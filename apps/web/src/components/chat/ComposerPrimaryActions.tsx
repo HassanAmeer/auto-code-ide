@@ -1,17 +1,17 @@
-import { memo, type MouseEventHandler, type PointerEventHandler } from "react";
-import { CheckIcon, ChevronDownIcon, ChevronLeftIcon, Minimize2Icon, PlayIcon } from "lucide-react";
+import { memo, useState, useRef, useEffect, type MouseEventHandler, type PointerEventHandler } from "react";
+import { CheckIcon, ChevronDownIcon, ChevronLeftIcon, Minimize2Icon, PlayIcon, Mic, X } from "lucide-react";
 import { CornerUpRight, ListPlus } from "lucide";
 import { MorphIcon } from "~/components/MorphIcon";
 import { useEnvironmentIdentificationMode } from "~/hooks/useSettings";
 import { formatContextWindowTokens } from "~/lib/contextWindow";
 import { cn } from "~/lib/utils";
+import { createSttSession, type SttController } from "~/lib/speech/stt";
 import { useShortcutModifierState } from "../../shortcutModifierState";
 import { StageBackdropButtonArt, useSidebarStageBackdropVariant } from "../SidebarStageBackdrop";
 import { Button } from "../ui/button";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
 import { Spinner } from "../ui/spinner";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { ComposerMicButton } from "./ComposerMicButton";
 import { composerFloatingLayerProps } from "./composerEventScope";
 import {
   alternateComposerDispatchAction,
@@ -119,6 +119,42 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
     : undefined;
   const environmentIdentificationMode = useEnvironmentIdentificationMode();
   const shortcutModifiers = useShortcutModifierState();
+  const [isDictating, setIsDictating] = useState(false);
+  const sttSessionRef = useRef<SttController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      sttSessionRef.current?.stop();
+    };
+  }, []);
+
+  const handleToggleDictation = () => {
+    if (isDictating) {
+      sttSessionRef.current?.stop();
+      setIsDictating(false);
+    } else {
+      const session = createSttSession({
+        onResult: (text, isFinal) => {
+          if (isFinal && text.trim()) {
+            window.dispatchEvent(
+              new CustomEvent("t3:insert-speech-text", { detail: { text: text.trim() } }),
+            );
+          }
+        },
+        onStateChange: (active) => {
+          setIsDictating(active);
+        },
+        onError: (err) => {
+          console.warn("STT error:", err);
+          setIsDictating(false);
+        },
+      });
+      sttSessionRef.current = session;
+      session.start();
+      setIsDictating(true);
+    }
+  };
+
   const isQueuing =
     !isEditingQueuedMessage &&
     resolveComposerDispatchMode({
@@ -355,16 +391,61 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
     </button>
   );
 
-  const submit = (
-    <Tooltip key="submit">
-      <TooltipTrigger render={<span className="inline-flex" />}>{sendButton}</TooltipTrigger>
-      <TooltipPopup>{submitTooltip}</TooltipPopup>
-    </Tooltip>
-  );
+  let primaryActionButton: React.ReactNode;
+  if (isDictating) {
+    primaryActionButton = (
+      <Tooltip key="cancel-dictation">
+        <TooltipTrigger
+          render={
+            <button
+              type="button"
+              className={cn(
+                "relative isolate flex h-9 w-9 items-center justify-center overflow-hidden rounded-full shadow-xs transition-all duration-150 cursor-pointer bg-red-600 text-white hover:bg-red-700 hover:scale-105 active:scale-95 sm:h-8 sm:w-8 animate-pulse shadow-md shadow-red-500/30",
+              )}
+              {...pointerFocusProps}
+              onClick={handleToggleDictation}
+              aria-label="Cancel dictation"
+            >
+              <X className="size-4" aria-hidden="true" />
+            </button>
+          }
+        />
+        <TooltipPopup>Cancel dictation</TooltipPopup>
+      </Tooltip>
+    );
+  } else if (!hasSendableContent && !promptHasText && !showResume && !isRunning && !isEditingQueuedMessage) {
+    primaryActionButton = (
+      <Tooltip key="mic-dictate">
+        <TooltipTrigger
+          render={
+            <button
+              type="button"
+              className={cn(
+                "relative isolate flex h-9 w-9 items-center justify-center overflow-hidden rounded-full shadow-xs transition-all duration-150 cursor-pointer bg-muted/80 text-muted-foreground hover:bg-muted hover:text-foreground hover:scale-105 active:scale-95 sm:h-8 sm:w-8",
+              )}
+              {...pointerFocusProps}
+              onClick={handleToggleDictation}
+              aria-label="Dictate message (Speech-to-Text)"
+            >
+              <Mic className="size-4" aria-hidden="true" />
+            </button>
+          }
+        />
+        <TooltipPopup>Click to speak (Roman Urdu / Urdu / English)</TooltipPopup>
+      </Tooltip>
+    );
+  } else {
+    primaryActionButton = (
+      <Tooltip key="submit">
+        <TooltipTrigger render={<span className="inline-flex" />}>{sendButton}</TooltipTrigger>
+        <TooltipPopup>{submitTooltip}</TooltipPopup>
+      </Tooltip>
+    );
+  }
+
   const actions = (
     <div className="flex items-center gap-1">
-      <ComposerMicButton />
-      {submit}
+      {primaryActionButton}
     </div>
   );
 

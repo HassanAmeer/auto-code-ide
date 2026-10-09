@@ -31,6 +31,7 @@ import { Route as SettingsDiagnosticsRouteImport } from './routes/settings.diagn
 import { Route as SettingsConnectionsRouteImport } from './routes/settings.connections'
 import { Route as SettingsArchivedRouteImport } from './routes/settings.archived'
 import { Route as SettingsAppearanceRouteImport } from './routes/settings.appearance'
+import { Route as SettingsSttTtsRouteImport } from './routes/settings.stt-tts'
 import { Route as SettingsTtsRouteImport } from './routes/settings.tts'
 import { Route as SettingsSttRouteImport } from './routes/settings.stt'
 import { Route as ProjectsProjectKeyRouteImport } from './routes/projects.$projectKey'
@@ -148,6 +149,11 @@ const SettingsAppearanceRoute = SettingsAppearanceRouteImport.update({
   path: '/appearance',
   getParentRoute: () => SettingsRoute,
 } as any)
+const SettingsSttTtsRoute = SettingsSttTtsRouteImport.update({
+  id: '/stt-tts',
+  path: '/stt-tts',
+  getParentRoute: () => SettingsRoute,
+} as any)
 const SettingsTtsRoute = SettingsTtsRouteImport.update({
   id: '/tts',
   path: '/tts',
@@ -191,6 +197,7 @@ export interface FileRoutesByFullPath {
   '/pull-requests': typeof ChatPullRequestsRoute
   '/projects/$projectKey': typeof ProjectsProjectKeyRoute
   '/settings/appearance': typeof SettingsAppearanceRoute
+  '/settings/stt-tts': typeof SettingsSttTtsRoute
   '/settings/archived': typeof SettingsArchivedRoute
   '/settings/connections': typeof SettingsConnectionsRoute
   '/settings/diagnostics': typeof SettingsDiagnosticsRoute
@@ -217,6 +224,7 @@ export interface FileRoutesByTo {
   '/pull-requests': typeof ChatPullRequestsRoute
   '/projects/$projectKey': typeof ProjectsProjectKeyRoute
   '/settings/appearance': typeof SettingsAppearanceRoute
+  '/settings/stt-tts': typeof SettingsSttTtsRoute
   '/settings/archived': typeof SettingsArchivedRoute
   '/settings/connections': typeof SettingsConnectionsRoute
   '/settings/diagnostics': typeof SettingsDiagnosticsRoute
@@ -246,6 +254,7 @@ export interface FileRoutesById {
   '/_chat/pull-requests': typeof ChatPullRequestsRoute
   '/projects/$projectKey': typeof ProjectsProjectKeyRoute
   '/settings/appearance': typeof SettingsAppearanceRoute
+  '/settings/stt-tts': typeof SettingsSttTtsRoute
   '/settings/archived': typeof SettingsArchivedRoute
   '/settings/connections': typeof SettingsConnectionsRoute
   '/settings/diagnostics': typeof SettingsDiagnosticsRoute
@@ -515,6 +524,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsAppearanceRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/settings/stt-tts': {
+      id: '/settings/stt-tts'
+      path: '/stt-tts'
+      fullPath: '/settings/stt-tts'
+      preLoaderRoute: typeof SettingsSttTtsRouteImport
+      parentRoute: typeof SettingsRoute
+    }
     '/projects/$projectKey': {
       id: '/projects/$projectKey'
       path: '/projects/$projectKey'
@@ -564,6 +580,7 @@ const ChatRouteWithChildren = ChatRoute._addFileChildren(ChatRouteChildren)
 
 interface SettingsRouteChildren {
   SettingsAppearanceRoute: typeof SettingsAppearanceRoute
+  SettingsSttTtsRoute: typeof SettingsSttTtsRoute
   SettingsTtsRoute: typeof SettingsTtsRoute
   SettingsSttRoute: typeof SettingsSttRoute
   SettingsArchivedRoute: typeof SettingsArchivedRoute
@@ -583,6 +600,7 @@ interface SettingsRouteChildren {
 
 const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsAppearanceRoute: SettingsAppearanceRoute,
+  SettingsSttTtsRoute: SettingsSttTtsRoute,
   SettingsTtsRoute: SettingsTtsRoute,
   SettingsSttRoute: SettingsSttRoute,
   SettingsArchivedRoute: SettingsArchivedRoute,

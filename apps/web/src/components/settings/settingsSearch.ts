@@ -15,8 +15,7 @@ export type SettingsPath =
   | "/settings/projects"
   | "/settings/general"
   | "/settings/appearance"
-  | "/settings/tts"
-  | "/settings/stt"
+  | "/settings/stt-tts"
   | "/settings/keybindings"
   | "/settings/snap-shot"
   | "/settings/providers"
@@ -92,8 +91,7 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/projects": "Project",
   "/settings/general": "General",
   "/settings/appearance": "Appearance",
-  "/settings/tts": "Text-to-Speech (TTS)",
-  "/settings/stt": "Speech-to-Text (STT)",
+  "/settings/stt-tts": "STT-TTS",
   "/settings/keybindings": "Keybindings",
   "/settings/snap-shot": "SnapShots",
   "/settings/providers": "Providers",

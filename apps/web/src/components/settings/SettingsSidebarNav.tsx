@@ -81,8 +81,7 @@ const SETTINGS_SECTION_ICONS: Readonly<
 > = {
   "/settings/general": Settings2Icon,
   "/settings/appearance": PaletteIcon,
-  "/settings/tts": Volume2Icon,
-  "/settings/stt": MicIcon,
+  "/settings/stt-tts": MicIcon,
   "/settings/projects": PanelsTopLeftIcon,
   "/settings/keybindings": KeyboardIcon,
   "/settings/snap-shot": SnapShotIcon,
