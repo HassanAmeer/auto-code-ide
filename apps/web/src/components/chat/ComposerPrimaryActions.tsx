@@ -1,5 +1,21 @@
-import { memo, useState, useRef, useEffect, type MouseEventHandler, type PointerEventHandler } from "react";
-import { CheckIcon, ChevronDownIcon, ChevronLeftIcon, Minimize2Icon, PlayIcon, Mic, X } from "lucide-react";
+import {
+  memo,
+  useState,
+  useRef,
+  useEffect,
+  type MouseEventHandler,
+  type PointerEventHandler,
+  type ReactNode,
+} from "react";
+import {
+  CheckIcon,
+  ChevronDownIcon,
+  ChevronLeftIcon,
+  Minimize2Icon,
+  PlayIcon,
+  Mic,
+  X,
+} from "lucide-react";
 import { CornerUpRight, ListPlus } from "lucide";
 import { MorphIcon } from "~/components/MorphIcon";
 import { useEnvironmentIdentificationMode } from "~/hooks/useSettings";
@@ -391,7 +407,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
     </button>
   );
 
-  let primaryActionButton: React.ReactNode;
+  let primaryActionButton: ReactNode;
   if (isDictating) {
     primaryActionButton = (
       <Tooltip key="cancel-dictation">
@@ -413,7 +429,13 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
         <TooltipPopup>Cancel dictation</TooltipPopup>
       </Tooltip>
     );
-  } else if (!hasSendableContent && !promptHasText && !showResume && !isRunning && !isEditingQueuedMessage) {
+  } else if (
+    !hasSendableContent &&
+    !promptHasText &&
+    !showResume &&
+    !isRunning &&
+    !isEditingQueuedMessage
+  ) {
     primaryActionButton = (
       <Tooltip key="mic-dictate">
         <TooltipTrigger
@@ -443,11 +465,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
     );
   }
 
-  const actions = (
-    <div className="flex items-center gap-1">
-      {primaryActionButton}
-    </div>
-  );
+  const actions = <div className="flex items-center gap-1">{primaryActionButton}</div>;
 
   if (compactTokens === null) return actions;
 

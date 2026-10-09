@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, type ChangeEvent } from "react";
 import { Mic, MicOff, Volume2, Play, Square, CheckCircle2, AlertCircle } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -29,7 +29,9 @@ export function SttTtsSettingsPanel() {
   // --- TTS State ---
   const [tts, setTts] = useState<TtsSettings>(loadTtsSettings);
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-  const [testText, setTestText] = useState("Assalam o alaikum! Yeh T3 Code ka text to speech test hai.");
+  const [testText, setTestText] = useState(
+    "Assalam o alaikum! Yeh T3 Code ka text to speech test hai.",
+  );
   const [isSpeaking, setIsSpeaking] = useState(false);
 
   // --- STT State ---
@@ -144,7 +146,8 @@ export function SttTtsSettingsPanel() {
       <div>
         <h2 className="text-xl font-semibold tracking-tight">STT-TTS Settings</h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Configure Speech-to-Text (STT) and Text-to-Speech (TTS) for Roman Urdu, Natural Urdu, and English.
+          Configure Speech-to-Text (STT) and Text-to-Speech (TTS) for Roman Urdu, Natural Urdu, and
+          English.
         </p>
       </div>
 
@@ -196,7 +199,9 @@ export function SttTtsSettingsPanel() {
             ) : (
               <>
                 <AlertCircle className="size-4 shrink-0 text-amber-500" />
-                <span>Web Speech API not detected. Please use Google Chrome for voice dictation.</span>
+                <span>
+                  Web Speech API not detected. Please use Google Chrome for voice dictation.
+                </span>
               </>
             )}
           </div>
@@ -254,7 +259,9 @@ export function SttTtsSettingsPanel() {
                 <Mic className="size-4 text-primary" /> Test Microphone Recognition
               </span>
               {isListening && (
-                <span className="text-xs text-red-500 font-normal animate-pulse">● Listening...</span>
+                <span className="text-xs text-red-500 font-normal animate-pulse">
+                  ● Listening...
+                </span>
               )}
             </label>
             <div className="flex flex-col gap-3">
@@ -290,9 +297,13 @@ export function SttTtsSettingsPanel() {
               )}
 
               <div className="min-h-20 rounded-md border border-input bg-muted/40 p-3 text-sm flex flex-col justify-between">
-                <div className="font-mono text-xs text-muted-foreground mb-1">Live Transcription Output:</div>
+                <div className="font-mono text-xs text-muted-foreground mb-1">
+                  Live Transcription Output:
+                </div>
                 <div className="text-foreground italic">
-                  {liveTranscript ? liveTranscript : "(No speech detected yet. Click start and speak into your mic)"}
+                  {liveTranscript
+                    ? liveTranscript
+                    : "(No speech detected yet. Click start and speak into your mic)"}
                 </div>
               </div>
             </div>
@@ -305,7 +316,9 @@ export function SttTtsSettingsPanel() {
         <div className="flex flex-col gap-5">
           {/* TTS Language Selection */}
           <div className="flex flex-col gap-2 rounded-lg border border-border p-4 bg-card">
-            <label className="text-sm font-medium">Spoken Language / Accent (Male Prioritized)</label>
+            <label className="text-sm font-medium">
+              Spoken Language / Accent (Male Prioritized)
+            </label>
             <p className="text-xs text-muted-foreground mb-2">
               Choose the primary voice accent for agent response read-aloud.
             </p>
@@ -357,7 +370,7 @@ export function SttTtsSettingsPanel() {
             </p>
             <select
               value={tts.voiceURI ?? ""}
-              onChange={(e) => updateTtsVoiceURI(e.target.value)}
+              onChange={(e: ChangeEvent<HTMLSelectElement>) => updateTtsVoiceURI(e.target.value)}
               className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             >
               <option value="">Auto (Best Matching Male Voice)</option>
@@ -382,7 +395,9 @@ export function SttTtsSettingsPanel() {
                 max="1.75"
                 step="0.05"
                 value={tts.rate}
-                onChange={(e) => updateTtsRate(parseFloat(e.target.value))}
+                onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                  updateTtsRate(parseFloat(e.target.value))
+                }
                 className="w-full accent-primary cursor-pointer"
               />
             </div>
@@ -397,7 +412,9 @@ export function SttTtsSettingsPanel() {
                 max="1.5"
                 step="0.05"
                 value={tts.pitch}
-                onChange={(e) => updateTtsPitch(parseFloat(e.target.value))}
+                onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                  updateTtsPitch(parseFloat(e.target.value))
+                }
                 className="w-full accent-primary cursor-pointer"
               />
             </div>
@@ -411,7 +428,7 @@ export function SttTtsSettingsPanel() {
             <div className="flex gap-2">
               <Input
                 value={testText}
-                onChange={(e) => setTestText(e.target.value)}
+                onChange={(e: ChangeEvent<HTMLInputElement>) => setTestText(e.target.value)}
                 placeholder="Type text to speak..."
                 className="flex-1"
               />
