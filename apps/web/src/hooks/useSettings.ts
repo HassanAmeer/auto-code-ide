@@ -386,9 +386,7 @@ export function useEnvironmentIdentificationMode(): EnvironmentIdentificationMod
  * whole tree for everyone instead of only for legacy opt-ins.
  */
 export function useLegacySidebarEnabled(): boolean {
-  const settingsHydrated = useClientSettingsHydrated();
-  const legacySidebarEnabled = useClientSettingsValue().legacySidebarEnabled;
-  return settingsHydrated && legacySidebarEnabled;
+  return true;
 }
 
 /** Read current settings for one environment, merged with client-local preferences. */
