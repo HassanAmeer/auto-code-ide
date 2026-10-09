@@ -1,6 +1,4 @@
-import { parsePatchFiles } from "@pierre/diffs/utils/parsePatchFiles";
-import { parseDiffFromFile } from "@pierre/diffs";
-import type { FileDiffMetadata } from "@pierre/diffs/types";
+import { parseDiffFromFile, parsePatchFiles, type FileDiffMetadata } from "@pierre/diffs";
 
 const DIFF_THEME_NAMES = {
   light: "pierre-light",

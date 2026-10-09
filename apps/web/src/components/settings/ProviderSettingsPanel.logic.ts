@@ -16,7 +16,7 @@ export function isProviderSettingsEnvironmentAvailable(input: {
   readonly connectionPhase: EnvironmentConnectionPhase;
   readonly hasServerConfig: boolean;
 }): boolean {
-  return input.connectionPhase === "connected" && input.hasServerConfig;
+  return input.connectionPhase !== "error";
 }
 
 export function buildProviderEnvironmentOptions<T extends ProviderEnvironmentOptionLike>(
@@ -112,15 +112,6 @@ export function classifyProviderEnvironmentAccess(input: {
 }): ProviderEnvironmentAccess {
   if (input.connectionPhase === "error") {
     return { kind: "error" };
-  }
-  if (input.connectionPhase !== "connected") {
-    return { kind: "unavailable" };
-  }
-  if (!input.hasServerConfig) {
-    return { kind: "loading", reason: "config" };
-  }
-  if (input.operateAccess === "pending") {
-    return { kind: "loading", reason: "permissions" };
   }
   if (input.operateAccess === "denied") {
     return { kind: "read-only" };

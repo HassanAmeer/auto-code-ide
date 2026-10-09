@@ -71,128 +71,26 @@ const workspaceEvidenceLiveAtom = Atom.make((get) => {
 }).pipe(Atom.withLabel("web-onboarding-workspace-evidence-live"));
 
 export function FirstRunGate({
-  enabled,
-  hostedStatic,
   children,
 }: {
-  readonly enabled: boolean;
-  readonly hostedStatic: boolean;
+  readonly enabled?: boolean;
+  readonly hostedStatic?: boolean;
   readonly children: React.ReactNode;
 }) {
-  const navigate = useNavigate();
-  const pathname = useLocation({ select: (location) => location.pathname });
   const hydrationStatus = useClientSettingsHydrationStatus();
   const hydrated = hydrationStatus === "ready";
   const completeOnboarding = useCompleteOnboarding();
   const onboardingCompletedAt = useClientSettings((settings) => settings.onboardingCompletedAt);
-  const bootstrapped = useAllEnvironmentShellsBootstrapped();
-  const { environments, isReady: environmentCatalogReady } = useEnvironments();
-  const projects = useProjects();
-  const threads = useThreadShells();
-  const serverConfig = useAtomValue(primaryServerConfigAtom);
-  const serverWelcome = useAtomValue(primaryServerWelcomeAtom);
-  const primaryShellLive = useAtomValue(primaryShellLiveAtom);
-  const workspaceEvidenceLive = useAtomValue(workspaceEvidenceLiveAtom);
-  // Within a session settings stay hydrated, so remounts (e.g. returning from
-  // the wizard) resolve synchronously instead of blanking a frame.
-  const [gateState, setGateState] = useState<FirstRunGateState>(() => ({
-    decision:
-      (!enabled && !hostedStatic) || (hydrated && onboardingCompletedAt !== null)
-        ? "app"
-        : "pending",
-    stalled: false,
-  }));
-  const { decision, stalled } = gateState;
   const settingsReadFailed = hydrationStatus === "failed" || hydrationStatus === "retrying";
-  // A workspace still counts as fresh when its only content is the server's
-  // own cwd auto-bootstrap: web mode creates a project + thread from cwd at
-  // startup (`autoBootstrapProjectFromCwd` defaults on there), so "no
-  // projects at all" would mean `npx t3` users never see the wizard. Any
-  // other project, more than one thread, or state in a non-primary
-  // environment is real user state — the aggregate hooks span every
-  // environment, and a saved remote's project must never read as "the
-  // bootstrap project" just because its root string matches the primary cwd.
-  const serverCwd = serverConfig?.cwd ?? null;
-  const primaryEnvironmentId = serverConfig?.environment.environmentId ?? null;
-  const workspaceFresh = isFreshFirstRunWorkspace({
-    primaryEnvironmentId,
-    serverCwd,
-    bootstrapProjectId: serverWelcome?.bootstrapProjectId,
-    bootstrapThreadId: serverWelcome?.bootstrapThreadId,
-    bootstrapProjectCreated: serverWelcome?.bootstrapProjectCreated,
-    bootstrapThreadCreated: serverWelcome?.bootstrapThreadCreated,
-    projects,
-    threads,
-  });
-
-  const { decision: nextDecision, persistCompletion } = hostedStatic
-    ? resolveHostedFirstRunDecision({
-        localEnvironmentDisabled: isLocalEnvironmentDisabled(),
-        hydrated,
-        completed: onboardingCompletedAt !== null,
-        catalogReady: environmentCatalogReady,
-        environmentCount: environments.length,
-      })
-    : resolveFirstRunDecision({
-        enabled,
-        hydrated,
-        completed: onboardingCompletedAt !== null,
-        bootstrapped,
-        authoritative: primaryShellLive,
-        workspaceAuthoritative: workspaceEvidenceLive,
-        workspaceProvenanceAuthoritative: isFirstRunWorkspaceProvenanceAuthoritative({
-          welcomeReceived: serverWelcome !== null,
-          bootstrapStatus: serverWelcome?.bootstrapStatus ?? null,
-        }),
-        catalogReady: environmentCatalogReady,
-        serverConfigAvailable: serverConfig !== null,
-        workspaceFresh,
-        projectCount: projects.length,
-        threadCount: threads.length,
-      });
 
   useEffect(() => {
-    if (decision === "wizard" || !hydrated) return;
-
-    if (persistCompletion && onboardingCompletedAt === null) {
+    if (hydrated && onboardingCompletedAt === null) {
       void completeOnboarding().catch(() => undefined);
     }
-
-    setGateState((state) =>
-      transitionFirstRunGateState(state, { type: "evidence", decision: nextDecision }),
-    );
-  }, [
-    completeOnboarding,
-    decision,
-    hydrated,
-    nextDecision,
-    onboardingCompletedAt,
-    persistCompletion,
-  ]);
-
-  // A stalled server read gets a recovery screen, but never mounts the app.
-  // The timer starts after settings hydrate so slow local hydration does not
-  // show a false connection failure.
-  useEffect(() => {
-    if (!enabled || decision !== "pending" || !hydrated) return;
-    const timer = window.setTimeout(
-      () => setGateState((state) => transitionFirstRunGateState(state, { type: "timeout" })),
-      FIRST_RUN_DECISION_TIMEOUT_MS,
-    );
-    return () => window.clearTimeout(timer);
-  }, [decision, enabled, hydrated]);
-
-  useEffect(() => {
-    if (decision === "wizard" && pathname !== "/welcome") {
-      void navigate({ to: "/welcome", replace: true });
-    }
-  }, [decision, navigate, pathname]);
+  }, [completeOnboarding, hydrated, onboardingCompletedAt]);
 
   if (settingsReadFailed) {
     return <FirstRunRecovery reason="settings" retrying={hydrationStatus === "retrying"} />;
-  }
-  if (decision !== "app") {
-    return stalled ? <FirstRunRecovery reason="connection" /> : null;
   }
   return children;
 }

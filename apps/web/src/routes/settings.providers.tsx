@@ -9,23 +9,24 @@ import { useSettingsScope } from "../components/settings/SettingsScopeContext";
  * the chosen one from the settings scope selector.
  * A project crumb narrows candidates to where that project is registered.
  */
+import { useEnvironments, usePrimaryEnvironmentId } from "../state/environments";
+
 function SettingsProvidersRoute() {
   const target = Route.useSearch();
-  const { environment, scope } = useSettingsScope();
-  if (!environment) {
-    return (
-      <p className="p-8 text-sm text-muted-foreground">
-        {scope.kind === "environment"
-          ? `Reconnect ${scope.label} to set up its providers.`
-          : "Connect an environment to set up its providers."}
-      </p>
-    );
-  }
+  const { environment } = useSettingsScope();
+  const { environments } = useEnvironments();
+  const primaryEnvironmentId = usePrimaryEnvironmentId();
+
+  const activeEnvironmentId =
+    target.environmentId ??
+    environment?.environmentId ??
+    primaryEnvironmentId ??
+    environments[0]?.environmentId;
+
   return (
     <ProviderSettingsPanel
-      environmentId={environment.environmentId}
+      {...(activeEnvironmentId ? { environmentId: activeEnvironmentId } : {})}
       {...(target.instanceId ? { instanceId: target.instanceId } : {})}
-      scoped
     />
   );
 }

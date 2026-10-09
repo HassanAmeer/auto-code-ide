@@ -48,11 +48,8 @@ function IndexDraftLanding() {
   const [startState, setStartState] = useState({ failed: false, retryRequest: 0 });
 
   const mostRecentProject = useMemo(
-    () =>
-      bootstrapped
-        ? (sortScopedProjectsForSidebar(projects, threads, "updated_at")[0] ?? null)
-        : null,
-    [bootstrapped, projects, threads],
+    () => sortScopedProjectsForSidebar(projects, threads, "updated_at")[0] ?? null,
+    [projects, threads],
   );
 
   useEffect(() => {
@@ -68,7 +65,7 @@ function IndexDraftLanding() {
     });
   }, [handleNewThread, mostRecentProject, startState.retryRequest]);
 
-  if (!bootstrapped) {
+  if (!bootstrapped && mostRecentProject !== null) {
     return null;
   }
   if (mostRecentProject !== null) {
