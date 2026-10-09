@@ -5,6 +5,7 @@ import { Input } from "../ui/input";
 import {
   type TtsLanguageMode,
   type TtsSettings,
+  TTS_ACCENTS,
   loadTtsSettings,
   saveTtsSettings,
   getAvailableVoices,
@@ -98,9 +99,33 @@ export function TtsSettingsPanel() {
       <div className="flex flex-col gap-2 rounded-lg border border-border p-4 bg-card">
         <label className="text-sm font-medium">Spoken Language / Accent</label>
         <p className="text-xs text-muted-foreground mb-2">
-          Choose the primary language accent for agent read-aloud.
+          Choose the primary language accent or auto-detect based on assistant responses.
         </p>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          <button
+            type="button"
+            onClick={() => updateLanguage("auto-male")}
+            className={`p-3 rounded-md border text-sm font-medium text-left transition-colors ${
+              settings.language === "auto-male"
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-border hover:bg-muted"
+            }`}
+          >
+            <div className="font-semibold">Auto (Male Voice)</div>
+            <div className="text-xs text-muted-foreground mt-1">Auto-detect response language</div>
+          </button>
+          <button
+            type="button"
+            onClick={() => updateLanguage("auto-female")}
+            className={`p-3 rounded-md border text-sm font-medium text-left transition-colors ${
+              settings.language === "auto-female"
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-border hover:bg-muted"
+            }`}
+          >
+            <div className="font-semibold">Auto (Female Voice)</div>
+            <div className="text-xs text-muted-foreground mt-1">Auto-detect response language</div>
+          </button>
           <button
             type="button"
             onClick={() => updateLanguage("roman-urdu")}
@@ -142,21 +167,59 @@ export function TtsSettingsPanel() {
 
       {/* Voice Selection */}
       <div className="flex flex-col gap-2 rounded-lg border border-border p-4 bg-card">
-        <label className="text-sm font-medium">Browser Voice (Male Prioritized)</label>
+        <label className="text-sm font-medium">Synthesizer Voice & Curated Accents</label>
         <p className="text-xs text-muted-foreground mb-1">
-          Select from available Chrome system voices.
+          Select curated male/female accents or browser synthesizer voices.
         </p>
         <select
           value={settings.voiceURI ?? ""}
           onChange={(e) => updateVoiceURI(e.target.value)}
           className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
         >
-          <option value="">Auto (Best Matching Male Voice)</option>
-          {availableFilteredVoices.map((v) => (
-            <option key={v.voiceURI} value={v.voiceURI}>
-              {v.name} ({v.lang})
-            </option>
-          ))}
+          <option value="">Auto (Male voice prioritized)</option>
+          <option value="auto-female">Auto (Female voice)</option>
+
+          <optgroup label="── Roman Urdu Accents ──">
+            {TTS_ACCENTS.filter((a) => a.category === "roman-urdu").map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </optgroup>
+
+          <optgroup label="── Natural Urdu Accents ──">
+            {TTS_ACCENTS.filter((a) => a.category === "natural-urdu").map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </optgroup>
+
+          <optgroup label="── Hindi Accents ──">
+            {TTS_ACCENTS.filter((a) => a.category === "hindi").map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </optgroup>
+
+          <optgroup label="── English Accents ──">
+            {TTS_ACCENTS.filter((a) => a.category === "english").map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </optgroup>
+
+          {availableFilteredVoices.length > 0 && (
+            <optgroup label="── Browser Synthesizer Voices (Male) ──">
+              {availableFilteredVoices.map((v) => (
+                <option key={v.voiceURI} value={v.voiceURI}>
+                  {v.name} ({v.lang})
+                </option>
+              ))}
+            </optgroup>
+          )}
         </select>
       </div>
 

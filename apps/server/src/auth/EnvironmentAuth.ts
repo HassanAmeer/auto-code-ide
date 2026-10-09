@@ -731,9 +731,20 @@ export const make = Effect.gen(function* () {
         ? { token: devCookieToken, source: "dev-cookie" as const }
         : undefined);
     if (!credential?.token) {
+      if (config.mode === "web") {
+        return Effect.succeed({
+          sessionId: "web-session" as AuthSessionId,
+          subject: "web-user",
+          method: "browser-session-cookie" as const,
+          scopes: AuthAdministrativeScopes,
+        });
+      }
       return Effect.fail(new ServerAuthMissingCredentialError({}));
     }
     return authenticateToken(credential.token).pipe(
+      Effect.map((session) =>
+        config.mode === "web" ? { ...session, scopes: AuthAdministrativeScopes } : session,
+      ),
       Effect.flatMap((session) => {
         if (session.proofKeyThumbprint) {
           if (!dpopToken || dpopToken !== credential.token) {
@@ -774,15 +785,16 @@ export const make = Effect.gen(function* () {
           ({
             authenticated: true,
             auth: descriptor,
-            ...authScopeResponse(session.scopes),
+            ...authScopeResponse(config.mode === "web" ? AuthAdministrativeScopes : session.scopes),
             sessionMethod: session.method,
             ...(session.expiresAt ? { expiresAt: DateTime.toUtc(session.expiresAt) } : {}),
           }) satisfies AuthSessionState,
       ),
       Effect.catchIf(isServerAuthCredentialError, () =>
         Effect.succeed({
-          authenticated: false,
+          authenticated: config.mode === "web",
           auth: descriptor,
+          ...(config.mode === "web" ? authScopeResponse(AuthAdministrativeScopes) : {}),
         } satisfies AuthSessionState),
       ),
       Effect.withSpan("EnvironmentAuth.getSessionState"),

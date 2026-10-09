@@ -71,8 +71,5 @@ function EnvironmentPermissionNotice({
 }
 
 export function PermissionUpdateNotice() {
-  const { environments } = useEnvironments();
-  return environments.map(({ environmentId, label }) => (
-    <EnvironmentPermissionNotice key={environmentId} environmentId={environmentId} label={label} />
-  ));
+  return null;
 }

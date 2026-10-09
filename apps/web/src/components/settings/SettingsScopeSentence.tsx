@@ -37,6 +37,7 @@ export const SETTINGS_DEVICE_ONLY_PATHS: ReadonlySet<string> = new Set([
   "/settings/stt-tts",
   "/settings/stt",
   "/settings/tts",
+  "/settings/custom-providers",
 ]);
 
 interface SettingsScopeMenuProps {

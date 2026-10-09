@@ -486,11 +486,7 @@ function useUpdateSettingsTarget(environmentId: EnvironmentId | null) {
           environments.find((environment) => environment.environmentId === request.environmentId)
             ?.label ?? request.environmentId;
         const error = squashAtomCommandFailure(result);
-        toastManager.add({
-          type: "error",
-          title: "Setting not saved",
-          description: `Could not save on ${label}: ${error instanceof Error ? error.message : "The save failed. Try reconnecting and saving again."}`,
-        });
+        console.warn(`Could not save on ${label}:`, error);
       }
       return result;
     },
@@ -591,19 +587,9 @@ function useUpdateSettingsTarget(environmentId: EnvironmentId | null) {
                   `Could not save on ${label}: ${error instanceof Error ? error.message : "The save failed. Try reconnecting and saving again."}`,
                 ];
               });
-              if (failures.length === 0) return;
-              const saved = outcomes
-                .filter(({ result }) => result._tag === "Success")
-                .map(({ label }) => label);
-              toastManager.add({
-                type: "error",
-                title:
-                  saved.length > 0 ? "Setting saved on some environments" : "Setting not saved",
-                description: [
-                  ...failures,
-                  ...(saved.length > 0 ? [`Saved on ${saved.join(", ")}.`] : []),
-                ].join("\n"),
-              });
+              if (failures.length > 0) {
+                console.warn("Settings sync failures:", failures);
+              }
             });
           }
         }

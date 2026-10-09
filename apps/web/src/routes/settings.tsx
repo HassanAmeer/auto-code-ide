@@ -91,7 +91,8 @@ function SettingsScopeBoundary({ pathname, children }: { pathname: string; child
   if (
     SETTINGS_DEVICE_ONLY_PATHS.has(pathname) ||
     pathname === "/settings/projects" ||
-    pathname === "/settings/providers"
+    pathname === "/settings/providers" ||
+    pathname === "/settings/custom-providers"
   ) {
     return children;
   }
@@ -102,15 +103,6 @@ function SettingsScopeBoundary({ pathname, children }: { pathname: string; child
         <p className="text-sm text-muted-foreground">{scope.message}</p>
       </SettingsPageContainer>
     );
-  if (scope.kind === "environment" && connectedEnvironments.length === 0) {
-    return (
-      <SettingsPageContainer>
-        <p className="text-sm text-muted-foreground">
-          Reconnect {scope.label} to change its settings.
-        </p>
-      </SettingsPageContainer>
-    );
-  }
   return children;
 }
 

@@ -766,14 +766,7 @@ export function EnvironmentProviderSettings({
     const isDirty = explicitInstance !== undefined;
     // Drivers without a default instance list only their configured instances.
     const hasDefaultSlot = providerSettings.hasDefaultInstance || explicitInstance !== undefined;
-    if (
-      hasDefaultSlot &&
-      (driver === "codex" ||
-        driver === "claudeAgent" ||
-        isDirty ||
-        resolveProviderInstanceEnabled(effectiveInstance) ||
-        defaultInstanceId === targetInstanceId)
-    ) {
+    if (hasDefaultSlot) {
       rows.push({
         instanceId: defaultInstanceId,
         instance: effectiveInstance,

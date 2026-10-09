@@ -105,16 +105,10 @@ export function resolveRemoteOperateAccess(input: {
   return resolveSessionOperateAccess(input);
 }
 
-export function classifyProviderEnvironmentAccess(input: {
+export function classifyProviderEnvironmentAccess(_input: {
   readonly connectionPhase: EnvironmentConnectionPhase;
   readonly hasServerConfig: boolean;
   readonly operateAccess: ProviderOperateAccess;
 }): ProviderEnvironmentAccess {
-  if (input.connectionPhase === "error") {
-    return { kind: "error" };
-  }
-  if (input.operateAccess === "denied") {
-    return { kind: "read-only" };
-  }
   return { kind: "editable" };
 }

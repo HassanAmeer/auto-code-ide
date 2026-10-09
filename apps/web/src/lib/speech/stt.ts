@@ -3,6 +3,8 @@
  * Chrome & Chromium natively supported.
  */
 
+import { transliterateUrduToRoman } from "./romanUrduTransliterate";
+
 export type SttLanguageMode = "roman-urdu" | "natural-urdu" | "english";
 
 export interface SttSettings {
@@ -120,10 +122,17 @@ export function createSttSession({
       }
     }
 
+    const processTranscript = (raw: string) => {
+      if (selectedMode === "roman-urdu") {
+        return transliterateUrduToRoman(raw);
+      }
+      return raw;
+    };
+
     if (finalTranscript) {
-      onResult(finalTranscript, true);
+      onResult(processTranscript(finalTranscript), true);
     } else if (interimTranscript) {
-      onResult(interimTranscript, false);
+      onResult(processTranscript(interimTranscript), false);
     }
   };
 

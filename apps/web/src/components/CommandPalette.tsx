@@ -1812,7 +1812,7 @@ function OpenCommandPaletteDialog(props: {
     // useful next step is connecting one.
     if (addProjectEnvironmentOptions.length === 0) {
       setOpen(false);
-      void navigate({ to: "/settings/connections" });
+      void navigate({ to: "/settings/general" });
       return;
     }
 

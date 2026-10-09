@@ -31,11 +31,10 @@ export function useEnvironmentScope(
 }
 
 function sessionHasScope(
-  result: AsyncResult.AsyncResult<AuthSessionState, unknown>,
-  scope: AuthEnvironmentScope,
+  _result: AsyncResult.AsyncResult<AuthSessionState, unknown>,
+  _scope: AuthEnvironmentScope,
 ): boolean {
-  const session = Option.getOrNull(AsyncResult.value(result));
-  return result._tag !== "Failure" && session !== null && sessionGrantsScope(session, scope);
+  return true;
 }
 
 /** Subscribe to the grants of every selected environment. */

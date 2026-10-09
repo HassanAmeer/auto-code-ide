@@ -7,6 +7,7 @@ import { SettingsPageContainer, SettingsRow, SettingsSection } from "./settingsL
 import {
   type TtsLanguageMode,
   type TtsSettings,
+  TTS_ACCENTS,
   loadTtsSettings,
   saveTtsSettings,
   getAvailableVoices,
@@ -33,6 +34,8 @@ const STT_LANG_LABELS: Record<SttLanguageMode, string> = {
 };
 
 const TTS_LANG_LABELS: Record<TtsLanguageMode, string> = {
+  "auto-male": "Auto Detect (Male Voice)",
+  "auto-female": "Auto Detect (Female Voice)",
   "roman-urdu": "Roman Urdu",
   "natural-urdu": "Natural Urdu (اردو)",
   english: "English",
@@ -87,7 +90,11 @@ export function SttTtsSettingsPanel() {
     };
     setTts(updated);
     saveTtsSettings(updated);
-    if (lang === "natural-urdu") {
+    if (lang === "auto-male" || lang === "auto-female") {
+      setTestText(
+        "Assalam o alaikum! Yeh auto-detected text to speech test hai. T3 Code will read this automatically.",
+      );
+    } else if (lang === "natural-urdu") {
       setTestText("السلام علیکم! یہ ٹی تھری کوڈ کا ٹیکسٹ ٹو اسپیچ ٹیسٹ ہے۔");
     } else if (lang === "english") {
       setTestText("Hello! This is a text to speech test for T3 Code.");
@@ -159,16 +166,21 @@ export function SttTtsSettingsPanel() {
     }
   };
 
-  const availableFilteredVoices = useMemo(
-    () => getVoicesForMode(voices, tts.language),
+  const availableMaleVoices = useMemo(
+    () => getVoicesForMode(voices, tts.language, true),
     [voices, tts.language],
   );
 
   const selectedVoiceName = useMemo(() => {
-    if (!tts.voiceURI) return "Auto (Male voice prioritized)";
-    const found = availableFilteredVoices.find((v) => v.voiceURI === tts.voiceURI);
+    if (!tts.voiceURI || tts.voiceURI === "auto") return "Auto (Male voice prioritized)";
+    if (tts.voiceURI === "auto-female") return "Auto (Female voice)";
+    if (tts.voiceURI.startsWith("accent:")) {
+      const accent = TTS_ACCENTS.find((a) => a.id === tts.voiceURI);
+      if (accent) return accent.name;
+    }
+    const found = voices.find((v) => v.voiceURI === tts.voiceURI);
     return found ? `${found.name} (${found.lang})` : "Auto (Male voice prioritized)";
-  }, [tts.voiceURI, availableFilteredVoices]);
+  }, [tts.voiceURI, voices]);
 
   // Slider progress ratios for native slider styling
   const speedProgressRatio = (tts.rate - 0.5) / (1.75 - 0.5);
@@ -353,7 +365,7 @@ export function SttTtsSettingsPanel() {
         >
           <SettingsRow
             title="Voice accent & dialect"
-            description="Select which language accent is used when reading assistant answers aloud."
+            description="Select which language accent is used, or let auto-detect choose the language based on response text."
             control={
               <Select
                 value={tts.language}
@@ -361,10 +373,21 @@ export function SttTtsSettingsPanel() {
                   if (val) updateTtsLanguage(val as TtsLanguageMode);
                 }}
               >
-                <SelectTrigger size="sm" className="w-full sm:w-56" aria-label="Voice accent">
+                <SelectTrigger size="sm" className="w-full sm:w-64" aria-label="Voice accent">
                   <SelectValue>{TTS_LANG_LABELS[tts.language]}</SelectValue>
                 </SelectTrigger>
-                <SelectPopup align="end" alignItemWithTrigger={false}>
+                <SelectPopup
+                  align="end"
+                  alignItemWithTrigger={false}
+                  className="max-h-72 overflow-y-auto"
+                >
+                  <SelectItem hideIndicator value="auto-male">
+                    Auto Detect (Male Voice)
+                  </SelectItem>
+                  <SelectItem hideIndicator value="auto-female">
+                    Auto Detect (Female Voice)
+                  </SelectItem>
+                  <div className="my-1 border-t border-border/40" />
                   <SelectItem hideIndicator value="roman-urdu">
                     Roman Urdu
                   </SelectItem>
@@ -381,24 +404,76 @@ export function SttTtsSettingsPanel() {
 
           <SettingsRow
             title="Synthesizer voice"
-            description="Choose a browser synthesizer voice (male voices prioritized automatically)."
+            description="Choose a browser synthesizer voice or curated accent (male voices prioritized automatically)."
             control={
               <Select
                 value={tts.voiceURI || "auto"}
                 onValueChange={(val) => updateTtsVoiceURI(val === "auto" || !val ? "" : val)}
               >
-                <SelectTrigger size="sm" className="w-full sm:w-56" aria-label="Synthesizer voice">
+                <SelectTrigger size="sm" className="w-full sm:w-64" aria-label="Synthesizer voice">
                   <SelectValue>{selectedVoiceName}</SelectValue>
                 </SelectTrigger>
-                <SelectPopup align="end" alignItemWithTrigger={false}>
+                <SelectPopup
+                  align="end"
+                  alignItemWithTrigger={false}
+                  className="max-h-80 overflow-y-auto"
+                >
                   <SelectItem hideIndicator value="auto">
                     Auto (Male voice prioritized)
                   </SelectItem>
-                  {availableFilteredVoices.map((v) => (
-                    <SelectItem hideIndicator key={v.voiceURI} value={v.voiceURI}>
-                      {v.name} ({v.lang})
+                  <SelectItem hideIndicator value="auto-female">
+                    Auto (Female voice)
+                  </SelectItem>
+
+                  {/* Curated Accents */}
+                  <div className="px-2 pt-2 pb-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                    Roman Urdu Accents
+                  </div>
+                  {TTS_ACCENTS.filter((a) => a.category === "roman-urdu").map((a) => (
+                    <SelectItem hideIndicator key={a.id} value={a.id}>
+                      {a.name}
                     </SelectItem>
                   ))}
+
+                  <div className="px-2 pt-2 pb-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                    Natural Urdu Accents
+                  </div>
+                  {TTS_ACCENTS.filter((a) => a.category === "natural-urdu").map((a) => (
+                    <SelectItem hideIndicator key={a.id} value={a.id}>
+                      {a.name}
+                    </SelectItem>
+                  ))}
+
+                  <div className="px-2 pt-2 pb-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                    Hindi Accents
+                  </div>
+                  {TTS_ACCENTS.filter((a) => a.category === "hindi").map((a) => (
+                    <SelectItem hideIndicator key={a.id} value={a.id}>
+                      {a.name}
+                    </SelectItem>
+                  ))}
+
+                  <div className="px-2 pt-2 pb-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                    English Accents
+                  </div>
+                  {TTS_ACCENTS.filter((a) => a.category === "english").map((a) => (
+                    <SelectItem hideIndicator key={a.id} value={a.id}>
+                      {a.name}
+                    </SelectItem>
+                  ))}
+
+                  {availableMaleVoices.length > 0 && (
+                    <>
+                      <div className="px-2 pt-2 pb-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider border-t border-border/40 mt-1">
+                        Browser Synthesizer Voices (Male)
+                      </div>
+                      {availableMaleVoices.map((v) => (
+                        <SelectItem hideIndicator key={v.voiceURI} value={v.voiceURI}>
+                          {v.name} ({v.lang})
+                        </SelectItem>
+                      ))}
+                    </>
+                  )}
                 </SelectPopup>
               </Select>
             }

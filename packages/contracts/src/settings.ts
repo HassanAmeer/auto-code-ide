@@ -1287,14 +1287,14 @@ export const providerInstanceConfigEnabledFlag = (config: unknown): boolean | un
  * `enabled` decoding default of each driver's settings schema.
  */
 const DEFAULT_DISABLED_PROVIDER_DRIVERS: ReadonlySet<ProviderDriverKind> = new Set(
-  ["cursor", "grok", "muse", "pi", "opencode", "antigravity"].map((driver) =>
-    ProviderDriverKind.make(driver),
-  ),
+  ["cursor", "grok", "muse", "pi"].map((driver) => ProviderDriverKind.make(driver)),
 );
 
 /** Built-in drivers whose default instance runs before the user configures it. */
 const DEFAULT_ENABLED_DEFAULT_INSTANCES: ReadonlySet<ProviderInstanceId> = new Set(
-  ["codex", "claudeAgent"].map((instanceId) => ProviderInstanceId.make(instanceId)),
+  ["codex", "claudeAgent", "opencode", "antigravity"].map((instanceId) =>
+    ProviderInstanceId.make(instanceId),
+  ),
 );
 
 /**
