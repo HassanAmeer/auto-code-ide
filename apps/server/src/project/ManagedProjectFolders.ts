@@ -373,10 +373,11 @@ const make = Effect.gen(function* () {
   // Projects started from just a name live beside Scratch and worktrees, away
   // from folders the user organizes by hand. A nested repository is fine here
   // (unlike Scratch) because each project gets its own `git init`.
-  const namedProjectsRoot = process.env.T3CODE_PROJECTS_DIR
-    ? path.resolve(process.env.T3CODE_PROJECTS_DIR)
-    : process.env.WORKSPACE_DIR
-      ? path.resolve(process.env.WORKSPACE_DIR)
+  const procEnv = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env;
+  const namedProjectsRoot = procEnv?.T3CODE_PROJECTS_DIR
+    ? path.resolve(procEnv.T3CODE_PROJECTS_DIR)
+    : procEnv?.WORKSPACE_DIR
+      ? path.resolve(procEnv.WORKSPACE_DIR)
       : path.resolve(config.baseDir, "projects");
 
   const claimNamedFolder = Effect.fn("ManagedProjectFolders.claimNamedFolder")(function* (
