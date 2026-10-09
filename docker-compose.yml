@@ -1,0 +1,41 @@
+services:
+  t3code:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: t3code-web:latest
+    container_name: t3code
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      # Single-User Security & Auth (Required for VPS access)
+      - APP_PASSWORD=${APP_PASSWORD:-changeme123}
+      - T3CODE_AUTH_TOKEN=${APP_PASSWORD:-changeme123}
+
+      # Server & Workspace Networking
+      - T3CODE_HOST=0.0.0.0
+      - T3CODE_PORT=3000
+      - T3CODE_MODE=web
+      - T3CODE_HOME=/app/data
+      - T3CODE_PROJECTS_DIR=/workspace
+
+      # Optional AI Provider Keys & Custom Endpoint Configuration
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL:-}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - GROK_API_KEY=${GROK_API_KEY:-}
+    volumes:
+      # Persistent app state: SQLite database (statev2.sqlite), credentials, settings
+      - ./t3code-data:/app/data
+      # User workspace containing active projects and repositories
+      - ./projects:/workspace
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+        reservations:
+          memory: 256M

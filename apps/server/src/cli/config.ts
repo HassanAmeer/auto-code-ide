@@ -128,8 +128,15 @@ const EnvServerConfig = Config.all({
     Config.map(Option.getOrUndefined),
   ),
   port: Config.Port("T3CODE_PORT").pipe(Config.option, Config.map(Option.getOrUndefined)),
-  host: Config.String("T3CODE_HOST").pipe(Config.option, Config.map(Option.getOrUndefined)),
+  host: Config.firstSomeOf([Config.String("T3CODE_HOST"), Config.String("HOST")]).pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
   t3Home: Config.String("T3CODE_HOME").pipe(Config.option, Config.map(Option.getOrUndefined)),
+  staticDir: Config.String("T3CODE_STATIC_DIR").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
   devUrl: Config.URL("VITE_DEV_SERVER_URL").pipe(Config.option, Config.map(Option.getOrUndefined)),
   devAllowedOrigins: Config.String("T3CODE_DEV_ALLOWED_ORIGINS").pipe(
     Config.withDefault(""),
@@ -166,21 +173,12 @@ const EnvServerConfig = Config.all({
   ),
 });
 
-const DevAuthTokenConfig = Config.Redacted("T3CODE_DEV_AUTH_TOKEN").pipe(
+const DevAuthTokenConfig = Config.firstSomeOf([
+  Config.Redacted("T3CODE_AUTH_TOKEN"),
+  Config.Redacted("APP_PASSWORD"),
+  Config.Redacted("T3CODE_DEV_AUTH_TOKEN"),
+]).pipe(
   Config.map((token) => Redacted.make(Redacted.value(token).trim())),
-  Config.mapEffect((token) =>
-    Redacted.value(token).length === 0 || Redacted.value(token).length >= 32
-      ? Effect.succeed(token)
-      : Effect.fail(
-          new Config.ConfigError(
-            new Schema.SchemaError(
-              new SchemaIssue.InvalidValue({
-                message: "T3CODE_DEV_AUTH_TOKEN must contain at least 32 characters.",
-              }),
-            ),
-          ),
-        ),
-  ),
   Config.option,
   Config.map(Option.filter((token) => Redacted.value(token).length > 0)),
   Config.map(Option.getOrUndefined),
@@ -315,7 +313,7 @@ export const resolveServerConfig = (
       () => undefined,
     );
     const devAuthToken =
-      mode === "web" && devUrl !== undefined ? yield* DevAuthTokenConfig : undefined;
+      mode === "web" ? yield* DevAuthTokenConfig : undefined;
     const explicitBaseDir = resolveOptionPrecedence(
       normalizedFlags.baseDir,
       Option.fromUndefinedOr(env.t3Home),
@@ -397,7 +395,11 @@ export const resolveServerConfig = (
       ),
       () => 443,
     );
-    const staticDir = devUrl ? undefined : yield* ServerConfig.resolveStaticDir();
+    const staticDir = devUrl
+      ? undefined
+      : env.staticDir !== undefined
+        ? path.resolve(env.staticDir)
+        : yield* ServerConfig.resolveStaticDir();
     const host = Option.getOrElse(
       resolveOptionPrecedence(
         normalizedFlags.host,

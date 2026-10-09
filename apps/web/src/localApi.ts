@@ -10,7 +10,13 @@ function createBrowserLocalApi(): LocalApi {
   return {
     dialogs: {
       pickFolder: async (options) => {
-        if (!window.desktopBridge) return null;
+        if (!window.desktopBridge) {
+          const defaultPath = options?.initialPath ?? "/workspace";
+          const input = typeof window !== "undefined"
+            ? window.prompt("Enter project folder path on server:", defaultPath)
+            : null;
+          return input?.trim() ? input.trim() : null;
+        }
         return window.desktopBridge.pickFolder(options);
       },
       confirm: async (message, options?: ConfirmDialogOptions) => {
