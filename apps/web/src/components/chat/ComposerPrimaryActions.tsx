@@ -11,6 +11,7 @@ import { Button } from "../ui/button";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
 import { Spinner } from "../ui/spinner";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { ComposerMicButton } from "./ComposerMicButton";
 import { composerFloatingLayerProps } from "./composerEventScope";
 import {
   alternateComposerDispatchAction,
@@ -360,7 +361,14 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
       <TooltipPopup>{submitTooltip}</TooltipPopup>
     </Tooltip>
   );
-  if (compactTokens === null) return submit;
+  const actions = (
+    <div className="flex items-center gap-1">
+      <ComposerMicButton />
+      {submit}
+    </div>
+  );
+
+  if (compactTokens === null) return actions;
 
   return (
     <div data-chat-composer-compact-send="true" className="flex items-center gap-2">
@@ -393,7 +401,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
             : `Next send compacts ${compactTokens} tokens first. Click to keep full history`}
         </TooltipPopup>
       </Tooltip>
-      {submit}
+      {actions}
     </div>
   );
 });

@@ -23,6 +23,8 @@ import {
   PaletteIcon,
   SearchIcon,
   Settings2Icon,
+  Volume2Icon,
+  MicIcon,
   XIcon,
 } from "lucide-react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
@@ -79,6 +81,8 @@ const SETTINGS_SECTION_ICONS: Readonly<
 > = {
   "/settings/general": Settings2Icon,
   "/settings/appearance": PaletteIcon,
+  "/settings/tts": Volume2Icon,
+  "/settings/stt": MicIcon,
   "/settings/projects": PanelsTopLeftIcon,
   "/settings/keybindings": KeyboardIcon,
   "/settings/snap-shot": SnapShotIcon,

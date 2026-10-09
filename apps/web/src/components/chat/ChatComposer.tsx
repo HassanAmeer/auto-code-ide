@@ -6227,6 +6227,19 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     return setContextInsertionHandler(composerDraftTarget, insertContextReferencesAtCaret);
   }, [composerDraftTarget, insertContextReferencesAtCaret, setContextInsertionHandler]);
 
+  useEffect(() => {
+    const handleSpeechText = (e: Event) => {
+      const customEvent = e as CustomEvent<{ text: string }>;
+      if (customEvent.detail?.text) {
+        insertComposerTextAtEnd(` ${customEvent.detail.text} `);
+      }
+    };
+    window.addEventListener("t3:insert-speech-text", handleSpeechText);
+    return () => {
+      window.removeEventListener("t3:insert-speech-text", handleSpeechText);
+    };
+  }, [insertComposerTextAtEnd]);
+
   // File-tree drags land as mentions. Handled in the capture phase so the
   // editor never sees the drop; the load-bearing rules (native stop, "move"
   // effect, no eager focus) live in makeComposerMentionDragHandlers.

@@ -500,8 +500,7 @@ const decodeBuildManifest = Schema.decodeUnknownEffect(
 
 const loadImmutableBuildAssets = Effect.gen(function* () {
   const config = yield* ServerConfig.ServerConfig;
-  const staticDir =
-    config.staticDir ?? (config.devUrl ? yield* ServerConfig.resolveStaticDir() : undefined);
+  const staticDir = config.staticDir ?? (yield* ServerConfig.resolveStaticDir());
   if (!staticDir) return new Set<string>();
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -563,8 +562,7 @@ const handleStaticAndDevRequest = Effect.fn("handleStaticAndDevRequest")(
       });
     }
 
-    const staticDir =
-      config.staticDir ?? (config.devUrl ? yield* ServerConfig.resolveStaticDir() : undefined);
+    const staticDir = config.staticDir ?? (yield* ServerConfig.resolveStaticDir());
     if (!staticDir) {
       return HttpServerResponse.text("No static directory configured and no dev URL set.", {
         status: 503,

@@ -3625,3 +3625,6 @@ export function ArchivedThreadsPanel() {
     </SettingsPageContainer>
   );
 }
+
+export { TtsSettingsPanel } from "./TtsSettingsPanel";
+export { SttSettingsPanel } from "./SttSettingsPanel";

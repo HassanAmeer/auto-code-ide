@@ -185,6 +185,7 @@ import {
   timelineContentOverflowsViewport,
 } from "./timelineScrollAnchoring";
 import { MessageCopyButton } from "./MessageCopyButton";
+import { ReadAloudButton } from "./ReadAloudButton";
 import { PierreEntryIcon } from "./PierreEntryIcon";
 import { inferEntryKindFromPath } from "../../pierre-icons";
 import { AssistantSelectionToolbar } from "./AssistantSelectionToolbar";
@@ -2930,7 +2931,12 @@ function AssistantCopyButton({
     return null;
   }
 
-  return <MessageCopyButton text={assistantCopyState.text ?? ""} variant="ghost" />;
+  return (
+    <div className="inline-flex items-center gap-0.5">
+      <MessageCopyButton text={assistantCopyState.text ?? ""} variant="ghost" />
+      <ReadAloudButton text={assistantCopyState.text ?? ""} variant="ghost" />
+    </div>
+  );
 }
 
 function ProposedPlanTimelineRow({
