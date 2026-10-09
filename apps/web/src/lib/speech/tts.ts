@@ -61,14 +61,18 @@ export function getVoicesForMode(
 ): SpeechSynthesisVoice[] {
   const isMale = (v: SpeechSynthesisVoice) => {
     const name = v.name.toLowerCase();
-    return name.includes("male") || name.includes("david") || name.includes("george") || name.includes("mark") || name.includes("guy");
+    return (
+      name.includes("male") ||
+      name.includes("david") ||
+      name.includes("george") ||
+      name.includes("mark") ||
+      name.includes("guy")
+    );
   };
 
   switch (mode) {
     case "natural-urdu": {
-      const urduOrHindi = voices.filter(
-        (v) => v.lang.startsWith("ur") || v.lang.startsWith("hi"),
-      );
+      const urduOrHindi = voices.filter((v) => v.lang.startsWith("ur") || v.lang.startsWith("hi"));
       if (urduOrHindi.length > 0) {
         return urduOrHindi.sort((a, b) => (isMale(b) ? 1 : 0) - (isMale(a) ? 1 : 0));
       }
@@ -76,9 +80,7 @@ export function getVoicesForMode(
     }
     case "roman-urdu": {
       // Roman Urdu is best articulated by Hindi/Urdu voices or smooth English voices
-      const urduHindi = voices.filter(
-        (v) => v.lang.startsWith("hi") || v.lang.startsWith("ur"),
-      );
+      const urduHindi = voices.filter((v) => v.lang.startsWith("hi") || v.lang.startsWith("ur"));
       const english = voices.filter((v) => v.lang.startsWith("en"));
       const combined = [...urduHindi, ...english];
       return combined.sort((a, b) => (isMale(b) ? 1 : 0) - (isMale(a) ? 1 : 0));
@@ -140,11 +142,7 @@ export function sanitizeTextForSpeech(markdown: string): string {
 /**
  * Speak provided text with active or specified settings.
  */
-export function speakText(
-  text: string,
-  options?: Partial<TtsSettings>,
-  onEnd?: () => void,
-): void {
+export function speakText(text: string, options?: Partial<TtsSettings>, onEnd?: () => void): void {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
 
   stopSpeaking();
@@ -164,7 +162,7 @@ export function speakText(
   if (settings.voiceURI) {
     const custom = voices.find((v) => v.voiceURI === settings.voiceURI);
     if (custom) utterance.voice = custom;
-  } else if (matchedVoices.length > 0) {
+  } else if (matchedVoices.length > 0 && matchedVoices[0]) {
     utterance.voice = matchedVoices[0];
   }
 

@@ -933,6 +933,7 @@ const SETTINGS_CATEGORY_SCOPES: Readonly<Record<SettingsPath, SettingsSearchScop
   "/settings/projects": "project",
   "/settings/general": null,
   "/settings/appearance": null,
+  "/settings/stt-tts": null,
   "/settings/snap-shot": null,
   // Keybindings fan out to the selection; Providers shows the representative
   // environment at any selection. Neither needs a particular scope to render.

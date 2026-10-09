@@ -1,7 +1,9 @@
-import { useState, useRef, useEffect, type ChangeEvent } from "react";
-import { Mic, MicOff, Volume2, Play, Square, CheckCircle2, AlertCircle } from "lucide-react";
+import { useState, useRef, useEffect, useMemo, type CSSProperties, type ChangeEvent } from "react";
+import { Mic, MicOff, Volume2, Play, Square, Settings2 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
+import { SettingsPageContainer, SettingsRow, SettingsSection } from "./settingsLayout";
 import {
   type TtsLanguageMode,
   type TtsSettings,
@@ -22,9 +24,22 @@ import {
   isSpeechRecognitionSupported,
   type SttController,
 } from "~/lib/speech/stt";
+import { cn } from "~/lib/utils";
+
+const STT_LANG_LABELS: Record<SttLanguageMode, string> = {
+  "roman-urdu": "Roman Urdu (Phonetic)",
+  "natural-urdu": "Natural Urdu (اردو رسم الخط)",
+  english: "English",
+};
+
+const TTS_LANG_LABELS: Record<TtsLanguageMode, string> = {
+  "roman-urdu": "Roman Urdu",
+  "natural-urdu": "Natural Urdu (اردو)",
+  english: "English",
+};
 
 export function SttTtsSettingsPanel() {
-  const [activeTab, setActiveTab] = useState<"stt" | "tts">("stt");
+  const [activeTab, setActiveTab] = useState<"all" | "stt" | "tts">("all");
 
   // --- TTS State ---
   const [tts, setTts] = useState<TtsSettings>(loadTtsSettings);
@@ -64,7 +79,12 @@ export function SttTtsSettingsPanel() {
 
   // --- TTS Handlers ---
   const updateTtsLanguage = (lang: TtsLanguageMode) => {
-    const updated = { ...tts, language: lang, voiceURI: undefined };
+    const updated: TtsSettings = {
+      language: lang,
+      rate: tts.rate,
+      pitch: tts.pitch,
+      volume: tts.volume,
+    };
     setTts(updated);
     saveTtsSettings(updated);
     if (lang === "natural-urdu") {
@@ -122,7 +142,7 @@ export function SttTtsSettingsPanel() {
       setLiveTranscript("");
       const session = createSttSession({
         mode: stt.language,
-        onResult: (text, isFinal) => {
+        onResult: (text) => {
           setLiveTranscript(text);
         },
         onStateChange: (active) => {
@@ -139,319 +159,336 @@ export function SttTtsSettingsPanel() {
     }
   };
 
-  const availableFilteredVoices = getVoicesForMode(voices, tts.language);
+  const availableFilteredVoices = useMemo(
+    () => getVoicesForMode(voices, tts.language),
+    [voices, tts.language],
+  );
+
+  const selectedVoiceName = useMemo(() => {
+    if (!tts.voiceURI) return "Auto (Male voice prioritized)";
+    const found = availableFilteredVoices.find((v) => v.voiceURI === tts.voiceURI);
+    return found ? `${found.name} (${found.lang})` : "Auto (Male voice prioritized)";
+  }, [tts.voiceURI, availableFilteredVoices]);
+
+  // Slider progress ratios for native slider styling
+  const speedProgressRatio = (tts.rate - 0.5) / (1.75 - 0.5);
+  const speedSliderStyle = {
+    "--settings-slider-progress": `${Math.max(0, Math.min(1, speedProgressRatio)) * 100}%`,
+    "--settings-slider-fill-offset": `${0.5 - speedProgressRatio}rem`,
+  } as CSSProperties;
+
+  const pitchProgressRatio = (tts.pitch - 0.5) / (1.5 - 0.5);
+  const pitchSliderStyle = {
+    "--settings-slider-progress": `${Math.max(0, Math.min(1, pitchProgressRatio)) * 100}%`,
+    "--settings-slider-fill-offset": `${0.5 - pitchProgressRatio}rem`,
+  } as CSSProperties;
 
   return (
-    <div className="flex flex-col gap-6 max-w-2xl">
-      <div>
-        <h2 className="text-xl font-semibold tracking-tight">STT-TTS Settings</h2>
-        <p className="text-sm text-muted-foreground mt-1">
-          Configure Speech-to-Text (STT) and Text-to-Speech (TTS) for Roman Urdu, Natural Urdu, and
-          English.
-        </p>
-      </div>
-
-      {/* Top Tabs */}
-      <div className="flex border-b border-border gap-2">
-        <button
-          type="button"
-          onClick={() => setActiveTab("stt")}
-          className={`flex items-center gap-2 pb-2.5 px-3 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === "stt"
-              ? "border-primary text-foreground font-semibold"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          <Mic className="size-4" />
-          <span>Speech-to-Text (STT)</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab("tts")}
-          className={`flex items-center gap-2 pb-2.5 px-3 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === "tts"
-              ? "border-primary text-foreground font-semibold"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          <Volume2 className="size-4" />
-          <span>Text-to-Speech (TTS)</span>
-        </button>
-      </div>
-
-      {/* STT TAB CONTENT */}
-      {activeTab === "stt" && (
-        <div className="flex flex-col gap-5">
-          {/* Browser Support Indicator */}
-          <div
-            className={`flex items-center gap-2 p-3 rounded-md border text-sm ${
-              isSttSupported
-                ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
-                : "border-amber-500/20 bg-amber-500/10 text-amber-400"
-            }`}
-          >
-            {isSttSupported ? (
-              <>
-                <CheckCircle2 className="size-4 shrink-0 text-emerald-500" />
-                <span>Chrome Web Speech API is active for Speech-to-Text.</span>
-              </>
-            ) : (
-              <>
-                <AlertCircle className="size-4 shrink-0 text-amber-500" />
-                <span>
-                  Web Speech API not detected. Please use Google Chrome for voice dictation.
-                </span>
-              </>
+    <SettingsPageContainer>
+      {/* Tab Filter Header */}
+      <div className="flex items-center justify-between pb-1">
+        <div className="flex items-center gap-1 rounded-lg border border-border/60 bg-muted/30 p-1">
+          <button
+            type="button"
+            onClick={() => setActiveTab("all")}
+            className={cn(
+              "flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-colors cursor-pointer",
+              activeTab === "all"
+                ? "bg-background text-foreground shadow-xs"
+                : "text-muted-foreground hover:text-foreground",
             )}
-          </div>
-
-          {/* STT Language Selection */}
-          <div className="flex flex-col gap-2 rounded-lg border border-border p-4 bg-card">
-            <label className="text-sm font-medium">Dictation Accent / Language</label>
-            <p className="text-xs text-muted-foreground mb-2">
-              Select what accent the microphone transcribes when speaking.
-            </p>
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => updateSttLanguage("roman-urdu")}
-                className={`p-3 rounded-md border text-sm font-medium text-left transition-colors ${
-                  stt.language === "roman-urdu"
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border hover:bg-muted"
-                }`}
-              >
-                <div className="font-semibold">Roman Urdu</div>
-                <div className="text-xs text-muted-foreground mt-1">Spoken Urdu / Phonetic</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => updateSttLanguage("natural-urdu")}
-                className={`p-3 rounded-md border text-sm font-medium text-left transition-colors ${
-                  stt.language === "natural-urdu"
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border hover:bg-muted"
-                }`}
-              >
-                <div className="font-semibold">Natural Urdu</div>
-                <div className="text-xs text-muted-foreground mt-1">اردو الفاظ (Urdu script)</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => updateSttLanguage("english")}
-                className={`p-3 rounded-md border text-sm font-medium text-left transition-colors ${
-                  stt.language === "english"
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border hover:bg-muted"
-                }`}
-              >
-                <div className="font-semibold">English</div>
-                <div className="text-xs text-muted-foreground mt-1">Standard English</div>
-              </button>
-            </div>
-          </div>
-
-          {/* STT Test Playground */}
-          <div className="flex flex-col gap-3 rounded-lg border border-border p-4 bg-card">
-            <label className="text-sm font-medium flex items-center justify-between">
-              <span className="flex items-center gap-2">
-                <Mic className="size-4 text-primary" /> Test Microphone Recognition
-              </span>
-              {isListening && (
-                <span className="text-xs text-red-500 font-normal animate-pulse">
-                  ● Listening...
-                </span>
-              )}
-            </label>
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center gap-3">
-                <Button
-                  type="button"
-                  onClick={toggleTestMic}
-                  disabled={!isSttSupported}
-                  variant={isListening ? "destructive" : "default"}
-                  className="flex items-center gap-2"
-                >
-                  {isListening ? (
-                    <>
-                      <MicOff className="size-4" /> Stop Listening
-                    </>
-                  ) : (
-                    <>
-                      <Mic className="size-4" /> Start Microphone Test
-                    </>
-                  )}
-                </Button>
-                {isListening && (
-                  <span className="text-xs text-muted-foreground animate-pulse">
-                    Speak now in {stt.language.replace("-", " ")}...
-                  </span>
-                )}
-              </div>
-
-              {sttError && (
-                <div className="p-2.5 rounded bg-destructive/10 text-destructive text-xs">
-                  {sttError}
-                </div>
-              )}
-
-              <div className="min-h-20 rounded-md border border-input bg-muted/40 p-3 text-sm flex flex-col justify-between">
-                <div className="font-mono text-xs text-muted-foreground mb-1">
-                  Live Transcription Output:
-                </div>
-                <div className="text-foreground italic">
-                  {liveTranscript
-                    ? liveTranscript
-                    : "(No speech detected yet. Click start and speak into your mic)"}
-                </div>
-              </div>
-            </div>
-          </div>
+          >
+            <Settings2 className="size-3.5" />
+            All
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("stt")}
+            className={cn(
+              "flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-colors cursor-pointer",
+              activeTab === "stt"
+                ? "bg-background text-foreground shadow-xs"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <Mic className="size-3.5" />
+            Speech-to-Text
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("tts")}
+            className={cn(
+              "flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-colors cursor-pointer",
+              activeTab === "tts"
+                ? "bg-background text-foreground shadow-xs"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <Volume2 className="size-3.5" />
+            Text-to-Speech
+          </button>
         </div>
-      )}
+      </div>
 
-      {/* TTS TAB CONTENT */}
-      {activeTab === "tts" && (
-        <div className="flex flex-col gap-5">
-          {/* TTS Language Selection */}
-          <div className="flex flex-col gap-2 rounded-lg border border-border p-4 bg-card">
-            <label className="text-sm font-medium">
-              Spoken Language / Accent (Male Prioritized)
-            </label>
-            <p className="text-xs text-muted-foreground mb-2">
-              Choose the primary voice accent for agent response read-aloud.
-            </p>
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => updateTtsLanguage("roman-urdu")}
-                className={`p-3 rounded-md border text-sm font-medium text-left transition-colors ${
-                  tts.language === "roman-urdu"
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border hover:bg-muted"
-                }`}
-              >
-                <div className="font-semibold">Roman Urdu</div>
-                <div className="text-xs text-muted-foreground mt-1">Urdu in Latin script</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => updateTtsLanguage("natural-urdu")}
-                className={`p-3 rounded-md border text-sm font-medium text-left transition-colors ${
-                  tts.language === "natural-urdu"
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border hover:bg-muted"
-                }`}
-              >
-                <div className="font-semibold">Natural Urdu</div>
-                <div className="text-xs text-muted-foreground mt-1">اردو الفاظ و رسم الخط</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => updateTtsLanguage("english")}
-                className={`p-3 rounded-md border text-sm font-medium text-left transition-colors ${
-                  tts.language === "english"
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border hover:bg-muted"
-                }`}
-              >
-                <div className="font-semibold">English</div>
-                <div className="text-xs text-muted-foreground mt-1">Standard English</div>
-              </button>
-            </div>
-          </div>
-
-          {/* Voice Dropdown */}
-          <div className="flex flex-col gap-2 rounded-lg border border-border p-4 bg-card">
-            <label className="text-sm font-medium">Browser Voice (Male Prioritized)</label>
-            <p className="text-xs text-muted-foreground mb-1">
-              Select from available Chrome system voices.
-            </p>
-            <select
-              value={tts.voiceURI ?? ""}
-              onChange={(e: ChangeEvent<HTMLSelectElement>) => updateTtsVoiceURI(e.target.value)}
-              className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            >
-              <option value="">Auto (Best Matching Male Voice)</option>
-              {availableFilteredVoices.map((v) => (
-                <option key={v.voiceURI} value={v.voiceURI}>
-                  {v.name} ({v.lang})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Speed & Pitch Controls */}
-          <div className="grid grid-cols-2 gap-4 rounded-lg border border-border p-4 bg-card">
-            <div className="flex flex-col gap-2">
-              <div className="flex justify-between items-center text-sm font-medium">
-                <span>Speech Speed</span>
-                <span className="text-xs text-muted-foreground">{tts.rate}x</span>
+      {/* SPEECH-TO-TEXT SECTION */}
+      {(activeTab === "all" || activeTab === "stt") && (
+        <SettingsSection
+          id="stt-section"
+          title="Speech-to-Text (STT)"
+          icon={<Mic className="size-4" />}
+        >
+          <SettingsRow
+            title="Browser speech engine"
+            description={
+              isSttSupported
+                ? "Chrome Web Speech recognition is active and ready for microphone input."
+                : "Web Speech API is not supported in this browser. Please use Chrome for voice dictation."
+            }
+            control={
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-muted/40 px-2.5 py-0.5 text-xs font-medium text-foreground">
+                  <span
+                    className={cn(
+                      "size-1.5 rounded-full",
+                      isSttSupported ? "bg-emerald-500" : "bg-warning",
+                    )}
+                  />
+                  {isSttSupported ? "Active" : "Unavailable"}
+                </span>
               </div>
-              <input
-                type="range"
-                min="0.5"
-                max="1.75"
-                step="0.05"
-                value={tts.rate}
-                onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                  updateTtsRate(parseFloat(e.target.value))
-                }
-                className="w-full accent-primary cursor-pointer"
-              />
-            </div>
-            <div className="flex flex-col gap-2">
-              <div className="flex justify-between items-center text-sm font-medium">
-                <span>Pitch</span>
-                <span className="text-xs text-muted-foreground">{tts.pitch}x</span>
-              </div>
-              <input
-                type="range"
-                min="0.5"
-                max="1.5"
-                step="0.05"
-                value={tts.pitch}
-                onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                  updateTtsPitch(parseFloat(e.target.value))
-                }
-                className="w-full accent-primary cursor-pointer"
-              />
-            </div>
-          </div>
+            }
+          />
 
-          {/* TTS Test Playground */}
-          <div className="flex flex-col gap-3 rounded-lg border border-border p-4 bg-card">
-            <label className="text-sm font-medium flex items-center gap-2">
-              <Volume2 className="size-4 text-primary" /> Test Voice Output
-            </label>
-            <div className="flex gap-2">
-              <Input
-                value={testText}
-                onChange={(e: ChangeEvent<HTMLInputElement>) => setTestText(e.target.value)}
-                placeholder="Type text to speak..."
-                className="flex-1"
-              />
+          <SettingsRow
+            title="Dictation language & dialect"
+            description="Select which spoken dialect or accent the microphone transcribes."
+            control={
+              <Select
+                value={stt.language}
+                onValueChange={(val) => {
+                  if (val) updateSttLanguage(val as SttLanguageMode);
+                }}
+              >
+                <SelectTrigger size="sm" className="w-full sm:w-56" aria-label="Dictation language">
+                  <SelectValue>{STT_LANG_LABELS[stt.language]}</SelectValue>
+                </SelectTrigger>
+                <SelectPopup align="end" alignItemWithTrigger={false}>
+                  <SelectItem hideIndicator value="roman-urdu">
+                    Roman Urdu (Phonetic)
+                  </SelectItem>
+                  <SelectItem hideIndicator value="natural-urdu">
+                    Natural Urdu (اردو رسم الخط)
+                  </SelectItem>
+                  <SelectItem hideIndicator value="english">
+                    English
+                  </SelectItem>
+                </SelectPopup>
+              </Select>
+            }
+          />
+
+          <SettingsRow
+            title="Microphone test"
+            description="Test your microphone recognition and view real-time transcription."
+            control={
               <Button
                 type="button"
-                onClick={handleTestSpeak}
-                variant={isSpeaking ? "destructive" : "default"}
-                className="shrink-0 flex items-center gap-1.5"
+                size="sm"
+                variant={isListening ? "destructive" : "outline"}
+                disabled={!isSttSupported}
+                onClick={toggleTestMic}
+                className="flex items-center gap-2"
               >
-                {isSpeaking ? (
+                {isListening ? (
                   <>
-                    <Square className="size-3.5 fill-current" /> Stop
+                    <MicOff className="size-3.5" /> Stop Listening
                   </>
                 ) : (
                   <>
-                    <Play className="size-3.5 fill-current" /> Speak Test
+                    <Mic className="size-3.5" /> Start Test
                   </>
                 )}
               </Button>
+            }
+          />
+
+          {/* Test Transcript Preview Box */}
+          <div className="p-3 sm:p-4 bg-muted/20 border-t border-border/50">
+            <div className="flex items-center justify-between text-xs text-muted-foreground font-mono mb-2">
+              <span>Live transcription output:</span>
+              {isListening && (
+                <span className="flex items-center gap-1.5 font-sans font-medium text-destructive animate-pulse">
+                  <span className="size-1.5 rounded-full bg-destructive" />
+                  Listening now in {STT_LANG_LABELS[stt.language]}...
+                </span>
+              )}
             </div>
+            {sttError ? (
+              <div className="rounded-md border border-destructive/30 bg-destructive/10 p-2.5 text-xs text-destructive">
+                {sttError}
+              </div>
+            ) : (
+              <div
+                className={cn(
+                  "rounded-md border border-border/60 bg-background/80 p-3 text-sm min-h-14 flex items-center",
+                  !liveTranscript && "text-muted-foreground italic",
+                )}
+              >
+                {liveTranscript ||
+                  (isListening
+                    ? "Speak into your microphone now..."
+                    : "Click 'Start Test' and speak into your microphone to verify recognition.")}
+              </div>
+            )}
           </div>
-        </div>
+        </SettingsSection>
       )}
-    </div>
+
+      {/* TEXT-TO-SPEECH SECTION */}
+      {(activeTab === "all" || activeTab === "tts") && (
+        <SettingsSection
+          id="tts-section"
+          title="Text-to-Speech (TTS)"
+          icon={<Volume2 className="size-4" />}
+        >
+          <SettingsRow
+            title="Voice accent & dialect"
+            description="Select which language accent is used when reading assistant answers aloud."
+            control={
+              <Select
+                value={tts.language}
+                onValueChange={(val) => {
+                  if (val) updateTtsLanguage(val as TtsLanguageMode);
+                }}
+              >
+                <SelectTrigger size="sm" className="w-full sm:w-56" aria-label="Voice accent">
+                  <SelectValue>{TTS_LANG_LABELS[tts.language]}</SelectValue>
+                </SelectTrigger>
+                <SelectPopup align="end" alignItemWithTrigger={false}>
+                  <SelectItem hideIndicator value="roman-urdu">
+                    Roman Urdu
+                  </SelectItem>
+                  <SelectItem hideIndicator value="natural-urdu">
+                    Natural Urdu (اردو)
+                  </SelectItem>
+                  <SelectItem hideIndicator value="english">
+                    English
+                  </SelectItem>
+                </SelectPopup>
+              </Select>
+            }
+          />
+
+          <SettingsRow
+            title="Synthesizer voice"
+            description="Choose a browser synthesizer voice (male voices prioritized automatically)."
+            control={
+              <Select
+                value={tts.voiceURI || "auto"}
+                onValueChange={(val) => updateTtsVoiceURI(val === "auto" || !val ? "" : val)}
+              >
+                <SelectTrigger size="sm" className="w-full sm:w-56" aria-label="Synthesizer voice">
+                  <SelectValue>{selectedVoiceName}</SelectValue>
+                </SelectTrigger>
+                <SelectPopup align="end" alignItemWithTrigger={false}>
+                  <SelectItem hideIndicator value="auto">
+                    Auto (Male voice prioritized)
+                  </SelectItem>
+                  {availableFilteredVoices.map((v) => (
+                    <SelectItem hideIndicator key={v.voiceURI} value={v.voiceURI}>
+                      {v.name} ({v.lang})
+                    </SelectItem>
+                  ))}
+                </SelectPopup>
+              </Select>
+            }
+          />
+
+          <SettingsRow
+            title="Speech speed"
+            description="Speed rate for text-to-speech audio synthesis."
+            control={
+              <div className="flex w-full items-center gap-3 sm:w-56">
+                <span className="w-10 text-right font-mono text-xs tabular-nums text-muted-foreground">
+                  {tts.rate.toFixed(2)}x
+                </span>
+                <input
+                  aria-label="Speech speed"
+                  className="settings-slider min-w-0 flex-1 cursor-pointer"
+                  id="tts-speed"
+                  max={1.75}
+                  min={0.5}
+                  step={0.05}
+                  type="range"
+                  style={speedSliderStyle}
+                  value={tts.rate}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                    updateTtsRate(parseFloat(e.currentTarget.value))
+                  }
+                />
+              </div>
+            }
+          />
+
+          <SettingsRow
+            title="Voice pitch"
+            description="Pitch tone frequency for spoken voice."
+            control={
+              <div className="flex w-full items-center gap-3 sm:w-56">
+                <span className="w-10 text-right font-mono text-xs tabular-nums text-muted-foreground">
+                  {tts.pitch.toFixed(2)}x
+                </span>
+                <input
+                  aria-label="Voice pitch"
+                  className="settings-slider min-w-0 flex-1 cursor-pointer"
+                  id="tts-pitch"
+                  max={1.5}
+                  min={0.5}
+                  step={0.05}
+                  type="range"
+                  style={pitchSliderStyle}
+                  value={tts.pitch}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                    updateTtsPitch(parseFloat(e.currentTarget.value))
+                  }
+                />
+              </div>
+            }
+          />
+
+          <SettingsRow
+            title="Preview voice output"
+            description="Type a test phrase and verify your speed, pitch, and voice settings."
+            control={
+              <div className="flex w-full items-center gap-2 sm:w-96">
+                <Input
+                  value={testText}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => setTestText(e.target.value)}
+                  placeholder="Type text to speak..."
+                  className="h-8 text-xs flex-1"
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={isSpeaking ? "destructive" : "outline"}
+                  onClick={handleTestSpeak}
+                  className="shrink-0 flex items-center gap-1.5"
+                >
+                  {isSpeaking ? (
+                    <>
+                      <Square className="size-3 fill-current" /> Stop
+                    </>
+                  ) : (
+                    <>
+                      <Play className="size-3 fill-current" /> Speak
+                    </>
+                  )}
+                </Button>
+              </div>
+            }
+          />
+        </SettingsSection>
+      )}
+    </SettingsPageContainer>
   );
 }

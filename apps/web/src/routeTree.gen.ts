@@ -17,6 +17,9 @@ import { Route as ConnectAgentRouteImport } from './routes/connect-agent'
 import { Route as ConnectRouteImport } from './routes/connect'
 import { Route as ChatRouteImport } from './routes/_chat'
 import { Route as ChatIndexRouteImport } from './routes/_chat.index'
+import { Route as SettingsTtsRouteImport } from './routes/settings.tts'
+import { Route as SettingsSttTtsRouteImport } from './routes/settings.stt-tts'
+import { Route as SettingsSttRouteImport } from './routes/settings.stt'
 import { Route as SettingsStorageRouteImport } from './routes/settings.storage'
 import { Route as SettingsSourceControlRouteImport } from './routes/settings.source-control'
 import { Route as SettingsSnapShotRouteImport } from './routes/settings.snap-shot'
@@ -31,9 +34,6 @@ import { Route as SettingsDiagnosticsRouteImport } from './routes/settings.diagn
 import { Route as SettingsConnectionsRouteImport } from './routes/settings.connections'
 import { Route as SettingsArchivedRouteImport } from './routes/settings.archived'
 import { Route as SettingsAppearanceRouteImport } from './routes/settings.appearance'
-import { Route as SettingsSttTtsRouteImport } from './routes/settings.stt-tts'
-import { Route as SettingsTtsRouteImport } from './routes/settings.tts'
-import { Route as SettingsSttRouteImport } from './routes/settings.stt'
 import { Route as ProjectsProjectKeyRouteImport } from './routes/projects.$projectKey'
 import { Route as ChatPullRequestsRouteImport } from './routes/_chat.pull-requests'
 import { Route as ChatDraftDraftIdRouteImport } from './routes/_chat.draft.$draftId'
@@ -77,6 +77,21 @@ const ChatIndexRoute = ChatIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => ChatRoute,
+} as any)
+const SettingsTtsRoute = SettingsTtsRouteImport.update({
+  id: '/tts',
+  path: '/tts',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsSttTtsRoute = SettingsSttTtsRouteImport.update({
+  id: '/stt-tts',
+  path: '/stt-tts',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsSttRoute = SettingsSttRouteImport.update({
+  id: '/stt',
+  path: '/stt',
+  getParentRoute: () => SettingsRoute,
 } as any)
 const SettingsStorageRoute = SettingsStorageRouteImport.update({
   id: '/storage',
@@ -149,21 +164,6 @@ const SettingsAppearanceRoute = SettingsAppearanceRouteImport.update({
   path: '/appearance',
   getParentRoute: () => SettingsRoute,
 } as any)
-const SettingsSttTtsRoute = SettingsSttTtsRouteImport.update({
-  id: '/stt-tts',
-  path: '/stt-tts',
-  getParentRoute: () => SettingsRoute,
-} as any)
-const SettingsTtsRoute = SettingsTtsRouteImport.update({
-  id: '/tts',
-  path: '/tts',
-  getParentRoute: () => SettingsRoute,
-} as any)
-const SettingsSttRoute = SettingsSttRouteImport.update({
-  id: '/stt',
-  path: '/stt',
-  getParentRoute: () => SettingsRoute,
-} as any)
 const ProjectsProjectKeyRoute = ProjectsProjectKeyRouteImport.update({
   id: '/projects/$projectKey',
   path: '/projects/$projectKey',
@@ -197,7 +197,6 @@ export interface FileRoutesByFullPath {
   '/pull-requests': typeof ChatPullRequestsRoute
   '/projects/$projectKey': typeof ProjectsProjectKeyRoute
   '/settings/appearance': typeof SettingsAppearanceRoute
-  '/settings/stt-tts': typeof SettingsSttTtsRoute
   '/settings/archived': typeof SettingsArchivedRoute
   '/settings/connections': typeof SettingsConnectionsRoute
   '/settings/diagnostics': typeof SettingsDiagnosticsRoute
@@ -211,6 +210,9 @@ export interface FileRoutesByFullPath {
   '/settings/snap-shot': typeof SettingsSnapShotRoute
   '/settings/source-control': typeof SettingsSourceControlRoute
   '/settings/storage': typeof SettingsStorageRoute
+  '/settings/stt': typeof SettingsSttRoute
+  '/settings/stt-tts': typeof SettingsSttTtsRoute
+  '/settings/tts': typeof SettingsTtsRoute
   '/$environmentId/$threadId': typeof ChatEnvironmentIdThreadIdRoute
   '/draft/$draftId': typeof ChatDraftDraftIdRoute
 }
@@ -224,7 +226,6 @@ export interface FileRoutesByTo {
   '/pull-requests': typeof ChatPullRequestsRoute
   '/projects/$projectKey': typeof ProjectsProjectKeyRoute
   '/settings/appearance': typeof SettingsAppearanceRoute
-  '/settings/stt-tts': typeof SettingsSttTtsRoute
   '/settings/archived': typeof SettingsArchivedRoute
   '/settings/connections': typeof SettingsConnectionsRoute
   '/settings/diagnostics': typeof SettingsDiagnosticsRoute
@@ -238,6 +239,9 @@ export interface FileRoutesByTo {
   '/settings/snap-shot': typeof SettingsSnapShotRoute
   '/settings/source-control': typeof SettingsSourceControlRoute
   '/settings/storage': typeof SettingsStorageRoute
+  '/settings/stt': typeof SettingsSttRoute
+  '/settings/stt-tts': typeof SettingsSttTtsRoute
+  '/settings/tts': typeof SettingsTtsRoute
   '/': typeof ChatIndexRoute
   '/$environmentId/$threadId': typeof ChatEnvironmentIdThreadIdRoute
   '/draft/$draftId': typeof ChatDraftDraftIdRoute
@@ -254,7 +258,6 @@ export interface FileRoutesById {
   '/_chat/pull-requests': typeof ChatPullRequestsRoute
   '/projects/$projectKey': typeof ProjectsProjectKeyRoute
   '/settings/appearance': typeof SettingsAppearanceRoute
-  '/settings/stt-tts': typeof SettingsSttTtsRoute
   '/settings/archived': typeof SettingsArchivedRoute
   '/settings/connections': typeof SettingsConnectionsRoute
   '/settings/diagnostics': typeof SettingsDiagnosticsRoute
@@ -268,6 +271,9 @@ export interface FileRoutesById {
   '/settings/snap-shot': typeof SettingsSnapShotRoute
   '/settings/source-control': typeof SettingsSourceControlRoute
   '/settings/storage': typeof SettingsStorageRoute
+  '/settings/stt': typeof SettingsSttRoute
+  '/settings/stt-tts': typeof SettingsSttTtsRoute
+  '/settings/tts': typeof SettingsTtsRoute
   '/_chat/': typeof ChatIndexRoute
   '/_chat/$environmentId/$threadId': typeof ChatEnvironmentIdThreadIdRoute
   '/_chat/draft/$draftId': typeof ChatDraftDraftIdRoute
@@ -285,7 +291,6 @@ export interface FileRouteTypes {
     | '/pull-requests'
     | '/projects/$projectKey'
     | '/settings/appearance'
-    | '/settings/stt-tts'
     | '/settings/archived'
     | '/settings/connections'
     | '/settings/diagnostics'
@@ -299,6 +304,9 @@ export interface FileRouteTypes {
     | '/settings/snap-shot'
     | '/settings/source-control'
     | '/settings/storage'
+    | '/settings/stt'
+    | '/settings/stt-tts'
+    | '/settings/tts'
     | '/$environmentId/$threadId'
     | '/draft/$draftId'
   fileRoutesByTo: FileRoutesByTo
@@ -312,7 +320,6 @@ export interface FileRouteTypes {
     | '/pull-requests'
     | '/projects/$projectKey'
     | '/settings/appearance'
-    | '/settings/stt-tts'
     | '/settings/archived'
     | '/settings/connections'
     | '/settings/diagnostics'
@@ -326,6 +333,9 @@ export interface FileRouteTypes {
     | '/settings/snap-shot'
     | '/settings/source-control'
     | '/settings/storage'
+    | '/settings/stt'
+    | '/settings/stt-tts'
+    | '/settings/tts'
     | '/'
     | '/$environmentId/$threadId'
     | '/draft/$draftId'
@@ -341,7 +351,6 @@ export interface FileRouteTypes {
     | '/_chat/pull-requests'
     | '/projects/$projectKey'
     | '/settings/appearance'
-    | '/settings/stt-tts'
     | '/settings/archived'
     | '/settings/connections'
     | '/settings/diagnostics'
@@ -355,6 +364,9 @@ export interface FileRouteTypes {
     | '/settings/snap-shot'
     | '/settings/source-control'
     | '/settings/storage'
+    | '/settings/stt'
+    | '/settings/stt-tts'
+    | '/settings/tts'
     | '/_chat/'
     | '/_chat/$environmentId/$threadId'
     | '/_chat/draft/$draftId'
@@ -428,6 +440,27 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof ChatIndexRouteImport
       parentRoute: typeof ChatRoute
+    }
+    '/settings/tts': {
+      id: '/settings/tts'
+      path: '/tts'
+      fullPath: '/settings/tts'
+      preLoaderRoute: typeof SettingsTtsRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/stt-tts': {
+      id: '/settings/stt-tts'
+      path: '/stt-tts'
+      fullPath: '/settings/stt-tts'
+      preLoaderRoute: typeof SettingsSttTtsRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/stt': {
+      id: '/settings/stt'
+      path: '/stt'
+      fullPath: '/settings/stt'
+      preLoaderRoute: typeof SettingsSttRouteImport
+      parentRoute: typeof SettingsRoute
     }
     '/settings/storage': {
       id: '/settings/storage'
@@ -527,13 +560,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsAppearanceRouteImport
       parentRoute: typeof SettingsRoute
     }
-    '/settings/stt-tts': {
-      id: '/settings/stt-tts'
-      path: '/stt-tts'
-      fullPath: '/settings/stt-tts'
-      preLoaderRoute: typeof SettingsSttTtsRouteImport
-      parentRoute: typeof SettingsRoute
-    }
     '/projects/$projectKey': {
       id: '/projects/$projectKey'
       path: '/projects/$projectKey'
@@ -583,9 +609,6 @@ const ChatRouteWithChildren = ChatRoute._addFileChildren(ChatRouteChildren)
 
 interface SettingsRouteChildren {
   SettingsAppearanceRoute: typeof SettingsAppearanceRoute
-  SettingsSttTtsRoute: typeof SettingsSttTtsRoute
-  SettingsTtsRoute: typeof SettingsTtsRoute
-  SettingsSttRoute: typeof SettingsSttRoute
   SettingsArchivedRoute: typeof SettingsArchivedRoute
   SettingsConnectionsRoute: typeof SettingsConnectionsRoute
   SettingsDiagnosticsRoute: typeof SettingsDiagnosticsRoute
@@ -599,13 +622,13 @@ interface SettingsRouteChildren {
   SettingsSnapShotRoute: typeof SettingsSnapShotRoute
   SettingsSourceControlRoute: typeof SettingsSourceControlRoute
   SettingsStorageRoute: typeof SettingsStorageRoute
+  SettingsSttRoute: typeof SettingsSttRoute
+  SettingsSttTtsRoute: typeof SettingsSttTtsRoute
+  SettingsTtsRoute: typeof SettingsTtsRoute
 }
 
 const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsAppearanceRoute: SettingsAppearanceRoute,
-  SettingsSttTtsRoute: SettingsSttTtsRoute,
-  SettingsTtsRoute: SettingsTtsRoute,
-  SettingsSttRoute: SettingsSttRoute,
   SettingsArchivedRoute: SettingsArchivedRoute,
   SettingsConnectionsRoute: SettingsConnectionsRoute,
   SettingsDiagnosticsRoute: SettingsDiagnosticsRoute,
@@ -619,6 +642,9 @@ const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsSnapShotRoute: SettingsSnapShotRoute,
   SettingsSourceControlRoute: SettingsSourceControlRoute,
   SettingsStorageRoute: SettingsStorageRoute,
+  SettingsSttRoute: SettingsSttRoute,
+  SettingsSttTtsRoute: SettingsSttTtsRoute,
+  SettingsTtsRoute: SettingsTtsRoute,
 }
 
 const SettingsRouteWithChildren = SettingsRoute._addFileChildren(

@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { SttSettingsPanel } from "../components/settings/SttSettingsPanel";
+import { SttTtsSettingsPanel } from "../components/settings/SttTtsSettingsPanel";
 
 function SettingsSttRoute() {
-  return <SttSettingsPanel />;
+  return <SttTtsSettingsPanel />;
 }
 
 export const Route = createFileRoute("/settings/stt")({

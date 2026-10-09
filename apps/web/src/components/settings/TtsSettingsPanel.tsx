@@ -17,7 +17,9 @@ import {
 export function TtsSettingsPanel() {
   const [settings, setSettings] = useState<TtsSettings>(loadTtsSettings);
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-  const [testText, setTestText] = useState("Assalam o alaikum! Yeh T3 Code ka text to speech test hai.");
+  const [testText, setTestText] = useState(
+    "Assalam o alaikum! Yeh T3 Code ka text to speech test hai.",
+  );
   const [isSpeaking, setIsSpeaking] = useState(false);
 
   useEffect(() => {
@@ -38,9 +40,10 @@ export function TtsSettingsPanel() {
 
   const updateLanguage = (lang: TtsLanguageMode) => {
     const updated: TtsSettings = {
-      ...settings,
       language: lang,
-      voiceURI: undefined, // reset to pick best default
+      rate: settings.rate,
+      pitch: settings.pitch,
+      volume: settings.volume,
     };
     setSettings(updated);
     saveTtsSettings(updated);
