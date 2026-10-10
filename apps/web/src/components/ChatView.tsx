@@ -441,6 +441,7 @@ import { ExpandedImageDialog } from "./chat/ExpandedImageDialog";
 import { PullRequestThreadDialog } from "./PullRequestThreadDialog";
 import type { AssistantCitationRequest } from "./chat/AssistantCitationSource";
 import { MessagesTimeline, type MessagesTimelineHistoryControls } from "./chat/MessagesTimeline";
+import { terminalStore } from "./chat/terminal";
 import { ProviderSubagentBar } from "./chat/ProviderSubagentBar";
 import { getTriggerDisplayModelName } from "./chat/providerIconUtils";
 import { resolveTimelineIsAtEnd, worktreeSetupAgentStarted } from "./chat/MessagesTimeline.logic";
@@ -5102,18 +5103,22 @@ export default function ChatView(props: ChatViewProps) {
   useLayoutEffect(() => {
     runProjectScriptRef.current = runProjectScript;
   }, [runProjectScript]);
-  const runShellCommand = useCallback((command: string) => {
-    void runProjectScriptRef.current(
-      {
-        id: "chat-code-block",
-        name: "Chat code block",
-        command,
-        icon: "play",
-        runOnWorktreeCreate: false,
-      },
-      { rememberAsLastInvoked: false },
-    );
-  }, []);
+  const runShellCommand = useCallback(
+    (command: string) => {
+      void terminalStore.runCommand(command, gitCwd ?? "/");
+      void runProjectScriptRef.current(
+        {
+          id: "chat-code-block",
+          name: "Chat code block",
+          command,
+          icon: "play",
+          runOnWorktreeCreate: false,
+        },
+        { rememberAsLastInvoked: false },
+      );
+    },
+    [gitCwd],
+  );
 
   const supportsProjectSettingsOverrides =
     environmentById.get(environmentId)?.serverConfig?.environment.capabilities

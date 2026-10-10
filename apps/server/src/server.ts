@@ -683,6 +683,7 @@ const layerMakeRoutes = Layer.mergeAll(
     ServerHttp.layerOtlpTracesProxyRoute,
     ServerHttp.layerAssetRoute,
     ServerHttp.layerAttachmentUploadRoute,
+    ServerHttp.layerTerminalExecRoute,
     DeviceHubProxy.layer,
     ServerBrowserStream.routeLayer,
     ServerHttp.layerStaticAndDevRoute,

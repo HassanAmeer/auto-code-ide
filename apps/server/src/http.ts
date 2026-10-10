@@ -1,3 +1,4 @@
+import { runBashCommandOnHost } from "./terminalExec.ts";
 import * as Mime from "effect/http/Mime";
 import {
   AuthOrchestrationOperateScope,
@@ -482,6 +483,37 @@ export const layerAttachmentUploadRoute = HttpRouter.add(
     return stored.ok
       ? HttpServerResponse.empty({ status: 204 })
       : HttpServerResponse.text(stored.detail, { status: stored.status });
+  }),
+);
+
+export const layerTerminalExecRoute = HttpRouter.add(
+  "POST",
+  "/api/terminal/exec",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const bodyJson = (yield* request.json) as {
+      command?: string;
+      cwd?: string;
+      timeoutMs?: number;
+    };
+
+    const command = bodyJson?.command?.trim();
+    if (!command) {
+      return HttpServerResponse.jsonUnsafe({
+        ok: false,
+        error: "Command is required",
+        stdout: "",
+        stderr: "Command is required",
+        exitCode: 1,
+        durationMs: 0,
+      });
+    }
+
+    const targetCwd = bodyJson?.cwd && bodyJson.cwd.trim().length > 0 ? bodyJson.cwd.trim() : "/";
+    const timeout = bodyJson?.timeoutMs || 120_000;
+
+    const result = yield* Effect.promise(() => runBashCommandOnHost(command, targetCwd, timeout));
+    return HttpServerResponse.jsonUnsafe(result);
   }),
 );
 
