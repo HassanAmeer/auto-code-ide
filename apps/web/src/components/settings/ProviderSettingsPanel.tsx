@@ -33,7 +33,8 @@ import * as Arr from "effect/Array";
 import * as Duration from "effect/Duration";
 import * as Equal from "effect/Equal";
 import * as Result from "effect/Result";
-import { PlusIcon } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { PlusIcon, SlidersIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { isDesktopLocalConnectionTarget } from "../../connection/desktopLocal";
@@ -1129,6 +1130,10 @@ export function EnvironmentProviderSettings({
         }
         headerAction={
           <div className="flex min-w-0 items-center gap-2">
+            <Button size="xs" variant="outline" render={<Link to="/settings/custom-providers" />}>
+              <SlidersIcon className="size-3.5" />
+              <span>Custom Providers</span>
+            </Button>
             <ProviderUpdatesAction />
             <Tooltip>
               <TooltipTrigger
@@ -1193,6 +1198,13 @@ export function EnvironmentProviderSettings({
                     Add provider
                   </button>
                 ) : null}
+                <Link
+                  to="/settings/custom-providers"
+                  className="flex w-full cursor-pointer items-center gap-3 px-3 py-3 text-left text-sm text-muted-foreground transition-colors outline-none hover:bg-muted/25 hover:text-foreground focus-visible:bg-muted/25 focus-visible:text-foreground sm:px-4"
+                >
+                  <SlidersIcon className="size-4 shrink-0" />
+                  Custom Providers
+                </Link>
               </div>
             </ScrollArea>
           </div>

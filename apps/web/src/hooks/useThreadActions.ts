@@ -827,7 +827,7 @@ export function useThreadActions() {
           }
           return unsettled;
         },
-        failureTitle: "Failed to undo settle",
+        failureTitle: "Failed to undo",
       });
       return result;
     },

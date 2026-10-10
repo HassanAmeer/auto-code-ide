@@ -93,6 +93,17 @@ export const traceMaxFilesConfig = Config.Int("T3CODE_TRACE_MAX_FILES").pipe(
   Config.withDefault(10),
 );
 
+const firstSomeOfConfig = <A>(
+  configs: [Config.Config<A>, ...Config.Config<A>[]],
+): Config.Config<A> => {
+  let result = configs[0];
+  for (let i = 1; i < configs.length; i++) {
+    const next = configs[i]!;
+    result = Config.orElse(result, () => next);
+  }
+  return result;
+};
+
 const EnvServerConfig = Config.all({
   logLevel: Config.LogLevel("T3CODE_LOG_LEVEL").pipe(Config.withDefault("Info")),
   traceMinLevel: Config.LogLevel("T3CODE_TRACE_MIN_LEVEL").pipe(Config.withDefault("Info")),
@@ -128,7 +139,7 @@ const EnvServerConfig = Config.all({
     Config.map(Option.getOrUndefined),
   ),
   port: Config.Port("T3CODE_PORT").pipe(Config.option, Config.map(Option.getOrUndefined)),
-  host: Config.firstSomeOf([Config.String("T3CODE_HOST"), Config.String("HOST")]).pipe(
+  host: firstSomeOfConfig([Config.String("T3CODE_HOST"), Config.String("HOST")]).pipe(
     Config.option,
     Config.map(Option.getOrUndefined),
   ),
@@ -173,7 +184,7 @@ const EnvServerConfig = Config.all({
   ),
 });
 
-const DevAuthTokenConfig = Config.firstSomeOf([
+const DevAuthTokenConfig = firstSomeOfConfig([
   Config.Redacted("T3CODE_AUTH_TOKEN"),
   Config.Redacted("APP_PASSWORD"),
   Config.Redacted("T3CODE_DEV_AUTH_TOKEN"),
@@ -312,8 +323,7 @@ export const resolveServerConfig = (
       resolveOptionPrecedence(normalizedFlags.devUrl, Option.fromUndefinedOr(env.devUrl)),
       () => undefined,
     );
-    const devAuthToken =
-      mode === "web" ? yield* DevAuthTokenConfig : undefined;
+    const devAuthToken = mode === "web" ? yield* DevAuthTokenConfig : undefined;
     const explicitBaseDir = resolveOptionPrecedence(
       normalizedFlags.baseDir,
       Option.fromUndefinedOr(env.t3Home),

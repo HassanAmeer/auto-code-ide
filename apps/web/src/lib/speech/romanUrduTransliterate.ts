@@ -167,7 +167,6 @@ const URDU_TO_ROMAN_DICT: Record<string, string> = {
   لیکن: "lekin",
   مگر: "magar",
   اگر: "agar",
-  تو: "toh",
   بھی: "bhi",
   ہی: "hi",
   نہ: "na",
@@ -298,7 +297,7 @@ const URDU_TO_ROMAN_DICT: Record<string, string> = {
   ماڈلز: "models",
   پرووائیڈر: "provider",
   "اے پی آئی": "api",
-  کی: "key",
+  "اے پی آئی کی": "api key",
 };
 
 // Digraph / aspirate letter clusters

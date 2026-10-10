@@ -63,6 +63,7 @@ import {
   deviceHubDescription,
   agentDeviceDescription,
 } from "~/components/device/DeviceSetup";
+import { ResearchAgentSettings } from "./ResearchAgentSettings";
 import { isElectron } from "../../env";
 
 import { Badge } from "../ui/badge";
@@ -1545,6 +1546,9 @@ export function IntegrationsSettingsPanel() {
         ) : (
           previewDefaults
         )}
+      </SettingsSection>
+      <SettingsSection id="agent-reach" title="Web Research & Agent-Reach">
+        <ResearchAgentSettings />
       </SettingsSection>
       <DeviceIntegrationSettings />
     </SettingsPageContainer>

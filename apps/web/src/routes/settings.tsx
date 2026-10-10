@@ -130,11 +130,11 @@ function SettingsContentLayout() {
         </WorkspacePageHeader>
 
         <div
-          key={`${JSON.stringify(search)}:${restoreSignal}`}
+          key={`${location.pathname}:${JSON.stringify(search)}:${restoreSignal}`}
           className="min-h-0 flex flex-1 flex-col"
         >
           <SettingsScopeBoundary pathname={location.pathname}>
-            <Outlet />
+            <Outlet key={location.pathname} />
           </SettingsScopeBoundary>
         </div>
       </div>

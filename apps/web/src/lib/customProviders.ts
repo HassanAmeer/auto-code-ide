@@ -10,15 +10,15 @@ export interface CustomHeader {
 
 export interface CustomProviderModel {
   id: string;
-  name?: string;
+  name?: string | undefined;
 }
 
 export interface CustomProvider {
   id: string;
   name: string;
   baseUrl: string;
-  apiKey?: string;
-  headers?: CustomHeader[];
+  apiKey?: string | undefined;
+  headers?: CustomHeader[] | undefined;
   models: CustomProviderModel[];
   enabled: boolean;
   createdAt: string;
@@ -230,15 +230,16 @@ export async function fetchModelsFromProvider(
 
       // Format 3: Direct array: [{ id: "model-name" }]
       if (Array.isArray(data)) {
-        const models: CustomProviderModel[] = data
+        const models: CustomProviderModel[] = (data as Array<Record<string, unknown>>)
           .filter(
-            (item: unknown) =>
+            (item): item is Record<string, unknown> =>
               typeof item === "object" && item !== null && ("id" in item || "name" in item),
           )
-          .map((item: { id?: string; name?: string }) => ({
-            id: String(item.id || item.name),
+          .map((item) => ({
+            id: String(item.id ?? item.name ?? ""),
             name: typeof item.name === "string" ? item.name : undefined,
-          }));
+          }))
+          .filter((m) => m.id.length > 0);
 
         if (models.length > 0) {
           return { success: true, models };

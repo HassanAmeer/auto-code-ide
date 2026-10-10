@@ -7213,7 +7213,7 @@ export default function ChatView(props: ChatViewProps) {
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: "Failed to un-settle thread",
+            title: "Failed to mark as undone",
             description: error instanceof Error ? error.message : "An error occurred.",
           }),
         );
@@ -7629,10 +7629,10 @@ export default function ChatView(props: ChatViewProps) {
         icon={<CheckCircle2Icon />}
         label={
           activeThreadShell?.settledAt
-            ? `Settled ${formatRelativeTimeLabel(activeThreadShell.settledAt)}`
-            : "Settled"
+            ? `Done ${formatRelativeTimeLabel(activeThreadShell.settledAt)}`
+            : "Done"
         }
-        actionLabel={isUnsettling ? "Un-settling..." : "Un-settle"}
+        actionLabel={isUnsettling ? "Undoing..." : "Undone"}
         actionDisabled={!canOperateThread || isUnsettling}
         onAction={() => void handleUnsettleActiveThread()}
       />
@@ -8023,7 +8023,7 @@ export default function ChatView(props: ChatViewProps) {
           toastManager.add(
             stackedThreadToast({
               type: "error",
-              title: "Failed to settle thread",
+              title: "Failed to mark as done",
               description: error instanceof Error ? error.message : "An error occurred.",
             }),
           );

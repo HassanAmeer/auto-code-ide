@@ -211,8 +211,8 @@ export function CustomProvidersSettingsPanel() {
       ...(editingProviderId ? { id: editingProviderId } : {}),
       name: name.trim(),
       baseUrl: baseUrl.trim(),
-      apiKey: apiKey.trim() || undefined,
-      headers: cleanHeaders.length > 0 ? cleanHeaders : undefined,
+      ...(apiKey.trim().length > 0 ? { apiKey: apiKey.trim() } : {}),
+      ...(cleanHeaders.length > 0 ? { headers: cleanHeaders } : {}),
       models: finalModels,
       enabled: true,
     });
@@ -275,10 +275,11 @@ export function CustomProvidersSettingsPanel() {
       </div>
 
       {/* TOP SECTION: Configured Custom Providers (List Style) */}
-      <SettingsSection
-        title="Configured Providers"
-        description="All added custom endpoints. You can toggle active/paused status, refresh models, edit settings, or delete providers."
-      >
+      <SettingsSection title="Configured Providers">
+        <p className="px-3 pb-2 text-xs text-muted-foreground sm:px-4">
+          All added custom endpoints. You can toggle active/paused status, refresh models, edit
+          settings, or delete providers.
+        </p>
         {providers.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border/80 bg-card/40 p-8 text-center">
             <SlidersIcon className="mb-3 size-8 text-muted-foreground/60" />
@@ -432,10 +433,10 @@ export function CustomProvidersSettingsPanel() {
 
       {/* BOTTOM SECTION: Add / Edit Custom Provider Form */}
       <div id="custom-provider-form">
-        <SettingsSection
-          title={editingProviderId ? "Edit Custom Provider" : "Add Custom Provider"}
-          description="Configure an endpoint with its base URL, optional API key, custom headers, and models."
-        >
+        <SettingsSection title={editingProviderId ? "Edit Custom Provider" : "Add Custom Provider"}>
+          <p className="px-3 pb-2 text-xs text-muted-foreground sm:px-4">
+            Configure an endpoint with its base URL, optional API key, custom headers, and models.
+          </p>
           <form
             onSubmit={handleSave}
             className="flex flex-col gap-5 rounded-xl border border-border/80 bg-card p-5 shadow-2xs"

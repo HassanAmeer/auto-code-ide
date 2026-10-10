@@ -114,7 +114,11 @@ import { useAtomQueryRunner } from "../state/use-atom-query-runner";
 import { useScratchProject } from "../hooks/useScratchProject";
 import { useNewProject } from "../hooks/useNewProject";
 import { isScratchProject } from "@t3tools/client-runtime/state/projects";
-import { useEnvironments, usePrimaryEnvironmentId } from "../state/environments";
+import {
+  useEnvironments,
+  usePrimaryEnvironmentId,
+  type EnvironmentPresentation,
+} from "../state/environments";
 import { useProjects, useServerConfigs, useThreadShells, waitForProject } from "../state/entities";
 import { useThreadSearch } from "../state/queries";
 import { resolveThreadActionProjectRef, startNewThreadFromContext } from "../lib/chatThreadActions";
@@ -844,9 +848,14 @@ function OpenCommandPaletteDialog(props: {
   const environmentIds = useMemo(
     () =>
       environments
-        .filter((environment) => environment.connection.phase === "connected")
+        .filter(
+          (environment) =>
+            environment.connection.phase === "connected" ||
+            environment.entry.target._tag === "PrimaryConnectionTarget" ||
+            environment.environmentId === primaryEnvironmentId,
+        )
         .map((environment) => environment.environmentId),
-    [environments],
+    [environments, primaryEnvironmentId],
   );
   const threadSearchQuery = currentView === null && !isActionsOnly ? deferredQuery : "";
   const threadSearch = useThreadSearch(environmentIds, threadSearchQuery);
@@ -998,11 +1007,58 @@ function OpenCommandPaletteDialog(props: {
     [projectPickerEntries],
   );
 
+  const isEnvironmentReadyForAddProject = useCallback(
+    (env: EnvironmentPresentation | null | undefined, envId?: EnvironmentId | null): boolean => {
+      const targetId = envId ?? env?.environmentId ?? null;
+      const isPrimary =
+        env?.entry.target._tag === "PrimaryConnectionTarget" ||
+        (targetId !== null && targetId === primaryEnvironmentId);
+      if (isPrimary) {
+        return true;
+      }
+      return (
+        canCreateProjectInEnvironment(env?.connection.phase) ||
+        env?.connection.phase === "available"
+      );
+    },
+    [primaryEnvironmentId],
+  );
+
   const addProjectEnvironmentOptions = useMemo(() => {
-    const options = environments
-      .filter((environment) => canCreateProjectInEnvironment(environment.connection.phase))
+    const candidateEnvs =
+      environments.length > 0
+        ? environments
+        : primaryEnvironmentId
+          ? [
+              {
+                environmentId: primaryEnvironmentId,
+                label: "Primary device",
+                displayUrl: null,
+                relayManaged: false,
+                entry: {
+                  target: {
+                    _tag: "PrimaryConnectionTarget" as const,
+                    environmentId: primaryEnvironmentId,
+                    label: "Primary device",
+                    httpBaseUrl: "",
+                    wsBaseUrl: "",
+                  },
+                  profile: Option.none(),
+                  enabled: true,
+                },
+                connection: { phase: "connected" as const, error: null, traceId: null },
+                serverConfig: null,
+              } as EnvironmentPresentation,
+            ]
+          : [];
+
+    const options = candidateEnvs
+      .filter((environment) => isEnvironmentReadyForAddProject(environment))
       .map((environment): AddProjectEnvironmentOption => {
-        const isPrimary = environment.entry.target._tag === "PrimaryConnectionTarget";
+        const isPrimary =
+          environment.entry.target._tag === "PrimaryConnectionTarget" ||
+          environment.environmentId === primaryEnvironmentId;
+        const isConnected = isEnvironmentReadyForAddProject(environment);
         return {
           environmentId: environment.environmentId,
           label: resolveEnvironmentOptionLabel({
@@ -1012,7 +1068,7 @@ function OpenCommandPaletteDialog(props: {
           }),
           isPrimary,
           machine: resolveEnvironmentMachineKind(environment.serverConfig),
-          isConnected: canCreateProjectInEnvironment(environment.connection.phase),
+          isConnected,
           status: connectionStatusText(environment.connection),
         };
       });
@@ -1025,9 +1081,13 @@ function OpenCommandPaletteDialog(props: {
     });
 
     return options;
-  }, [environments]);
+  }, [environments, isEnvironmentReadyForAddProject, primaryEnvironmentId]);
   const defaultAddProjectEnvironmentId =
-    addProjectEnvironmentOptions.find((option) => option.isConnected)?.environmentId ?? null;
+    addProjectEnvironmentOptions.find((option) => option.isConnected)?.environmentId ??
+    addProjectEnvironmentOptions.find((option) => option.isPrimary)?.environmentId ??
+    primaryEnvironmentId ??
+    environments[0]?.environmentId ??
+    null;
   const wslAddProjectEnvironmentOption = useMemo(
     () =>
       addProjectEnvironmentOptions.find((option) => {
@@ -1216,7 +1276,8 @@ function OpenCommandPaletteDialog(props: {
       );
       if (
         !readEnvironmentScope(environmentId, AuthFilesystemReadScope) ||
-        !canPreloadBrowsePath(environment?.connection.phase)
+        (!canPreloadBrowsePath(environment?.connection.phase) &&
+          !isEnvironmentReadyForAddProject(environment, environmentId))
       ) {
         return;
       }
@@ -1733,7 +1794,7 @@ function OpenCommandPaletteDialog(props: {
       const environment = environments.find(
         (candidate) => candidate.environmentId === environmentId,
       );
-      if (!canCreateProjectInEnvironment(environment?.connection.phase)) {
+      if (!isEnvironmentReadyForAddProject(environment, environmentId)) {
         toastManager.add(
           stackedThreadToast({
             type: "error",
@@ -1808,15 +1869,18 @@ function OpenCommandPaletteDialog(props: {
   );
 
   const openAddProjectFlow = useCallback(() => {
-    // With no connected environment there is nothing to browse, so the only
-    // useful next step is connecting one.
-    if (addProjectEnvironmentOptions.length === 0) {
+    const fallbackEnvId =
+      defaultAddProjectEnvironmentId ??
+      primaryEnvironmentId ??
+      environments[0]?.environmentId ??
+      null;
+
+    if (addProjectEnvironmentOptions.length === 0 && !fallbackEnvId) {
       setOpen(false);
-      void navigate({ to: "/settings/general" });
       return;
     }
 
-    if (addProjectEnvironmentOptions.length > 1 || defaultAddProjectEnvironmentId === null) {
+    if (addProjectEnvironmentOptions.length > 1) {
       pushPaletteView({
         addonIcon: <FolderPlusIcon className={ADDON_ICON_CLASS} />,
         groups: addProjectEnvironmentGroups,
@@ -1824,12 +1888,16 @@ function OpenCommandPaletteDialog(props: {
       return;
     }
 
-    void startAddProjectSourceSelection(defaultAddProjectEnvironmentId);
+    const targetEnvId = defaultAddProjectEnvironmentId ?? fallbackEnvId;
+    if (targetEnvId !== null) {
+      void startAddProjectSourceSelection(targetEnvId);
+    }
   }, [
     addProjectEnvironmentGroups,
     addProjectEnvironmentOptions.length,
     defaultAddProjectEnvironmentId,
-    navigate,
+    environments,
+    primaryEnvironmentId,
     pushPaletteView,
     setOpen,
     startAddProjectSourceSelection,
@@ -2377,7 +2445,7 @@ function OpenCommandPaletteDialog(props: {
       const environment = environments.find(
         (candidate) => candidate.environmentId === input.environmentId,
       );
-      if (!canCreateProjectInEnvironment(environment?.connection.phase)) {
+      if (!isEnvironmentReadyForAddProject(environment, input.environmentId)) {
         toastManager.add(
           stackedThreadToast({
             type: "error",
@@ -2541,7 +2609,7 @@ function OpenCommandPaletteDialog(props: {
     newProjectFlow !== null &&
     newProjectName.length > 0 &&
     !isCreatingNewProject &&
-    canCreateProjectInEnvironment(browseEnvironment?.connection.phase);
+    isEnvironmentReadyForAddProject(browseEnvironment, browseEnvironmentId);
 
   async function submitNewProject(): Promise<void> {
     if (newProjectFlow === null || !canSubmitNewProject || newProjectSubmittingRef.current) {
@@ -2570,7 +2638,7 @@ function OpenCommandPaletteDialog(props: {
     if (!addProjectCloneFlow) {
       return;
     }
-    if (!canCreateProjectInEnvironment(browseEnvironment?.connection.phase)) {
+    if (!isEnvironmentReadyForAddProject(browseEnvironment, browseEnvironmentId)) {
       toastManager.add(
         stackedThreadToast({
           type: "error",
@@ -3017,7 +3085,7 @@ function OpenCommandPaletteDialog(props: {
     !relativePathNeedsActiveProject &&
     canCreateProject &&
     (!isCloneDestinationStep || canCloneProject) &&
-    canCreateProjectInEnvironment(browseEnvironment?.connection.phase);
+    isEnvironmentReadyForAddProject(browseEnvironment, browseEnvironmentId);
   const willCreateProjectPath =
     canSubmitBrowsePath &&
     !isBrowsePending &&
@@ -3044,7 +3112,7 @@ function OpenCommandPaletteDialog(props: {
   const canSubmitRemoteProjectFlow =
     addProjectCloneFlow?.step === "repository" &&
     query.trim().length > 0 &&
-    canCreateProjectInEnvironment(browseEnvironment?.connection.phase) &&
+    isEnvironmentReadyForAddProject(browseEnvironment, browseEnvironmentId) &&
     !isRemoteProjectPending;
   const fileManagerName = getLocalFileManagerName(navigator.platform);
   const canOpenProjectFromFileManager =
@@ -3403,7 +3471,7 @@ function OpenCommandPaletteDialog(props: {
               aria-label={`${submitActionLabel} (${addShortcutLabel})`}
               disabled={
                 !canCreateProject ||
-                !canCreateProjectInEnvironment(browseEnvironment?.connection.phase) ||
+                !isEnvironmentReadyForAddProject(browseEnvironment, browseEnvironmentId) ||
                 relativePathNeedsActiveProject ||
                 (isCloneDestinationStep && (!canCloneProject || isRemoteProjectPending))
               }
