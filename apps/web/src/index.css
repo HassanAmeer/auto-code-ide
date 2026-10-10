@@ -94,6 +94,11 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   --appearance-contrast-target: black;
   --app-scrollbar-thumb: rgb(217 217 217);
   --app-scrollbar-thumb-hover: rgb(191 191 191);
+  --primary-color: var(--primary, #6366f1);
+  --primary-glow: color-mix(in srgb, var(--primary, #6366f1) 45%, transparent);
+  --primary-dark: color-mix(in srgb, var(--primary, #6366f1) 65%, black);
+  --theme-accent: var(--primary, #6366f1);
+  --theme-accent-dim: color-mix(in srgb, var(--theme-accent, #6366f1) 20%, transparent);
   /*
    * Compact UI geometry. Keep these values semantic so sidebar, palette,
    * tooltip, and toolbar controls cannot quietly drift apart.
@@ -2357,4 +2362,49 @@ code {
       );
     }
   }
+}
+
+/* Animated Conic-Gradient Border During Response */
+@property --chat-border-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes streaming-border-spin {
+  to {
+    --chat-border-angle: 360deg;
+  }
+}
+
+.streamingBorder {
+  --chat-border-angle: 0deg;
+  position: relative;
+  isolation: isolate;
+  border-color: transparent !important;
+}
+
+.streamingBorder::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  padding: 1.5px;
+  border-radius: inherit;
+  background: conic-gradient(
+    from var(--chat-border-angle),
+    transparent 0deg,
+    transparent 235deg,
+    var(--theme-accent-dim, rgba(255, 255, 255, 0.1)) 270deg,
+    var(--theme-accent, #6366f1) 305deg,
+    var(--theme-accent-dim, rgba(255, 255, 255, 0.1)) 325deg,
+    transparent 350deg,
+    transparent 360deg
+  );
+  pointer-events: none;
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  animation: streaming-border-spin 2.2s linear infinite;
 }

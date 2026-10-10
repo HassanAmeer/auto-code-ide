@@ -538,6 +538,26 @@ export const ProjectCreateNewResult = Schema.Struct({
 });
 export type ProjectCreateNewResult = typeof ProjectCreateNewResult.Type;
 
+export const ProjectUploadedFile = Schema.Struct({
+  relativePath: TrimmedNonEmptyString,
+  content: Schema.String,
+  encoding: Schema.optional(Schema.Literals(["utf8", "base64"])),
+});
+export type ProjectUploadedFile = typeof ProjectUploadedFile.Type;
+
+export const ProjectImportUploadedInput = Schema.Struct({
+  name: TrimmedNonEmptyString.check(Schema.isMaxLength(200)),
+  files: Schema.Array(ProjectUploadedFile),
+});
+export type ProjectImportUploadedInput = typeof ProjectImportUploadedInput.Type;
+
+export const ProjectImportUploadedResult = Schema.Struct({
+  projectId: ProjectId,
+  workspaceRoot: TrimmedNonEmptyString,
+  commitError: Schema.optionalKey(TrimmedNonEmptyString),
+});
+export type ProjectImportUploadedResult = typeof ProjectImportUploadedResult.Type;
+
 export class ProjectWriteFileError extends Schema.TaggedError<ProjectWriteFileError>()(
   "ProjectWriteFileError",
   {

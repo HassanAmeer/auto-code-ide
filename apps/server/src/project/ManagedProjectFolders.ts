@@ -9,7 +9,7 @@
  *
  * @module ManagedProjectFolders
  */
-import { CommandId, ProjectId, type ThreadId } from "@t3tools/contracts";
+import { CommandId, ProjectId, type ThreadId, type ProjectUploadedFile } from "@t3tools/contracts";
 import { newProjectFolderName } from "@t3tools/shared/path";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
@@ -118,6 +118,17 @@ export class ManagedProjectFolders extends Context.Service<
      * cancelled before the project exists, never once another project owns it.
      */
     readonly createNamedProject: (input: { readonly name: string }) => Effect.Effect<
+      {
+        readonly projectId: ProjectId;
+        readonly workspaceRoot: string;
+        readonly commitError?: string;
+      },
+      NamedProjectError
+    >;
+    readonly importUploadedProject: (input: {
+      readonly name: string;
+      readonly files: ReadonlyArray<ProjectUploadedFile>;
+    }) => Effect.Effect<
       {
         readonly projectId: ProjectId;
         readonly workspaceRoot: string;
@@ -373,7 +384,8 @@ const make = Effect.gen(function* () {
   // Projects started from just a name live beside Scratch and worktrees, away
   // from folders the user organizes by hand. A nested repository is fine here
   // (unlike Scratch) because each project gets its own `git init`.
-  const procEnv = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env;
+  const procEnv = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process
+    ?.env;
   const namedProjectsRoot = procEnv?.T3CODE_PROJECTS_DIR
     ? path.resolve(procEnv.T3CODE_PROJECTS_DIR)
     : procEnv?.WORKSPACE_DIR
@@ -390,7 +402,7 @@ const make = Effect.gen(function* () {
           (cause) => new NamedProjectFolderError({ folder: namedProjectsRoot, cause }),
         ),
       );
-    const folderName = newProjectFolderName(name);
+    const folderName = newProjectFolderName(name) || "project";
     const claimed = yield* claimFreeFolder(
       (attempt) =>
         Effect.succeed(
@@ -503,12 +515,121 @@ const make = Effect.gen(function* () {
     };
   });
 
+  const importUploadedProject: ManagedProjectFolders["Service"]["importUploadedProject"] =
+    Effect.fn("ManagedProjectFolders.importUploadedProject")(function* (input) {
+      const workspaceRoot = yield* claimNamedFolder(input.name);
+      const removeFolder = fileSystem
+        .remove(workspaceRoot, { recursive: true })
+        .pipe(Effect.ignore);
+
+      for (const file of input.files) {
+        const rel = file.relativePath.replace(/^(\.\.[\/\\])+/, "").trim();
+        if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) continue;
+        const targetPath = path.resolve(workspaceRoot, rel);
+        if (!targetPath.startsWith(workspaceRoot)) continue;
+
+        const parentDir = path.dirname(targetPath);
+        yield* fileSystem
+          .makeDirectory(parentDir, { recursive: true })
+          .pipe(
+            Effect.mapError((cause) => new NamedProjectFolderError({ folder: parentDir, cause })),
+          );
+        if (file.encoding === "base64") {
+          const buffer = Buffer.from(file.content, "base64");
+          yield* fileSystem
+            .writeFile(targetPath, buffer)
+            .pipe(
+              Effect.mapError(
+                (cause) => new NamedProjectFolderError({ folder: targetPath, cause }),
+              ),
+            );
+        } else {
+          yield* fileSystem
+            .writeFileString(targetPath, file.content)
+            .pipe(
+              Effect.mapError(
+                (cause) => new NamedProjectFolderError({ folder: targetPath, cause }),
+              ),
+            );
+        }
+      }
+
+      const branch =
+        (yield* git
+          .readConfigValue(workspaceRoot, "init.defaultBranch")
+          .pipe(Effect.orElseSucceed(() => null))) ?? "main";
+      yield* git
+        .execute({
+          operation: "ManagedProjectFolders.init",
+          cwd: workspaceRoot,
+          args: ["init", `--initial-branch=${branch}`],
+          timeoutMs: 10_000,
+        })
+        .pipe(
+          Effect.mapError((cause) => new NamedProjectFolderError({ folder: workspaceRoot, cause })),
+        );
+      yield* git
+        .execute({
+          operation: "ManagedProjectFolders.add",
+          cwd: workspaceRoot,
+          args: ["add", "-A"],
+          timeoutMs: 30_000,
+        })
+        .pipe(
+          Effect.mapError((cause) => new NamedProjectFolderError({ folder: workspaceRoot, cause })),
+        );
+      const commitError = yield* git
+        .execute({
+          operation: "ManagedProjectFolders.commit",
+          cwd: workspaceRoot,
+          args: ["commit", "--message", "Initial commit from imported project"],
+          allowNonZeroExit: true,
+          timeoutMs: 30_000,
+        })
+        .pipe(
+          Effect.map((result) =>
+            result.exitCode === 0 ? undefined : describeCommitFailure(result.stderr),
+          ),
+          Effect.catch((error) => Effect.succeed(error.message)),
+        );
+
+      const id = yield* crypto.randomUUIDv4.pipe(
+        Effect.mapError((cause) => new NamedProjectCreateError({ workspaceRoot, cause })),
+      );
+
+      const project = yield* projects
+        .create({
+          commandId: CommandId.make(`imported-project:${id}`),
+          projectId: ProjectId.make(id),
+          title: input.name,
+          workspaceRoot,
+        })
+        .pipe(
+          Effect.tapError((error) =>
+            error._tag === "ProjectConflictError"
+              ? Effect.void
+              : projects.getByWorkspaceRoot(workspaceRoot).pipe(
+                  Effect.flatMap((owner) => (Option.isNone(owner) ? removeFolder : Effect.void)),
+                  Effect.ignore,
+                ),
+          ),
+          Effect.mapError((cause) => new NamedProjectCreateError({ workspaceRoot, cause })),
+        );
+
+      return {
+        projectId: project.id,
+        workspaceRoot,
+        ...(commitError === undefined ? {} : { commitError }),
+      };
+    });
+
   return ManagedProjectFolders.of({
     scratchRoot,
     ensureScratchProject,
     folderForThread,
     namedProjectsRoot,
     createNamedProject,
+    importUploadedProject,
   });
 });
 

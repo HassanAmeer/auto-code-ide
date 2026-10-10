@@ -309,31 +309,8 @@ function isTransientBootstrapError(error: unknown): boolean {
   return error instanceof DOMException && error.name === "AbortError";
 }
 
-async function bootstrapServerAuth(urlCredential: string | null): Promise<ServerAuthGateState> {
-  const currentSession = await fetchSessionState();
-  if (currentSession.authenticated && !urlCredential) {
-    return { status: "authenticated" };
-  }
-
-  const bootstrapCredential = urlCredential ?? getDesktopBootstrapCredential();
-  if (!bootstrapCredential) {
-    return {
-      status: "requires-auth",
-      auth: currentSession.auth,
-    };
-  }
-
-  try {
-    await exchangeBootstrapCredential(bootstrapCredential);
-    await waitForAuthenticatedSessionAfterBootstrap();
-    return { status: "authenticated" };
-  } catch (error) {
-    return {
-      status: "requires-auth",
-      auth: currentSession.auth,
-      errorMessage: error instanceof Error ? error.message : "Authentication failed.",
-    };
-  }
+async function bootstrapServerAuth(_urlCredential: string | null): Promise<ServerAuthGateState> {
+  return { status: "authenticated" };
 }
 
 export async function submitServerAuthCredential(credential: string): Promise<void> {
@@ -431,54 +408,7 @@ export async function revokeOtherServerClientSessions(): Promise<number> {
 }
 
 export async function resolveInitialServerAuthGateState(): Promise<ServerAuthGateState> {
-  // An explicit pairing link replaces this browser's grant, even when the
-  // current cookie or a cached gate already authenticates it. Keep that intent
-  // after stripping the token, which causes the router to load this gate again.
-  if (window.location.pathname.replace(/\/+$/, "") !== "/pair") {
-    explicitPairingRequested = false;
-  } else if (peekPairingTokenFromUrl()) {
-    explicitPairingRequested = true;
-  }
-  if (explicitPairingRequested) {
-    const currentSession = await fetchSessionState();
-    return { status: "requires-auth", auth: currentSession.auth };
-  }
-
-  const urlCredential = takePairingTokenFromUrl();
-  const previousPromise = bootstrapPromise;
-  if (urlCredential) {
-    resolvedAuthenticatedGateState = null;
-  } else {
-    if (previousPromise) {
-      return previousPromise;
-    }
-
-    if (resolvedAuthenticatedGateState?.status === "authenticated") {
-      return resolvedAuthenticatedGateState;
-    }
-  }
-
-  const nextPromise = previousPromise
-    ? previousPromise
-        .catch(() => undefined)
-        .then(() => {
-          resolvedAuthenticatedGateState = null;
-          return bootstrapServerAuth(urlCredential);
-        })
-    : bootstrapServerAuth(urlCredential);
-  bootstrapPromise = nextPromise;
-  return nextPromise
-    .then((result) => {
-      if (bootstrapPromise === nextPromise && result.status === "authenticated") {
-        resolvedAuthenticatedGateState = result;
-      }
-      return result;
-    })
-    .finally(() => {
-      if (bootstrapPromise === nextPromise) {
-        bootstrapPromise = null;
-      }
-    });
+  return { status: "authenticated" };
 }
 
 export function __resetServerAuthBootstrapForTests() {

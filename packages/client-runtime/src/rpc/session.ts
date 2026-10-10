@@ -194,7 +194,7 @@ export const make = Effect.fn("RpcSessionFactory.make")(function* (
         ),
         Effect.asVoid,
       ),
-    });
+    } as any);
     const layerSocket = Socket.layerWebSocket(connection.socketUrl, {
       openTimeout: SOCKET_OPEN_TIMEOUT,
     }).pipe(Layer.provide(Layer.succeed(Socket.WebSocketConstructor, webSocketConstructor)));

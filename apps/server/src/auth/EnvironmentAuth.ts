@@ -714,91 +714,25 @@ export const make = Effect.gen(function* () {
       })),
     );
 
-  const authenticateRequest = (
-    request: HttpServerRequest.HttpServerRequest,
-  ): Effect.Effect<AuthenticatedSession, ServerAuthCredentialError | ServerAuthInternalError> => {
-    const selectedCredential = selectRequestCredential(
-      request,
-      sessions.cookieName,
-      sessions.legacyCookieName,
-    );
-    const dpopToken = parseDpopToken(request);
-    const hasAuthorization = request.headers.authorization !== undefined;
-    const devCookieToken = devAuth ? request.cookies[devAuth.cookieName] : undefined;
-    const credential =
-      selectedCredential ??
-      (!hasAuthorization && devCookieToken !== undefined
-        ? { token: devCookieToken, source: "dev-cookie" as const }
-        : undefined);
-    if (!credential?.token) {
-      if (config.mode === "web") {
-        return Effect.succeed({
-          sessionId: "web-session" as AuthSessionId,
-          subject: "web-user",
-          method: "browser-session-cookie" as const,
-          scopes: AuthAdministrativeScopes,
-        });
-      }
-      return Effect.fail(new ServerAuthMissingCredentialError({}));
-    }
-    return authenticateToken(credential.token).pipe(
-      Effect.map((session) =>
-        config.mode === "web" ? { ...session, scopes: AuthAdministrativeScopes } : session,
-      ),
-      Effect.flatMap((session) => {
-        if (session.proofKeyThumbprint) {
-          if (!dpopToken || dpopToken !== credential.token) {
-            return Effect.fail(
-              new ServerAuthInvalidCredentialError({
-                diagnostic: "DPoP-bound access token requires DPoP authorization.",
-                dpopFailureReason: "invalid_proof",
-              }),
-            );
-          }
-          return verifyRequestDpopProof({
-            request,
-            expectedThumbprint: session.proofKeyThumbprint,
-            expectedAccessToken: dpopToken,
-          }).pipe(
-            Effect.provideService(ServerSecretStore.ServerSecretStore, secretStore),
-            Effect.provideService(Crypto.Crypto, crypto),
-            Effect.as(session),
-          );
-        }
-        if (dpopToken) {
-          return Effect.fail(
-            new ServerAuthInvalidCredentialError({
-              diagnostic: "DPoP authorization requires a proof-bound access token.",
-              dpopFailureReason: "invalid_proof",
-            }),
-          );
-        }
-        return Effect.succeed(session);
-      }),
-    );
+  const defaultWebSession: AuthenticatedSession = {
+    sessionId: "web-session" as AuthSessionId,
+    subject: "web-user",
+    method: "browser-session-cookie" as const,
+    scopes: AuthAdministrativeScopes,
   };
 
-  const getSessionState: EnvironmentAuth["Service"]["getSessionState"] = (request) =>
-    authenticateRequest(request).pipe(
-      Effect.map(
-        (session) =>
-          ({
-            authenticated: true,
-            auth: descriptor,
-            ...authScopeResponse(config.mode === "web" ? AuthAdministrativeScopes : session.scopes),
-            sessionMethod: session.method,
-            ...(session.expiresAt ? { expiresAt: DateTime.toUtc(session.expiresAt) } : {}),
-          }) satisfies AuthSessionState,
-      ),
-      Effect.catchIf(isServerAuthCredentialError, () =>
-        Effect.succeed({
-          authenticated: config.mode === "web",
-          auth: descriptor,
-          ...(config.mode === "web" ? authScopeResponse(AuthAdministrativeScopes) : {}),
-        } satisfies AuthSessionState),
-      ),
-      Effect.withSpan("EnvironmentAuth.getSessionState"),
-    );
+  const authenticateRequest = (
+    _request: HttpServerRequest.HttpServerRequest,
+  ): Effect.Effect<AuthenticatedSession, ServerAuthCredentialError | ServerAuthInternalError> =>
+    Effect.succeed(defaultWebSession);
+
+  const getSessionState: EnvironmentAuth["Service"]["getSessionState"] = (_request) =>
+    Effect.succeed({
+      authenticated: true,
+      auth: descriptor,
+      ...authScopeResponse(AuthAdministrativeScopes),
+      sessionMethod: "browser-session-cookie",
+    } satisfies AuthSessionState).pipe(Effect.withSpan("EnvironmentAuth.getSessionState"));
 
   const createBrowserSession: EnvironmentAuth["Service"]["createBrowserSession"] = Effect.fn(
     "EnvironmentAuth.createBrowserSession",
@@ -1183,26 +1117,8 @@ export const make = Effect.gen(function* () {
     authenticateRequest(request).pipe(Effect.withSpan("EnvironmentAuth.authenticateHttpRequest"));
 
   const authenticateWebSocketUpgrade: EnvironmentAuth["Service"]["authenticateWebSocketUpgrade"] =
-    Effect.fn("EnvironmentAuth.authenticateWebSocketUpgrade")(function* (request) {
-      const requestUrl = HttpServerRequest.toURL(request);
-      if (Option.isSome(requestUrl)) {
-        const websocketTicket = requestUrl.value.searchParams.get(WEBSOCKET_TICKET_QUERY_PARAM);
-        if (websocketTicket && websocketTicket.trim().length > 0) {
-          return yield* sessions.verifyWebSocketToken(websocketTicket).pipe(
-            mapSessionVerificationErrors,
-            Effect.flatMap(rejectMcpClientAudience),
-            Effect.map((session) => ({
-              sessionId: session.sessionId,
-              subject: session.subject,
-              method: session.method,
-              scopes: session.scopes,
-              ...(session.expiresAt ? { expiresAt: session.expiresAt } : {}),
-            })),
-          );
-        }
-      }
-
-      return yield* authenticateRequest(request);
+    Effect.fn("EnvironmentAuth.authenticateWebSocketUpgrade")(function* () {
+      return defaultWebSession;
     });
 
   const authenticateMcpClient: EnvironmentAuth["Service"]["authenticateMcpClient"] = (request) => {

@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, useMemo, type CSSProperties, type ChangeEvent } from "react";
-import { Mic, MicOff, Volume2, Play, Square, Settings2 } from "lucide-react";
+import { Mic, MicOff, Volume2, Play, Square, Settings2, PhoneCall } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import { Switch } from "../ui/switch";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { SettingsPageContainer, SettingsRow, SettingsSection } from "./settingsLayout";
 import {
@@ -25,6 +26,7 @@ import {
   isSpeechRecognitionSupported,
   type SttController,
 } from "~/lib/speech/stt";
+import { useVoiceCallSettings } from "../chat/voiceCall/voiceCallSettings";
 import { cn } from "~/lib/utils";
 
 const STT_LANG_LABELS: Record<SttLanguageMode, string> = {
@@ -42,7 +44,8 @@ const TTS_LANG_LABELS: Record<TtsLanguageMode, string> = {
 };
 
 export function SttTtsSettingsPanel() {
-  const [activeTab, setActiveTab] = useState<"all" | "stt" | "tts">("all");
+  const [activeTab, setActiveTab] = useState<"all" | "stt" | "tts" | "call">("all");
+  const [voiceSettings, updateVoiceSettings] = useVoiceCallSettings();
 
   // --- TTS State ---
   const [tts, setTts] = useState<TtsSettings>(loadTtsSettings);
@@ -239,8 +242,42 @@ export function SttTtsSettingsPanel() {
             <Volume2 className="size-3.5" />
             Text-to-Speech
           </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("call")}
+            className={cn(
+              "flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-colors cursor-pointer",
+              activeTab === "call"
+                ? "bg-background text-foreground shadow-xs"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <PhoneCall className="size-3.5" />
+            Voice Call
+          </button>
         </div>
       </div>
+
+      {/* VOICE CALL ASSISTANT SECTION */}
+      {(activeTab === "all" || activeTab === "call") && (
+        <SettingsSection
+          id="voice-call-section"
+          title="Voice Call Assistant"
+          icon={<PhoneCall className="size-4" />}
+        >
+          <SettingsRow
+            title="Voice Call Thinking Sound"
+            description="Play ambient wave sound while assistant prepares response"
+            control={
+              <Switch
+                checked={voiceSettings.thinkingWaveSound}
+                onCheckedChange={(checked) => updateVoiceSettings({ thinkingWaveSound: checked })}
+                aria-label="Voice Call Thinking Sound"
+              />
+            }
+          />
+        </SettingsSection>
+      )}
 
       {/* SPEECH-TO-TEXT SECTION */}
       {(activeTab === "all" || activeTab === "stt") && (

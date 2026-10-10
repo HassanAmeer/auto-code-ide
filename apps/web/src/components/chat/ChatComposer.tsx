@@ -327,6 +327,7 @@ import {
   getComposerSubmissionValidationMessage,
   submitComposerDraft,
 } from "./composerSubmission";
+import { useVoiceCallAssistant, VoiceCallButton, VoiceVisualizerWaves } from "./voiceCall";
 import { ComposerPromptLengthValidation } from "./ComposerPromptLengthValidation";
 import { PierreEntryIcon } from "./PierreEntryIcon";
 import { pendingDraftWork } from "./pendingDraftWork";
@@ -4340,6 +4341,28 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     pendingUserInputs.length,
     phase,
   ]);
+
+  const {
+    isCallActive,
+    callStatus,
+    analyserNode,
+    toggleCall: toggleVoiceCall,
+    endCall: _endVoiceCall,
+  } = useVoiceCallAssistant({
+    onTranscriptChange: useCallback(
+      (text: string) => {
+        onPromptChange(text, text.length, text.length, false, []);
+      },
+      [onPromptChange],
+    ),
+    onAutoSend: useCallback(() => {
+      submitComposer();
+    }, [submitComposer]),
+    prompt,
+    phase,
+    promptHistoryMessages,
+    disabled: isConnecting || isComposerApprovalState,
+  });
   const expandMobileComposer = useCallback(() => {
     if (composerBlurFrameRef.current !== null) {
       window.cancelAnimationFrame(composerBlurFrameRef.current);
@@ -6920,6 +6943,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
               "in-data-[thread-context-over]:bg-accent/45 in-data-[thread-context-over]:ring-1 in-data-[thread-context-over]:ring-primary/70",
               isDragOverComposer ? "bg-accent/45 ring-1 ring-primary/70" : null,
               projectSelectionRequired ? "opacity-75" : null,
+              ((isCallActive && (callStatus === "thinking" || callStatus === "speaking")) ||
+                phase === "running") &&
+                "streamingBorder",
               composerProviderState.composerSurfaceClassName,
             )}
           >
@@ -6994,6 +7020,15 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                 isComposerResting && "py-2 sm:py-2",
               )}
             >
+              {/* Call Assistant Button: Top-right corner inside the chat input box */}
+              {!isComposerCollapsedMobile && (
+                <VoiceCallButton
+                  isCallActive={isCallActive}
+                  onToggleCall={toggleVoiceCall}
+                  className="absolute top-2 right-2 z-10"
+                />
+              )}
+
               {isStashMenuOpen && !composerMenuOpen && !isComposerApprovalState && (
                 <ComposerCommandMenuLayer anchor={composerMenuAnchor}>
                   <ComposerStashMenu
@@ -7557,7 +7592,18 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
             />
 
             {/* Bottom toolbar */}
-            {isComposerCollapsedMobile || isComposerApprovalState ? null : (
+            {isComposerCollapsedMobile || isComposerApprovalState ? null : isCallActive ? (
+              <div
+                data-chat-composer-footer="true"
+                className="flex min-w-0 w-full items-center justify-center px-3 pb-3 sm:px-4 sm:pb-4"
+              >
+                <VoiceVisualizerWaves
+                  callStatus={callStatus}
+                  analyserNode={analyserNode}
+                  className="w-full"
+                />
+              </div>
+            ) : (
               <div
                 data-chat-composer-footer="true"
                 data-chat-composer-footer-compact={isComposerFooterCompact ? "true" : "false"}

@@ -56,6 +56,7 @@ import {
   FolderGit2Icon,
   FolderIcon,
   FolderPlusIcon,
+  FolderUpIcon,
   MessageSquareDashedIcon,
   LinkIcon,
   MessageSquareIcon,
@@ -113,6 +114,7 @@ import { useAtomCommand } from "../state/use-atom-command";
 import { useAtomQueryRunner } from "../state/use-atom-query-runner";
 import { useScratchProject } from "../hooks/useScratchProject";
 import { useNewProject } from "../hooks/useNewProject";
+import { projectUploadStore, useProjectUploadProgress } from "../state/projectUploadProgress";
 import { isScratchProject } from "@t3tools/client-runtime/state/projects";
 import {
   useEnvironments,
@@ -897,6 +899,8 @@ function OpenCommandPaletteDialog(props: {
   const cloneLookupGeneration = useRef(0);
   const [isRemoteProjectLookingUp, setIsRemoteProjectLookingUp] = useState(false);
   const [isRemoteProjectCloning, setIsRemoteProjectCloning] = useState(false);
+  const uploadProgress = useProjectUploadProgress();
+
   const projectGroupingSettings = useMemo(
     () => selectProjectGroupingSettings(clientSettings),
     [clientSettings],
@@ -1104,6 +1108,14 @@ function OpenCommandPaletteDialog(props: {
     [addProjectEnvironmentOptions, environments],
   );
   const browseEnvironmentId = addProjectEnvironmentId ?? defaultAddProjectEnvironmentId;
+
+  const triggerFolderUpload = useCallback(
+    (envId: EnvironmentId) => {
+      projectUploadStore.triggerUpload(envId);
+      setOpen(false);
+    },
+    [setOpen],
+  );
   const canCreateProject = useEnvironmentScope(browseEnvironmentId, AuthOrchestrationOperateScope);
   const browseEnvironment =
     environments.find((environment) => environment.environmentId === browseEnvironmentId) ?? null;
@@ -1693,6 +1705,18 @@ function OpenCommandPaletteDialog(props: {
             await startAddProjectBrowse(environmentId);
           },
         },
+        {
+          kind: "action",
+          value: `action:add-project:${environmentId}:upload`,
+          searchTerms: ["upload", "import", "local", "folder", "directory", "computer", "files"],
+          title: "Upload local folder",
+          description: "Select folder from your computer to import (skips dependencies)",
+          icon: <FolderUpIcon className={ITEM_ICON_CLASS} />,
+          keepOpen: false,
+          run: async () => {
+            triggerFolderUpload(environmentId);
+          },
+        },
       ];
 
       if (newProjectsRootFor(environmentId) !== null) {
@@ -1786,6 +1810,7 @@ function OpenCommandPaletteDialog(props: {
       startAddProjectBrowse,
       startAddProjectClone,
       startNewProject,
+      triggerFolderUpload,
     ],
   );
 
@@ -3529,6 +3554,17 @@ function OpenCommandPaletteDialog(props: {
       }}
     >
       {`Open in ${fileManagerName}`}
+    </CommandFooterAction>
+  ) : isBrowsing && browseEnvironmentId !== null ? (
+    <CommandFooterAction
+      disabled={uploadProgress.isImporting}
+      onClick={() => {
+        triggerFolderUpload(browseEnvironmentId);
+      }}
+    >
+      {uploadProgress.isImporting
+        ? `Importing... (${uploadProgress.percent}%)`
+        : "Upload folder from computer"}
     </CommandFooterAction>
   ) : null;
 

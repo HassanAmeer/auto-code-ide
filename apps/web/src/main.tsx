@@ -55,13 +55,15 @@ const managedAuthShellModule =
     : null;
 
 // The index.html boot splash lives inside #root, and React's first commit
-// clears it. Resolve everything that first commit needs, the selected
-// managed-auth runtime and the initial route's split chunks, before
-// rendering, so the splash holds until real UI paints instead of dropping to
-// a blank window while chunks download.
-export const startup = Promise.all([
-  managedAuthShellModule?.then((module) => module.default) ?? null,
-  router.load(),
+// clears it. Cap the splash hold at exactly 1 second (1000ms) maximum,
+// so the splash screen with the logo never holds longer than 1 second.
+const MAX_BOOT_SPLASH_MS = 1000;
+
+export const startup = Promise.race([
+  Promise.all([managedAuthShellModule?.then((module) => module.default) ?? null, router.load()]),
+  new Promise<[null]>((resolve) => {
+    setTimeout(() => resolve([null]), MAX_BOOT_SPLASH_MS);
+  }),
 ])
   .then(([ManagedAuthShell]) => {
     // A route chunk failure still resolves router.load(): the error is parked in
@@ -70,7 +72,9 @@ export const startup = Promise.all([
     // that fetched every chunk it asked for.
     if (reloadScheduled) return;
     if (!chunkLoadFailed) clearChunkReloadGuard();
-    ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+    const rootElement = document.getElementById("root");
+    if (!rootElement) return;
+    ReactDOM.createRoot(rootElement).render(
       <React.StrictMode>
         {ManagedAuthShell && clerkPublishableKey ? (
           <ManagedAuthShell publishableKey={clerkPublishableKey}>{app}</ManagedAuthShell>

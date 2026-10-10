@@ -31,43 +31,18 @@ function originFromUrl(value: string): string | null {
   }
 }
 
-export function isHostedStaticApp(url?: URL): boolean {
-  if (configuredBackendUrl()) {
-    return false;
-  }
-
-  if (configuredHostedAppChannel()) {
-    return true;
-  }
-
-  // No window, or a window without a location (tests, static render), means
-  // no origin to be hosted at.
-  if (url === undefined && (typeof window === "undefined" || window.location === undefined)) {
-    return false;
-  }
-
-  const hostedOrigin = originFromUrl(configuredHostedAppUrl());
-  return hostedOrigin !== null && (url ?? new URL(window.location.href)).origin === hostedOrigin;
+export function isHostedStaticApp(_url?: URL): boolean {
+  return false;
 }
 
-export function readHostedPairingRequest(url: URL = new URL(window.location.href)) {
-  const host = url.searchParams.get("host")?.trim() ?? "";
-  const token = getPairingTokenFromUrl(url)?.trim() ?? "";
-  const label = url.searchParams.get("label")?.trim() ?? "";
-
-  if (!host || !token) {
-    return null;
-  }
-
-  return {
-    host,
-    token,
-    label,
-  } satisfies HostedPairingRequest;
+export function readHostedPairingRequest(
+  _url: URL = new URL(window.location.href),
+): HostedPairingRequest | null {
+  return null;
 }
 
-export function hasHostedPairingRequest(url: URL = new URL(window.location.href)): boolean {
-  return readHostedPairingRequest(url) !== null;
+export function hasHostedPairingRequest(_url: URL = new URL(window.location.href)): boolean {
+  return false;
 }
 
 export function buildHostedPairingUrl(input: {

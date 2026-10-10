@@ -386,39 +386,7 @@ function ConnectionStep({
             onToggleEnvironment={onToggleEnvironment}
           />
         ) : null}
-        <div className="rounded-lg border border-border bg-background">
-          <Collapsible open={pairingOpen} onOpenChange={setPairingOpen}>
-            <CollapsibleTrigger
-              disabled={isPairing}
-              render={
-                <Button
-                  variant="ghost"
-                  size="sm-multiline"
-                  className="min-h-14 w-full justify-start"
-                />
-              }
-            >
-              <LinkIcon className="size-4 text-muted-foreground" />
-              <span className="flex-1 text-left">Add a computer</span>
-              <ChevronRightIcon
-                className={cn("size-4 text-muted-foreground", pairingOpen && "rotate-90")}
-              />
-            </CollapsibleTrigger>
-            <CollapsiblePanel>
-              <div className="px-3 pb-3">
-                <PairingForm
-                  isPairing={isPairing}
-                  setIsPairing={setIsPairing}
-                  onPaired={(environmentId) => {
-                    setPairingOpen(false);
-                    onPaired(environmentId);
-                    requestAnimationFrame(() => continueRef.current?.focus());
-                  }}
-                />
-              </div>
-            </CollapsiblePanel>
-          </Collapsible>
-        </div>
+        {/* Pairing disabled */}
       </div>
       {skippedLabels.length > 0 ? (
         <p className="mt-4 text-xs text-muted-foreground">

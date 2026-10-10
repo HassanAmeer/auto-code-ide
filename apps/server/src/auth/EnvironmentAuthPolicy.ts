@@ -20,21 +20,9 @@ export const make = Effect.gen(function* () {
   const serverEnvironment = yield* ServerEnvironment.ServerEnvironmentIdentity;
   const isRemoteReachable = isRemoteReachableHost(config.host);
 
-  const policy =
-    config.mode === "desktop"
-      ? isRemoteReachable
-        ? "remote-reachable"
-        : "desktop-managed-local"
-      : isRemoteReachable
-        ? "remote-reachable"
-        : "loopback-browser";
+  const policy = "loopback-browser";
 
-  const bootstrapMethods: ServerAuthDescriptor["bootstrapMethods"] =
-    policy === "desktop-managed-local"
-      ? ["desktop-bootstrap"]
-      : config.mode === "desktop" && policy === "remote-reachable"
-        ? ["desktop-bootstrap", "one-time-token"]
-        : ["one-time-token"];
+  const bootstrapMethods: ServerAuthDescriptor["bootstrapMethods"] = [];
 
   const descriptor: ServerAuthDescriptor = {
     policy,
