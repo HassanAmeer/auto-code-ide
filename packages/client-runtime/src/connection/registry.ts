@@ -34,7 +34,7 @@ import type {
   PersistedConnectionTarget,
   SupervisorConnectionState,
 } from "./model.ts";
-import { ConnectionBlockedError } from "./model.ts";
+import { ConnectionBlockedError, PrimaryConnectionTarget } from "./model.ts";
 import * as Persistence from "../platform/persistence.ts";
 import * as EnvironmentSupervisor from "./supervisor.ts";
 import * as ConnectionDriver from "./driver.ts";
@@ -346,6 +346,23 @@ export const make = Effect.gen(function* () {
       if (entry === undefined) {
         entry = current.values().next().value;
       }
+      if (entry === undefined) {
+        const origin =
+          typeof window !== "undefined" && window.location?.origin
+            ? window.location.origin
+            : "http://127.0.0.1:3000";
+        const wsOrigin = origin.replace(/^http/, "ws");
+        entry = {
+          target: new PrimaryConnectionTarget({
+            environmentId: "primary" as EnvironmentId,
+            label: "Primary",
+            httpBaseUrl: origin,
+            wsBaseUrl: wsOrigin,
+          }),
+          profile: Option.none(),
+          enabled: true,
+        };
+      }
     }
     if (entry === undefined) {
       return yield* new EnvironmentNotRegisteredError({
@@ -528,6 +545,9 @@ export const make = Effect.gen(function* () {
     yield* SubscriptionRef.update(entries, (current) => {
       const next = new Map(current);
       next.set(target.environmentId, entry);
+      if (target._tag === "PrimaryConnectionTarget" || !next.has("primary" as EnvironmentId)) {
+        next.set("primary" as EnvironmentId, entry);
+      }
       return next;
     });
     yield* createServiceScope(entry);

@@ -620,6 +620,18 @@ const layerPlatformConnectionSource = Layer.effect(
             const cacheEntry = { signature, registration: built.value };
             next.set(PRIMARY_LOCAL_ENVIRONMENT_ID, cacheEntry);
             registrations.push(built.value);
+          } else {
+            const fallbackRegistration = new PrimaryConnectionRegistration({
+              target: new PrimaryConnectionTarget({
+                environmentId: PRIMARY_LOCAL_ENVIRONMENT_ID as EnvironmentId,
+                label: "Primary",
+                httpBaseUrl: primaryTarget.target.httpBaseUrl,
+                wsBaseUrl: primaryTarget.target.wsBaseUrl,
+              }),
+            });
+            const cacheEntry = { signature, registration: fallbackRegistration };
+            next.set(PRIMARY_LOCAL_ENVIRONMENT_ID, cacheEntry);
+            registrations.push(fallbackRegistration);
           }
         }
       }
@@ -735,8 +747,11 @@ const layerPlatformConnectionSource = Layer.effect(
     }).pipe(Effect.provide(FetchHttpClient.layer));
 
     return PlatformConnectionSource.PlatformConnectionSource.of({
-      registrations: Stream.tick(PLATFORM_POLL_INTERVAL).pipe(
-        Stream.mapEffect(() => buildPlatformRegistrations),
+      registrations: Stream.concat(
+        Stream.fromEffect(buildPlatformRegistrations),
+        Stream.tick(PLATFORM_POLL_INTERVAL).pipe(
+          Stream.mapEffect(() => buildPlatformRegistrations),
+        ),
       ),
     });
   }),

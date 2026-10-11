@@ -28,6 +28,7 @@ import {
   AuthAccessStreamError,
   type AuthAccessStreamEvent,
   AuthOrchestrationOperateScope,
+  AuthAdministrativeScopes,
   type AuthEnvironmentScope,
   type ScheduledTaskListResult,
   AuthSessionId,
@@ -3151,7 +3152,7 @@ export const layer = Layer.unwrap(
         );
         const clientOrigin = readClientConnectionOrigin(request);
         const clientAnalyticsProps = readClientAnalyticsProps(request);
-        yield* sessions.recordClientConnection(session.sessionId, clientOrigin);
+        yield* sessions.recordClientConnection(session.sessionId, clientOrigin).pipe(Effect.ignore);
         yield* analytics.record("client.connected", clientAnalyticsProps);
         const rpcWebSocketHttpEffect = yield* Effect.gen(function* () {
           const { protocol, httpEffect } = yield* RpcServer.makeProtocolWithHttpEffectWebsocket;

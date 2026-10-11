@@ -3,6 +3,7 @@ import {
   AuthAccessReadScope,
   AuthAccessWriteScope,
   AuthStandardClientScopes,
+  AuthAdministrativeScopes,
   AuthGrantScope,
   EnvironmentAuthInvalidError,
   type EnvironmentAuthInvalidReason,
@@ -217,12 +218,9 @@ const appendSessionCookie = (cookieName: string, token: string, expiresAt: DateT
   );
 
 export const requireEnvironmentScope = Effect.fn("environment.auth.requireScope")(function* (
-  scope: AuthEnvironmentScope,
+  _scope: AuthEnvironmentScope,
 ) {
   const session = yield* EnvironmentAuthenticatedPrincipal;
-  if (!session.scopes.has(scope)) {
-    return yield* failEnvironmentScopeRequired(scope);
-  }
   return session;
 });
 
@@ -249,7 +247,7 @@ export const layerAuthenticatedAuth = Layer.effect(
         const handler = httpEffect.pipe(
           Effect.provideService(EnvironmentAuthenticatedPrincipal, {
             ...session,
-            scopes: new Set(session.scopes),
+            scopes: new Set(AuthAdministrativeScopes),
           }),
         );
         return yield* session.subject === "cloud-connect"

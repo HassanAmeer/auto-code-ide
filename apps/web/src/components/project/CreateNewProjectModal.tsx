@@ -8,10 +8,12 @@ import {
   XIcon,
   CheckIcon,
   Loader2Icon,
+  GitBranchIcon,
 } from "lucide-react";
 import React, { useState, useEffect, useRef } from "react";
 
 import { useNewProject } from "~/hooks/useNewProject";
+import { useImportLocalProject } from "~/hooks/useImportLocalProject";
 import { useEnvironments, usePrimaryEnvironmentId } from "~/state/environments";
 import { projectUploadStore } from "~/state/projectUploadProgress";
 import { useProjectCreateModal, projectCreateModalStore } from "./projectCreateModalStore";
@@ -72,11 +74,14 @@ const TEMPLATES: TemplateOption[] = [
 export function CreateNewProjectModal() {
   const { isOpen, environmentId } = useProjectCreateModal();
   const createNewProject = useNewProject();
+  const { cloneGitRepo } = useImportLocalProject();
   const primaryEnvId = usePrimaryEnvironmentId();
   const { environments } = useEnvironments();
 
   const [projectName, setProjectName] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState<ProjectTemplateType>("blank");
+  const [isCloneMode, setIsCloneMode] = useState(false);
+  const [gitRepoUrl, setGitRepoUrl] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -84,6 +89,8 @@ export function CreateNewProjectModal() {
     if (isOpen) {
       setProjectName("");
       setSelectedTemplate("blank");
+      setIsCloneMode(false);
+      setGitRepoUrl("");
       setIsSubmitting(false);
       setTimeout(() => {
         inputRef.current?.focus();
@@ -105,13 +112,21 @@ export function CreateNewProjectModal() {
 
     setIsSubmitting(true);
     try {
-      const success = await createNewProject({
-        environmentId: targetEnv,
-        name: trimmed,
-        template: selectedTemplate,
-      });
-      if (success) {
-        projectCreateModalStore.close();
+      if (isCloneMode) {
+        if (!gitRepoUrl.trim()) return;
+        const success = await cloneGitRepo(targetEnv, gitRepoUrl.trim(), trimmed);
+        if (success) {
+          projectCreateModalStore.close();
+        }
+      } else {
+        const success = await createNewProject({
+          environmentId: targetEnv,
+          name: trimmed,
+          template: selectedTemplate,
+        });
+        if (success) {
+          projectCreateModalStore.close();
+        }
       }
     } finally {
       setIsSubmitting(false);
@@ -155,7 +170,7 @@ export function CreateNewProjectModal() {
             <div>
               <h2 className="text-base font-semibold tracking-tight">Create New Project</h2>
               <p className="text-xs text-muted-foreground">
-                Start from scratch with templates or upload an existing archive
+                Start from scratch with templates, clone a repo, or upload an archive
               </p>
             </div>
           </div>
@@ -169,7 +184,35 @@ export function CreateNewProjectModal() {
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4 pt-4">
+        {/* Mode Toggle */}
+        <div className="flex items-center gap-1.5 p-1 mt-3 bg-muted/40 rounded-xl border border-border/40">
+          <button
+            type="button"
+            onClick={() => setIsCloneMode(false)}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-medium transition-all ${
+              !isCloneMode
+                ? "bg-background text-foreground shadow-sm font-semibold"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <SparklesIcon className="size-3.5 text-primary" />
+            <span>Templates / Scratch</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsCloneMode(true)}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-medium transition-all ${
+              isCloneMode
+                ? "bg-background text-foreground shadow-sm font-semibold"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <GitBranchIcon className="size-3.5 text-sky-400" />
+            <span>Clone Git Repo</span>
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4 pt-3">
           {/* Project Name Field */}
           <div>
             <label className="block text-xs font-medium text-foreground/90 mb-1.5">
@@ -182,52 +225,81 @@ export function CreateNewProjectModal() {
               disabled={isSubmitting}
               value={projectName}
               onChange={(e) => setProjectName(e.target.value)}
-              placeholder="e.g. my-awesome-app"
+              placeholder={isCloneMode ? "e.g. cloned-repo" : "e.g. my-awesome-app"}
               className="w-full rounded-xl border border-input bg-background px-3.5 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all font-mono"
             />
           </div>
 
-          {/* Template Selection */}
-          <div>
-            <label className="block text-xs font-medium text-foreground/90 mb-2">
-              Select Starter Template
-            </label>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {TEMPLATES.map((tmpl) => {
-                const isSelected = selectedTemplate === tmpl.id;
-                return (
-                  <button
-                    key={tmpl.id}
-                    type="button"
-                    disabled={isSubmitting}
-                    onClick={() => setSelectedTemplate(tmpl.id)}
-                    className={`flex flex-col items-start p-3 rounded-xl border text-left transition-all ${
-                      isSelected
-                        ? "border-primary bg-primary/10 shadow-sm ring-1 ring-primary/40"
-                        : "border-border/60 bg-muted/20 hover:bg-muted/50 hover:border-border"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between w-full mb-1">
-                      <span className="text-xl">{tmpl.icon}</span>
-                      {isSelected ? (
-                        <CheckIcon className="size-3.5 text-primary" />
-                      ) : (
-                        <span className="text-3xs px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground font-mono">
-                          {tmpl.badge}
-                        </span>
-                      )}
-                    </div>
-                    <div className="font-semibold text-xs text-foreground truncate w-full">
-                      {tmpl.title}
-                    </div>
-                    <div className="text-3xs text-muted-foreground line-clamp-2 mt-0.5 leading-relaxed">
-                      {tmpl.description}
-                    </div>
-                  </button>
-                );
-              })}
+          {/* Conditional: Clone Git or Templates */}
+          {isCloneMode ? (
+            <div>
+              <label className="block text-xs font-medium text-foreground/90 mb-1.5">
+                Git Repository URL
+              </label>
+              <input
+                type="url"
+                required
+                disabled={isSubmitting}
+                value={gitRepoUrl}
+                onChange={(e) => {
+                  setGitRepoUrl(e.target.value);
+                  if (!projectName) {
+                    const inferred = e.target.value
+                      .split("/")
+                      .pop()
+                      ?.replace(/\.git$/, "");
+                    if (inferred) setProjectName(inferred);
+                  }
+                }}
+                placeholder="https://github.com/username/repository.git"
+                className="w-full rounded-xl border border-input bg-background px-3.5 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-sky-500/40 focus:border-sky-500 transition-all font-mono"
+              />
+              <p className="text-3xs text-muted-foreground mt-1">
+                Clones directly into a new workspace with history and dependencies preserved.
+              </p>
             </div>
-          </div>
+          ) : (
+            <div>
+              <label className="block text-xs font-medium text-foreground/90 mb-2">
+                Select Starter Template
+              </label>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {TEMPLATES.map((tmpl) => {
+                  const isSelected = selectedTemplate === tmpl.id;
+                  return (
+                    <button
+                      key={tmpl.id}
+                      type="button"
+                      disabled={isSubmitting}
+                      onClick={() => setSelectedTemplate(tmpl.id)}
+                      className={`flex flex-col items-start p-3 rounded-xl border text-left transition-all ${
+                        isSelected
+                          ? "border-primary bg-primary/10 shadow-sm ring-1 ring-primary/40"
+                          : "border-border/60 bg-muted/20 hover:bg-muted/50 hover:border-border"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between w-full mb-1">
+                        <span className="text-xl">{tmpl.icon}</span>
+                        {isSelected ? (
+                          <CheckIcon className="size-3.5 text-primary" />
+                        ) : (
+                          <span className="text-3xs px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground font-mono">
+                            {tmpl.badge}
+                          </span>
+                        )}
+                      </div>
+                      <div className="font-semibold text-xs text-foreground truncate w-full">
+                        {tmpl.title}
+                      </div>
+                      <div className="text-3xs text-muted-foreground line-clamp-2 mt-0.5 leading-relaxed">
+                        {tmpl.description}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Quick upload alternative shortcuts */}
           <div className="rounded-xl border border-border/50 bg-muted/30 p-2.5 flex items-center justify-between gap-2 text-xs">
@@ -270,18 +342,22 @@ export function CreateNewProjectModal() {
             </button>
             <button
               type="submit"
-              disabled={!projectName.trim() || isSubmitting}
+              disabled={!projectName.trim() || (isCloneMode && !gitRepoUrl.trim()) || isSubmitting}
               className="inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold shadow-lg shadow-primary/20 transition-all active:scale-95 disabled:opacity-40 disabled:pointer-events-none"
             >
               {isSubmitting ? (
                 <>
                   <Loader2Icon className="size-3.5 animate-spin" />
-                  <span>Creating Project...</span>
+                  <span>{isCloneMode ? "Cloning Repository..." : "Creating Project..."}</span>
                 </>
               ) : (
                 <>
-                  <FolderGit2Icon className="size-3.5" />
-                  <span>Create Project</span>
+                  {isCloneMode ? (
+                    <GitBranchIcon className="size-3.5 text-sky-300" />
+                  ) : (
+                    <FolderGit2Icon className="size-3.5" />
+                  )}
+                  <span>{isCloneMode ? "Clone & Open" : "Create Project"}</span>
                 </>
               )}
             </button>

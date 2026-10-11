@@ -72,7 +72,6 @@ import {
 } from "../../state/session";
 import { terminalEnvironment } from "../../state/terminal";
 import { useAtomCommand } from "../../state/use-atom-command";
-import { connectPairing } from "../../connection/onboarding";
 import { getProviderSummary } from "../settings/providerStatus";
 import { providerClients } from "../settings/providerDriverMeta";
 import { ChatGptWelcomeCoordinator } from "../settings/ChatGptWelcomeCoordinator";
@@ -225,12 +224,7 @@ export function WelcomeWizard({
 
   return (
     <Dialog open disablePointerDismissal onOpenChange={(_, event) => event.cancel()}>
-      <WizardPopup
-        size="wide"
-        bottomStickOnMobile={false}
-        showCloseButton={false}
-        initialFocus={() => document.getElementById("onboarding-pairing-url") ?? true}
-      >
+      <WizardPopup size="wide" bottomStickOnMobile={false} showCloseButton={false}>
         <WizardHeader
           title="Set up T3 Code"
           identity={
@@ -256,7 +250,6 @@ export function WelcomeWizard({
         <WizardPanel holdHeight={isLoadingProjects}>
           {step === "connection" ? (
             <ConnectionStep
-              expandPairingInitially={!localAvailable && !hasCloudPublicConfig()}
               selectedIds={selectedIds}
               autoSelectedComputers={autoSelectedComputers.current}
               onSelectionChange={setSelection}
@@ -271,9 +264,6 @@ export function WelcomeWizard({
               onContinue={() =>
                 startSetup(resolveOnboardingSetup(environments, selectedIds).environmentIds)
               }
-              onPaired={(environmentId) => {
-                setSelection(new Set([...selectedIds, environmentId]));
-              }}
             />
           ) : step === "agents" ? (
             <AgentsStep environmentIds={setupIds} onContinue={() => setStep("import")} />
@@ -296,28 +286,22 @@ export function WelcomeWizard({
 
 function ConnectionStep({
   autoSelectedComputers,
-  expandPairingInitially,
   selectedIds,
   onSelectionChange,
   onToggleEnvironment,
   onContinue,
-  onPaired,
 }: {
   readonly autoSelectedComputers: Set<EnvironmentId>;
-  readonly expandPairingInitially: boolean;
   readonly selectedIds: ReadonlySet<EnvironmentId>;
   readonly onSelectionChange: (ids: ReadonlySet<EnvironmentId>) => void;
   readonly onToggleEnvironment: (environmentId: EnvironmentId, checked: boolean) => void;
   readonly onContinue: () => void;
-  readonly onPaired: (environmentId: EnvironmentId) => void;
 }) {
   const { environments } = useEnvironments();
   const cloudEnabled = hasCloudPublicConfig();
   const directEnvironments = environments.filter(
     (environment) => !cloudEnabled || !isOnboardingRelayEnvironment(environment),
   );
-  const [pairingOpen, setPairingOpen] = useState(expandPairingInitially);
-  const [isPairing, setIsPairing] = useState(false);
   const { ready, skippedIds } = resolveOnboardingSetup(environments, selectedIds);
   const skippedLabels = environments
     .filter((environment) => skippedIds.includes(environment.environmentId))
@@ -381,7 +365,6 @@ function ConnectionStep({
         {cloudEnabled ? (
           <ConnectAccountOption
             autoSelectedComputers={autoSelectedComputers}
-            disabled={isPairing}
             selectedIds={selectedIds}
             onToggleEnvironment={onToggleEnvironment}
           />
@@ -411,8 +394,7 @@ function ConnectionStep({
         <Button
           className="shrink-0 self-end"
           ref={continueRef}
-          autoFocus={!expandPairingInitially}
-          disabled={!ready || isPairing}
+          disabled={!ready}
           onClick={onContinue}
         >
           Continue
@@ -425,12 +407,10 @@ function ConnectionStep({
 
 function ConnectAccountOption({
   autoSelectedComputers,
-  disabled,
   selectedIds,
   onToggleEnvironment,
 }: {
   readonly autoSelectedComputers: Set<EnvironmentId>;
-  readonly disabled: boolean;
   readonly selectedIds: ReadonlySet<EnvironmentId>;
   readonly onToggleEnvironment: (environmentId: EnvironmentId, checked: boolean) => void;
 }) {
@@ -445,7 +425,7 @@ function ConnectAccountOption({
     <div className="rounded-lg border border-border bg-background">
       <Collapsible open={expanded && !!isSignedIn && discoveryReady} onOpenChange={setExpanded}>
         <CollapsibleTrigger
-          disabled={disabled || !isLoaded}
+          disabled={!isLoaded}
           onClick={(event) => {
             if (!isSignedIn) {
               event.preventDefault();
@@ -500,121 +480,6 @@ function ConnectAccountOption({
         </CollapsiblePanel>
       </Collapsible>
     </div>
-  );
-}
-
-// ── Step 2′: Direct pairing ──────────────────────────────────
-
-/**
- * Register a computer in this browser using a server-minted pairing link.
- */
-function PairingForm({
-  isPairing,
-  setIsPairing,
-  onPaired,
-}: {
-  readonly isPairing: boolean;
-  readonly setIsPairing: (value: boolean) => void;
-  readonly onPaired: (environmentId: EnvironmentId) => void;
-}) {
-  const connectPairingEnvironment = useAtomCommand(connectPairing, { reportFailure: false });
-  const [pairingUrl, setPairingUrl] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
-  const mountedRef = useRef(true);
-
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
-
-  const submit = async () => {
-    if (isPairing || pairingUrl.trim().length === 0) return;
-    setIsPairing(true);
-    setErrorMessage("");
-    const result = await connectPairingEnvironment({ pairingUrl: pairingUrl.trim() });
-    if (!mountedRef.current) return;
-    setIsPairing(false);
-    if (result._tag === "Success") {
-      onPaired(result.value);
-      return;
-    }
-    if (isAtomCommandInterrupted(result)) return;
-    const cause = squashAtomCommandFailure(result);
-    setErrorMessage(cause instanceof Error ? cause.message : "Pairing failed.");
-  };
-
-  return (
-    <>
-      <form
-        className="space-y-3"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void submit();
-        }}
-      >
-        <div>
-          <label className="block text-sm text-muted-foreground" htmlFor="onboarding-pairing-url">
-            Pairing link
-          </label>
-          <Input
-            id="onboarding-pairing-url"
-            autoFocus
-            aria-invalid={errorMessage.length > 0}
-            aria-describedby={errorMessage ? "onboarding-pairing-error" : undefined}
-            className="mt-2"
-            size="lg"
-            autoCapitalize="none"
-            autoComplete="off"
-            autoCorrect="off"
-            spellCheck={false}
-            nativeInput
-            readOnly={isPairing}
-            placeholder="https://your-server:5230/pair#token=…"
-            value={pairingUrl}
-            onChange={(event) => setPairingUrl(event.currentTarget.value)}
-            onKeyDown={(event) => {
-              if (
-                event.key === "Enter" &&
-                (event.nativeEvent.isComposing || event.keyCode === 229)
-              ) {
-                event.preventDefault();
-              }
-            }}
-          />
-        </div>
-        {errorMessage ? (
-          <Alert id="onboarding-pairing-error" variant="error">
-            <AlertDescription>{errorMessage}</AlertDescription>
-          </Alert>
-        ) : null}
-        <Collapsible>
-          <div className="flex items-center justify-between gap-3">
-            <CollapsibleTrigger
-              type="button"
-              className="group flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-            >
-              <ChevronRightIcon className="size-3.5 group-data-panel-open:rotate-90" />
-              Need a pairing link?
-            </CollapsibleTrigger>
-            <Button type="submit" disabled={isPairing || pairingUrl.trim().length === 0}>
-              {isPairing ? "Pairing..." : "Pair"}
-            </Button>
-          </div>
-          <CollapsiblePanel>
-            <p className="pt-3 text-sm text-muted-foreground">
-              Run this on the computer with your code.
-            </p>
-            <CommandBlock command="npx t3 pair" className="mt-2" />
-            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-              Start T3 Code first, or run <code className="font-mono">npx t3 serve</code>. Add{" "}
-              <code className="font-mono">--tailscale</code> to use your tailnet.
-            </p>
-          </CollapsiblePanel>
-        </Collapsible>
-      </form>
-    </>
   );
 }
 

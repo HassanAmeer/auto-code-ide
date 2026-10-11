@@ -12,12 +12,7 @@ import { Argument, Command, Flag, GlobalFlag } from "effect/cli";
 
 import * as EnvironmentAuth from "../auth/EnvironmentAuth.ts";
 
-import {
-  formatIssuedPairingCredential,
-  formatIssuedSession,
-  formatPairingCredentialList,
-  formatSessionList,
-} from "../cliAuthFormat.ts";
+import { formatIssuedSession, formatSessionList } from "../cliAuthFormat.ts";
 import * as ServerConfig from "../config.ts";
 import { authScopesFlag } from "./authScopes.ts";
 import {
@@ -72,93 +67,9 @@ const subjectFlag = Flag.String("subject").pipe(
   Flag.optional,
 );
 
-const baseUrlFlag = Flag.String("base-url").pipe(
-  Flag.withDescription("Optional public base URL used to print a ready `/pair#token=...` link."),
-  Flag.optional,
-);
-
 const tokenOnlyFlag = Flag.Boolean("token-only").pipe(
   Flag.withDescription("Print only the issued bearer token."),
   Flag.withDefault(false),
-);
-
-const pairingCreateCommand = Command.make("create", {
-  ...authLocationFlags,
-  scopes: authScopesFlag(AuthStandardClientScopes),
-  ttl: ttlFlag,
-  label: labelFlag,
-  baseUrl: baseUrlFlag,
-  json: jsonFlag,
-}).pipe(
-  Command.withDescription("Issue a new client pairing token."),
-  Command.withHandler((flags) =>
-    runWithEnvironmentAuth(
-      flags,
-      (environmentAuth) =>
-        Effect.gen(function* () {
-          const issued = yield* environmentAuth.createPairingLink({
-            scopes: flags.scopes,
-            subject: "one-time-token",
-            ...(Option.isSome(flags.ttl) ? { ttl: flags.ttl.value } : {}),
-            ...(Option.isSome(flags.label) ? { label: flags.label.value } : {}),
-          });
-          const output = formatIssuedPairingCredential(issued, {
-            json: flags.json,
-            ...(Option.isSome(flags.baseUrl) ? { baseUrl: flags.baseUrl.value } : {}),
-          });
-          yield* Console.log(output);
-        }),
-      {
-        quietLogs: flags.json,
-      },
-    ),
-  ),
-);
-
-const pairingListCommand = Command.make("list", {
-  ...authLocationFlags,
-  json: jsonFlag,
-}).pipe(
-  Command.withDescription("List active client pairing tokens without revealing their secrets."),
-  Command.withHandler((flags) =>
-    runWithEnvironmentAuth(
-      flags,
-      (environmentAuth) =>
-        Effect.gen(function* () {
-          const pairingLinks = yield* environmentAuth.listPairingLinks({
-            excludeSubjects: [EnvironmentAuth.INTERNAL_ADMINISTRATIVE_BOOTSTRAP_SUBJECT],
-          });
-          yield* Console.log(formatPairingCredentialList(pairingLinks, { json: flags.json }));
-        }),
-      {
-        quietLogs: flags.json,
-      },
-    ),
-  ),
-);
-
-const pairingRevokeCommand = Command.make("revoke", {
-  ...authLocationFlags,
-  id: Argument.String("id").pipe(Argument.withDescription("Pairing credential id to revoke.")),
-}).pipe(
-  Command.withDescription("Revoke an active client pairing token."),
-  Command.withHandler((flags) =>
-    runWithEnvironmentAuth(flags, (environmentAuth) =>
-      Effect.gen(function* () {
-        const revoked = yield* environmentAuth.revokePairingLink(flags.id);
-        yield* Console.log(
-          revoked
-            ? `Revoked pairing credential ${flags.id}.\n`
-            : `No active pairing credential found for ${flags.id}.\n`,
-        );
-      }),
-    ),
-  ),
-);
-
-const pairingCommand = Command.make("pairing").pipe(
-  Command.withDescription("Manage one-time client pairing tokens."),
-  Command.withSubcommands([pairingCreateCommand, pairingListCommand, pairingRevokeCommand]),
 );
 
 const sessionIssueCommand = Command.make("issue", {
@@ -245,5 +156,5 @@ const sessionCommand = Command.make("session").pipe(
 
 export const authCommand = Command.make("auth").pipe(
   Command.withDescription("Manage the local auth control plane for headless deployments."),
-  Command.withSubcommands([pairingCommand, sessionCommand]),
+  Command.withSubcommands([sessionCommand]),
 );

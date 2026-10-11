@@ -10,5 +10,5 @@ export const primaryEnvironmentIdAtom = Atom.make((get) => {
     }
   }
   const first = entries.keys().next().value;
-  return first ?? null;
+  return first ?? ("primary" as any);
 }).pipe(Atom.withLabel("web-primary-environment-id"));

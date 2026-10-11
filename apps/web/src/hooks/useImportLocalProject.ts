@@ -413,6 +413,12 @@ export function useImportLocalProject() {
           percent: 75,
         });
 
+        let createdProjectResult: {
+          readonly projectId: any;
+          readonly workspaceRoot: string;
+          readonly commitError?: string | undefined;
+        } | null = null;
+
         const result = await importUploaded({
           environmentId,
           input: {
@@ -421,22 +427,59 @@ export function useImportLocalProject() {
           },
         });
 
-        if (result._tag === "Failure") {
-          const errDetail = errorMessage(squashAtomCommandFailure(result));
-          projectUploadStore.setState({
-            isImporting: false,
-            error: errDetail,
-          });
-          if (!isAtomCommandInterrupted(result)) {
-            toastManager.add(
-              stackedThreadToast({
-                type: "error",
-                title: "Could not import the project",
-                description: errDetail,
+        if (result._tag === "Success") {
+          createdProjectResult = result.value;
+        } else {
+          try {
+            const resp = await fetch("/api/project/import-files-direct", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                name: projectName,
+                files: uploadedFiles,
               }),
-            );
+            });
+            const data = (await resp.json()) as {
+              ok?: boolean;
+              projectId?: string;
+              workspaceRoot?: string;
+              commitError?: string;
+              error?: string;
+            };
+            if (data && data.ok && data.projectId && data.workspaceRoot) {
+              createdProjectResult = {
+                projectId: data.projectId,
+                workspaceRoot: data.workspaceRoot,
+                commitError: data.commitError,
+              };
+            } else {
+              const errDetail = data?.error ?? errorMessage(squashAtomCommandFailure(result));
+              projectUploadStore.setState({ isImporting: false, error: errDetail });
+              if (!isAtomCommandInterrupted(result)) {
+                toastManager.add(
+                  stackedThreadToast({
+                    type: "error",
+                    title: "Could not import the project",
+                    description: errDetail,
+                  }),
+                );
+              }
+              return false;
+            }
+          } catch {
+            const errDetail = errorMessage(squashAtomCommandFailure(result));
+            projectUploadStore.setState({ isImporting: false, error: errDetail });
+            if (!isAtomCommandInterrupted(result)) {
+              toastManager.add(
+                stackedThreadToast({
+                  type: "error",
+                  title: "Could not import the project",
+                  description: errDetail,
+                }),
+              );
+            }
+            return false;
           }
-          return false;
         }
 
         projectUploadStore.setState({
@@ -444,7 +487,7 @@ export function useImportLocalProject() {
           percent: 95,
         });
 
-        const { projectId, workspaceRoot, commitError } = result.value;
+        const { projectId, workspaceRoot, commitError } = createdProjectResult;
 
         toastManager.add(
           stackedThreadToast({
@@ -454,8 +497,18 @@ export function useImportLocalProject() {
           }),
         );
 
+        if (commitError) {
+          toastManager.add(
+            stackedThreadToast({
+              type: "warning",
+              title: "Initial commit warning",
+              description: commitError,
+            }),
+          );
+        }
+
         projectUploadStore.setState({
-          stage: "Complete!",
+          stage: "Opening project in T3 Code...",
           percent: 100,
         });
 
@@ -492,12 +545,120 @@ export function useImportLocalProject() {
         setIsImporting(false);
       }
     },
-    [handleNewThread, importUploaded],
+    [environments, handleNewThread, importUploaded, primaryEnvId],
+  );
+
+  const cloneGitRepo = useCallback(
+    async (
+      targetEnvId: EnvironmentId | undefined,
+      repoUrl: string,
+      customProjectName?: string,
+    ): Promise<boolean> => {
+      const environmentId = (targetEnvId ??
+        primaryEnvId ??
+        environments[0]?.environmentId ??
+        PRIMARY_LOCAL_ENVIRONMENT_ID) as EnvironmentId;
+      if (!repoUrl.trim()) return false;
+
+      setIsImporting(true);
+      const inferredName =
+        customProjectName?.trim() ||
+        repoUrl
+          .split("/")
+          .pop()
+          ?.replace(/\.git$/, "")
+          .trim() ||
+        "cloned-repo";
+      const projectName =
+        inferredName.replace(/[^a-zA-Z0-9._-]/g, "-").slice(0, 100) || "cloned-repo";
+
+      projectUploadStore.setState({
+        isImporting: true,
+        projectName,
+        stage: `Cloning repository ${repoUrl}...`,
+        current: 0,
+        total: 100,
+        percent: 40,
+        error: null,
+      });
+
+      try {
+        const response = await fetch("/api/project/clone-direct", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: projectName,
+            repoUrl: repoUrl.trim(),
+          }),
+        });
+        const data = (await response.json()) as {
+          ok?: boolean;
+          projectId?: string;
+          workspaceRoot?: string;
+          error?: string;
+        };
+
+        if (!data || !data.ok || !data.projectId || !data.workspaceRoot) {
+          const errDetail = data?.error ?? "Failed to clone repository";
+          projectUploadStore.setState({ isImporting: false, error: errDetail });
+          toastManager.add(
+            stackedThreadToast({
+              type: "error",
+              title: "Could not clone repository",
+              description: errDetail,
+            }),
+          );
+          return false;
+        }
+
+        projectUploadStore.setState({
+          stage: "Cloned successfully! Opening project...",
+          percent: 95,
+        });
+
+        toastManager.add(
+          stackedThreadToast({
+            type: "success",
+            title: `Cloned ${projectName}`,
+            description: data.workspaceRoot,
+          }),
+        );
+
+        const projectRef = scopeProjectRef(environmentId, data.projectId as any);
+        const project = await waitForProject(projectRef).catch(() => null);
+        if (project !== null) {
+          await handleNewThread(projectRef).catch((error: unknown) => {
+            console.warn("Could not auto-open thread draft:", error);
+          });
+        }
+
+        setTimeout(() => {
+          projectUploadStore.reset();
+        }, 1500);
+
+        return true;
+      } catch (err) {
+        const errDetail = errorMessage(err);
+        projectUploadStore.setState({ isImporting: false, error: errDetail });
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: "Clone failed",
+            description: errDetail,
+          }),
+        );
+        return false;
+      } finally {
+        setIsImporting(false);
+      }
+    },
+    [environments, handleNewThread, primaryEnvId],
   );
 
   return {
     importFiles,
     importZipFile,
+    cloneGitRepo,
     isImporting,
     importProgress: progressState.isImporting
       ? { current: progressState.current, total: progressState.total, stage: progressState.stage }

@@ -678,6 +678,8 @@ const layerMakeRoutes = Layer.mergeAll(
     ServerHttp.layerTerminalExecRoute,
     ServerHttp.layerDirectProjectCreateRoute,
     ServerHttp.layerDirectProjectImportZipRoute,
+    ServerHttp.layerDirectProjectImportFilesRoute,
+    ServerHttp.layerDirectProjectCloneRoute,
     ServerBrowserStream.routeLayer,
     ServerHttp.layerStaticAndDevRoute,
     Ws.layer,
@@ -704,6 +706,8 @@ const layerMakeRoutes = Layer.mergeAll(
   Layer.provide(layerCommandReadiness),
   Layer.provide(ServerHttp.layerBrowserApiCors),
   Layer.provide(ServerHttp.layerHttpCompression),
+  Layer.provide(RuntimeLayer.layerManagedProjectFoldersProvided),
+  Layer.provide(RuntimeLayer.layerProjectService),
 );
 
 const layerMakeServer = Layer.unwrap(

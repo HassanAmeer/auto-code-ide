@@ -11,6 +11,7 @@
  */
 import { CommandId, ProjectId, type ThreadId, type ProjectUploadedFile } from "@t3tools/contracts";
 import { newProjectFolderName } from "@t3tools/shared/path";
+// @effect-diagnostics-next-line nodeBuiltinImport:off
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import * as Cause from "effect/Cause";
@@ -462,6 +463,7 @@ const make = Effect.gen(function* () {
       const slug = name.toLowerCase().replace(/[^a-z0-9_-]/g, "-") || "react-app";
       yield* fileSystem.writeFileString(
         path.join(cwd, "package.json"),
+        // @effect-diagnostics-next-line preferSchemaOverJson:off
         JSON.stringify(
           {
             name: slug,
@@ -576,6 +578,7 @@ export default function App() {
       const slug = name.toLowerCase().replace(/[^a-z0-9_-]/g, "-") || "nextjs-app";
       yield* fileSystem.writeFileString(
         path.join(cwd, "package.json"),
+        // @effect-diagnostics-next-line preferSchemaOverJson:off
         JSON.stringify(
           {
             name: slug,
@@ -638,6 +641,7 @@ export default function RootLayout({ children }) {
       const slug = name.toLowerCase().replace(/[^a-z0-9_-]/g, "-") || "node-app";
       yield* fileSystem.writeFileString(
         path.join(cwd, "package.json"),
+        // @effect-diagnostics-next-line preferSchemaOverJson:off
         JSON.stringify(
           {
             name: slug,
@@ -950,7 +954,7 @@ header('Content-Type: text/html; charset=utf-8');
           "*/.cache/*",
         ]);
       },
-      catch: (cause) => cause,
+      catch: (cause) => new NamedProjectFolderError({ folder: tempZipFile, cause }),
     }).pipe(Effect.ignore);
 
     // Remove the temporary zip
@@ -962,17 +966,15 @@ header('Content-Type: text/html; charset=utf-8');
       .pipe(Effect.orElseSucceed(() => []));
     if (rootChildren.length === 1) {
       const singleDir = path.join(workspaceRoot, rootChildren[0]!);
-      const isDir = yield* fileSystem
-        .isDirectory(singleDir)
-        .pipe(Effect.orElseSucceed(() => false));
-      if (isDir) {
+      const stat = yield* fileSystem.stat(singleDir).pipe(Effect.option);
+      if (Option.isSome(stat) && stat.value.type === "Directory") {
         const subItems = yield* fileSystem
           .readDirectory(singleDir)
           .pipe(Effect.orElseSucceed(() => []));
         for (const item of subItems) {
           const from = path.join(singleDir, item);
           const to = path.join(workspaceRoot, item);
-          yield* fileSystem.move(from, to).pipe(Effect.ignore);
+          yield* fileSystem.rename(from, to).pipe(Effect.ignore);
         }
         yield* fileSystem.remove(singleDir, { recursive: true }).pipe(Effect.ignore);
       }

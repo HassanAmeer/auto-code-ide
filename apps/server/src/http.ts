@@ -8,6 +8,7 @@ import {
 } from "@t3tools/contracts";
 import { isDevProxiedPath } from "@t3tools/shared/devProxy";
 import { decodeOtlpTraceRecords } from "@t3tools/shared/observability";
+import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -523,7 +524,7 @@ export const layerDirectProjectCreateRoute = HttpRouter.add(
   "/api/project/create-direct",
   Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
-    const bodyJson = (yield* request.json) as {
+    const bodyJson = (yield* request.json.pipe(Effect.catch(() => Effect.succeed({} as any)))) as {
       name?: string;
       template?: string;
     };
@@ -549,16 +550,20 @@ export const layerDirectProjectCreateRoute = HttpRouter.add(
           workspaceRoot: res.workspaceRoot,
           commitError: res.commitError,
         })),
-        Effect.catch((err: unknown) =>
+        Effect.catchCause((cause) =>
           Effect.succeed({
             ok: false as const,
-            error: (err as Error)?.message ?? "Failed to create project",
+            error: Cause.pretty(cause),
           }),
         ),
       );
 
     return HttpServerResponse.jsonUnsafe(result);
-  }),
+  }).pipe(
+    Effect.catchCause((cause) =>
+      Effect.succeed(HttpServerResponse.jsonUnsafe({ ok: false, error: Cause.pretty(cause) })),
+    ),
+  ),
 );
 
 export const layerDirectProjectImportZipRoute = HttpRouter.add(
@@ -566,7 +571,7 @@ export const layerDirectProjectImportZipRoute = HttpRouter.add(
   "/api/project/import-zip-direct",
   Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
-    const bodyJson = (yield* request.json) as {
+    const bodyJson = (yield* request.json.pipe(Effect.catch(() => Effect.succeed({} as any)))) as {
       name?: string;
       zipBase64?: string;
     };
@@ -593,16 +598,134 @@ export const layerDirectProjectImportZipRoute = HttpRouter.add(
           workspaceRoot: res.workspaceRoot,
           commitError: res.commitError,
         })),
-        Effect.catch((err: unknown) =>
+        Effect.catchCause((cause) =>
           Effect.succeed({
             ok: false as const,
-            error: (err as Error)?.message ?? "Failed to import zip project",
+            error: Cause.pretty(cause),
           }),
         ),
       );
 
     return HttpServerResponse.jsonUnsafe(result);
-  }),
+  }).pipe(
+    Effect.catchCause((cause) =>
+      Effect.succeed(HttpServerResponse.jsonUnsafe({ ok: false, error: Cause.pretty(cause) })),
+    ),
+  ),
+);
+
+export const layerDirectProjectImportFilesRoute = HttpRouter.add(
+  "POST",
+  "/api/project/import-files-direct",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const bodyJson = (yield* request.json.pipe(Effect.catch(() => Effect.succeed({} as any)))) as {
+      name?: string;
+      files?: ReadonlyArray<{
+        relativePath: string;
+        content: string;
+        encoding?: "utf8" | "base64";
+      }>;
+    };
+
+    const name = bodyJson?.name?.trim();
+    const files = bodyJson?.files;
+    if (!name || !Array.isArray(files) || files.length === 0) {
+      return HttpServerResponse.jsonUnsafe(
+        { ok: false, error: "Project name and files are required" },
+        { status: 400 },
+      );
+    }
+
+    const managedFolders = yield* ManagedProjectFolders.ManagedProjectFolders;
+    const result = yield* managedFolders
+      .importUploadedProject({
+        name,
+        files: files.map((f) => ({
+          relativePath: f.relativePath,
+          content: f.content,
+          encoding: f.encoding ?? "utf8",
+        })),
+      })
+      .pipe(
+        Effect.map((res) => ({
+          ok: true as const,
+          projectId: res.projectId,
+          workspaceRoot: res.workspaceRoot,
+          commitError: res.commitError,
+        })),
+        Effect.catchCause((cause) =>
+          Effect.succeed({
+            ok: false as const,
+            error: Cause.pretty(cause),
+          }),
+        ),
+      );
+
+    return HttpServerResponse.jsonUnsafe(result);
+  }).pipe(
+    Effect.catchCause((cause) =>
+      Effect.succeed(HttpServerResponse.jsonUnsafe({ ok: false, error: Cause.pretty(cause) })),
+    ),
+  ),
+);
+
+export const layerDirectProjectCloneRoute = HttpRouter.add(
+  "POST",
+  "/api/project/clone-direct",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const bodyJson = (yield* request.json.pipe(Effect.catch(() => Effect.succeed({} as any)))) as {
+      name?: string;
+      repoUrl?: string;
+    };
+
+    const repoUrl = bodyJson?.repoUrl?.trim();
+    if (!repoUrl) {
+      return HttpServerResponse.jsonUnsafe(
+        { ok: false, error: "Repository URL is required" },
+        { status: 400 },
+      );
+    }
+
+    const rawName =
+      bodyJson?.name?.trim() ||
+      repoUrl
+        .split("/")
+        .pop()
+        ?.replace(/\.git$/, "") ||
+      "cloned-repo";
+    const name = rawName.replace(/[^a-zA-Z0-9_-]/g, "-");
+
+    const managedFolders = yield* ManagedProjectFolders.ManagedProjectFolders;
+    const created = yield* managedFolders.createNamedProject({ name });
+    const targetDir = created.workspaceRoot;
+
+    const cloneResult = yield* Effect.promise(() =>
+      runBashCommandOnHost(
+        `rm -rf "${targetDir}" && git clone --depth 1 "${repoUrl}" "${targetDir}"`,
+        "/tmp",
+        120_000,
+      ),
+    );
+
+    if (cloneResult.exitCode !== 0) {
+      return HttpServerResponse.jsonUnsafe({
+        ok: false,
+        error: cloneResult.stderr || "Git clone failed",
+      });
+    }
+
+    return HttpServerResponse.jsonUnsafe({
+      ok: true,
+      projectId: created.projectId,
+      workspaceRoot: targetDir,
+    });
+  }).pipe(
+    Effect.catchCause((cause) =>
+      Effect.succeed(HttpServerResponse.jsonUnsafe({ ok: false, error: Cause.pretty(cause) })),
+    ),
+  ),
 );
 
 const decodeBuildManifest = Schema.decodeUnknownEffect(
