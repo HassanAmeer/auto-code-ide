@@ -11,6 +11,8 @@
  */
 import { CommandId, ProjectId, type ThreadId, type ProjectUploadedFile } from "@t3tools/contracts";
 import { newProjectFolderName } from "@t3tools/shared/path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
@@ -117,7 +119,10 @@ export class ManagedProjectFolders extends Context.Service<
      * why in `commitError`. The folder is removed when the create fails or is
      * cancelled before the project exists, never once another project owns it.
      */
-    readonly createNamedProject: (input: { readonly name: string }) => Effect.Effect<
+    readonly createNamedProject: (input: {
+      readonly name: string;
+      readonly template?: string | undefined;
+    }) => Effect.Effect<
       {
         readonly projectId: ProjectId;
         readonly workspaceRoot: string;
@@ -128,6 +133,17 @@ export class ManagedProjectFolders extends Context.Service<
     readonly importUploadedProject: (input: {
       readonly name: string;
       readonly files: ReadonlyArray<ProjectUploadedFile>;
+    }) => Effect.Effect<
+      {
+        readonly projectId: ProjectId;
+        readonly workspaceRoot: string;
+        readonly commitError?: string;
+      },
+      NamedProjectError
+    >;
+    readonly importZipProject: (input: {
+      readonly name: string;
+      readonly zipBase64: string;
     }) => Effect.Effect<
       {
         readonly projectId: ProjectId;
@@ -429,6 +445,7 @@ const make = Effect.gen(function* () {
   const scaffoldRepository = Effect.fn("ManagedProjectFolders.scaffoldRepository")(function* (
     cwd: string,
     name: string,
+    template?: string | undefined,
   ) {
     const branch =
       (yield* git
@@ -440,24 +457,301 @@ const make = Effect.gen(function* () {
       args: ["init", `--initial-branch=${branch}`],
       timeoutMs: 10_000,
     });
-    yield* fileSystem.writeFileString(path.join(cwd, "README.md"), namedProjectReadme(name));
-    yield* fileSystem.makeDirectory(path.join(cwd, "assets"));
-    yield* fileSystem.writeFileString(
-      path.join(cwd, "assets", "icon.svg"),
-      namedProjectIconSvg(name),
-    );
-    // Named and forced so a global ignore rule (say `*.svg`) cannot drop one.
+
+    if (template === "react") {
+      const slug = name.toLowerCase().replace(/[^a-z0-9_-]/g, "-") || "react-app";
+      yield* fileSystem.writeFileString(
+        path.join(cwd, "package.json"),
+        JSON.stringify(
+          {
+            name: slug,
+            private: true,
+            version: "0.1.0",
+            type: "module",
+            scripts: {
+              dev: "vite",
+              build: "vite build",
+              preview: "vite preview",
+            },
+            dependencies: {
+              react: "^19.0.0",
+              "react-dom": "^19.0.0",
+            },
+            devDependencies: {
+              "@vitejs/plugin-react": "^4.3.4",
+              vite: "^6.0.0",
+            },
+          },
+          null,
+          2,
+        ),
+      );
+      yield* fileSystem.writeFileString(
+        path.join(cwd, "index.html"),
+        `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${name}</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>\n`,
+      );
+      yield* fileSystem.writeFileString(
+        path.join(cwd, "vite.config.js"),
+        `import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+export default defineConfig({
+  plugins: [react()],
+});\n`,
+      );
+      const srcDir = path.join(cwd, "src");
+      yield* fileSystem.makeDirectory(srcDir, { recursive: true });
+      yield* fileSystem.writeFileString(
+        path.join(srcDir, "main.jsx"),
+        `import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App.jsx';
+import './index.css';
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);\n`,
+      );
+      yield* fileSystem.writeFileString(
+        path.join(srcDir, "App.jsx"),
+        `import React, { useState } from 'react';
+
+export default function App() {
+  const [count, setCount] = useState(0);
+
+  return (
+    <div style={{ fontFamily: 'system-ui, sans-serif', padding: '3rem', textAlign: 'center' }}>
+      <h1>Welcome to ${name}</h1>
+      <p style={{ color: '#94a3b8' }}>Built with React + Vite & Jobi Code AI</p>
+      <div style={{ marginTop: '2rem' }}>
+        <button
+          onClick={() => setCount((c) => c + 1)}
+          style={{
+            padding: '0.6rem 1.4rem',
+            borderRadius: '8px',
+            border: 'none',
+            background: '#3b82f6',
+            color: '#fff',
+            fontWeight: 600,
+            cursor: 'pointer',
+          }}
+        >
+          Count is {count}
+        </button>
+      </div>
+    </div>
+  );
+}\n`,
+      );
+      yield* fileSystem.writeFileString(
+        path.join(srcDir, "index.css"),
+        `body {
+  margin: 0;
+  background-color: #0f172a;
+  color: #f8fafc;
+}\n`,
+      );
+      yield* fileSystem.writeFileString(
+        path.join(cwd, ".gitignore"),
+        `node_modules/\ndist/\n.env\n.env.local\n`,
+      );
+      yield* fileSystem.writeFileString(
+        path.join(cwd, "README.md"),
+        `# ${name}\n\nReact + Vite project initialized with Jobi Code.\n\n## Getting Started\n\`\`\`bash\nnpm install\nnpm run dev\n\`\`\`\n`,
+      );
+    } else if (template === "nextjs") {
+      const slug = name.toLowerCase().replace(/[^a-z0-9_-]/g, "-") || "nextjs-app";
+      yield* fileSystem.writeFileString(
+        path.join(cwd, "package.json"),
+        JSON.stringify(
+          {
+            name: slug,
+            private: true,
+            version: "0.1.0",
+            scripts: {
+              dev: "next dev",
+              build: "next build",
+              start: "next start",
+            },
+            dependencies: {
+              next: "^15.0.0",
+              react: "^19.0.0",
+              "react-dom": "^19.0.0",
+            },
+          },
+          null,
+          2,
+        ),
+      );
+      const appDir = path.join(cwd, "app");
+      yield* fileSystem.makeDirectory(appDir, { recursive: true });
+      yield* fileSystem.writeFileString(
+        path.join(appDir, "layout.jsx"),
+        `export const metadata = {
+  title: "${name}",
+  description: "Created with Jobi Code AI",
+};
+
+export default function RootLayout({ children }) {
+  return (
+    <html lang="en">
+      <body style={{ margin: 0, fontFamily: 'system-ui, sans-serif', background: '#0b0f19', color: '#f1f5f9' }}>
+        {children}
+      </body>
+    </html>
+  );
+}\n`,
+      );
+      yield* fileSystem.writeFileString(
+        path.join(appDir, "page.jsx"),
+        `export default function HomePage() {
+  return (
+    <main style={{ padding: '3rem', textAlign: 'center' }}>
+      <h1>${name}</h1>
+      <p style={{ color: '#94a3b8' }}>Next.js starter ready for fullstack AI development.</p>
+    </main>
+  );
+}\n`,
+      );
+      yield* fileSystem.writeFileString(
+        path.join(cwd, ".gitignore"),
+        `node_modules/\n.next/\nout/\n.env*.local\n`,
+      );
+      yield* fileSystem.writeFileString(
+        path.join(cwd, "README.md"),
+        `# ${name}\n\nNext.js project initialized with Jobi Code.\n\n\`\`\`bash\nnpm install\nnpm run dev\n\`\`\`\n`,
+      );
+    } else if (template === "node") {
+      const slug = name.toLowerCase().replace(/[^a-z0-9_-]/g, "-") || "node-app";
+      yield* fileSystem.writeFileString(
+        path.join(cwd, "package.json"),
+        JSON.stringify(
+          {
+            name: slug,
+            private: true,
+            version: "0.1.0",
+            type: "module",
+            scripts: {
+              start: "node index.js",
+              dev: "node --watch index.js",
+            },
+            dependencies: {
+              express: "^4.21.0",
+            },
+          },
+          null,
+          2,
+        ),
+      );
+      yield* fileSystem.writeFileString(
+        path.join(cwd, "index.js"),
+        `import express from "express";
+
+const app = express();
+const port = process.env.PORT || 3000;
+
+app.use(express.json());
+
+app.get("/", (req, res) => {
+  res.json({ message: "Hello from ${name} API!", time: new Date().toISOString() });
+});
+
+app.listen(port, () => {
+  console.log(\`Server running at http://localhost:\${port}\`);
+});\n`,
+      );
+      yield* fileSystem.writeFileString(path.join(cwd, ".gitignore"), `node_modules/\n.env\n`);
+      yield* fileSystem.writeFileString(
+        path.join(cwd, "README.md"),
+        `# ${name}\n\nNode.js API project initialized with Jobi Code.\n\n\`\`\`bash\nnpm install\nnpm run dev\n\`\`\`\n`,
+      );
+    } else if (template === "python") {
+      yield* fileSystem.writeFileString(
+        path.join(cwd, "main.py"),
+        `"""${name} - Python Application"""
+
+def main():
+    print("Welcome to ${name}!")
+
+if __name__ == "__main__":
+    main()
+\n`,
+      );
+      yield* fileSystem.writeFileString(
+        path.join(cwd, "requirements.txt"),
+        `# Add your dependencies here\n`,
+      );
+      yield* fileSystem.writeFileString(
+        path.join(cwd, ".gitignore"),
+        `__pycache__/\n*.pyc\nvenv/\n.venv/\n.env\n`,
+      );
+      yield* fileSystem.writeFileString(
+        path.join(cwd, "README.md"),
+        `# ${name}\n\nPython project initialized with Jobi Code.\n\n\`\`\`bash\npython main.py\n\`\`\`\n`,
+      );
+    } else if (template === "php") {
+      yield* fileSystem.writeFileString(
+        path.join(cwd, "index.php"),
+        `<?php
+/**
+ * ${name} - PHP Application
+ */
+header('Content-Type: text/html; charset=utf-8');
+?>
+<!DOCTYPE html>
+<html>
+<head>
+    <title>${name}</title>
+    <style>body { font-family: sans-serif; padding: 2rem; background: #0f172a; color: #f8fafc; text-align: center; }</style>
+</head>
+<body>
+    <h1><?= htmlspecialchars("${name}") ?></h1>
+    <p>PHP Application initialized with Jobi Code.</p>
+</body>
+</html>\n`,
+      );
+      yield* fileSystem.writeFileString(path.join(cwd, ".gitignore"), `vendor/\n.env\n`);
+      yield* fileSystem.writeFileString(
+        path.join(cwd, "README.md"),
+        `# ${name}\n\nPHP project initialized with Jobi Code.\n\n\`\`\`bash\nphp -S localhost:8000\n\`\`\`\n`,
+      );
+    } else {
+      yield* fileSystem.writeFileString(path.join(cwd, "README.md"), namedProjectReadme(name));
+      yield* fileSystem.makeDirectory(path.join(cwd, "assets"));
+      yield* fileSystem.writeFileString(
+        path.join(cwd, "assets", "icon.svg"),
+        namedProjectIconSvg(name),
+      );
+      yield* fileSystem.writeFileString(
+        path.join(cwd, ".gitignore"),
+        `node_modules/\n.env\n.DS_Store\n`,
+      );
+    }
+
     yield* git.execute({
       operation: "ManagedProjectFolders.add",
       cwd,
-      args: ["add", "--force", "--", "README.md", "assets/icon.svg"],
-      timeoutMs: 10_000,
+      args: ["add", "-A"],
+      timeoutMs: 15_000,
     });
     return yield* git
       .execute({
         operation: "ManagedProjectFolders.commit",
         cwd,
-        args: ["commit", "--message", "Initial commit"],
+        args: ["commit", "--message", `Initial commit for ${name}`],
         allowNonZeroExit: true,
         timeoutMs: 30_000,
       })
@@ -477,7 +771,7 @@ const make = Effect.gen(function* () {
     // Until the create is dispatched nothing else can use the folder, so any
     // exit but success removes it, an interrupt included.
     const prepared = yield* Effect.all([
-      scaffoldRepository(workspaceRoot, input.name).pipe(
+      scaffoldRepository(workspaceRoot, input.name, input.template).pipe(
         Effect.mapError((cause) => new NamedProjectFolderError({ folder: workspaceRoot, cause })),
       ),
       crypto.randomUUIDv4.pipe(
@@ -623,6 +917,136 @@ const make = Effect.gen(function* () {
       };
     });
 
+  const importZipProject: ManagedProjectFolders["Service"]["importZipProject"] = Effect.fn(
+    "ManagedProjectFolders.importZipProject",
+  )(function* (input) {
+    const workspaceRoot = yield* claimNamedFolder(input.name);
+    const removeFolder = fileSystem.remove(workspaceRoot, { recursive: true }).pipe(Effect.ignore);
+
+    const tempZipFile = path.join(workspaceRoot, "__temp_upload.zip");
+    const zipBuffer = Buffer.from(input.zipBase64, "base64");
+    yield* fileSystem
+      .writeFile(tempZipFile, zipBuffer)
+      .pipe(
+        Effect.mapError((cause) => new NamedProjectFolderError({ folder: tempZipFile, cause })),
+      );
+
+    // Unzip excluding node_modules, .git, and common build artifacts
+    yield* Effect.tryPromise({
+      try: () => {
+        const execAsync = promisify(execFile);
+        return execAsync("unzip", [
+          "-q",
+          "-o",
+          tempZipFile,
+          "-d",
+          workspaceRoot,
+          "-x",
+          "*/node_modules/*",
+          "*/.git/*",
+          "*/dist/*",
+          "*/.next/*",
+          "*/build/*",
+          "*/.cache/*",
+        ]);
+      },
+      catch: (cause) => cause,
+    }).pipe(Effect.ignore);
+
+    // Remove the temporary zip
+    yield* fileSystem.remove(tempZipFile).pipe(Effect.ignore);
+
+    // If all extracted files were nested under a single top-level directory, flatten them
+    const rootChildren = yield* fileSystem
+      .readDirectory(workspaceRoot)
+      .pipe(Effect.orElseSucceed(() => []));
+    if (rootChildren.length === 1) {
+      const singleDir = path.join(workspaceRoot, rootChildren[0]!);
+      const isDir = yield* fileSystem
+        .isDirectory(singleDir)
+        .pipe(Effect.orElseSucceed(() => false));
+      if (isDir) {
+        const subItems = yield* fileSystem
+          .readDirectory(singleDir)
+          .pipe(Effect.orElseSucceed(() => []));
+        for (const item of subItems) {
+          const from = path.join(singleDir, item);
+          const to = path.join(workspaceRoot, item);
+          yield* fileSystem.move(from, to).pipe(Effect.ignore);
+        }
+        yield* fileSystem.remove(singleDir, { recursive: true }).pipe(Effect.ignore);
+      }
+    }
+
+    const branch =
+      (yield* git
+        .readConfigValue(workspaceRoot, "init.defaultBranch")
+        .pipe(Effect.orElseSucceed(() => null))) ?? "main";
+    yield* git
+      .execute({
+        operation: "ManagedProjectFolders.init",
+        cwd: workspaceRoot,
+        args: ["init", `--initial-branch=${branch}`],
+        timeoutMs: 10_000,
+      })
+      .pipe(
+        Effect.mapError((cause) => new NamedProjectFolderError({ folder: workspaceRoot, cause })),
+      );
+    yield* git
+      .execute({
+        operation: "ManagedProjectFolders.add",
+        cwd: workspaceRoot,
+        args: ["add", "-A"],
+        timeoutMs: 30_000,
+      })
+      .pipe(
+        Effect.mapError((cause) => new NamedProjectFolderError({ folder: workspaceRoot, cause })),
+      );
+    const commitError = yield* git
+      .execute({
+        operation: "ManagedProjectFolders.commit",
+        cwd: workspaceRoot,
+        args: ["commit", "--message", "Initial commit from imported ZIP"],
+        allowNonZeroExit: true,
+        timeoutMs: 30_000,
+      })
+      .pipe(
+        Effect.map((result) =>
+          result.exitCode === 0 ? undefined : describeCommitFailure(result.stderr),
+        ),
+        Effect.catch((error) => Effect.succeed(error.message)),
+      );
+
+    const id = yield* crypto.randomUUIDv4.pipe(
+      Effect.mapError((cause) => new NamedProjectCreateError({ workspaceRoot, cause })),
+    );
+
+    const project = yield* projects
+      .create({
+        commandId: CommandId.make(`imported-zip-project:${id}`),
+        projectId: ProjectId.make(id),
+        title: input.name,
+        workspaceRoot,
+      })
+      .pipe(
+        Effect.tapError((error) =>
+          error._tag === "ProjectConflictError"
+            ? Effect.void
+            : projects.getByWorkspaceRoot(workspaceRoot).pipe(
+                Effect.flatMap((owner) => (Option.isNone(owner) ? removeFolder : Effect.void)),
+                Effect.ignore,
+              ),
+        ),
+        Effect.mapError((cause) => new NamedProjectCreateError({ workspaceRoot, cause })),
+      );
+
+    return {
+      projectId: project.id,
+      workspaceRoot,
+      ...(commitError === undefined ? {} : { commitError }),
+    };
+  });
+
   return ManagedProjectFolders.of({
     scratchRoot,
     ensureScratchProject,
@@ -630,6 +1054,7 @@ const make = Effect.gen(function* () {
     namedProjectsRoot,
     createNamedProject,
     importUploadedProject,
+    importZipProject,
   });
 });
 

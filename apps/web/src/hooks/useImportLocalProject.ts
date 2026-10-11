@@ -89,9 +89,126 @@ export function useImportLocalProject() {
   const importUploaded = useAtomCommand(projectEnvironment.importUploaded, {
     reportFailure: false,
   });
+  const importZip = useAtomCommand(projectEnvironment.importZip, {
+    reportFailure: false,
+  });
   const handleNewThread = useNewThreadHandler();
   const progressState = useProjectUploadProgress();
   const [isImporting, setIsImporting] = useState(false);
+
+  const importZipFile = useCallback(
+    async (
+      targetEnvId: EnvironmentId | undefined,
+      file: File,
+      customProjectName?: string,
+    ): Promise<boolean> => {
+      const environmentId = (targetEnvId ?? PRIMARY_LOCAL_ENVIRONMENT_ID) as EnvironmentId;
+      if (!file) return false;
+
+      setIsImporting(true);
+      const inferredName =
+        customProjectName?.trim() || file.name.replace(/\.zip$/i, "").trim() || "imported-project";
+      const projectName =
+        inferredName.replace(/[^a-zA-Z0-9._-]/g, "-").slice(0, 100) || "imported-project";
+
+      projectUploadStore.setState({
+        isImporting: true,
+        projectName,
+        stage: `Reading ZIP file (${(file.size / (1024 * 1024)).toFixed(1)} MB)...`,
+        current: 0,
+        total: 100,
+        percent: 20,
+        error: null,
+      });
+
+      try {
+        const base64Data = await readFileAsBase64(file);
+
+        projectUploadStore.setState({
+          stage: "Uploading ZIP and auto-extracting on server...",
+          percent: 60,
+        });
+
+        const result = await importZip({
+          environmentId,
+          input: {
+            name: projectName,
+            zipBase64: base64Data,
+          },
+        });
+
+        if (result._tag === "Failure") {
+          const errDetail = errorMessage(squashAtomCommandFailure(result));
+          projectUploadStore.setState({
+            isImporting: false,
+            error: errDetail,
+          });
+          if (!isAtomCommandInterrupted(result)) {
+            toastManager.add(
+              stackedThreadToast({
+                type: "error",
+                title: "Could not import ZIP project",
+                description: errDetail,
+              }),
+            );
+          }
+          return false;
+        }
+
+        projectUploadStore.setState({
+          stage: "Extracted successfully! Initializing Git repository...",
+          percent: 95,
+        });
+
+        const { projectId, workspaceRoot, commitError } = result.value;
+
+        toastManager.add(
+          stackedThreadToast({
+            type: "success",
+            title: `Imported ${projectName}`,
+            description: `ZIP archive extracted successfully. Workspace: ${workspaceRoot}`,
+          }),
+        );
+
+        projectUploadStore.setState({
+          stage: "Complete!",
+          percent: 100,
+        });
+
+        const projectRef = scopeProjectRef(environmentId, projectId);
+        const project = await waitForProject(projectRef).catch(() => null);
+
+        if (project !== null) {
+          await handleNewThread(projectRef).catch((error: unknown) => {
+            console.warn("Could not auto-open thread draft:", error);
+          });
+        }
+
+        setTimeout(() => {
+          projectUploadStore.reset();
+        }, 1500);
+
+        return true;
+      } catch (error) {
+        const errDetail = errorMessage(error);
+        projectUploadStore.setState({
+          isImporting: false,
+          error: errDetail,
+        });
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: "ZIP import failed",
+            description: errDetail,
+          }),
+        );
+        return false;
+      } finally {
+        setIsImporting(false);
+      }
+    },
+    [handleNewThread, importZip],
+  );
 
   const importFiles = useCallback(
     async (
@@ -318,6 +435,7 @@ export function useImportLocalProject() {
 
   return {
     importFiles,
+    importZipFile,
     isImporting,
     importProgress: progressState.isImporting
       ? { current: progressState.current, total: progressState.total, stage: progressState.stage }

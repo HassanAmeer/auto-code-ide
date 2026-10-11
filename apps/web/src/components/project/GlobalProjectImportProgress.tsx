@@ -7,17 +7,26 @@ import { projectUploadStore, useProjectUploadProgress } from "~/state/projectUpl
 
 export function GlobalProjectImportProgress() {
   const folderInputRef = useRef<HTMLInputElement | null>(null);
+  const zipInputRef = useRef<HTMLInputElement | null>(null);
   const targetEnvRef = useRef<EnvironmentId | undefined>(undefined);
-  const { importFiles } = useImportLocalProject();
+  const { importFiles, importZipFile } = useImportLocalProject();
   const progress = useProjectUploadProgress();
   const [showError, setShowError] = useState(true);
 
-  // Register trigger with the global store so any component can invoke folder selection
+  // Register triggers with the global store so any component can invoke folder or zip selection
   useEffect(() => {
-    return projectUploadStore.registerTrigger((envId) => {
+    const unsubFolder = projectUploadStore.registerTrigger((envId) => {
       targetEnvRef.current = envId;
       folderInputRef.current?.click();
     });
+    const unsubZip = projectUploadStore.registerZipTrigger((envId) => {
+      targetEnvRef.current = envId;
+      zipInputRef.current?.click();
+    });
+    return () => {
+      unsubFolder();
+      unsubZip();
+    };
   }, []);
 
   useEffect(() => {
@@ -30,14 +39,21 @@ export function GlobalProjectImportProgress() {
     const files = event.target.files;
     const envId = targetEnvRef.current;
     if (!files || files.length === 0) return;
-    // Clear input value so same folder can be re-selected if desired
     event.target.value = "";
     await importFiles(envId, files);
   };
 
+  const handleZipChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    const envId = targetEnvRef.current;
+    if (!file) return;
+    event.target.value = "";
+    await importZipFile(envId, file);
+  };
+
   return (
     <>
-      {/* Permanent Root File Input */}
+      {/* Permanent Root Folder Input */}
       <input
         ref={folderInputRef}
         type="file"
@@ -48,6 +64,16 @@ export function GlobalProjectImportProgress() {
         className="hidden"
         style={{ display: "none" }}
         onChange={(e) => void handleFileChange(e)}
+      />
+
+      {/* Permanent Root ZIP File Input */}
+      <input
+        ref={zipInputRef}
+        type="file"
+        accept=".zip,application/zip,application/x-zip-compressed"
+        className="hidden"
+        style={{ display: "none" }}
+        onChange={(e) => void handleZipChange(e)}
       />
 
       {/* Top Fixed Progress Bar */}

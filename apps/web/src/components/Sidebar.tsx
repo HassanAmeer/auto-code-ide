@@ -76,6 +76,8 @@ import {
   PinIcon,
   PinOffIcon,
   PlusIcon,
+  SparklesIcon,
+  FileArchiveIcon,
   SettingsIcon,
   ShieldQuestionIcon,
   SquarePenIcon,
@@ -83,6 +85,8 @@ import {
   Undo2Icon,
   XIcon,
 } from "lucide-react";
+import { projectCreateModalStore } from "./project/projectCreateModalStore";
+import { projectUploadStore } from "~/state/projectUploadProgress";
 import {
   memo,
   useCallback,
@@ -5553,17 +5557,35 @@ export default function Sidebar() {
             0 ? (
             <div className="flex flex-col items-center gap-2 px-2 py-6 text-center text-xs text-muted-foreground/60">
               {projects.length === 0 ? (
-                <>
-                  <span>No projects yet</span>
-                  <button
-                    type="button"
-                    onClick={openAddProjectCommandPalette}
-                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-sidebar-border px-2.5 py-1 text-2xs font-medium text-sidebar-muted-foreground transition-colors hover:bg-sidebar-row-hover hover:text-sidebar-foreground"
-                  >
-                    <PlusIcon className="-mx-0.5 size-3" />
-                    Add project
-                  </button>
-                </>
+                <div className="flex flex-col items-center gap-2.5 w-full px-1">
+                  <span className="text-muted-foreground/80 font-medium">No projects yet</span>
+                  <div className="flex flex-col gap-1.5 w-full">
+                    <button
+                      type="button"
+                      onClick={() => projectCreateModalStore.open()}
+                      className="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-primary/15 border border-primary/40 px-3 py-1.5 text-2xs font-semibold text-primary hover:bg-primary/25 transition-colors shadow-sm"
+                    >
+                      <SparklesIcon className="size-3 text-amber-400" />
+                      Create new project
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => projectUploadStore.triggerZipUpload()}
+                      className="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-sidebar-border bg-sidebar/50 px-3 py-1 text-2xs font-medium text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground transition-colors"
+                    >
+                      <FileArchiveIcon className="size-3 text-sky-400" />
+                      Upload .zip project
+                    </button>
+                    <button
+                      type="button"
+                      onClick={openAddProjectCommandPalette}
+                      className="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-sidebar-border px-3 py-1 text-2xs font-medium text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground transition-colors"
+                    >
+                      <PlusIcon className="-mx-0.5 size-3" />
+                      Add / Import project
+                    </button>
+                  </div>
+                </div>
               ) : scopedProjectGroup ? (
                 `No threads in ${scopedProjectGroup.displayName} yet`
               ) : (

@@ -105,7 +105,18 @@ export const expandHomePath = Effect.fn(function* (input: string) {
 export const resolveBaseDir = Effect.fn(function* (raw: string | undefined) {
   const { join, resolve } = yield* Path.Path;
   if (!raw || raw.trim().length === 0) {
-    return join(NodeOS.homedir(), ".t3");
+    const fs = yield* FileSystem.FileSystem;
+    const jobiDir = join(NodeOS.homedir(), ".jobi");
+    const t3Dir = join(NodeOS.homedir(), ".t3");
+    const hasJobi = yield* fs.exists(jobiDir);
+    if (hasJobi) {
+      return jobiDir;
+    }
+    const hasT3 = yield* fs.exists(t3Dir);
+    if (hasT3) {
+      return t3Dir;
+    }
+    return jobiDir;
   }
   return resolve(yield* expandHomePath(raw.trim()));
 });

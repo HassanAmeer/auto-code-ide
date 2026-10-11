@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import * as NodeOS from "node:os";
+import * as NodeFS from "node:fs";
 
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -67,9 +68,11 @@ export function isProxiableBindHost(host: string): boolean {
   );
 }
 
-export const DEFAULT_T3_HOME = Effect.map(Effect.service(Path.Path), (path) =>
-  path.join(NodeOS.homedir(), ".t3"),
-);
+export const DEFAULT_T3_HOME = Effect.map(Effect.service(Path.Path), (path) => {
+  const jobiDir = path.join(NodeOS.homedir(), ".jobi");
+  const t3Dir = path.join(NodeOS.homedir(), ".t3");
+  return NodeFS.existsSync(jobiDir) || !NodeFS.existsSync(t3Dir) ? jobiDir : t3Dir;
+});
 
 const MODE_ARGS = {
   dev: [
@@ -674,7 +677,7 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
     const resolvedT3Home =
       (input.t3Home?.trim() || undefined) ??
       worktreeHome ??
-      (hostEnvironment.T3CODE_HOME?.trim() || undefined);
+      (hostEnvironment.JOBICODE_HOME?.trim() || hostEnvironment.T3CODE_HOME?.trim() || undefined);
     const env = yield* createDevRunnerEnv({
       mode: input.mode,
       baseEnv: hostEnvironment,

@@ -524,9 +524,20 @@ export const ProjectEnsureScratchResult = Schema.Struct({
 });
 export type ProjectEnsureScratchResult = typeof ProjectEnsureScratchResult.Type;
 
+export const ProjectTemplateType = Schema.Literals([
+  "blank",
+  "react",
+  "nextjs",
+  "node",
+  "python",
+  "php",
+]);
+export type ProjectTemplateType = typeof ProjectTemplateType.Type;
+
 /** A project started from just a name, in a new folder the server makes. */
 export const ProjectCreateNewInput = Schema.Struct({
   name: TrimmedNonEmptyString.check(Schema.isMaxLength(200)),
+  template: Schema.optional(ProjectTemplateType),
 });
 export type ProjectCreateNewInput = typeof ProjectCreateNewInput.Type;
 
@@ -557,6 +568,19 @@ export const ProjectImportUploadedResult = Schema.Struct({
   commitError: Schema.optionalKey(TrimmedNonEmptyString),
 });
 export type ProjectImportUploadedResult = typeof ProjectImportUploadedResult.Type;
+
+export const ProjectImportZipInput = Schema.Struct({
+  name: TrimmedNonEmptyString.check(Schema.isMaxLength(200)),
+  zipBase64: Schema.String,
+});
+export type ProjectImportZipInput = typeof ProjectImportZipInput.Type;
+
+export const ProjectImportZipResult = Schema.Struct({
+  projectId: ProjectId,
+  workspaceRoot: TrimmedNonEmptyString,
+  commitError: Schema.optionalKey(TrimmedNonEmptyString),
+});
+export type ProjectImportZipResult = typeof ProjectImportZipResult.Type;
 
 export class ProjectWriteFileError extends Schema.TaggedError<ProjectWriteFileError>()(
   "ProjectWriteFileError",

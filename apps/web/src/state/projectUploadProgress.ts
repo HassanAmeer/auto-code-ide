@@ -25,6 +25,7 @@ let currentState: ProjectUploadProgressState = { ...initialState };
 const listeners = new Set<(state: ProjectUploadProgressState) => void>();
 
 let triggerHandler: ((envId?: EnvironmentId) => void) | null = null;
+let triggerZipHandler: ((envId?: EnvironmentId) => void) | null = null;
 
 export const projectUploadStore = {
   getState: () => currentState,
@@ -55,6 +56,21 @@ export const projectUploadStore = {
       triggerHandler(envId);
     } else {
       console.warn("Global folder upload trigger is not yet registered.");
+    }
+  },
+  registerZipTrigger: (fn: (envId?: EnvironmentId) => void) => {
+    triggerZipHandler = fn;
+    return () => {
+      if (triggerZipHandler === fn) {
+        triggerZipHandler = null;
+      }
+    };
+  },
+  triggerZipUpload: (envId?: EnvironmentId) => {
+    if (triggerZipHandler) {
+      triggerZipHandler(envId);
+    } else {
+      console.warn("Global zip upload trigger is not yet registered.");
     }
   },
 };

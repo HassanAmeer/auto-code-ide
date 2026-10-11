@@ -12,6 +12,7 @@ import {
   Folder,
   Server,
   Globe,
+  Key,
 } from "lucide-react";
 import type { TerminalCommandRun } from "./terminalTypes";
 import { terminalStore } from "./terminalStore";
@@ -91,6 +92,15 @@ export function TerminalCommandBox({
                 )}
                 <span>{run.targetHost ? run.targetHost : run.cwd}</span>
               </span>
+              {run.activeKeys && run.activeKeys.length > 0 && (
+                <span
+                  className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/25 text-amber-300 text-3xs font-mono"
+                  title={`Executed with credentials from: ${run.activeKeys.map((k) => k.name).join(", ")}`}
+                >
+                  <Key className="size-2.5 text-amber-400" />
+                  <span>{run.activeKeys.map((k) => k.name).join(", ")}</span>
+                </span>
+              )}
             </div>
           </div>
 

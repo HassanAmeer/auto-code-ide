@@ -99,5 +99,16 @@ export const resolveWorktreeT3Home = (
       return undefined;
     }
     const path = yield* Path.Path;
-    return path.join(worktreePath, ".t3");
+    const fs = yield* FileSystem.FileSystem;
+    const jobiPath = path.join(worktreePath, ".jobi");
+    const t3Path = path.join(worktreePath, ".t3");
+    const hasJobi = yield* fs.exists(jobiPath);
+    if (hasJobi) {
+      return jobiPath;
+    }
+    const hasT3 = yield* fs.exists(t3Path);
+    if (hasT3) {
+      return t3Path;
+    }
+    return jobiPath;
   });

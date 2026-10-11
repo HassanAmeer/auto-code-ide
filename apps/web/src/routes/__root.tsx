@@ -39,6 +39,7 @@ import { ChatGptWelcomeCoordinator } from "../components/settings/ChatGptWelcome
 import { ProviderAuthCallbackCoordinator } from "../components/settings/ProviderAuthCallbackCoordinator";
 import { ThemeEditorHost } from "../components/settings/ThemeEditorHost";
 import { GlobalProjectImportProgress } from "../components/project/GlobalProjectImportProgress";
+import { CreateNewProjectModal } from "../components/project/CreateNewProjectModal";
 import { useCopyToClipboard } from "../hooks/useCopyToClipboard";
 import { useDefaultThemeAdoption } from "../hooks/useDefaultTheme";
 import { useEnvironmentThemeSync } from "../hooks/useEnvironmentTheme";
@@ -208,6 +209,7 @@ function RootRouteView() {
       <AnchoredToastProvider>
         <DocumentTitleSync />
         <GlobalProjectImportProgress />
+        <CreateNewProjectModal />
         <ContrastAppearanceSync />
         <EnvironmentThemeSync />
         <GlassAppearanceSync />

@@ -11,9 +11,16 @@ import {
   Globe,
   Plus,
   Trash2,
+  Key,
+  CheckSquare,
+  Square,
+  ShieldCheck,
+  Eye,
+  EyeOff,
+  Lock,
 } from "lucide-react";
 import { useTerminalStore, terminalStore } from "./terminalStore";
-import type { SshProfile } from "./terminalTypes";
+import type { SshProfile, TerminalKeyType, TerminalAccessKey } from "./terminalTypes";
 
 export interface AiTerminalQuickCommandProps {
   projectCwd?: string | undefined;
@@ -46,6 +53,18 @@ export function AiTerminalQuickCommand({
   const [showTargetMenu, setShowTargetMenu] = useState(false);
   const [showNewSshModal, setShowNewSshModal] = useState(false);
 
+  // Access Keys Vault menu & modal state
+  const [showKeysMenu, setShowKeysMenu] = useState(false);
+  const [showNewKeyModal, setShowNewKeyModal] = useState(false);
+  const [newKeyName, setNewKeyName] = useState("");
+  const [newKeyType, setNewKeyType] = useState<TerminalKeyType>("ssh");
+  const [newKeyHost, setNewKeyHost] = useState("");
+  const [newKeyUser, setNewKeyUser] = useState("root");
+  const [newKeyPort, setNewKeyPort] = useState("22");
+  const [newKeySecret, setNewKeySecret] = useState("");
+  const [newKeyNotes, setNewKeyNotes] = useState("");
+  const [showSecretInModal, setShowSecretInModal] = useState(false);
+
   // New SSH profile form state
   const [newSshLabel, setNewSshLabel] = useState("");
   const [newSshHost, setNewSshHost] = useState("");
@@ -57,6 +76,33 @@ export function AiTerminalQuickCommand({
   useEffect(() => {
     setCustomCwd(store.activeCwd);
   }, [store.activeCwd]);
+
+  const activeKeysCount = store.accessKeys.filter((k) => k.enabled).length;
+
+  const handleCreateKey = () => {
+    if (!newKeyName.trim()) return;
+    const accessKey: TerminalAccessKey = {
+      id: "key_" + Date.now(),
+      name: newKeyName.trim(),
+      type: newKeyType,
+      enabled: true,
+      ...(newKeyHost.trim() ? { host: newKeyHost.trim() } : {}),
+      ...(newKeyUser.trim() ? { user: newKeyUser.trim() } : {}),
+      ...(newKeyPort.trim() ? { port: Number(newKeyPort) || 22 } : {}),
+      ...(newKeySecret.trim() ? { secret: newKeySecret.trim() } : {}),
+      ...(newKeyNotes.trim() ? { notes: newKeyNotes.trim() } : {}),
+    };
+    terminalStore.addAccessKey(accessKey);
+    setShowNewKeyModal(false);
+    setShowKeysMenu(false);
+    setNewKeyName("");
+    setNewKeyHost("");
+    setNewKeyUser("root");
+    setNewKeyPort("22");
+    setNewKeySecret("");
+    setNewKeyNotes("");
+    setShowSecretInModal(false);
+  };
 
   const handleRun = useCallback(
     async (cmdToRun?: string, modeOverride?: "bash" | "ai") => {
@@ -286,6 +332,138 @@ export function AiTerminalQuickCommand({
             )}
           </div>
 
+          {/* Access Keys & Credentials Vault (Multi-select checkmarks) */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => {
+                setShowKeysMenu(!showKeysMenu);
+                setShowTargetMenu(false);
+              }}
+              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full font-mono border transition-colors ${
+                activeKeysCount > 0
+                  ? "bg-amber-500/15 text-amber-300 border-amber-500/40 hover:bg-amber-500/25"
+                  : "bg-zinc-800/80 text-zinc-400 border-zinc-700/60 hover:text-zinc-200 hover:bg-zinc-800"
+              }`}
+              title="Access Keys Vault: Select active keys for AI to use via checkmarks"
+            >
+              <Key className="size-2.5 text-amber-400" />
+              <span>
+                Keys ({activeKeysCount}/{store.accessKeys.length})
+              </span>
+              <ChevronDown className="size-2.5 text-zinc-500" />
+            </button>
+
+            {/* Keys Dropdown Popover */}
+            {showKeysMenu && (
+              <div className="absolute left-0 top-7 z-50 w-72 rounded-xl border border-zinc-800 bg-[#12161f] p-2 shadow-2xl">
+                <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-zinc-800/80">
+                  <div className="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wider text-amber-400">
+                    <ShieldCheck className="size-3" />
+                    <span>Keys & Credentials Vault</span>
+                  </div>
+                  {store.accessKeys.length > 0 && (
+                    <div className="flex items-center gap-1.5 text-3xs">
+                      <button
+                        type="button"
+                        onClick={() => terminalStore.selectAllAccessKeys(true)}
+                        className="text-zinc-400 hover:text-emerald-400"
+                      >
+                        All
+                      </button>
+                      <span className="text-zinc-600">|</span>
+                      <button
+                        type="button"
+                        onClick={() => terminalStore.selectAllAccessKeys(false)}
+                        className="text-zinc-400 hover:text-rose-400"
+                      >
+                        None
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {store.accessKeys.length === 0 ? (
+                  <div className="py-3 px-2 text-center text-zinc-500 text-3xs">
+                    No credentials stored yet. Add SSH keys, server IPs, passwords, or API tokens to
+                    enable AI automated connections.
+                  </div>
+                ) : (
+                  <div className="max-h-48 overflow-y-auto space-y-1 pr-0.5">
+                    {store.accessKeys.map((k) => (
+                      <div
+                        key={k.id}
+                        onClick={() => terminalStore.toggleAccessKey(k.id)}
+                        className={`flex items-center justify-between p-1.5 rounded-lg border cursor-pointer transition-colors ${
+                          k.enabled
+                            ? "bg-amber-500/10 border-amber-500/30 text-zinc-200"
+                            : "bg-zinc-900/60 border-zinc-800/60 text-zinc-400 hover:bg-zinc-800/60"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 truncate flex-1 min-w-0">
+                          {k.enabled ? (
+                            <CheckSquare className="size-3.5 text-amber-400 shrink-0" />
+                          ) : (
+                            <Square className="size-3.5 text-zinc-600 shrink-0" />
+                          )}
+                          <div className="truncate">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-medium text-xs truncate">{k.name}</span>
+                              <span
+                                className={`px-1 py-0.2 rounded text-3xs font-mono uppercase ${
+                                  k.type === "ssh"
+                                    ? "bg-sky-500/20 text-sky-300"
+                                    : k.type === "api"
+                                      ? "bg-emerald-500/20 text-emerald-300"
+                                      : k.type === "server"
+                                        ? "bg-indigo-500/20 text-indigo-300"
+                                        : "bg-zinc-700/50 text-zinc-300"
+                                }`}
+                              >
+                                {k.type}
+                              </span>
+                            </div>
+                            {(k.host || k.user) && (
+                              <div className="text-3xs text-zinc-500 font-mono truncate">
+                                {k.user ? `${k.user}@` : ""}
+                                {k.host}
+                                {k.port && k.port !== 22 ? `:${k.port}` : ""}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            terminalStore.removeAccessKey(k.id);
+                          }}
+                          className="p-1 text-zinc-600 hover:text-rose-400 rounded shrink-0 transition-colors"
+                          title="Remove key"
+                        >
+                          <Trash2 className="size-2.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowNewKeyModal(true);
+                    setShowKeysMenu(false);
+                  }}
+                  className="w-full flex items-center justify-center gap-1.5 px-2.5 py-1.5 mt-2 rounded-lg text-2xs text-amber-400 hover:bg-amber-500/10 border border-dashed border-amber-500/30 transition-colors font-medium"
+                >
+                  <Plus className="size-3" />
+                  <span>+ Add Key / Credential</span>
+                </button>
+              </div>
+            )}
+          </div>
+
           {/* CWD Selector Pill (for Local) */}
           {!activeSshProfile && (
             <>
@@ -435,6 +613,172 @@ export function AiTerminalQuickCommand({
               Save Host
             </button>
           </div>
+        </div>
+      )}
+
+      {/* New Key & Credential Modal Form */}
+      {showNewKeyModal && (
+        <div className="p-3 my-2 rounded-xl bg-zinc-900/95 border border-amber-500/40 text-2xs space-y-2.5 shadow-2xl">
+          <div className="flex items-center justify-between font-semibold text-amber-400 border-b border-zinc-800 pb-1.5">
+            <span className="flex items-center gap-1.5">
+              <Key className="size-3.5 text-amber-400" />
+              <span>Add Access Key / Server Credential / API Token</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowNewKeyModal(false)}
+              className="text-zinc-500 hover:text-zinc-300"
+            >
+              <X className="size-3" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <label className="text-3xs text-zinc-400 block mb-1">Key / Credential Type</label>
+              <select
+                value={newKeyType}
+                onChange={(e) => setNewKeyType(e.target.value as TerminalKeyType)}
+                className="w-full px-2 py-1 rounded bg-zinc-800 border border-zinc-700 text-zinc-200"
+              >
+                <option value="ssh">SSH Key / Server</option>
+                <option value="server">Server IP / Password</option>
+                <option value="api">API Token / Bearer</option>
+                <option value="custom">Custom Credential</option>
+              </select>
+            </div>
+
+            <div className="col-span-2">
+              <label className="text-3xs text-zinc-400 block mb-1">Name / Label</label>
+              <input
+                type="text"
+                placeholder="e.g. Production VPS, Hostinger Node, Cloudflare Token"
+                value={newKeyName}
+                onChange={(e) => setNewKeyName(e.target.value)}
+                className="w-full px-2 py-1 rounded bg-zinc-800 border border-zinc-700 text-zinc-200"
+              />
+            </div>
+          </div>
+
+          {(newKeyType === "ssh" || newKeyType === "server") && (
+            <div className="grid grid-cols-4 gap-2">
+              <div className="col-span-2">
+                <label className="text-3xs text-zinc-400 block mb-1">Host / IP</label>
+                <input
+                  type="text"
+                  placeholder="e.g. 192.168.1.100 or vps.domain.com"
+                  value={newKeyHost}
+                  onChange={(e) => setNewKeyHost(e.target.value)}
+                  className="w-full px-2 py-1 rounded bg-zinc-800 border border-zinc-700 text-zinc-200 font-mono"
+                />
+              </div>
+              <div>
+                <label className="text-3xs text-zinc-400 block mb-1">User</label>
+                <input
+                  type="text"
+                  placeholder="root"
+                  value={newKeyUser}
+                  onChange={(e) => setNewKeyUser(e.target.value)}
+                  className="w-full px-2 py-1 rounded bg-zinc-800 border border-zinc-700 text-zinc-200 font-mono"
+                />
+              </div>
+              <div>
+                <label className="text-3xs text-zinc-400 block mb-1">Port</label>
+                <input
+                  type="text"
+                  placeholder="22"
+                  value={newKeyPort}
+                  onChange={(e) => setNewKeyPort(e.target.value)}
+                  className="w-full px-2 py-1 rounded bg-zinc-800 border border-zinc-700 text-zinc-200 font-mono"
+                />
+              </div>
+            </div>
+          )}
+
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-3xs text-zinc-400 flex items-center gap-1">
+                <Lock className="size-2.5 text-amber-400" />
+                <span>
+                  {newKeyType === "api"
+                    ? "API Key / Token"
+                    : newKeyType === "ssh"
+                      ? "SSH Private Key or Password (Optional)"
+                      : "Password / Secret (Optional)"}
+                </span>
+              </label>
+              <button
+                type="button"
+                onClick={() => setShowSecretInModal(!showSecretInModal)}
+                className="text-3xs text-zinc-500 hover:text-zinc-300 flex items-center gap-1"
+              >
+                {showSecretInModal ? (
+                  <>
+                    <EyeOff className="size-2.5" /> <span>Hide</span>
+                  </>
+                ) : (
+                  <>
+                    <Eye className="size-2.5" /> <span>Show</span>
+                  </>
+                )}
+              </button>
+            </div>
+            <input
+              type={showSecretInModal ? "text" : "password"}
+              placeholder="Paste password, private key path/string, or API token here..."
+              value={newKeySecret}
+              onChange={(e) => setNewKeySecret(e.target.value)}
+              className="w-full px-2 py-1 rounded bg-zinc-800 border border-zinc-700 text-zinc-200 font-mono"
+            />
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-1 border-t border-zinc-800">
+            <button
+              type="button"
+              onClick={() => setShowNewKeyModal(false)}
+              className="px-2.5 py-1 rounded text-zinc-400 hover:text-zinc-200"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleCreateKey}
+              disabled={!newKeyName.trim()}
+              className="px-3.5 py-1 rounded bg-amber-600 hover:bg-amber-500 disabled:opacity-40 text-white font-semibold flex items-center gap-1.5 shadow"
+            >
+              <Plus className="size-3" />
+              <span>Save to Vault</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Active Keys Strip (Selected checkmarks active in AI execution context) */}
+      {activeKeysCount > 0 && (
+        <div className="flex items-center gap-1.5 px-1 py-1 overflow-x-auto text-3xs border-b border-zinc-800/40">
+          <span className="text-zinc-500 flex items-center gap-1 shrink-0 font-medium">
+            <Key className="size-2.5 text-amber-400" />
+            <span>Active Keys for AI:</span>
+          </span>
+          {store.accessKeys
+            .filter((k) => k.enabled)
+            .map((k) => (
+              <span
+                key={k.id}
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-300 font-mono shrink-0"
+              >
+                <span>{k.name}</span>
+                {k.host && <span className="text-zinc-400">({k.host})</span>}
+                <button
+                  type="button"
+                  onClick={() => terminalStore.toggleAccessKey(k.id)}
+                  className="hover:text-rose-400 text-zinc-400 ml-0.5"
+                  title="Uncheck this key"
+                >
+                  <X className="size-2.5" />
+                </button>
+              </span>
+            ))}
         </div>
       )}
 

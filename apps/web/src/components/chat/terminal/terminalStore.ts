@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import type { TerminalCommandRun, SshProfile } from "./terminalTypes";
+import type { TerminalCommandRun, SshProfile, TerminalAccessKey } from "./terminalTypes";
 import {
   executeTerminalCommand,
   generateAiExplanation,
@@ -13,12 +13,14 @@ interface TerminalState {
   history: string[];
   activeTarget: string; // "local" or sshProfile id
   sshProfiles: SshProfile[];
+  accessKeys: TerminalAccessKey[];
   inputMode: "bash" | "ai";
 }
 
-const STORAGE_KEY_CWD = "t3_terminal_active_cwd";
-const STORAGE_KEY_OPEN = "t3_terminal_quickbar_open";
-const STORAGE_KEY_SSH = "t3_terminal_ssh_profiles";
+const STORAGE_KEY_CWD = "jobi_terminal_active_cwd";
+const STORAGE_KEY_OPEN = "jobi_terminal_quickbar_open";
+const STORAGE_KEY_SSH = "jobi_terminal_ssh_profiles";
+const STORAGE_KEY_KEYS = "jobi_terminal_access_keys";
 
 const initialCwd =
   typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY_CWD) || "/" : "/";
@@ -36,12 +38,43 @@ if (typeof window !== "undefined") {
   }
 }
 
+let initialAccessKeys: TerminalAccessKey[] = [
+  {
+    id: "key_vps_default",
+    name: "Production Server (SSH)",
+    type: "ssh",
+    host: "192.168.1.100",
+    user: "root",
+    port: 22,
+    secret: "",
+    enabled: true,
+    notes: "Primary VPS Access",
+  },
+  {
+    id: "key_api_default",
+    name: "API Secret Key",
+    type: "api",
+    secret: "sk-proj-demo-token",
+    enabled: false,
+    notes: "Main API Secret",
+  },
+];
+if (typeof window !== "undefined") {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY_KEYS);
+    if (raw) initialAccessKeys = JSON.parse(raw);
+  } catch {
+    // ignore
+  }
+}
+
 let state: TerminalState = {
   runs: [],
   activeCwd: initialCwd,
   isQuickBarOpen: initialOpen,
   activeTarget: "local",
   sshProfiles: initialSshProfiles,
+  accessKeys: initialAccessKeys,
   inputMode: "bash",
   history: ["ls -la /", "df -h", "free -m", "uname -a"],
 };
@@ -131,6 +164,55 @@ export const terminalStore = {
     notify();
   },
 
+  addAccessKey(key: Omit<TerminalAccessKey, "id">) {
+    const newKey: TerminalAccessKey = {
+      ...key,
+      id: "key_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
+    };
+    const updated = [...state.accessKeys, newKey];
+    state = { ...state, accessKeys: updated };
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(STORAGE_KEY_KEYS, JSON.stringify(updated));
+    }
+    notify();
+  },
+
+  updateAccessKey(id: string, updates: Partial<TerminalAccessKey>) {
+    const updated = state.accessKeys.map((k) => (k.id === id ? { ...k, ...updates } : k));
+    state = { ...state, accessKeys: updated };
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(STORAGE_KEY_KEYS, JSON.stringify(updated));
+    }
+    notify();
+  },
+
+  toggleAccessKey(id: string) {
+    const updated = state.accessKeys.map((k) => (k.id === id ? { ...k, enabled: !k.enabled } : k));
+    state = { ...state, accessKeys: updated };
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(STORAGE_KEY_KEYS, JSON.stringify(updated));
+    }
+    notify();
+  },
+
+  removeAccessKey(id: string) {
+    const updated = state.accessKeys.filter((k) => k.id !== id);
+    state = { ...state, accessKeys: updated };
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(STORAGE_KEY_KEYS, JSON.stringify(updated));
+    }
+    notify();
+  },
+
+  selectAllAccessKeys(enabled: boolean) {
+    const updated = state.accessKeys.map((k) => ({ ...k, enabled }));
+    state = { ...state, accessKeys: updated };
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(STORAGE_KEY_KEYS, JSON.stringify(updated));
+    }
+    notify();
+  },
+
   async runCommand(
     commandOrPrompt: string,
     customCwd?: string | undefined,
@@ -143,10 +225,13 @@ export const terminalStore = {
 
     const currentMode = modeOverride ?? state.inputMode;
     const cwd = customCwd || state.activeCwd || "/";
+    const activeKeys = state.accessKeys.filter((k) => k.enabled);
 
-    // Translate if AI mode
+    // Translate if AI mode with knowledge of active keys
     const actualCommand =
-      currentMode === "ai" ? translatePromptToBashCommand(trimmedInput, cwd) : trimmedInput;
+      currentMode === "ai"
+        ? translatePromptToBashCommand(trimmedInput, cwd, activeKeys)
+        : trimmedInput;
 
     const runId = "term_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
 
@@ -180,6 +265,7 @@ export const terminalStore = {
       targetHost: targetLabel,
       mode: currentMode,
       aiPrompt: currentMode === "ai" ? trimmedInput : undefined,
+      activeKeys: activeKeys.length > 0 ? activeKeys : undefined,
     };
 
     state = {
@@ -221,6 +307,7 @@ export const terminalStore = {
       targetHost: targetLabel,
       mode: currentMode,
       aiPrompt: currentMode === "ai" ? trimmedInput : undefined,
+      activeKeys: activeKeys.length > 0 ? activeKeys : undefined,
     };
 
     state = {

@@ -7,6 +7,8 @@ import type { EnvironmentId, ProjectEntry } from "@t3tools/contracts";
 import { FileTree, useFileTree, useFileTreeSearch, useFileTreeSelector } from "@pierre/trees/react";
 import { serializeComposerFileLink } from "@t3tools/shared/composerTrigger";
 import { ChevronsDownUp, ChevronsUpDown } from "lucide";
+import { CheckIcon, FilePlusIcon, FolderPlusIcon, XIcon } from "lucide-react";
+import { AsyncResult } from "effect/reactivity";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "~/components/ui/button";
@@ -22,6 +24,8 @@ import { useFileContextMenu, type FileContextMenuAction } from "~/fileContextMen
 import { readLocalApi } from "~/localApi";
 import { T3_PIERRE_ICONS } from "~/pierre-icons";
 import { PIERRE_TREE_UNSAFE_CSS, pierreTreeStyle } from "~/pierre-tree-theme";
+import { projectEnvironment } from "~/state/projects";
+import { useAtomCommand } from "~/state/use-atom-command";
 
 import { createFileTreeDragMentionController } from "./fileTreeDragMention";
 import { areAllDirectoriesExpanded, setAllDirectoriesExpanded } from "./fileTreeExpansion";
@@ -119,6 +123,76 @@ export default function FileBrowserPanel({
   } = useDirectoryEntries(environmentId, cwd);
   const [query, setQuery] = useState("");
   const [expandAll, setExpandAll] = useState(false);
+  const [createMode, setCreateMode] = useState<"file" | "folder" | null>(null);
+  const [createName, setCreateName] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
+  const createInputRef = useRef<HTMLInputElement>(null);
+  const writeFile = useAtomCommand(projectEnvironment.writeFile);
+
+  useEffect(() => {
+    if (createMode) {
+      setCreateName("");
+      const timer = setTimeout(() => {
+        createInputRef.current?.focus();
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [createMode]);
+
+  const handleCreateSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const trimmed = createName.trim();
+    if (!trimmed || isCreating) return;
+
+    setIsCreating(true);
+    try {
+      const isFolder = createMode === "folder";
+      const normalized = trimmed.replace(/^\/+/, "");
+      const relativePath = isFolder
+        ? normalized.endsWith("/")
+          ? `${normalized}.gitkeep`
+          : `${normalized}/.gitkeep`
+        : normalized;
+
+      const result = await writeFile({
+        environmentId,
+        input: {
+          cwd,
+          relativePath,
+          contents: "",
+        },
+      });
+
+      if (AsyncResult.isSuccess(result)) {
+        toastManager.add({
+          type: "success",
+          title: isFolder ? "Folder created" : "File created",
+          description: normalized,
+        });
+        handleRefresh();
+        if (!isFolder) {
+          onOpenFile(normalized);
+        }
+        setCreateMode(null);
+        setCreateName("");
+      } else {
+        toastManager.add({
+          type: "error",
+          title: isFolder ? "Failed to create folder" : "Failed to create file",
+          description: "An error occurred while creating the entry.",
+        });
+      }
+    } catch (err) {
+      toastManager.add({
+        type: "error",
+        title: "Error",
+        description: err instanceof Error ? err.message : "Failed to create.",
+      });
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
   const pathSearch = useProjectPathSearch({ environmentId, cwd, query: query.slice(0, 256) }, 200);
   const entries = useMemo(() => {
     const result = new Map(directoryEntries.map((entry) => [entry.path, entry]));
@@ -509,6 +583,38 @@ export default function FileBrowserPanel({
         data-surface-subheader
       >
         <RefreshFilesButton isPending={isPending} onRefresh={handleRefresh} />
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                type="button"
+                size="icon-xs"
+                variant={createMode === "file" ? "secondary" : "ghost"}
+                aria-label="New file"
+                onClick={() => setCreateMode((prev) => (prev === "file" ? null : "file"))}
+              />
+            }
+          >
+            <FilePlusIcon className="size-3.5" />
+          </TooltipTrigger>
+          <TooltipPopup>New file</TooltipPopup>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                type="button"
+                size="icon-xs"
+                variant={createMode === "folder" ? "secondary" : "ghost"}
+                aria-label="New folder"
+                onClick={() => setCreateMode((prev) => (prev === "folder" ? null : "folder"))}
+              />
+            }
+          >
+            <FolderPlusIcon className="size-3.5" />
+          </TooltipTrigger>
+          <TooltipPopup>New folder</TooltipPopup>
+        </Tooltip>
         <FileSearchField
           name="project-files-search"
           ariaLabel={`Search ${projectName} files`}
@@ -544,6 +650,54 @@ export default function FileBrowserPanel({
           </Tooltip>
         ) : null}
       </div>
+      {createMode !== null && (
+        <form
+          onSubmit={handleCreateSubmit}
+          className="flex items-center gap-1.5 border-b border-border/60 bg-muted/20 px-2 py-1.5"
+        >
+          {createMode === "file" ? (
+            <FilePlusIcon className="size-3.5 shrink-0 text-muted-foreground" />
+          ) : (
+            <FolderPlusIcon className="size-3.5 shrink-0 text-muted-foreground" />
+          )}
+          <input
+            ref={createInputRef}
+            type="text"
+            disabled={isCreating}
+            value={createName}
+            onChange={(e) => setCreateName(e.target.value)}
+            placeholder={createMode === "file" ? "filename.ts" : "folder-name"}
+            className="h-6 min-w-0 flex-1 bg-transparent px-1 text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                setCreateMode(null);
+                setCreateName("");
+              }
+            }}
+          />
+          <Button
+            type="submit"
+            size="icon-xs"
+            variant="ghost"
+            disabled={!createName.trim() || isCreating}
+            aria-label="Confirm"
+          >
+            <CheckIcon className="size-3 text-emerald-500" />
+          </Button>
+          <Button
+            type="button"
+            size="icon-xs"
+            variant="ghost"
+            aria-label="Cancel"
+            onClick={() => {
+              setCreateMode(null);
+              setCreateName("");
+            }}
+          >
+            <XIcon className="size-3 text-muted-foreground" />
+          </Button>
+        </form>
+      )}
       {error || pathSearch.error ? (
         <button
           type="button"

@@ -1,4 +1,4 @@
-import type { TerminalExecResult } from "./terminalTypes";
+import type { TerminalExecResult, TerminalAccessKey } from "./terminalTypes";
 
 export async function executeTerminalCommand(
   command: string,
@@ -53,8 +53,80 @@ export async function executeTerminalCommand(
 /**
  * Intelligent prompt-to-command translator for natural language (Urdu & English)
  */
-export function translatePromptToBashCommand(prompt: string, cwd: string = "/"): string {
+export function translatePromptToBashCommand(
+  prompt: string,
+  cwd: string = "/",
+  activeKeys: TerminalAccessKey[] = [],
+): string {
   const p = prompt.trim().toLowerCase();
+
+  // If active keys exist, see if prompt asks to connect, ping, or execute on one of them
+  const sshOrServerKey = activeKeys.find((k) => k.type === "ssh" || k.type === "server");
+  const apiKey = activeKeys.find((k) => k.type === "api");
+  const targetedKey = activeKeys.find((k) => k.name && p.includes(k.name.toLowerCase()));
+  const effectiveKey = targetedKey ?? sshOrServerKey;
+
+  // Remote SSH connection requests (e.g. "connect to server", "ssh karo", "login to vps", or remote command execution)
+  if (
+    effectiveKey &&
+    effectiveKey.host &&
+    (p.includes("connect") ||
+      p.includes("ssh") ||
+      p.includes("login") ||
+      p.includes("access") ||
+      p.includes("remote"))
+  ) {
+    const portFlag =
+      effectiveKey.port && effectiveKey.port !== 22 ? `-p ${effectiveKey.port} ` : "";
+    const userPrefix = effectiveKey.user ? `${effectiveKey.user}@` : "";
+    const remoteCmdMatch = prompt.match(
+      /(?:and check|and run|and execute|run|execute)\s+["']?([^"']+)["']?$/i,
+    );
+    const remoteCmd = remoteCmdMatch?.[1]?.trim();
+    if (remoteCmd) {
+      return `ssh -o StrictHostKeyChecking=no ${portFlag}${userPrefix}${effectiveKey.host} "${remoteCmd}"`;
+    }
+    return `ssh -o StrictHostKeyChecking=no ${portFlag}${userPrefix}${effectiveKey.host}`;
+  }
+
+  // Ping / status check for active server key
+  if (
+    effectiveKey &&
+    effectiveKey.host &&
+    (p.includes("ping") || p.includes("server status") || p.includes("online check"))
+  ) {
+    return `ping -c 4 ${effectiveKey.host} || nc -zv -w 3 ${effectiveKey.host} ${effectiveKey.port || 22}`;
+  }
+
+  // Remote command execution on targeted server (e.g. "vps par disk check karo", "server disk space")
+  if (
+    effectiveKey &&
+    effectiveKey.host &&
+    (p.includes("on server") ||
+      p.includes("vps par") ||
+      p.includes("remote") ||
+      p.includes("server per"))
+  ) {
+    const portFlag =
+      effectiveKey.port && effectiveKey.port !== 22 ? `-p ${effectiveKey.port} ` : "";
+    const userPrefix = effectiveKey.user ? `${effectiveKey.user}@` : "";
+    let subCommand = "df -h && free -h";
+    if (p.includes("disk") || p.includes("storage")) subCommand = "df -h";
+    if (p.includes("ram") || p.includes("memory")) subCommand = "free -h";
+    if (p.includes("docker")) subCommand = "docker ps";
+    if (p.includes("pm2")) subCommand = "pm2 status";
+    return `ssh -o StrictHostKeyChecking=no ${portFlag}${userPrefix}${effectiveKey.host} "${subCommand}"`;
+  }
+
+  // API curl request using active API key/token
+  if (
+    apiKey &&
+    apiKey.secret &&
+    (p.includes("api") || p.includes("token test") || p.includes("curl"))
+  ) {
+    const targetHost = apiKey.host || "api.example.com";
+    return `curl -s -H "Authorization: Bearer ${apiKey.secret}" "https://${targetHost}"`;
+  }
 
   // If already a shell command, return directly
   if (

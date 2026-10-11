@@ -10,7 +10,8 @@
  * of the sidebar's scope logic. `searchFieldRef` lands on the search field so
  * the picker's popup can anchor to that width rather than to its 28px trigger.
  */
-import { FolderPlusIcon, SearchIcon, SquarePenIcon, XIcon } from "lucide-react";
+import { FolderPlusIcon, SearchIcon, SquarePenIcon, XIcon, SparklesIcon } from "lucide-react";
+import { projectCreateModalStore } from "../project/projectCreateModalStore";
 import {
   type ComponentProps,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -127,7 +128,13 @@ export function SidebarThreadHeader({
         {hasProjects ? (
           <>
             {projectScope}
-            <SidebarHeaderIconButton label="Add project" onClick={onNewProject}>
+            <SidebarHeaderIconButton
+              label="Create new project"
+              onClick={() => projectCreateModalStore.open()}
+            >
+              <SparklesIcon className="size-3.5 text-amber-400" />
+            </SidebarHeaderIconButton>
+            <SidebarHeaderIconButton label="Add / Import project" onClick={onNewProject}>
               <FolderPlusIcon />
             </SidebarHeaderIconButton>
           </>

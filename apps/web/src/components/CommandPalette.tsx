@@ -57,6 +57,8 @@ import {
   FolderIcon,
   FolderPlusIcon,
   FolderUpIcon,
+  FileArchiveIcon,
+  SparklesIcon,
   MessageSquareDashedIcon,
   LinkIcon,
   MessageSquareIcon,
@@ -115,6 +117,7 @@ import { useAtomQueryRunner } from "../state/use-atom-query-runner";
 import { useScratchProject } from "../hooks/useScratchProject";
 import { useNewProject } from "../hooks/useNewProject";
 import { projectUploadStore, useProjectUploadProgress } from "../state/projectUploadProgress";
+import { projectCreateModalStore } from "./project/projectCreateModalStore";
 import { isScratchProject } from "@t3tools/client-runtime/state/projects";
 import {
   useEnvironments,
@@ -1695,14 +1698,48 @@ function OpenCommandPaletteDialog(props: {
       const sourceItems: Array<CommandPaletteActionItem | CommandPaletteSubmenuItem> = [
         {
           kind: "action",
-          value: `action:add-project:${environmentId}:local`,
-          searchTerms: ["local", "folder", "directory", "browse"],
-          title: "Local folder",
-          description: "Browse a folder on disk",
-          icon: <FolderPlusIcon className={ITEM_ICON_CLASS} />,
-          keepOpen: true,
+          value: `action:add-project:${environmentId}:create-new-modal`,
+          searchTerms: [
+            "new project",
+            "create",
+            "template",
+            "react",
+            "nextjs",
+            "node",
+            "python",
+            "php",
+            "empty",
+          ],
+          title: "Create new project",
+          description: "Start from scratch (Blank, React + Vite, Next.js, Node, Python, PHP)",
+          icon: <SparklesIcon className={ITEM_ICON_CLASS} />,
+          keepOpen: false,
           run: async () => {
-            await startAddProjectBrowse(environmentId);
+            setOpen(false);
+            projectCreateModalStore.open(environmentId);
+          },
+        },
+        {
+          kind: "action",
+          value: `action:add-project:${environmentId}:upload-zip`,
+          searchTerms: [
+            "zip",
+            "upload",
+            "archive",
+            "compress",
+            "extract",
+            "project",
+            "react",
+            "import",
+            "files",
+          ],
+          title: "Upload ZIP archive (.zip)",
+          description: "Upload a project .zip file (auto-extracts & skips node_modules)",
+          icon: <FileArchiveIcon className={ITEM_ICON_CLASS} />,
+          keepOpen: false,
+          run: async () => {
+            setOpen(false);
+            projectUploadStore.triggerZipUpload(environmentId);
           },
         },
         {
@@ -1717,22 +1754,19 @@ function OpenCommandPaletteDialog(props: {
             triggerFolderUpload(environmentId);
           },
         },
-      ];
-
-      if (newProjectsRootFor(environmentId) !== null) {
-        sourceItems.unshift({
+        {
           kind: "action",
-          value: `action:add-project:${environmentId}:new`,
-          searchTerms: ["new project", "create", "empty", "repository", "git init"],
-          title: "New project",
-          description: "Start a new Git repository from a name",
-          icon: <FolderGit2Icon className={ITEM_ICON_CLASS} />,
+          value: `action:add-project:${environmentId}:local`,
+          searchTerms: ["local", "folder", "directory", "browse", "server"],
+          title: "Local folder on server",
+          description: "Browse a folder on the host disk",
+          icon: <FolderPlusIcon className={ITEM_ICON_CLASS} />,
           keepOpen: true,
           run: async () => {
-            startNewProject(environmentId, environmentId);
+            await startAddProjectBrowse(environmentId);
           },
-        });
-      }
+        },
+      ];
 
       const orderedSources: ReadonlyArray<AddProjectRemoteSource> = [
         "url",
