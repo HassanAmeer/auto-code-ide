@@ -1,4 +1,9 @@
-import { ArrowLeftIcon, ChartNoAxesColumnIcon, SettingsIcon } from "lucide-react";
+import {
+  ArrowLeftIcon,
+  ChartNoAxesColumnIcon,
+  SettingsIcon,
+  TerminalSquareIcon,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { memo, useCallback } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
@@ -236,12 +241,66 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
   );
 });
 
+export const SidebarAiTerminalItem = memo(function SidebarAiTerminalItem() {
+  const navigate = useNavigate();
+  const { isMobile, setOpenMobile } = useSidebar();
+  const isTerminalActive = useLocation({
+    select: (location) => location.pathname === "/ai-terminal",
+  });
+
+  const handleClick = useCallback(() => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+    void navigate({ to: "/ai-terminal" });
+  }, [isMobile, navigate, setOpenMobile]);
+
+  return (
+    <SidebarMenu className="mb-1">
+      <SidebarMenuItem>
+        <SidebarMenuButton
+          isActive={isTerminalActive}
+          onClick={handleClick}
+          size="default"
+          className={cn(
+            "w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs transition-all group font-medium cursor-pointer",
+            isTerminalActive
+              ? "bg-primary/15 text-primary border border-primary/30 shadow-sm"
+              : "text-sidebar-foreground/80 hover:bg-sidebar-row-hover hover:text-sidebar-foreground border border-transparent",
+          )}
+        >
+          <div className="flex items-center gap-2">
+            <div
+              className={cn(
+                "size-5 rounded-md flex items-center justify-center transition-transform group-hover:scale-105",
+                isTerminalActive
+                  ? "bg-primary/20 text-primary"
+                  : "bg-emerald-500/10 border border-emerald-500/25 text-emerald-400",
+              )}
+            >
+              <TerminalSquareIcon className="size-3.5" />
+            </div>
+            <span className="font-semibold tracking-tight">AI Terminal</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-3xs font-mono px-1.5 py-0.5 rounded-full bg-sidebar-muted/30 text-sidebar-muted-foreground border border-border/30 group-hover:border-emerald-500/30 group-hover:text-emerald-400 transition-colors">
+              Shell
+            </span>
+          </div>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    </SidebarMenu>
+  );
+});
+
 export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
   return (
     <SidebarFooter>
       <SidebarThreadUndoNotice />
       <SidebarProviderUpdatePill />
       <SidebarUpdateArchitectureWarning />
+      <SidebarAiTerminalItem />
       <SidebarUtilityMenu />
     </SidebarFooter>
   );

@@ -9,6 +9,7 @@ import { useCallback } from "react";
 
 import { stackedThreadToast, toastManager } from "~/components/ui/toast";
 import { waitForProject } from "~/state/entities";
+import { projectUploadStore } from "~/state/projectUploadProgress";
 import { projectEnvironment } from "~/state/projects";
 import { sourceControlEnvironment } from "~/state/sourceControl";
 import { useAtomCommand } from "~/state/use-atom-command";
@@ -86,6 +87,16 @@ export function useNewProject() {
         readonly commitError?: string | undefined;
       } | null = null;
 
+      projectUploadStore.setState({
+        isImporting: true,
+        projectName: input.name,
+        stage: "Setting up workspace template...",
+        current: 1,
+        total: 4,
+        percent: 25,
+        error: null,
+      });
+
       const result = await createNew({
         environmentId: input.environmentId,
         input: {
@@ -122,6 +133,10 @@ export function useNewProject() {
             };
           } else {
             const err = data?.error ?? errorMessage(squashAtomCommandFailure(result));
+            projectUploadStore.setState({
+              isImporting: false,
+              error: err,
+            });
             if (!isAtomCommandInterrupted(result)) {
               toastManager.add(
                 stackedThreadToast({
@@ -134,18 +149,30 @@ export function useNewProject() {
             return false;
           }
         } catch (httpError) {
+          const err = errorMessage(squashAtomCommandFailure(result));
+          projectUploadStore.setState({
+            isImporting: false,
+            error: err,
+          });
           if (!isAtomCommandInterrupted(result)) {
             toastManager.add(
               stackedThreadToast({
                 type: "error",
                 title: "Could not create the project",
-                description: errorMessage(squashAtomCommandFailure(result)),
+                description: err,
               }),
             );
           }
           return false;
         }
       }
+
+      projectUploadStore.setState({
+        stage: "Initializing repository...",
+        current: 2,
+        total: 4,
+        percent: 65,
+      });
 
       const { projectId, workspaceRoot, commitError } = createdProject;
       // The folder sits in T3 Code's data directory, so always say where.
@@ -169,28 +196,33 @@ export function useNewProject() {
       }
 
       const projectRef = scopeProjectRef(input.environmentId, projectId);
-      // Drafts key off the project's stored path, so wait for the create event
-      // to reach the store before opening one.
-      const project = await waitForProject(projectRef).catch((error: unknown) => {
-        toastManager.add(
-          stackedThreadToast({
-            type: "error",
-            title: "Failed to open project",
-            description: `${errorMessage(error)} It will appear in the sidebar once this client catches up.`,
-          }),
-        );
-        return null;
+
+      projectUploadStore.setState({
+        stage: "Opening workspace thread...",
+        current: 3,
+        total: 4,
+        percent: 90,
       });
-      if (project === null) return true;
+
+      // Quick check if already in store (2s max), never failing or showing error toast if still propagating
+      await waitForProject(projectRef, 2_000).catch(() => null);
+
+      projectUploadStore.setState({
+        stage: "Ready!",
+        current: 4,
+        total: 4,
+        percent: 100,
+      });
+
+      // Open new thread draft directly without error toast
       await handleNewThread(projectRef).catch((error: unknown) => {
-        toastManager.add(
-          stackedThreadToast({
-            type: "error",
-            title: "Failed to open project",
-            description: errorMessage(error),
-          }),
-        );
+        console.warn("Could not auto-open thread draft:", error);
       });
+
+      setTimeout(() => {
+        projectUploadStore.reset();
+      }, 1200);
+
       return true;
     },
     [createNew, handleNewThread, publishToGitHub],

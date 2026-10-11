@@ -79,22 +79,22 @@ export function GlobalProjectImportProgress() {
       {/* Top Fixed Progress Bar */}
       {progress.isImporting && (
         <div
-          className="pointer-events-none fixed top-0 left-0 right-0 z-[999999] h-1.5 overflow-hidden bg-muted/40"
+          className="pointer-events-none fixed top-0 left-0 right-0 z-[999999] h-1 overflow-hidden bg-primary/10 backdrop-blur-sm"
           role="progressbar"
           aria-valuenow={progress.percent}
           aria-valuemin={0}
           aria-valuemax={100}
         >
           <div
-            className="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-emerald-500 transition-all duration-300 ease-out shadow-[0_0_12px_rgba(99,102,241,0.8)]"
+            className="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-emerald-400 transition-all duration-300 ease-out shadow-[0_0_14px_rgba(99,102,241,0.9)]"
             style={{ width: `${Math.max(4, Math.min(100, progress.percent))}%` }}
           />
         </div>
       )}
 
-      {/* Floating Top HUD Card */}
+      {/* Floating Top HUD Card with Live Percentage */}
       {progress.isImporting && (
-        <div className="pointer-events-auto fixed top-3 left-1/2 -translate-x-1/2 z-[999999] flex max-w-[90vw] items-center gap-3 rounded-full border border-border/80 bg-background/95 px-4 py-2 shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-top-4 duration-200">
+        <div className="pointer-events-auto fixed top-2.5 left-1/2 -translate-x-1/2 z-[999999] flex max-w-[92vw] items-center gap-3 rounded-full border border-primary/30 bg-background/95 px-4 py-1.5 shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-top-3 duration-200">
           {progress.percent >= 100 ? (
             <CheckCircle2Icon className="size-4 shrink-0 text-emerald-500" />
           ) : (
@@ -102,12 +102,14 @@ export function GlobalProjectImportProgress() {
           )}
 
           <div className="flex min-w-0 items-center gap-2 text-xs">
-            <span className="max-w-[140px] truncate font-semibold text-foreground sm:max-w-[200px]">
-              {progress.projectName}
+            <span className="max-w-[130px] truncate font-semibold text-foreground sm:max-w-[200px]">
+              {progress.projectName || "Project"}
             </span>
             <span className="text-muted-foreground/60">•</span>
             <span className="text-muted-foreground truncate">{progress.stage}</span>
-            <span className="shrink-0 font-mono font-medium text-primary">{progress.percent}%</span>
+            <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-primary">
+              {progress.percent}%
+            </span>
           </div>
         </div>
       )}

@@ -153,6 +153,7 @@ export class ManagedProjectFolders extends Context.Service<
       },
       NamedProjectError
     >;
+    readonly syncProjectsFromDisk: () => Effect.Effect<ReadonlyArray<string>, never>;
   }
 >()("t3/project/ManagedProjectFolders") {}
 
@@ -398,26 +399,55 @@ const make = Effect.gen(function* () {
     );
   });
 
-  // Projects started from just a name live beside Scratch and worktrees, away
-  // from folders the user organizes by hand. A nested repository is fine here
-  // (unlike Scratch) because each project gets its own `git init`.
+  // Projects are saved in autodeskprojects under the user's home or configured directory
   const procEnv = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process
     ?.env;
-  const namedProjectsRoot = procEnv?.T3CODE_PROJECTS_DIR
-    ? path.resolve(procEnv.T3CODE_PROJECTS_DIR)
-    : procEnv?.WORKSPACE_DIR
-      ? path.resolve(procEnv.WORKSPACE_DIR)
-      : path.resolve(config.baseDir, "projects");
+  const userHomeDir = procEnv?.HOME || procEnv?.USERPROFILE || config.baseDir;
+  const defaultAutodeskProjectsDir = path.resolve(userHomeDir, "autodeskprojects");
+
+  const resolveNamedProjectsRoot = Effect.gen(function* () {
+    // 1. Explicit env vars
+    if (procEnv?.AUTODESK_PROJECTS_DIR && procEnv.AUTODESK_PROJECTS_DIR.trim().length > 0) {
+      return path.resolve(procEnv.AUTODESK_PROJECTS_DIR.trim());
+    }
+    if (procEnv?.T3CODE_PROJECTS_DIR && procEnv.T3CODE_PROJECTS_DIR.trim().length > 0) {
+      return path.resolve(procEnv.T3CODE_PROJECTS_DIR.trim());
+    }
+
+    // 2. Read settings.json if exists
+    // @effect-diagnostics-next-line preferSchemaOverJson:off
+    const settingsRaw = yield* fileSystem.readFileString(config.settingsPath).pipe(Effect.option);
+    if (Option.isSome(settingsRaw)) {
+      try {
+        const parsed = JSON.parse(settingsRaw.value);
+        if (
+          typeof parsed?.projectsDirectory === "string" &&
+          parsed.projectsDirectory.trim().length > 0
+        ) {
+          return path.resolve(parsed.projectsDirectory.trim());
+        }
+      } catch {
+        // ignore parse error
+      }
+    }
+
+    // 3. Default: autodeskprojects in user's home or root directory
+    return defaultAutodeskProjectsDir;
+  });
+
+  // Ensure default autodeskprojects directory is created immediately
+  yield* fileSystem
+    .makeDirectory(defaultAutodeskProjectsDir, { recursive: true })
+    .pipe(Effect.ignore);
 
   const claimNamedFolder = Effect.fn("ManagedProjectFolders.claimNamedFolder")(function* (
     name: string,
   ) {
+    const currentRoot = yield* resolveNamedProjectsRoot;
     yield* fileSystem
-      .makeDirectory(namedProjectsRoot, { recursive: true })
+      .makeDirectory(currentRoot, { recursive: true })
       .pipe(
-        Effect.mapError(
-          (cause) => new NamedProjectFolderError({ folder: namedProjectsRoot, cause }),
-        ),
+        Effect.mapError((cause) => new NamedProjectFolderError({ folder: currentRoot, cause })),
       );
     const folderName = newProjectFolderName(name) || "project";
     const claimed = yield* claimFreeFolder(
@@ -426,17 +456,14 @@ const make = Effect.gen(function* () {
           attempt > MAX_NAMED_FOLDER_ATTEMPTS
             ? Option.none()
             : Option.some(
-                path.join(
-                  namedProjectsRoot,
-                  attempt === 1 ? folderName : `${folderName}-${attempt}`,
-                ),
+                path.join(currentRoot, attempt === 1 ? folderName : `${folderName}-${attempt}`),
               ),
         ),
       (folder, cause) => new NamedProjectFolderError({ folder, cause }),
     );
     if (Option.isSome(claimed)) return claimed.value;
     return yield* new NamedProjectFolderError({
-      folder: path.join(namedProjectsRoot, folderName),
+      folder: path.join(currentRoot, folderName),
       cause: `Every folder name for "${folderName}" is taken.`,
     });
   });
@@ -1053,7 +1080,7 @@ header('Content-Type: text/html; charset=utf-8');
     scratchRoot,
     ensureScratchProject,
     folderForThread,
-    namedProjectsRoot,
+    namedProjectsRoot: defaultAutodeskProjectsDir,
     createNamedProject,
     importUploadedProject,
     importZipProject,

@@ -235,13 +235,11 @@ export function useImportLocalProject() {
         });
 
         const projectRef = scopeProjectRef(environmentId, projectId);
-        const project = await waitForProject(projectRef).catch(() => null);
+        await waitForProject(projectRef, 2_000).catch(() => null);
 
-        if (project !== null) {
-          await handleNewThread(projectRef).catch((error: unknown) => {
-            console.warn("Could not auto-open thread draft:", error);
-          });
-        }
+        await handleNewThread(projectRef).catch((error: unknown) => {
+          console.warn("Could not auto-open thread draft:", error);
+        });
 
         setTimeout(() => {
           projectUploadStore.reset();
@@ -513,13 +511,11 @@ export function useImportLocalProject() {
         });
 
         const projectRef = scopeProjectRef(environmentId, projectId);
-        const project = await waitForProject(projectRef).catch(() => null);
+        await waitForProject(projectRef, 2_000).catch(() => null);
 
-        if (project !== null) {
-          await handleNewThread(projectRef).catch((error: unknown) => {
-            console.warn("Could not auto-open thread draft:", error);
-          });
-        }
+        await handleNewThread(projectRef).catch((error: unknown) => {
+          console.warn("Could not auto-open thread draft:", error);
+        });
 
         // Keep 100% visible briefly for smooth transition
         setTimeout(() => {
@@ -625,12 +621,10 @@ export function useImportLocalProject() {
         );
 
         const projectRef = scopeProjectRef(environmentId, data.projectId as any);
-        const project = await waitForProject(projectRef).catch(() => null);
-        if (project !== null) {
-          await handleNewThread(projectRef).catch((error: unknown) => {
-            console.warn("Could not auto-open thread draft:", error);
-          });
-        }
+        await waitForProject(projectRef, 2_000).catch(() => null);
+        await handleNewThread(projectRef).catch((error: unknown) => {
+          console.warn("Could not auto-open thread draft:", error);
+        });
 
         setTimeout(() => {
           projectUploadStore.reset();

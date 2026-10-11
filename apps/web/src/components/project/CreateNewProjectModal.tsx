@@ -104,29 +104,26 @@ export function CreateNewProjectModal() {
     if (e) e.preventDefault();
     const trimmed = projectName.trim();
     if (!trimmed || isSubmitting) return;
+    if (isCloneMode && !gitRepoUrl.trim()) return;
 
     const targetEnv = (environmentId ??
       primaryEnvId ??
       environments[0]?.environmentId ??
       PRIMARY_LOCAL_ENVIRONMENT_ID) as EnvironmentId;
 
+    // Auto-hide popup immediately so user can see top progress bar and read toasts freely
+    projectCreateModalStore.close();
+
     setIsSubmitting(true);
     try {
       if (isCloneMode) {
-        if (!gitRepoUrl.trim()) return;
-        const success = await cloneGitRepo(targetEnv, gitRepoUrl.trim(), trimmed);
-        if (success) {
-          projectCreateModalStore.close();
-        }
+        await cloneGitRepo(targetEnv, gitRepoUrl.trim(), trimmed);
       } else {
-        const success = await createNewProject({
+        await createNewProject({
           environmentId: targetEnv,
           name: trimmed,
           template: selectedTemplate,
         });
-        if (success) {
-          projectCreateModalStore.close();
-        }
       }
     } finally {
       setIsSubmitting(false);
@@ -328,6 +325,17 @@ export function CreateNewProjectModal() {
                 <span>Upload Folder</span>
               </button>
             </div>
+          </div>
+
+          {/* Projects Saving Location note */}
+          <div className="flex items-center justify-between text-3xs text-muted-foreground px-1 pt-1">
+            <span>Saved in:</span>
+            <span
+              className="font-mono text-primary/90 font-medium truncate max-w-[280px] bg-primary/10 px-2 py-0.5 rounded"
+              title="Default projects directory: autodeskprojects"
+            >
+              ~/autodeskprojects/{projectName.trim() || "<name>"}
+            </span>
           </div>
 
           {/* Footer Actions */}

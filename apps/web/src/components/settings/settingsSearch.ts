@@ -148,6 +148,15 @@ export const SETTINGS_SEARCH_ITEMS = [
     ],
   },
   {
+    id: "storage-projects-location",
+    title: "Projects location (autodeskprojects)",
+    to: "/settings/storage",
+    scope: "environment-defaults",
+    searchTerms: [
+      "projects location autodeskprojects folder directory path save uploads clone zip",
+    ],
+  },
+  {
     id: "storage-worktrees-location",
     title: "Worktree location",
     to: "/settings/storage",

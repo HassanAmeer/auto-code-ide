@@ -1,3 +1,4 @@
+import * as NodePath from "node:path";
 import { runBashCommandOnHost } from "./terminalExec.ts";
 import * as ManagedProjectFolders from "./project/ManagedProjectFolders.ts";
 import * as Mime from "effect/http/Mime";
@@ -720,6 +721,100 @@ export const layerDirectProjectCloneRoute = HttpRouter.add(
       ok: true,
       projectId: created.projectId,
       workspaceRoot: targetDir,
+    });
+  }).pipe(
+    Effect.catchCause((cause) =>
+      Effect.succeed(HttpServerResponse.jsonUnsafe({ ok: false, error: Cause.pretty(cause) })),
+    ),
+  ),
+);
+
+export const layerFsBrowseRoute = HttpRouter.add(
+  "POST",
+  "/api/fs/browse",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const bodyJson = (yield* request.json.pipe(Effect.catch(() => Effect.succeed({} as any)))) as {
+      path?: string;
+    };
+
+    const homeDir = process.env.HOME || process.env.USERPROFILE || "/";
+    let target = bodyJson?.path?.trim() || homeDir;
+    if (target.startsWith("~")) {
+      target = target.replace(/^~/, homeDir);
+    }
+    const resolved = NodePath.resolve(target);
+
+    const fileSystem = yield* FileSystem.FileSystem;
+    const exists = yield* fileSystem.exists(resolved).pipe(Effect.orElseSucceed(() => false));
+    if (!exists) {
+      return HttpServerResponse.jsonUnsafe({
+        ok: true,
+        currentPath: resolved,
+        exists: false,
+        parentPath: NodePath.dirname(resolved),
+        homePath: homeDir,
+        directories: [],
+      });
+    }
+
+    const entries = yield* fileSystem.readDirectory(resolved).pipe(Effect.orElseSucceed(() => []));
+    const directories: string[] = [];
+
+    for (const entry of entries) {
+      if (entry.startsWith(".")) continue;
+      const full = NodePath.join(resolved, entry);
+      const stat = yield* fileSystem.stat(full).pipe(Effect.option);
+      if (Option.isSome(stat) && stat.value.type === "Directory") {
+        directories.push(entry);
+      }
+    }
+
+    directories.sort((a, b) => a.localeCompare(b));
+
+    return HttpServerResponse.jsonUnsafe({
+      ok: true,
+      currentPath: resolved,
+      exists: true,
+      parentPath: NodePath.dirname(resolved),
+      homePath: homeDir,
+      directories,
+    });
+  }).pipe(
+    Effect.catchCause((cause) =>
+      Effect.succeed(HttpServerResponse.jsonUnsafe({ ok: false, error: Cause.pretty(cause) })),
+    ),
+  ),
+);
+
+export const layerFsEnsureDirRoute = HttpRouter.add(
+  "POST",
+  "/api/fs/ensure-dir",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const bodyJson = (yield* request.json.pipe(Effect.catch(() => Effect.succeed({} as any)))) as {
+      path?: string;
+    };
+
+    const homeDir = process.env.HOME || process.env.USERPROFILE || "/";
+    let target = bodyJson?.path?.trim() || NodePath.join(homeDir, "autodeskprojects");
+    if (target.startsWith("~")) {
+      target = target.replace(/^~/, homeDir);
+    }
+    const resolved = NodePath.resolve(target);
+
+    const fileSystem = yield* FileSystem.FileSystem;
+    yield* fileSystem
+      .makeDirectory(resolved, { recursive: true })
+      .pipe(
+        Effect.mapError(
+          (cause) => new Error(`Could not create directory ${resolved}: ${String(cause)}`),
+        ),
+      );
+
+    return HttpServerResponse.jsonUnsafe({
+      ok: true,
+      path: resolved,
     });
   }).pipe(
     Effect.catchCause((cause) =>

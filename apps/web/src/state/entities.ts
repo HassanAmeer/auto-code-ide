@@ -177,6 +177,12 @@ export function waitForProject(
     const timeout = setTimeout(() => {
       unsubscribe?.();
       unsubscribeAll?.();
+      const finalCheck =
+        readProject(ref) ?? readProjects().find((p) => p.id === ref.projectId) ?? null;
+      if (finalCheck !== null) {
+        resolve(finalCheck);
+        return;
+      }
       reject(new Error("The project did not appear in the web app yet."));
     }, timeoutMs);
     const finish = (project: EnvironmentProject | null) => {

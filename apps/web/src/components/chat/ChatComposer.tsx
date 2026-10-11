@@ -328,7 +328,6 @@ import {
   submitComposerDraft,
 } from "./composerSubmission";
 import { useVoiceCallAssistant, VoiceCallButton, VoiceVisualizerWaves } from "./voiceCall";
-import { AiTerminalQuickCommand, TerminalFeed } from "./terminal";
 import { ComposerPromptLengthValidation } from "./ComposerPromptLengthValidation";
 import { PierreEntryIcon } from "./PierreEntryIcon";
 import { pendingDraftWork } from "./pendingDraftWork";
@@ -6927,8 +6926,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         ) : null}
       </ComposerBanner.Dock>
       <div className="relative">
-        <TerminalFeed />
-        <AiTerminalQuickCommand projectCwd={gitCwd ?? undefined} />
         <ComposerSurface.Main
           ref={composerMainSurfaceRef}
           data-inline-resting-controls={restingControlsHost === null ? "true" : undefined}

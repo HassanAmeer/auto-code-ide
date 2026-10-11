@@ -1730,7 +1730,7 @@ const layerWsRpc = (
               onNone: () => ({}),
               onSome: (root) => ({ scratchWorkspaceRoot: root }),
             }),
-            newProjectsRoot: managedFolders.namedProjectsRoot,
+            newProjectsRoot: settings.projectsDirectory?.trim() || managedFolders.namedProjectsRoot,
           };
         });
 

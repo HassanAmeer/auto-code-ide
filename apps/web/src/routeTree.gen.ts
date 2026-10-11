@@ -14,6 +14,7 @@ import { Route as UsageRouteImport } from './routes/usage'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ConnectAgentRouteImport } from './routes/connect-agent'
 import { Route as ConnectRouteImport } from './routes/connect'
+import { Route as AiTerminalRouteImport } from './routes/ai-terminal'
 import { Route as ChatRouteImport } from './routes/_chat'
 import { Route as ChatIndexRouteImport } from './routes/_chat.index'
 import { Route as SettingsTtsRouteImport } from './routes/settings.tts'
@@ -62,6 +63,11 @@ const ConnectAgentRoute = ConnectAgentRouteImport.update({
 const ConnectRoute = ConnectRouteImport.update({
   id: '/connect',
   path: '/connect',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AiTerminalRoute = AiTerminalRouteImport.update({
+  id: '/ai-terminal',
+  path: '/ai-terminal',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ChatRoute = ChatRouteImport.update({
@@ -188,6 +194,7 @@ const ChatEnvironmentIdThreadIdRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof ChatIndexRoute
+  '/ai-terminal': typeof AiTerminalRoute
   '/connect': typeof ConnectRoute
   '/connect-agent': typeof ConnectAgentRoute
   '/settings': typeof SettingsRouteWithChildren
@@ -217,6 +224,7 @@ export interface FileRoutesByFullPath {
   '/draft/$draftId': typeof ChatDraftDraftIdRoute
 }
 export interface FileRoutesByTo {
+  '/ai-terminal': typeof AiTerminalRoute
   '/connect': typeof ConnectRoute
   '/connect-agent': typeof ConnectAgentRoute
   '/settings': typeof SettingsRouteWithChildren
@@ -249,6 +257,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_chat': typeof ChatRouteWithChildren
+  '/ai-terminal': typeof AiTerminalRoute
   '/connect': typeof ConnectRoute
   '/connect-agent': typeof ConnectAgentRoute
   '/settings': typeof SettingsRouteWithChildren
@@ -282,6 +291,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/ai-terminal'
     | '/connect'
     | '/connect-agent'
     | '/settings'
@@ -311,6 +321,7 @@ export interface FileRouteTypes {
     | '/draft/$draftId'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/ai-terminal'
     | '/connect'
     | '/connect-agent'
     | '/settings'
@@ -342,6 +353,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/_chat'
+    | '/ai-terminal'
     | '/connect'
     | '/connect-agent'
     | '/settings'
@@ -374,6 +386,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   ChatRoute: typeof ChatRouteWithChildren
+  AiTerminalRoute: typeof AiTerminalRoute
   ConnectRoute: typeof ConnectRoute
   ConnectAgentRoute: typeof ConnectAgentRoute
   SettingsRoute: typeof SettingsRouteWithChildren
@@ -417,6 +430,13 @@ declare module '@tanstack/react-router' {
       path: '/connect'
       fullPath: '/connect'
       preLoaderRoute: typeof ConnectRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ai-terminal': {
+      id: '/ai-terminal'
+      path: '/ai-terminal'
+      fullPath: '/ai-terminal'
+      preLoaderRoute: typeof AiTerminalRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_chat': {
@@ -654,6 +674,7 @@ const SettingsRouteWithChildren = SettingsRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   ChatRoute: ChatRouteWithChildren,
+  AiTerminalRoute: AiTerminalRoute,
   ConnectRoute: ConnectRoute,
   ConnectAgentRoute: ConnectAgentRoute,
   SettingsRoute: SettingsRouteWithChildren,

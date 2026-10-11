@@ -1,8 +1,29 @@
 import type { StorageCleanupSettings, WorktreeCleanupRules } from "@t3tools/contracts";
 import { resolveWorktreeCleanup } from "@t3tools/shared/projectSettings";
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  ArrowUpIcon,
+  CheckIcon,
+  FolderIcon,
+  FolderOpenIcon,
+  FolderPlusIcon,
+  HomeIcon,
+  Loader2Icon,
+  RefreshCwIcon,
+} from "lucide-react";
 
 import { Input } from "../ui/input";
+import { Button } from "../ui/button";
+import {
+  Dialog,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogPopup,
+  DialogTitle,
+} from "../ui/dialog";
+import { toastManager } from "../ui/toast";
+import { cn } from "~/lib/utils";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
 import {
@@ -28,6 +49,398 @@ import {
   useScopedSettingsMixed,
   useUpdateScopedSettings,
 } from "./useScopedSettings";
+
+function DirectoryBrowserModal({
+  open,
+  onOpenChange,
+  currentValue,
+  onSelect,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  currentValue: string;
+  onSelect: (path: string) => void;
+}) {
+  const [currentPath, setCurrentPath] = useState("");
+  const [parentPath, setParentPath] = useState<string | null>(null);
+  const [homePath, setHomePath] = useState("");
+  const [directories, setDirectories] = useState<string[]>([]);
+  const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [newFolderOpen, setNewFolderOpen] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [creating, setCreating] = useState(false);
+
+  const fetchDirectory = useCallback(async (pathQuery?: string) => {
+    setLoading(true);
+    setSelectedFolder(null);
+    setNewFolderOpen(false);
+    try {
+      const res = await fetch("/api/fs/browse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: pathQuery || "" }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setCurrentPath(data.currentPath);
+        setParentPath(
+          data.parentPath && data.parentPath !== data.currentPath ? data.parentPath : null,
+        );
+        setHomePath(data.homePath || "");
+        setDirectories(data.directories || []);
+      }
+    } catch {
+      // ignore network errors
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (open) {
+      void fetchDirectory(currentValue || "");
+    }
+  }, [open, currentValue, fetchDirectory]);
+
+  const handleCreateFolder = async () => {
+    const trimmed = newFolderName.trim();
+    if (!trimmed) return;
+    setCreating(true);
+    try {
+      const folderPath = `${currentPath}/${trimmed}`;
+      const res = await fetch("/api/fs/ensure-dir", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: folderPath }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setNewFolderName("");
+        setNewFolderOpen(false);
+        await fetchDirectory(folderPath);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleConfirmSelect = async () => {
+    const finalPath = selectedFolder ? `${currentPath}/${selectedFolder}` : currentPath;
+    if (!finalPath) return;
+    try {
+      await fetch("/api/fs/ensure-dir", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: finalPath }),
+      });
+      onSelect(finalPath);
+      onOpenChange(false);
+    } catch {
+      onSelect(finalPath);
+      onOpenChange(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogPopup className="max-w-xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-base font-semibold">
+            <FolderOpenIcon className="size-4 text-primary" />
+            Choose Projects Folder
+          </DialogTitle>
+          <DialogDescription className="text-xs text-muted-foreground">
+            Browse and choose the location for your projects. Folders are automatically created if
+            they do not exist.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex flex-col gap-3 px-6 py-2">
+          {/* Navigation Toolbar */}
+          <div className="flex items-center gap-1.5 bg-muted/40 p-1.5 rounded-lg border border-border/50 text-xs">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              title="Home directory (~)"
+              onClick={() => void fetchDirectory(homePath)}
+              disabled={loading || !homePath}
+            >
+              <HomeIcon className="size-3.5" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              title="Parent directory"
+              onClick={() => parentPath && void fetchDirectory(parentPath)}
+              disabled={loading || !parentPath}
+            >
+              <ArrowUpIcon className="size-3.5" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              title="Refresh"
+              onClick={() => void fetchDirectory(currentPath)}
+              disabled={loading}
+            >
+              <RefreshCwIcon className={cn("size-3.5", loading && "animate-spin")} />
+            </Button>
+            <div className="h-4 w-px bg-border/60 mx-1" />
+            <span className="font-mono text-[11px] truncate select-all flex-1 text-foreground/80 px-1">
+              {currentPath || "Loading..."}
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="xs"
+              onClick={() => setNewFolderOpen(!newFolderOpen)}
+              className="gap-1 text-[11px] shrink-0"
+            >
+              <FolderPlusIcon className="size-3.5" />
+              New Folder
+            </Button>
+          </div>
+
+          {/* New folder creation bar */}
+          {newFolderOpen && (
+            <div className="flex items-center gap-2 p-2 bg-accent/20 rounded-lg border border-accent/30">
+              <Input
+                size="sm"
+                placeholder="Folder name (e.g. autodeskprojects)"
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void handleCreateFolder();
+                }}
+                className="text-xs h-7"
+                autoFocus
+              />
+              <Button
+                type="button"
+                size="xs"
+                variant="default"
+                disabled={creating || !newFolderName.trim()}
+                onClick={() => void handleCreateFolder()}
+              >
+                {creating ? "Creating..." : "Create"}
+              </Button>
+              <Button
+                type="button"
+                size="xs"
+                variant="ghost"
+                onClick={() => {
+                  setNewFolderOpen(false);
+                  setNewFolderName("");
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+          )}
+
+          {/* Folder listing */}
+          <div className="h-60 overflow-y-auto border border-border/40 rounded-lg p-1.5 bg-background/50 divide-y divide-border/20">
+            {loading ? (
+              <div className="flex items-center justify-center h-full gap-2 text-xs text-muted-foreground">
+                <Loader2Icon className="size-4 animate-spin text-primary" />
+                Reading directories...
+              </div>
+            ) : directories.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full gap-1 text-xs text-muted-foreground">
+                <FolderIcon className="size-6 text-muted-foreground/40 mb-1" />
+                No subdirectories here
+                <span className="text-[10px] text-muted-foreground/60">
+                  You can select this folder directly or create a new one above
+                </span>
+              </div>
+            ) : (
+              directories.map((dir) => {
+                const isSelected = selectedFolder === dir;
+                return (
+                  <div
+                    key={dir}
+                    onClick={() => setSelectedFolder(isSelected ? null : dir)}
+                    onDoubleClick={() => void fetchDirectory(`${currentPath}/${dir}`)}
+                    className={cn(
+                      "flex items-center justify-between px-2.5 py-1.5 rounded-md cursor-pointer text-xs transition-colors group select-none",
+                      isSelected
+                        ? "bg-primary/15 text-primary font-medium"
+                        : "hover:bg-muted/60 text-foreground/80",
+                    )}
+                  >
+                    <div className="flex items-center gap-2 truncate flex-1 min-w-0">
+                      <FolderIcon
+                        className={cn(
+                          "size-3.5 shrink-0",
+                          isSelected
+                            ? "text-primary"
+                            : "text-muted-foreground/70 group-hover:text-foreground",
+                        )}
+                      />
+                      <span className="truncate">{dir}</span>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-micro"
+                      title={`Open ${dir}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void fetchDirectory(`${currentPath}/${dir}`);
+                      }}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <ArrowUpIcon className="size-3 rotate-90" />
+                    </Button>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Active selection preview */}
+          <div className="text-[11px] text-muted-foreground flex items-center justify-between px-1">
+            <span className="truncate">
+              Target:{" "}
+              <strong className="text-foreground font-mono">
+                {selectedFolder
+                  ? `${currentPath}/${selectedFolder}`
+                  : currentPath || "~/autodeskprojects"}
+              </strong>
+            </span>
+            <span className="text-[10px] text-muted-foreground/60 shrink-0 ml-2">
+              (Double click to open folder)
+            </span>
+          </div>
+        </div>
+
+        <DialogFooter variant="default">
+          <Button type="button" variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="default"
+            size="sm"
+            onClick={() => void handleConfirmSelect()}
+            disabled={!currentPath}
+            className="gap-1.5"
+          >
+            <CheckIcon className="size-3.5" />
+            Select This Folder
+          </Button>
+        </DialogFooter>
+      </DialogPopup>
+    </Dialog>
+  );
+}
+
+function ProjectsDirectoryRow() {
+  const settings = useScopedSettings();
+  const updateSettings = useUpdateScopedSettings();
+  const mixed = useScopedSettingsMixed(["projectsDirectory"]);
+  const [browserOpen, setBrowserOpen] = useState(false);
+  const [inputValue, setInputValue] = useState(settings.projectsDirectory || "");
+
+  useEffect(() => {
+    setInputValue(settings.projectsDirectory || "");
+  }, [settings.projectsDirectory]);
+
+  const savePath = async (rawPath: string) => {
+    const trimmed = rawPath.trim();
+    if (trimmed) {
+      try {
+        await fetch("/api/fs/ensure-dir", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path: trimmed }),
+        });
+      } catch {
+        // ignore
+      }
+    }
+    updateSettings({ projectsDirectory: trimmed });
+    toastManager.add({
+      title: "Projects location updated",
+      description: trimmed || "~/autodeskprojects (default)",
+      type: "success",
+    });
+  };
+
+  return (
+    <>
+      <SettingsRow
+        {...searchableSetting("storage-projects-location")}
+        title="Projects location (autodeskprojects)"
+        description={
+          "Folder where all new projects, uploads, and Git clones are created and stored (e.g. ~/autodeskprojects or a custom path). Automatically created if it does not exist."
+        }
+        resetAction={
+          mixed || (settings.projectsDirectory && settings.projectsDirectory !== "") ? (
+            <SettingResetButton
+              label="projects location"
+              onClick={() => {
+                void savePath("");
+                setInputValue("");
+              }}
+            />
+          ) : null
+        }
+        control={
+          <div className="flex items-center gap-1.5 w-full max-w-sm">
+            <Input
+              aria-label="Projects location"
+              autoCapitalize="none"
+              spellCheck={false}
+              placeholder={mixed ? "Mixed" : "~/autodeskprojects"}
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onBlur={() => {
+                if (inputValue !== settings.projectsDirectory) {
+                  void savePath(inputValue);
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  if (inputValue !== settings.projectsDirectory) {
+                    void savePath(inputValue);
+                  }
+                }
+              }}
+              className="font-mono text-xs flex-1"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-sm"
+              title="Browse folders on server"
+              aria-label="Browse folders"
+              onClick={() => setBrowserOpen(true)}
+              className="shrink-0"
+            >
+              <FolderOpenIcon className="size-4" />
+            </Button>
+          </div>
+        }
+      />
+      <DirectoryBrowserModal
+        open={browserOpen}
+        onOpenChange={setBrowserOpen}
+        currentValue={inputValue}
+        onSelect={(newPath) => {
+          setInputValue(newPath);
+          void savePath(newPath);
+        }}
+      />
+    </>
+  );
+}
 
 function WorktreesDirectoryRow() {
   const { connectedEnvironments, targets } = useSettingsScope();
@@ -213,6 +626,11 @@ export function StorageSettingsPanel() {
 
   return (
     <SettingsPageContainer>
+      {!isProjectScope && (
+        <SettingsSection id="storage-projects" title="Projects & Workspace Location">
+          <ProjectsDirectoryRow />
+        </SettingsSection>
+      )}
       <SettingsSection id="storage-worktrees" title="Worktrees">
         {!isProjectScope && <WorktreesDirectoryRow />}
         {isProjectScope && (

@@ -1054,6 +1054,12 @@ export const ServerSettings = Schema.Struct({
    */
   worktreesDirectory: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   /**
+   * Absolute directory where new projects are created and saved,
+   * e.g. `/home/user/autodeskprojects` or `~/autodeskprojects`.
+   * Empty defaults to `<home>/autodeskprojects`.
+   */
+  projectsDirectory: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  /**
    * Custom locations used before the current one. Server-maintained so
    * worktrees left there stay eligible for cleanup and review diffs.
    */
@@ -1391,6 +1397,7 @@ export const ServerSettingsPatch = Schema.Struct({
     }),
   ),
   worktreesDirectory: Schema.optionalKey(TrimmedString),
+  projectsDirectory: Schema.optionalKey(TrimmedString),
   // Server settings
   responseStreamingMode: Schema.optionalKey(ResponseStreamingMode),
   enableProviderUpdateChecks: Schema.optionalKey(Schema.Boolean),
