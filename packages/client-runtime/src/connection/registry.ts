@@ -334,7 +334,19 @@ export const make = Effect.gen(function* () {
   const getEntry = Effect.fn("EnvironmentRegistry.getEntry")(function* (
     environmentId: EnvironmentId,
   ) {
-    const entry = (yield* SubscriptionRef.get(entries)).get(environmentId);
+    const current = yield* SubscriptionRef.get(entries);
+    let entry = current.get(environmentId);
+    if (entry === undefined && (environmentId === "primary" || !environmentId)) {
+      for (const candidate of current.values()) {
+        if (candidate.target._tag === "PrimaryConnectionTarget") {
+          entry = candidate;
+          break;
+        }
+      }
+      if (entry === undefined) {
+        entry = current.values().next().value;
+      }
+    }
     if (entry === undefined) {
       return yield* new EnvironmentNotRegisteredError({
         environmentId,
@@ -408,12 +420,13 @@ export const make = Effect.gen(function* () {
       environmentId,
       Effect.gen(function* () {
         const entry = yield* getEntry(environmentId);
-        const existing = (yield* SubscriptionRef.get(serviceScopes)).get(environmentId);
+        const resolvedId = entry.target.environmentId;
+        const existing = (yield* SubscriptionRef.get(serviceScopes)).get(resolvedId);
         if (existing !== undefined) {
           if (Equal.equals(existing.entry, entry)) {
             return existing.supervisor;
           }
-          yield* closeServiceScope(environmentId);
+          yield* closeServiceScope(resolvedId);
         }
         return yield* createServiceScope(entry);
       }),

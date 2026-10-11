@@ -294,13 +294,24 @@ export const make = Effect.gen(function* () {
       Effect.mapError(mapRemoteEnvironmentError),
       Effect.provideService(HttpClient.HttpClient, httpClient),
     );
-    if (descriptor.environmentId !== target.environmentId) {
+    if (
+      target._tag !== "PrimaryConnectionTarget" &&
+      target.environmentId !== "primary" &&
+      descriptor.environmentId !== target.environmentId
+    ) {
       return yield* environmentMismatchError({
         expected: target.environmentId,
         actual: descriptor.environmentId,
       });
     }
-    return { prepared, descriptor };
+    return {
+      prepared: {
+        ...prepared,
+        environmentId: descriptor.environmentId,
+        label: descriptor.label,
+      },
+      descriptor,
+    };
   });
 
   const prepare = Effect.fn("clientRuntime.connection.broker.prepare")(function* (
@@ -313,6 +324,8 @@ export const make = Effect.gen(function* () {
     }
     return {
       ...prepared,
+      environmentId: descriptor.environmentId,
+      label: descriptor.label,
       socketUrl: appendOrchestrationProtocol(prepared.socketUrl),
     };
   });

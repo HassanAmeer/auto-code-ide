@@ -151,7 +151,11 @@ export const make = Effect.gen(function* () {
       timeoutMs: ROUTE_CHECK_TIMEOUT_MS,
     }).pipe(
       Effect.map((descriptor): RouteCheck =>
-        descriptor.environmentId === entry.target.environmentId ? "answered" : "silent",
+        entry.target._tag === "PrimaryConnectionTarget" ||
+        entry.target.environmentId === "primary" ||
+        descriptor.environmentId === entry.target.environmentId
+          ? "answered"
+          : "silent",
       ),
       Effect.orElseSucceed((): RouteCheck => "silent"),
       Effect.provideService(HttpClient.HttpClient, httpClient),

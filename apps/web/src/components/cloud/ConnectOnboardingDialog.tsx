@@ -41,9 +41,7 @@ import { WizardSteps, WizardPopup, WizardHeader, WizardPanel, WizardFooter } fro
  * away. A cold load with a restored session does not count as a sign-in.
  */
 export function ConnectOnboardingDialog() {
-  if (!hasCloudPublicConfig()) return null;
-
-  return <ConfiguredConnectOnboardingDialog />;
+  return null;
 }
 
 type OnboardingStep = "publish" | "devices";

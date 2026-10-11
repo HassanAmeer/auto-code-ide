@@ -1015,20 +1015,10 @@ function OpenCommandPaletteDialog(props: {
   );
 
   const isEnvironmentReadyForAddProject = useCallback(
-    (env: EnvironmentPresentation | null | undefined, envId?: EnvironmentId | null): boolean => {
-      const targetId = envId ?? env?.environmentId ?? null;
-      const isPrimary =
-        env?.entry.target._tag === "PrimaryConnectionTarget" ||
-        (targetId !== null && targetId === primaryEnvironmentId);
-      if (isPrimary) {
-        return true;
-      }
-      return (
-        canCreateProjectInEnvironment(env?.connection.phase) ||
-        env?.connection.phase === "available"
-      );
+    (_env?: EnvironmentPresentation | null | undefined, _envId?: EnvironmentId | null): boolean => {
+      return true;
     },
-    [primaryEnvironmentId],
+    [],
   );
 
   const addProjectEnvironmentOptions = useMemo(() => {
@@ -1850,19 +1840,6 @@ function OpenCommandPaletteDialog(props: {
 
   const startAddProjectSourceSelection = useCallback(
     (environmentId: EnvironmentId): void => {
-      const environment = environments.find(
-        (candidate) => candidate.environmentId === environmentId,
-      );
-      if (!isEnvironmentReadyForAddProject(environment, environmentId)) {
-        toastManager.add(
-          stackedThreadToast({
-            type: "error",
-            title: "Environment unavailable",
-            description: `${environment?.label ?? "The selected environment"} is not connected.`,
-          }),
-        );
-        return;
-      }
       setAddProjectEnvironmentId(environmentId);
       setAddProjectCloneFlow(null);
       pushPaletteView({
@@ -1928,29 +1905,13 @@ function OpenCommandPaletteDialog(props: {
   );
 
   const openAddProjectFlow = useCallback(() => {
-    const fallbackEnvId =
-      defaultAddProjectEnvironmentId ??
+    const targetEnvId =
       primaryEnvironmentId ??
       environments[0]?.environmentId ??
-      null;
+      defaultAddProjectEnvironmentId ??
+      (PRIMARY_LOCAL_ENVIRONMENT_ID as EnvironmentId);
 
-    if (addProjectEnvironmentOptions.length === 0 && !fallbackEnvId) {
-      setOpen(false);
-      return;
-    }
-
-    if (addProjectEnvironmentOptions.length > 1) {
-      pushPaletteView({
-        addonIcon: <FolderPlusIcon className={ADDON_ICON_CLASS} />,
-        groups: addProjectEnvironmentGroups,
-      });
-      return;
-    }
-
-    const targetEnvId = defaultAddProjectEnvironmentId ?? fallbackEnvId;
-    if (targetEnvId !== null) {
-      void startAddProjectSourceSelection(targetEnvId);
-    }
+    void startAddProjectSourceSelection(targetEnvId);
   }, [
     addProjectEnvironmentGroups,
     addProjectEnvironmentOptions.length,
@@ -2501,19 +2462,6 @@ function OpenCommandPaletteDialog(props: {
       readonly platform: string;
       readonly currentProjectCwd: string | null;
     }) => {
-      const environment = environments.find(
-        (candidate) => candidate.environmentId === input.environmentId,
-      );
-      if (!isEnvironmentReadyForAddProject(environment, input.environmentId)) {
-        toastManager.add(
-          stackedThreadToast({
-            type: "error",
-            title: "Environment unavailable",
-            description: `${environment?.label ?? "The selected environment"} is not connected.`,
-          }),
-        );
-        return;
-      }
       const rawCwd = input.rawCwd;
 
       if (isUnsupportedWindowsProjectPath(rawCwd.trim(), input.platform)) {
@@ -2695,16 +2643,6 @@ function OpenCommandPaletteDialog(props: {
 
   async function submitAddProjectCloneFlow(destinationPathInput?: string): Promise<void> {
     if (!addProjectCloneFlow) {
-      return;
-    }
-    if (!isEnvironmentReadyForAddProject(browseEnvironment, browseEnvironmentId)) {
-      toastManager.add(
-        stackedThreadToast({
-          type: "error",
-          title: "Environment unavailable",
-          description: `${browseEnvironment?.label ?? "The selected environment"} is not connected.`,
-        }),
-      );
       return;
     }
 

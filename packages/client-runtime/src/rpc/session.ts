@@ -298,7 +298,10 @@ export const make = Effect.fn("RpcSessionFactory.make")(function* (
       ),
     ).pipe(
       Effect.filterOrElse(
-        (config) => config.environment.environmentId === connection.environmentId,
+        (config) =>
+          connection.environmentId === "primary" ||
+          connection.target._tag === "PrimaryConnectionTarget" ||
+          config.environment.environmentId === connection.environmentId,
         (config) =>
           environmentMismatchError({
             expected: connection.environmentId,

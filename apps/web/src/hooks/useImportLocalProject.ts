@@ -12,6 +12,7 @@ import { useCallback, useState } from "react";
 
 import { stackedThreadToast, toastManager } from "~/components/ui/toast";
 import { waitForProject } from "~/state/entities";
+import { useEnvironments, usePrimaryEnvironmentId } from "~/state/environments";
 import { projectUploadStore, useProjectUploadProgress } from "~/state/projectUploadProgress";
 import { projectEnvironment } from "~/state/projects";
 import { useAtomCommand } from "~/state/use-atom-command";
@@ -94,6 +95,8 @@ export function useImportLocalProject() {
   });
   const handleNewThread = useNewThreadHandler();
   const progressState = useProjectUploadProgress();
+  const primaryEnvId = usePrimaryEnvironmentId();
+  const { environments } = useEnvironments();
   const [isImporting, setIsImporting] = useState(false);
 
   const importZipFile = useCallback(
@@ -102,7 +105,10 @@ export function useImportLocalProject() {
       file: File,
       customProjectName?: string,
     ): Promise<boolean> => {
-      const environmentId = (targetEnvId ?? PRIMARY_LOCAL_ENVIRONMENT_ID) as EnvironmentId;
+      const environmentId = (targetEnvId ??
+        primaryEnvId ??
+        environments[0]?.environmentId ??
+        PRIMARY_LOCAL_ENVIRONMENT_ID) as EnvironmentId;
       if (!file) return false;
 
       setIsImporting(true);
@@ -129,6 +135,12 @@ export function useImportLocalProject() {
           percent: 60,
         });
 
+        let createdZipProject: {
+          readonly projectId: any;
+          readonly workspaceRoot: string;
+          readonly commitError?: string | undefined;
+        } | null = null;
+
         const result = await importZip({
           environmentId,
           input: {
@@ -137,22 +149,69 @@ export function useImportLocalProject() {
           },
         });
 
-        if (result._tag === "Failure") {
-          const errDetail = errorMessage(squashAtomCommandFailure(result));
+        if (result._tag === "Success") {
+          createdZipProject = result.value;
+        } else {
           projectUploadStore.setState({
-            isImporting: false,
-            error: errDetail,
+            stage: "Direct HTTP upload fallback...",
+            percent: 75,
           });
-          if (!isAtomCommandInterrupted(result)) {
-            toastManager.add(
-              stackedThreadToast({
-                type: "error",
-                title: "Could not import ZIP project",
-                description: errDetail,
+          try {
+            const response = await fetch("/api/project/import-zip-direct", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                name: projectName,
+                zipBase64: base64Data,
               }),
-            );
+            });
+            const data = (await response.json()) as {
+              ok?: boolean;
+              projectId?: string;
+              workspaceRoot?: string;
+              commitError?: string;
+              error?: string;
+            };
+            if (data && data.ok && data.projectId && data.workspaceRoot) {
+              createdZipProject = {
+                projectId: data.projectId,
+                workspaceRoot: data.workspaceRoot,
+                commitError: data.commitError,
+              };
+            } else {
+              const errDetail = data?.error ?? errorMessage(squashAtomCommandFailure(result));
+              projectUploadStore.setState({
+                isImporting: false,
+                error: errDetail,
+              });
+              if (!isAtomCommandInterrupted(result)) {
+                toastManager.add(
+                  stackedThreadToast({
+                    type: "error",
+                    title: "Could not import ZIP project",
+                    description: errDetail,
+                  }),
+                );
+              }
+              return false;
+            }
+          } catch (httpError) {
+            const errDetail = errorMessage(squashAtomCommandFailure(result));
+            projectUploadStore.setState({
+              isImporting: false,
+              error: errDetail,
+            });
+            if (!isAtomCommandInterrupted(result)) {
+              toastManager.add(
+                stackedThreadToast({
+                  type: "error",
+                  title: "Could not import ZIP project",
+                  description: errDetail,
+                }),
+              );
+            }
+            return false;
           }
-          return false;
         }
 
         projectUploadStore.setState({
@@ -160,7 +219,7 @@ export function useImportLocalProject() {
           percent: 95,
         });
 
-        const { projectId, workspaceRoot, commitError } = result.value;
+        const { projectId, workspaceRoot, commitError } = createdZipProject;
 
         toastManager.add(
           stackedThreadToast({
@@ -216,7 +275,10 @@ export function useImportLocalProject() {
       rawFiles: FileList | ReadonlyArray<File>,
       customProjectName?: string,
     ): Promise<boolean> => {
-      const environmentId = (targetEnvId ?? PRIMARY_LOCAL_ENVIRONMENT_ID) as EnvironmentId;
+      const environmentId = (targetEnvId ??
+        primaryEnvId ??
+        environments[0]?.environmentId ??
+        PRIMARY_LOCAL_ENVIRONMENT_ID) as EnvironmentId;
       const filesArray = Array.from(rawFiles);
       if (filesArray.length === 0) {
         toastManager.add(

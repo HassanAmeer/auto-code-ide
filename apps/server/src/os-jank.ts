@@ -106,17 +106,15 @@ export const resolveBaseDir = Effect.fn(function* (raw: string | undefined) {
   const { join, resolve } = yield* Path.Path;
   if (!raw || raw.trim().length === 0) {
     const fs = yield* FileSystem.FileSystem;
+    const adcDir = join(NodeOS.homedir(), ".adc");
+    const autodeskDir = join(NodeOS.homedir(), ".autodeskcode");
     const jobiDir = join(NodeOS.homedir(), ".jobi");
     const t3Dir = join(NodeOS.homedir(), ".t3");
-    const hasJobi = yield* fs.exists(jobiDir);
-    if (hasJobi) {
-      return jobiDir;
-    }
-    const hasT3 = yield* fs.exists(t3Dir);
-    if (hasT3) {
-      return t3Dir;
-    }
-    return jobiDir;
+    if (yield* fs.exists(adcDir)) return adcDir;
+    if (yield* fs.exists(autodeskDir)) return autodeskDir;
+    if (yield* fs.exists(jobiDir)) return jobiDir;
+    if (yield* fs.exists(t3Dir)) return t3Dir;
+    return adcDir;
   }
   return resolve(yield* expandHomePath(raw.trim()));
 });

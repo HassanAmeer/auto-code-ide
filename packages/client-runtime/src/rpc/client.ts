@@ -62,7 +62,6 @@ export type EnvironmentSubscriptionRpcTag =
   | typeof WS_METHODS.subscribeTerminalMetadata
   | typeof WS_METHODS.subscribePreviewEvents
   | typeof WS_METHODS.subscribeDiscoveredLocalServers
-  | typeof WS_METHODS.subscribeDeviceState
   | typeof WS_METHODS.subscribeResourceTelemetry
   | typeof WS_METHODS.pullRequestsSubscribeRefreshes
   | typeof WS_METHODS.subscribeVcsStatus
@@ -127,22 +126,34 @@ export type EnvironmentRpcStreamFailure<TTag extends EnvironmentStreamRpcTag> =
     ? E
     : never;
 
-const currentSession = Effect.fn("EnvironmentRpc.currentSession")(function* () {
+const currentSession: () => Effect.Effect<
+  RpcSession,
+  EnvironmentRpcUnavailableError,
+  EnvironmentSupervisor.EnvironmentSupervisor
+> = Effect.fn("EnvironmentRpc.currentSession")(function* () {
   const supervisor = yield* EnvironmentSupervisor.EnvironmentSupervisor;
-  return yield* SubscriptionRef.get(supervisor.session).pipe(
-    Effect.flatMap(
-      Option.match({
-        onNone: () =>
-          Effect.fail(
-            new EnvironmentRpcUnavailableError({
-              environmentId: supervisor.target.environmentId,
-              message: `${supervisor.target.label} is not connected.`,
-            }),
-          ),
-        onSome: Effect.succeed,
-      }),
-    ),
+  const current = yield* SubscriptionRef.get(supervisor.session);
+  if (Option.isSome(current)) {
+    return current.value;
+  }
+  yield* supervisor.connect.pipe(Effect.ignore);
+  const maybeSession: Option.Option<RpcSession> = yield* Stream.concat(
+    Stream.fromEffect(SubscriptionRef.get(supervisor.session)),
+    SubscriptionRef.changes(supervisor.session),
+  ).pipe(
+    Stream.filter(Option.isSome),
+    Stream.map((some) => some.value),
+    Stream.runHead,
+    Effect.timeout("15 seconds"),
+    Effect.catch(() => Effect.succeedNone),
   );
+  if (Option.isSome(maybeSession)) {
+    return maybeSession.value;
+  }
+  return yield* new EnvironmentRpcUnavailableError({
+    environmentId: supervisor.target.environmentId,
+    message: `${supervisor.target.label} is not connected.`,
+  });
 });
 
 export const getInitialServerConfig = Effect.fn("EnvironmentRpc.getInitialServerConfig")(

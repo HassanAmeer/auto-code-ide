@@ -6,20 +6,11 @@ export {
 } from "./context";
 
 export {
-  createServerPairingCredential,
-  isPrimaryEnvironmentPairingCredentialRejectedError,
-  peekPairingTokenFromUrl,
-  PrimaryEnvironmentPairingCredentialRejectedError,
   PrimaryEnvironmentRequestError,
   resolveInitialServerAuthGateState,
   revokeOtherServerClientSessions,
   revokeServerClientSession,
-  revokeServerPairingLink,
-  stripPairingTokenFromUrl,
-  submitServerAuthCredential,
-  takePairingTokenFromUrl,
   type ServerClientSessionRecord,
-  type ServerPairingLinkRecord,
   __resetServerAuthBootstrapForTests,
 } from "./auth";
 

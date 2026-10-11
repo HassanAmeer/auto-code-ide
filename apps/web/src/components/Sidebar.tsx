@@ -5562,7 +5562,9 @@ export default function Sidebar() {
                   <div className="flex flex-col gap-1.5 w-full">
                     <button
                       type="button"
-                      onClick={() => projectCreateModalStore.open()}
+                      onClick={() =>
+                        projectCreateModalStore.open(primaryEnvironmentId ?? undefined)
+                      }
                       className="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-primary/15 border border-primary/40 px-3 py-1.5 text-2xs font-semibold text-primary hover:bg-primary/25 transition-colors shadow-sm"
                     >
                       <SparklesIcon className="size-3 text-amber-400" />
@@ -5570,7 +5572,9 @@ export default function Sidebar() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => projectUploadStore.triggerZipUpload()}
+                      onClick={() =>
+                        projectUploadStore.triggerZipUpload(primaryEnvironmentId ?? undefined)
+                      }
                       className="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-sidebar-border bg-sidebar/50 px-3 py-1 text-2xs font-medium text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground transition-colors"
                     >
                       <FileArchiveIcon className="size-3 text-sky-400" />

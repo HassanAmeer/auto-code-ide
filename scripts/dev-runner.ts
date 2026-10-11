@@ -29,7 +29,6 @@ const BASE_SERVER_PORT = 13773;
 const BASE_WEB_PORT = 5733;
 const MAX_HASH_OFFSET = 3000;
 const MAX_PORT = 65535;
-const DESKTOP_DEV_LOOPBACK_HOST = "127.0.0.1";
 // HTTP(S) requests to these ports are blocked by the Fetch standard before a
 // browser reaches the network. Keep the complete list here so explicit or
 // future wider offsets cannot produce a URL that curl accepts but browsers
@@ -69,9 +68,15 @@ export function isProxiableBindHost(host: string): boolean {
 }
 
 export const DEFAULT_T3_HOME = Effect.map(Effect.service(Path.Path), (path) => {
+  const adcDir = path.join(NodeOS.homedir(), ".adc");
+  const autodeskDir = path.join(NodeOS.homedir(), ".autodeskcode");
   const jobiDir = path.join(NodeOS.homedir(), ".jobi");
   const t3Dir = path.join(NodeOS.homedir(), ".t3");
-  return NodeFS.existsSync(jobiDir) || !NodeFS.existsSync(t3Dir) ? jobiDir : t3Dir;
+  if (NodeFS.existsSync(adcDir)) return adcDir;
+  if (NodeFS.existsSync(autodeskDir)) return autodeskDir;
+  if (NodeFS.existsSync(jobiDir)) return jobiDir;
+  if (NodeFS.existsSync(t3Dir)) return t3Dir;
+  return adcDir;
 });
 
 const MODE_ARGS = {
@@ -85,7 +90,6 @@ const MODE_ARGS = {
   ],
   "dev:server": ["run", "--filter=t3", "dev"],
   "dev:web": ["run", "--filter=@t3tools/web", "dev"],
-  "dev:desktop": ["run", "--filter=@t3tools/desktop", "--filter=@t3tools/web", "dev"],
 } as const satisfies Record<string, ReadonlyArray<string>>;
 
 type DevMode = keyof typeof MODE_ARGS;
@@ -154,7 +158,7 @@ export class DevRunnerProcessError extends Schema.TaggedError<DevRunnerProcessEr
   "DevRunnerProcessError",
   {
     operation: Schema.Literals(["spawn", "wait-for-exit"]),
-    mode: Schema.Literals(["dev", "dev:server", "dev:web", "dev:desktop"]),
+    mode: Schema.Literals(["dev", "dev:server", "dev:web"]),
     executable: Schema.Literal("vp"),
     argumentCount: Schema.Number,
     shell: Schema.Boolean,
@@ -169,7 +173,7 @@ export class DevRunnerProcessError extends Schema.TaggedError<DevRunnerProcessEr
 export class DevRunnerProcessExitError extends Schema.TaggedError<DevRunnerProcessExitError>()(
   "DevRunnerProcessExitError",
   {
-    mode: Schema.Literals(["dev", "dev:server", "dev:web", "dev:desktop"]),
+    mode: Schema.Literals(["dev", "dev:server", "dev:web"]),
     executable: Schema.Literal("vp"),
     argumentCount: Schema.Number,
     shell: Schema.Boolean,
@@ -316,14 +320,11 @@ export function createDevRunnerEnv({
     // by the caller; an unset t3Home here genuinely means "use the default".
     const configuredBaseDir = t3Home?.trim() || undefined;
     const resolvedBaseDir = yield* resolveBaseDir(configuredBaseDir);
-    const isDesktopMode = mode === "dev:desktop";
 
     const output: NodeJS.ProcessEnv = {
       ...baseEnv,
       PORT: String(webPort),
-      VITE_DEV_SERVER_URL:
-        devUrl?.toString() ??
-        `http://${isDesktopMode ? DESKTOP_DEV_LOOPBACK_HOST : "localhost"}:${webPort}`,
+      VITE_DEV_SERVER_URL: devUrl?.toString() ?? `http://localhost:${webPort}`,
     };
 
     if (configuredBaseDir !== undefined) {
@@ -340,56 +341,40 @@ export function createDevRunnerEnv({
     delete output.T3_SERVICE_LAUNCHER_CONTEXT;
     delete output.T3_BOOT_SERVICE_UNIT;
 
-    if (!isDesktopMode) {
-      output.T3CODE_PORT = String(serverPort);
-      // HOST is Vite's own bind address, and the desktop branch below is the
-      // only place we set it. An inherited one (an exported HOST, a container,
-      // a `HOST=0.0.0.0 npm start` habit) would otherwise reach Vite and pin
-      // its HMR socket to that address — see the `explicitHost` gate in
-      // apps/web/vite.config.ts. Over a shared origin that is invisible: the
-      // page loads and only HMR quietly dials the wrong machine.
-      delete output.HOST;
-      if (mode === "dev" || mode === "dev:web") {
-        // Browser dev is single-origin: everything (including /ws) is proxied
-        // through Vite, so the client must resolve its backend from
-        // window.location.origin rather than a baked-in localhost URL. See
-        // resolveConfiguredPrimaryTarget in apps/web/src/environments/primary/target.ts
-        // — it only defers to the origin when both of these are absent. Baking
-        // localhost here is what breaks any non-localhost origin (tailnet, LAN,
-        // phone): the remote browser dials its own machine.
-        delete output.VITE_HTTP_URL;
-        delete output.VITE_WS_URL;
-        // Deleting is not enough on its own: vite.config.ts calls loadRepoEnv,
-        // which merges `.env`/`.env.local` *under* this env, so a developer
-        // with either URL in their `.env` would get it back and silently lose
-        // single-origin mode. This states the intent positively so Vite can
-        // ignore those values rather than infer from their absence.
-        output.T3CODE_SINGLE_ORIGIN_DEV = "1";
-      } else {
-        output.VITE_HTTP_URL = `http://localhost:${serverPort}`;
-        output.VITE_WS_URL = `ws://localhost:${serverPort}`;
-        delete output.T3CODE_SINGLE_ORIGIN_DEV;
-      }
+    output.T3CODE_PORT = String(serverPort);
+    // HOST is Vite's own bind address; an inherited one (an exported HOST, a
+    // container, a `HOST=0.0.0.0 npm start` habit) would reach Vite and pin its
+    // HMR socket to that address — see the `explicitHost` gate in
+    // apps/web/vite.config.ts. Over a shared origin that is invisible: the page
+    // loads and only HMR quietly dials the wrong machine.
+    delete output.HOST;
+    if (mode === "dev" || mode === "dev:web") {
+      // Browser dev is single-origin: everything (including /ws) is proxied
+      // through Vite, so the client must resolve its backend from
+      // window.location.origin rather than a baked-in localhost URL. See
+      // resolveConfiguredPrimaryTarget in apps/web/src/environments/primary/target.ts
+      // — it only defers to the origin when both of these are absent. Baking
+      // localhost here is what breaks any non-localhost origin (tailnet, LAN,
+      // phone): the remote browser dials its own machine.
+      delete output.VITE_HTTP_URL;
+      delete output.VITE_WS_URL;
+      // Deleting is not enough on its own: vite.config.ts calls loadRepoEnv,
+      // which merges `.env`/`.env.local` *under* this env, so a developer
+      // with either URL in their `.env` would get it back and silently lose
+      // single-origin mode. This states the intent positively so Vite can
+      // ignore those values rather than infer from their absence.
+      output.T3CODE_SINGLE_ORIGIN_DEV = "1";
     } else {
-      output.T3CODE_PORT = String(serverPort);
-      output.VITE_HTTP_URL = `http://${DESKTOP_DEV_LOOPBACK_HOST}:${serverPort}`;
-      output.VITE_WS_URL = `ws://${DESKTOP_DEV_LOOPBACK_HOST}:${serverPort}`;
-      // Desktop pins the renderer to loopback on purpose; an ambient marker
-      // must not make Vite drop those URLs.
+      output.VITE_HTTP_URL = `http://localhost:${serverPort}`;
+      output.VITE_WS_URL = `ws://localhost:${serverPort}`;
       delete output.T3CODE_SINGLE_ORIGIN_DEV;
-      delete output.T3CODE_MODE;
-      delete output.T3CODE_NO_BROWSER;
-      delete output.T3CODE_HOST;
-      delete output.T3CODE_DEV_AUTH_TOKEN;
     }
 
-    if (!isDesktopMode && host !== undefined) {
+    if (host !== undefined) {
       output.T3CODE_HOST = host;
     }
 
-    if (!isDesktopMode) {
-      output.T3CODE_NO_BROWSER = browser === true ? "0" : "1";
-    }
+    output.T3CODE_NO_BROWSER = browser === true ? "0" : "1";
 
     if (autoBootstrapProjectFromCwd !== undefined) {
       output.T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD = autoBootstrapProjectFromCwd ? "1" : "0";
@@ -410,11 +395,6 @@ export function createDevRunnerEnv({
 
     if (mode === "dev:server" || mode === "dev:web") {
       output.T3CODE_MODE = "web";
-      delete output.T3CODE_DESKTOP_WS_URL;
-    }
-
-    if (isDesktopMode) {
-      output.HOST = DESKTOP_DEV_LOOPBACK_HOST;
       delete output.T3CODE_DESKTOP_WS_URL;
     }
 
@@ -451,17 +431,16 @@ export function checkPortAvailabilityOnHosts<R>(
 /**
  * Hosts to probe for a dev server bound to `configuredHost`.
  *
- * Loopback is always checked because the web server and the desktop renderer
- * target reach it there. When `--host`/`T3CODE_HOST` moves the backend onto
- * another interface, that interface decides whether the bind actually
- * succeeds — probing only loopback would hand back a port that is free here
- * and taken there, and the server would fail to start.
+ * Loopback is always checked because the web server reaches it there. When
+ * `--host`/`T3CODE_HOST` moves the backend onto another interface, that
+ * interface decides whether the bind actually succeeds — probing only loopback
+ * would hand back a port that is free here and taken there, and the server
+ * would fail to start.
  *
- * `configuredHost` applies to the *backend* only. Vite takes its bind address
- * from `HOST`, which the runner sets for desktop alone, so the web port stays
- * on loopback and must not be judged against the backend's interface —
- * a port free on loopback but busy on that interface would otherwise be
- * rejected for a server that was never going to bind there.
+ * `configuredHost` applies to the *backend* only. The web port stays on
+ * loopback and must not be judged against the backend's interface — a port
+ * free on loopback but busy on that interface would otherwise be rejected for
+ * a server that was never going to bind there.
  */
 export function devPortProbeHosts(configuredHost: string | undefined): ReadonlyArray<string> {
   const host = configuredHost?.trim();
@@ -639,7 +618,7 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
     // bind still answers there; a specific non-loopback interface does not,
     // which breaks every proxied request in a way that reads as "server is
     // broken" rather than "flag combination is unsupported". Reject it up
-    // front instead. (dev:server and dev:desktop don't proxy — untouched.)
+    // front instead. (dev:server doesn't proxy — untouched.)
     if (
       (input.mode === "dev" || input.mode === "dev:web") &&
       input.host !== undefined &&
@@ -677,7 +656,11 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
     const resolvedT3Home =
       (input.t3Home?.trim() || undefined) ??
       worktreeHome ??
-      (hostEnvironment.JOBICODE_HOME?.trim() || hostEnvironment.T3CODE_HOME?.trim() || undefined);
+      (hostEnvironment.AUTODESKCODE_HOME?.trim() ||
+        hostEnvironment.ADC_HOME?.trim() ||
+        hostEnvironment.JOBICODE_HOME?.trim() ||
+        hostEnvironment.T3CODE_HOME?.trim() ||
+        undefined);
     const env = yield* createDevRunnerEnv({
       mode: input.mode,
       baseEnv: hostEnvironment,
@@ -713,16 +696,6 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
     if (input.share) {
       if (input.mode === "dev:server") {
         yield* Effect.logInfo("[dev-runner] --share has no effect for dev:server (no web server).");
-      } else if (input.mode === "dev:desktop") {
-        // Desktop is not single-origin: the renderer gets VITE_HTTP_URL and
-        // VITE_WS_URL baked to loopback, so a tailnet visitor would load the UI
-        // and then watch it dial its own 127.0.0.1 for the backend. Worse,
-        // sharing would overwrite VITE_DEV_SERVER_URL, which is the origin
-        // Electron itself loads the renderer from. Refuse rather than hand out
-        // a URL that is broken in a way the user cannot see.
-        yield* Effect.logWarning(
-          "[dev-runner] --share is not supported for dev:desktop (the renderer is pinned to loopback). Use `dev`, which runs the whole browser stack.",
-        );
       } else {
         // acquireRelease, not share-then-addFinalizer: the mapping outlives this
         // process (and reboots), so the cleanup has to be registered atomically

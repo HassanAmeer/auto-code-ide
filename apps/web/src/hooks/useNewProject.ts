@@ -80,6 +80,12 @@ export function useNewProject() {
       readonly template?: ProjectTemplateType | undefined;
       readonly github?: { readonly account: string | null } | null | undefined;
     }): Promise<boolean> => {
+      let createdProject: {
+        readonly projectId: any;
+        readonly workspaceRoot: string;
+        readonly commitError?: string | undefined;
+      } | null = null;
+
       const result = await createNew({
         environmentId: input.environmentId,
         input: {
@@ -87,20 +93,61 @@ export function useNewProject() {
           ...(input.template ? { template: input.template } : {}),
         },
       });
-      if (result._tag === "Failure") {
-        if (!isAtomCommandInterrupted(result)) {
-          toastManager.add(
-            stackedThreadToast({
-              type: "error",
-              title: "Could not create the project",
-              description: errorMessage(squashAtomCommandFailure(result)),
+
+      if (result._tag === "Success") {
+        createdProject = result.value;
+      } else {
+        // Direct HTTP fallback for standalone web / VPS environment
+        try {
+          const response = await fetch("/api/project/create-direct", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: input.name,
+              template: input.template,
             }),
-          );
+          });
+          const data = (await response.json()) as {
+            ok?: boolean;
+            projectId?: string;
+            workspaceRoot?: string;
+            commitError?: string;
+            error?: string;
+          };
+          if (data && data.ok && data.projectId && data.workspaceRoot) {
+            createdProject = {
+              projectId: data.projectId,
+              workspaceRoot: data.workspaceRoot,
+              commitError: data.commitError,
+            };
+          } else {
+            const err = data?.error ?? errorMessage(squashAtomCommandFailure(result));
+            if (!isAtomCommandInterrupted(result)) {
+              toastManager.add(
+                stackedThreadToast({
+                  type: "error",
+                  title: "Could not create the project",
+                  description: err,
+                }),
+              );
+            }
+            return false;
+          }
+        } catch (httpError) {
+          if (!isAtomCommandInterrupted(result)) {
+            toastManager.add(
+              stackedThreadToast({
+                type: "error",
+                title: "Could not create the project",
+                description: errorMessage(squashAtomCommandFailure(result)),
+              }),
+            );
+          }
+          return false;
         }
-        return false;
       }
 
-      const { projectId, workspaceRoot, commitError } = result.value;
+      const { projectId, workspaceRoot, commitError } = createdProject;
       // The folder sits in T3 Code's data directory, so always say where.
       toastManager.add(
         stackedThreadToast(

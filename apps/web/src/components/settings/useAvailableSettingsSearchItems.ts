@@ -3,13 +3,10 @@ import { AuthEnvironmentMaintainScope } from "@t3tools/contracts";
 
 import { usePrimaryCloudLinkState } from "~/cloud/primaryCloudLinkState";
 import { hasCloudPublicConfig } from "~/cloud/publicConfig";
-import { isElectron } from "~/env";
 import { isLocalEnvironmentDisabled } from "~/localEnvironment";
-import { desktopWslStateAtom } from "~/state/desktopWslState";
 import { useEnvironments, usePrimaryEnvironmentId } from "~/state/environments";
 import { useEnvironmentQuery } from "~/state/query";
 import { useEnvironmentScope } from "~/state/session";
-import { isWslSettingsRowVisible } from "./ConnectionsSettings.logic";
 import { isProviderSettingsEnvironmentAvailable } from "./ProviderSettingsPanel.logic";
 import type { SettingsScopeSearch } from "./settingsScope";
 import {
@@ -22,10 +19,6 @@ export function useAvailableSettingsSearchItems(scopeSearch: SettingsScopeSearch
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const localEnvironmentDisabled = isLocalEnvironmentDisabled();
   const canMaintain = useEnvironmentScope(primaryEnvironmentId, AuthEnvironmentMaintainScope);
-  const canManageLocalBackend = !localEnvironmentDisabled && canMaintain;
-  const desktopWsl = useEnvironmentQuery(
-    isElectron && canManageLocalBackend ? desktopWslStateAtom : null,
-  );
   const cloudLinkState = usePrimaryCloudLinkState().data;
   // Same fallback as the Connections row: older servers imply a tunnel from `linked`.
   const managedTunnelActive =
@@ -53,23 +46,12 @@ export function useAvailableSettingsSearchItems(scopeSearch: SettingsScopeSearch
               hasServerConfig: true,
             }),
         ),
-        canManageLocalBackend,
-        isWslSettingsRowVisible: isWslSettingsRowVisible({
-          state: desktopWsl.data,
-          error: desktopWsl.error,
-        }),
+        isWslSettingsRowVisible: false,
         hasThreadAutoSettlement:
           getThreadAutoSettlementSearchAvailability(environments).eligibleEnvironmentIds.length > 0,
         managedTunnelActive,
+        canManageLocalBackend: false,
       }),
-    [
-      managedTunnelActive,
-      canManageLocalBackend,
-      desktopWsl.data,
-      desktopWsl.error,
-      environments,
-      localEnvironmentDisabled,
-      scopeSearch.machine,
-    ],
+    [managedTunnelActive, environments, localEnvironmentDisabled, scopeSearch.machine],
   );
 }

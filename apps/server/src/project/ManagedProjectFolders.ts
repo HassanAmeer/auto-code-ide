@@ -535,7 +535,7 @@ export default function App() {
   return (
     <div style={{ fontFamily: 'system-ui, sans-serif', padding: '3rem', textAlign: 'center' }}>
       <h1>Welcome to ${name}</h1>
-      <p style={{ color: '#94a3b8' }}>Built with React + Vite & Jobi Code AI</p>
+      <p style={{ color: '#94a3b8' }}>Built with React + Vite & Autodesk Code AI</p>
       <div style={{ marginTop: '2rem' }}>
         <button
           onClick={() => setCount((c) => c + 1)}
@@ -570,7 +570,7 @@ export default function App() {
       );
       yield* fileSystem.writeFileString(
         path.join(cwd, "README.md"),
-        `# ${name}\n\nReact + Vite project initialized with Jobi Code.\n\n## Getting Started\n\`\`\`bash\nnpm install\nnpm run dev\n\`\`\`\n`,
+        `# ${name}\n\nReact + Vite project initialized with Autodesk Code (ADC).\n\n## Getting Started\n\`\`\`bash\nnpm install\nnpm run dev\n\`\`\`\n`,
       );
     } else if (template === "nextjs") {
       const slug = name.toLowerCase().replace(/[^a-z0-9_-]/g, "-") || "nextjs-app";
@@ -602,7 +602,7 @@ export default function App() {
         path.join(appDir, "layout.jsx"),
         `export const metadata = {
   title: "${name}",
-  description: "Created with Jobi Code AI",
+  description: "Created with Autodesk Code (ADC) AI",
 };
 
 export default function RootLayout({ children }) {
@@ -632,7 +632,7 @@ export default function RootLayout({ children }) {
       );
       yield* fileSystem.writeFileString(
         path.join(cwd, "README.md"),
-        `# ${name}\n\nNext.js project initialized with Jobi Code.\n\n\`\`\`bash\nnpm install\nnpm run dev\n\`\`\`\n`,
+        `# ${name}\n\nNext.js project initialized with Autodesk Code (ADC).\n\n\`\`\`bash\nnpm install\nnpm run dev\n\`\`\`\n`,
       );
     } else if (template === "node") {
       const slug = name.toLowerCase().replace(/[^a-z0-9_-]/g, "-") || "node-app";
@@ -676,7 +676,7 @@ app.listen(port, () => {
       yield* fileSystem.writeFileString(path.join(cwd, ".gitignore"), `node_modules/\n.env\n`);
       yield* fileSystem.writeFileString(
         path.join(cwd, "README.md"),
-        `# ${name}\n\nNode.js API project initialized with Jobi Code.\n\n\`\`\`bash\nnpm install\nnpm run dev\n\`\`\`\n`,
+        `# ${name}\n\nNode.js API project initialized with Autodesk Code (ADC).\n\n\`\`\`bash\nnpm install\nnpm run dev\n\`\`\`\n`,
       );
     } else if (template === "python") {
       yield* fileSystem.writeFileString(
@@ -700,7 +700,7 @@ if __name__ == "__main__":
       );
       yield* fileSystem.writeFileString(
         path.join(cwd, "README.md"),
-        `# ${name}\n\nPython project initialized with Jobi Code.\n\n\`\`\`bash\npython main.py\n\`\`\`\n`,
+        `# ${name}\n\nPython project initialized with Autodesk Code (ADC).\n\n\`\`\`bash\npython main.py\n\`\`\`\n`,
       );
     } else if (template === "php") {
       yield* fileSystem.writeFileString(
@@ -719,14 +719,14 @@ header('Content-Type: text/html; charset=utf-8');
 </head>
 <body>
     <h1><?= htmlspecialchars("${name}") ?></h1>
-    <p>PHP Application initialized with Jobi Code.</p>
+    <p>PHP Application initialized with Autodesk Code (ADC).</p>
 </body>
 </html>\n`,
       );
       yield* fileSystem.writeFileString(path.join(cwd, ".gitignore"), `vendor/\n.env\n`);
       yield* fileSystem.writeFileString(
         path.join(cwd, "README.md"),
-        `# ${name}\n\nPHP project initialized with Jobi Code.\n\n\`\`\`bash\nphp -S localhost:8000\n\`\`\`\n`,
+        `# ${name}\n\nPHP project initialized with Autodesk Code (ADC).\n\n\`\`\`bash\nphp -S localhost:8000\n\`\`\`\n`,
       );
     } else {
       yield* fileSystem.writeFileString(path.join(cwd, "README.md"), namedProjectReadme(name));

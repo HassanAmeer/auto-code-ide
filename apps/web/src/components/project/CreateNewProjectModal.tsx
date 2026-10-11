@@ -12,6 +12,7 @@ import {
 import React, { useState, useEffect, useRef } from "react";
 
 import { useNewProject } from "~/hooks/useNewProject";
+import { useEnvironments, usePrimaryEnvironmentId } from "~/state/environments";
 import { projectUploadStore } from "~/state/projectUploadProgress";
 import { useProjectCreateModal, projectCreateModalStore } from "./projectCreateModalStore";
 
@@ -71,6 +72,8 @@ const TEMPLATES: TemplateOption[] = [
 export function CreateNewProjectModal() {
   const { isOpen, environmentId } = useProjectCreateModal();
   const createNewProject = useNewProject();
+  const primaryEnvId = usePrimaryEnvironmentId();
+  const { environments } = useEnvironments();
 
   const [projectName, setProjectName] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState<ProjectTemplateType>("blank");
@@ -95,9 +98,13 @@ export function CreateNewProjectModal() {
     const trimmed = projectName.trim();
     if (!trimmed || isSubmitting) return;
 
+    const targetEnv = (environmentId ??
+      primaryEnvId ??
+      environments[0]?.environmentId ??
+      PRIMARY_LOCAL_ENVIRONMENT_ID) as EnvironmentId;
+
     setIsSubmitting(true);
     try {
-      const targetEnv = (environmentId ?? PRIMARY_LOCAL_ENVIRONMENT_ID) as EnvironmentId;
       const success = await createNewProject({
         environmentId: targetEnv,
         name: trimmed,
@@ -113,12 +120,20 @@ export function CreateNewProjectModal() {
 
   const handleTriggerZip = () => {
     projectCreateModalStore.close();
-    projectUploadStore.triggerZipUpload(environmentId);
+    const targetEnv = (environmentId ??
+      primaryEnvId ??
+      environments[0]?.environmentId ??
+      PRIMARY_LOCAL_ENVIRONMENT_ID) as EnvironmentId;
+    projectUploadStore.triggerZipUpload(targetEnv);
   };
 
   const handleTriggerFolder = () => {
     projectCreateModalStore.close();
-    projectUploadStore.triggerUpload(environmentId);
+    const targetEnv = (environmentId ??
+      primaryEnvId ??
+      environments[0]?.environmentId ??
+      PRIMARY_LOCAL_ENVIRONMENT_ID) as EnvironmentId;
+    projectUploadStore.triggerUpload(targetEnv);
   };
 
   return (

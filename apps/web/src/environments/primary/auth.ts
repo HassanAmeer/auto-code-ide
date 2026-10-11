@@ -2,8 +2,6 @@ import type {
   AuthBrowserSessionResult,
   AuthClientMetadata,
   AuthEnvironmentScope,
-  AuthGrantScope,
-  AuthPairingCredentialResult,
   ServerAuthSessionMethod,
   AuthSessionId,
   AuthSessionState,
@@ -14,11 +12,6 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { HttpClientError } from "effect/http";
 
-import {
-  getPairingTokenFromUrl,
-  stripPairingTokenFromUrl as stripPairingTokenUrl,
-} from "../../pairingUrl";
-
 import { PrimaryEnvironmentHttpClient } from "./httpClient";
 import { runPrimaryHttp } from "../../lib/runtime";
 
@@ -26,9 +19,6 @@ const PrimaryEnvironmentRequestOperation = Schema.Literals([
   "fetch-session-state",
   "exchange-bootstrap-credential",
   "fetch-environment-descriptor",
-  "create-pairing-credential",
-  "list-pairing-links",
-  "revoke-pairing-link",
   "list-client-sessions",
   "revoke-client-session",
   "revoke-other-client-sessions",
@@ -40,7 +30,6 @@ export class PrimaryEnvironmentRequestError extends Schema.TaggedError<PrimaryEn
   {
     operation: PrimaryEnvironmentRequestOperation,
     status: Schema.Number,
-    pairingLinkId: Schema.optional(Schema.String),
     sessionId: Schema.optional(Schema.String),
     cause: Schema.Defect(),
   },
@@ -48,14 +37,12 @@ export class PrimaryEnvironmentRequestError extends Schema.TaggedError<PrimaryEn
   static fromCause(input: {
     readonly operation: PrimaryEnvironmentRequestOperation;
     readonly cause: unknown;
-    readonly pairingLinkId?: string;
     readonly sessionId?: string;
   }): PrimaryEnvironmentRequestError {
     const status = readHttpApiStatus(input.cause) ?? 500;
     return new PrimaryEnvironmentRequestError({
       operation: input.operation,
       status,
-      ...(input.pairingLinkId !== undefined ? { pairingLinkId: input.pairingLinkId } : {}),
       ...(input.sessionId !== undefined ? { sessionId: input.sessionId } : {}),
       cause: input.cause,
     });
@@ -67,22 +54,6 @@ export class PrimaryEnvironmentRequestError extends Schema.TaggedError<PrimaryEn
 }
 
 const isPrimaryEnvironmentRequestError = Schema.is(PrimaryEnvironmentRequestError);
-
-export class PrimaryEnvironmentPairingCredentialRejectedError extends Schema.TaggedError<PrimaryEnvironmentPairingCredentialRejectedError>()(
-  "PrimaryEnvironmentPairingCredentialRejectedError",
-  {
-    providedLength: Schema.Number,
-    cause: Schema.Defect(),
-  },
-) {
-  override get message(): string {
-    return "Invalid pairing token. Check the token and try again.";
-  }
-}
-
-export const isPrimaryEnvironmentPairingCredentialRejectedError = Schema.is(
-  PrimaryEnvironmentPairingCredentialRejectedError,
-);
 
 export class PrimaryEnvironmentAuthSessionTimeoutError extends Schema.TaggedError<PrimaryEnvironmentAuthSessionTimeoutError>()(
   "PrimaryEnvironmentAuthSessionTimeoutError",
@@ -96,27 +67,7 @@ export class PrimaryEnvironmentAuthSessionTimeoutError extends Schema.TaggedErro
   }
 }
 
-export class PrimaryEnvironmentPairingCredentialRequiredError extends Schema.TaggedError<PrimaryEnvironmentPairingCredentialRequiredError>()(
-  "PrimaryEnvironmentPairingCredentialRequiredError",
-  {
-    providedLength: Schema.Number,
-  },
-) {
-  override get message(): string {
-    return "Enter a pairing token to continue.";
-  }
-}
-
 const isEnvironmentHttpCommonError = Schema.is(EnvironmentHttpCommonError);
-
-export interface ServerPairingLinkRecord {
-  readonly id: string;
-  readonly scopes: ReadonlyArray<AuthEnvironmentScope>;
-  readonly subject: string;
-  readonly label?: string;
-  readonly createdAt: string;
-  readonly expiresAt: string;
-}
 
 export interface ServerClientSessionRecord {
   readonly sessionId: AuthSessionId;
@@ -139,33 +90,8 @@ type ServerAuthGateState =
       errorMessage?: string;
     };
 
-let bootstrapPromise: Promise<ServerAuthGateState> | null = null;
-let resolvedAuthenticatedGateState: ServerAuthGateState | null = null;
-let explicitPairingRequested = false;
 const AUTH_SESSION_ESTABLISH_TIMEOUT_MS = 2_000;
 const AUTH_SESSION_ESTABLISH_STEP_MS = 100;
-
-export function peekPairingTokenFromUrl(): string | null {
-  return getPairingTokenFromUrl(new URL(window.location.href));
-}
-
-export function stripPairingTokenFromUrl() {
-  const url = new URL(window.location.href);
-  const next = stripPairingTokenUrl(url);
-  if (next.toString() === url.toString()) {
-    return;
-  }
-  window.history.replaceState({}, document.title, next.toString());
-}
-
-export function takePairingTokenFromUrl(): string | null {
-  const token = peekPairingTokenFromUrl();
-  if (!token) {
-    return null;
-  }
-  stripPairingTokenFromUrl();
-  return token;
-}
 
 function getDesktopBootstrapCredential(): string | null {
   // Both backends share the same bootstrap token (DesktopBackendConfiguration
@@ -229,16 +155,6 @@ async function exchangeBootstrapCredential(credential: string): Promise<AuthBrow
         ),
       );
     } catch (error) {
-      if (
-        isEnvironmentHttpCommonError(error) &&
-        error._tag === "EnvironmentAuthInvalidError" &&
-        error.reason === "invalid_credential"
-      ) {
-        throw new PrimaryEnvironmentPairingCredentialRejectedError({
-          providedLength: credential.length,
-          cause: error,
-        });
-      }
       throw PrimaryEnvironmentRequestError.fromCause({
         operation: "exchange-bootstrap-credential",
         cause: error,
@@ -313,66 +229,6 @@ async function bootstrapServerAuth(_urlCredential: string | null): Promise<Serve
   return { status: "authenticated" };
 }
 
-export async function submitServerAuthCredential(credential: string): Promise<void> {
-  const trimmedCredential = credential.trim();
-  if (!trimmedCredential) {
-    throw new PrimaryEnvironmentPairingCredentialRequiredError({
-      providedLength: credential.length,
-    });
-  }
-
-  resolvedAuthenticatedGateState = null;
-  await exchangeBootstrapCredential(trimmedCredential);
-  await waitForAuthenticatedSessionAfterBootstrap();
-  resolvedAuthenticatedGateState = { status: "authenticated" };
-  bootstrapPromise = null;
-  explicitPairingRequested = false;
-  stripPairingTokenFromUrl();
-}
-
-export async function createServerPairingCredential(input?: {
-  readonly label?: string;
-  readonly scopes?: ReadonlyArray<AuthGrantScope>;
-}): Promise<AuthPairingCredentialResult> {
-  const trimmedLabel = input?.label?.trim();
-  try {
-    return await runPrimaryHttp(
-      PrimaryEnvironmentHttpClient.pipe(
-        Effect.flatMap((client) =>
-          client.auth.pairingCredential({
-            headers: {},
-            payload: {
-              ...(trimmedLabel ? { label: trimmedLabel } : {}),
-              ...(input?.scopes ? { scopes: input.scopes } : {}),
-            },
-          }),
-        ),
-      ),
-    );
-  } catch (error) {
-    throw PrimaryEnvironmentRequestError.fromCause({
-      operation: "create-pairing-credential",
-      cause: error,
-    });
-  }
-}
-
-export async function revokeServerPairingLink(id: string): Promise<void> {
-  try {
-    await runPrimaryHttp(
-      PrimaryEnvironmentHttpClient.pipe(
-        Effect.flatMap((client) => client.auth.revokePairingLink({ headers: {}, payload: { id } })),
-      ),
-    );
-  } catch (error) {
-    throw PrimaryEnvironmentRequestError.fromCause({
-      operation: "revoke-pairing-link",
-      pairingLinkId: id,
-      cause: error,
-    });
-  }
-}
-
 export async function revokeServerClientSession(sessionId: AuthSessionId): Promise<void> {
   try {
     await runPrimaryHttp(
@@ -412,7 +268,5 @@ export async function resolveInitialServerAuthGateState(): Promise<ServerAuthGat
 }
 
 export function __resetServerAuthBootstrapForTests() {
-  bootstrapPromise = null;
-  resolvedAuthenticatedGateState = null;
-  explicitPairingRequested = false;
+  // The local environment trusts its own origin; there is no pairing state to reset.
 }

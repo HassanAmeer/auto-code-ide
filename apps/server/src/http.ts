@@ -1,4 +1,5 @@
 import { runBashCommandOnHost } from "./terminalExec.ts";
+import * as ManagedProjectFolders from "./project/ManagedProjectFolders.ts";
 import * as Mime from "effect/http/Mime";
 import {
   AuthOrchestrationOperateScope,
@@ -513,6 +514,93 @@ export const layerTerminalExecRoute = HttpRouter.add(
     const timeout = bodyJson?.timeoutMs || 120_000;
 
     const result = yield* Effect.promise(() => runBashCommandOnHost(command, targetCwd, timeout));
+    return HttpServerResponse.jsonUnsafe(result);
+  }),
+);
+
+export const layerDirectProjectCreateRoute = HttpRouter.add(
+  "POST",
+  "/api/project/create-direct",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const bodyJson = (yield* request.json) as {
+      name?: string;
+      template?: string;
+    };
+
+    const name = bodyJson?.name?.trim();
+    if (!name) {
+      return HttpServerResponse.jsonUnsafe(
+        { ok: false, error: "Project name is required" },
+        { status: 400 },
+      );
+    }
+
+    const managedFolders = yield* ManagedProjectFolders.ManagedProjectFolders;
+    const result = yield* managedFolders
+      .createNamedProject({
+        name,
+        template: bodyJson.template,
+      })
+      .pipe(
+        Effect.map((res) => ({
+          ok: true as const,
+          projectId: res.projectId,
+          workspaceRoot: res.workspaceRoot,
+          commitError: res.commitError,
+        })),
+        Effect.catch((err: unknown) =>
+          Effect.succeed({
+            ok: false as const,
+            error: (err as Error)?.message ?? "Failed to create project",
+          }),
+        ),
+      );
+
+    return HttpServerResponse.jsonUnsafe(result);
+  }),
+);
+
+export const layerDirectProjectImportZipRoute = HttpRouter.add(
+  "POST",
+  "/api/project/import-zip-direct",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const bodyJson = (yield* request.json) as {
+      name?: string;
+      zipBase64?: string;
+    };
+
+    const name = bodyJson?.name?.trim();
+    const zipBase64 = bodyJson?.zipBase64;
+    if (!name || !zipBase64) {
+      return HttpServerResponse.jsonUnsafe(
+        { ok: false, error: "Project name and zipBase64 are required" },
+        { status: 400 },
+      );
+    }
+
+    const managedFolders = yield* ManagedProjectFolders.ManagedProjectFolders;
+    const result = yield* managedFolders
+      .importZipProject({
+        name,
+        zipBase64,
+      })
+      .pipe(
+        Effect.map((res) => ({
+          ok: true as const,
+          projectId: res.projectId,
+          workspaceRoot: res.workspaceRoot,
+          commitError: res.commitError,
+        })),
+        Effect.catch((err: unknown) =>
+          Effect.succeed({
+            ok: false as const,
+            error: (err as Error)?.message ?? "Failed to import zip project",
+          }),
+        ),
+      );
+
     return HttpServerResponse.jsonUnsafe(result);
   }),
 );

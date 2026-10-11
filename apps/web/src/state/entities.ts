@@ -168,22 +168,29 @@ export function waitForProject(
   ref: ScopedProjectRef,
   timeoutMs = 10_000,
 ): Promise<EnvironmentProject> {
-  const current = readProject(ref);
+  const current = readProject(ref) ?? readProjects().find((p) => p.id === ref.projectId) ?? null;
   if (current !== null) return Promise.resolve(current);
 
   return new Promise((resolve, reject) => {
     let unsubscribe: (() => void) | null = null;
+    let unsubscribeAll: (() => void) | null = null;
     const timeout = setTimeout(() => {
       unsubscribe?.();
-      reject(new Error("The project did not appear in the desktop app."));
+      unsubscribeAll?.();
+      reject(new Error("The project did not appear in the web app yet."));
     }, timeoutMs);
     const finish = (project: EnvironmentProject | null) => {
-      if (project === null) return;
+      const match = project ?? readProjects().find((p) => p.id === ref.projectId) ?? null;
+      if (match === null) return;
       clearTimeout(timeout);
       unsubscribe?.();
-      resolve(project);
+      unsubscribeAll?.();
+      resolve(match);
     };
     unsubscribe = appAtomRegistry.subscribe(environmentProjects.projectAtom(ref), finish);
+    unsubscribeAll = appAtomRegistry.subscribe(environmentProjects.projectsAtom, () => {
+      finish(null);
+    });
     finish(readProject(ref));
   });
 }

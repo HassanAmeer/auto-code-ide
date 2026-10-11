@@ -17,10 +17,10 @@ interface TerminalState {
   inputMode: "bash" | "ai";
 }
 
-const STORAGE_KEY_CWD = "jobi_terminal_active_cwd";
-const STORAGE_KEY_OPEN = "jobi_terminal_quickbar_open";
-const STORAGE_KEY_SSH = "jobi_terminal_ssh_profiles";
-const STORAGE_KEY_KEYS = "jobi_terminal_access_keys";
+const STORAGE_KEY_CWD = "adc_terminal_active_cwd";
+const STORAGE_KEY_OPEN = "adc_terminal_quickbar_open";
+const STORAGE_KEY_SSH = "adc_terminal_ssh_profiles";
+const STORAGE_KEY_KEYS = "adc_terminal_access_keys";
 
 const initialCwd =
   typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY_CWD) || "/" : "/";

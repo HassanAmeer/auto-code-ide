@@ -100,15 +100,13 @@ export const resolveWorktreeT3Home = (
     }
     const path = yield* Path.Path;
     const fs = yield* FileSystem.FileSystem;
+    const adcPath = path.join(worktreePath, ".adc");
+    const autodeskPath = path.join(worktreePath, ".autodeskcode");
     const jobiPath = path.join(worktreePath, ".jobi");
     const t3Path = path.join(worktreePath, ".t3");
-    const hasJobi = yield* fs.exists(jobiPath);
-    if (hasJobi) {
-      return jobiPath;
-    }
-    const hasT3 = yield* fs.exists(t3Path);
-    if (hasT3) {
-      return t3Path;
-    }
-    return jobiPath;
+    if (yield* fs.exists(adcPath)) return adcPath;
+    if (yield* fs.exists(autodeskPath)) return autodeskPath;
+    if (yield* fs.exists(jobiPath)) return jobiPath;
+    if (yield* fs.exists(t3Path)) return t3Path;
+    return adcPath;
   });
