@@ -5,7 +5,7 @@
 
 import { transliterateUrduToRoman } from "./romanUrduTransliterate";
 
-export type SttLanguageMode = "roman-urdu" | "natural-urdu" | "english";
+export type SttLanguageMode = "auto" | "roman-urdu" | "natural-urdu" | "hindi" | "english";
 
 export interface SttSettings {
   language: SttLanguageMode;
@@ -16,7 +16,7 @@ export interface SttSettings {
 const STT_STORAGE_KEY = "t3code:speech:stt-settings:v1";
 
 export const DEFAULT_STT_SETTINGS: SttSettings = {
-  language: "roman-urdu",
+  language: "auto",
   continuous: true,
   interimResults: true,
 };
@@ -52,11 +52,14 @@ export function getRecognitionLanguageCode(mode: SttLanguageMode): string {
     case "natural-urdu":
       return "ur-PK";
     case "roman-urdu":
-      // ur-PK captures Urdu vocabulary spoken phonetically; Chrome transcribes ur-PK or en-IN
       return "ur-PK";
+    case "hindi":
+      return "hi-IN";
     case "english":
-    default:
       return "en-US";
+    case "auto":
+    default:
+      return "ur-PK";
   }
 }
 
@@ -110,29 +113,28 @@ export function createSttSession({
   };
 
   recognition.onresult = (event: any) => {
-    let finalTranscript = "";
-    let interimTranscript = "";
+    let accumulatedFinal = "";
+    let currentInterim = "";
 
-    for (let i = event.resultIndex; i < event.results.length; ++i) {
+    for (let i = 0; i < event.results.length; ++i) {
       const item = event.results[i];
       if (item.isFinal) {
-        finalTranscript += item[0].transcript;
+        accumulatedFinal += (accumulatedFinal ? " " : "") + item[0].transcript.trim();
       } else {
-        interimTranscript += item[0].transcript;
+        currentInterim += (currentInterim ? " " : "") + item[0].transcript.trim();
       }
     }
 
     const processTranscript = (raw: string) => {
-      if (selectedMode === "roman-urdu") {
+      if (selectedMode === "roman-urdu" || selectedMode === "auto") {
         return transliterateUrduToRoman(raw);
       }
       return raw;
     };
 
-    if (finalTranscript) {
-      onResult(processTranscript(finalTranscript), true);
-    } else if (interimTranscript) {
-      onResult(processTranscript(interimTranscript), false);
+    const fullRaw = (accumulatedFinal + (currentInterim ? " " + currentInterim : "")).trim();
+    if (fullRaw) {
+      onResult(processTranscript(fullRaw), !currentInterim);
     }
   };
 

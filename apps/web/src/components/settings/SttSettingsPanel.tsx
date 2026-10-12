@@ -87,7 +87,8 @@ export function SttSettingsPanel() {
           <>
             <AlertCircle className="size-4 shrink-0 text-amber-500" />
             <span>
-              Web Speech API not detected. Please open in Google Chrome or Chromium for full voice recognition support.
+              Web Speech API not detected. Please open in Google Chrome or Chromium for full voice
+              recognition support.
             </span>
           </>
         )}
@@ -99,7 +100,19 @@ export function SttSettingsPanel() {
         <p className="text-xs text-muted-foreground mb-2">
           Select what accent the microphone transcribes when you dictate.
         </p>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          <button
+            type="button"
+            onClick={() => updateLanguage("auto")}
+            className={`p-3 rounded-md border text-sm font-medium text-left transition-colors ${
+              settings.language === "auto"
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-border hover:bg-muted"
+            }`}
+          >
+            <div className="font-semibold">Auto Detect</div>
+            <div className="text-xs text-muted-foreground mt-1">Urdu / Hindi / English</div>
+          </button>
           <button
             type="button"
             onClick={() => updateLanguage("roman-urdu")}
@@ -123,6 +136,18 @@ export function SttSettingsPanel() {
           >
             <div className="font-semibold">Natural Urdu</div>
             <div className="text-xs text-muted-foreground mt-1">اردو الفاظ (Urdu script)</div>
+          </button>
+          <button
+            type="button"
+            onClick={() => updateLanguage("hindi")}
+            className={`p-3 rounded-md border text-sm font-medium text-left transition-colors ${
+              settings.language === "hindi"
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-border hover:bg-muted"
+            }`}
+          >
+            <div className="font-semibold">Hindi</div>
+            <div className="text-xs text-muted-foreground mt-1">हिन्दी / Hinglish</div>
           </button>
           <button
             type="button"
@@ -186,9 +211,13 @@ export function SttSettingsPanel() {
           )}
 
           <div className="min-h-20 rounded-md border border-input bg-muted/40 p-3 text-sm flex flex-col justify-between">
-            <div className="font-mono text-xs text-muted-foreground mb-1">Live Transcription Output:</div>
+            <div className="font-mono text-xs text-muted-foreground mb-1">
+              Live Transcription Output:
+            </div>
             <div className="text-foreground italic">
-              {liveTranscript ? liveTranscript : "(No speech detected yet. Click start and speak into your mic)"}
+              {liveTranscript
+                ? liveTranscript
+                : "(No speech detected yet. Click start and speak into your mic)"}
             </div>
           </div>
         </div>

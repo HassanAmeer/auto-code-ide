@@ -30,8 +30,10 @@ import { useVoiceCallSettings } from "../chat/voiceCall/voiceCallSettings";
 import { cn } from "~/lib/utils";
 
 const STT_LANG_LABELS: Record<SttLanguageMode, string> = {
+  auto: "Auto Detect (Urdu / Hindi / English / Roman)",
   "roman-urdu": "Roman Urdu (Phonetic)",
   "natural-urdu": "Natural Urdu (اردو رسم الخط)",
+  hindi: "Hindi (हिन्दी / Hinglish)",
   english: "English",
 };
 
@@ -322,11 +324,17 @@ export function SttTtsSettingsPanel() {
                   <SelectValue>{STT_LANG_LABELS[stt.language]}</SelectValue>
                 </SelectTrigger>
                 <SelectPopup align="end" alignItemWithTrigger={false}>
+                  <SelectItem hideIndicator value="auto">
+                    Auto Detect (Urdu / Hindi / English / Roman)
+                  </SelectItem>
                   <SelectItem hideIndicator value="roman-urdu">
                     Roman Urdu (Phonetic)
                   </SelectItem>
                   <SelectItem hideIndicator value="natural-urdu">
                     Natural Urdu (اردو رسم الخط)
+                  </SelectItem>
+                  <SelectItem hideIndicator value="hindi">
+                    Hindi (हिन्दी / Hinglish)
                   </SelectItem>
                   <SelectItem hideIndicator value="english">
                     English

@@ -385,6 +385,137 @@ export function containsUrdu(text: string): boolean {
 }
 
 /**
+ * Checks if a string contains Hindi / Devanagari characters.
+ */
+export function containsHindi(text: string): boolean {
+  return /[\u0900-\u097F]/.test(text);
+}
+
+/**
+ * Checks if a string contains either Urdu or Hindi characters.
+ */
+export function containsUrduOrHindi(text: string): boolean {
+  return /[\u0600-\u06FF\u0900-\u097F]/.test(text);
+}
+
+// Common Hindi words to Roman Hindi/Urdu
+const HINDI_TO_ROMAN_DICT: Record<string, string> = {
+  नमस्ते: "namaste",
+  धन्यवाद: "dhanyawad",
+  शुक्रिया: "shukriya",
+  हाँ: "haan",
+  नहीं: "nahi",
+  कैसे: "kaise",
+  कैसा: "kaisa",
+  कैसी: "kaisi",
+  क्या: "kya",
+  कहाँ: "kahan",
+  कौन: "kaun",
+  कब: "kab",
+  क्यों: "kyun",
+  मेरा: "mera",
+  मेरी: "meri",
+  मेरे: "mere",
+  तुम्हारा: "tumhara",
+  तुम्हारी: "tumhari",
+  तुम्हारे: "tumhare",
+  आपका: "aapka",
+  आपकी: "aapki",
+  आपके: "aapke",
+  आप: "aap",
+  तुम: "tum",
+  हम: "hum",
+  यह: "yeh",
+  वह: "woh",
+  है: "hai",
+  हैं: "hain",
+  हूँ: "hoon",
+  हो: "ho",
+  था: "tha",
+  थी: "thi",
+  थे: "the",
+  करो: "karo",
+  करें: "karein",
+  करना: "karna",
+  कर: "kar",
+  चाहिए: "chahiye",
+  देखो: "dekho",
+  बताओ: "batao",
+};
+
+const DEVANAGARI_CHAR_MAP: Record<string, string> = {
+  क: "k",
+  ख: "kh",
+  ग: "g",
+  घ: "gh",
+  ङ: "ng",
+  च: "ch",
+  छ: "chh",
+  ज: "j",
+  झ: "jh",
+  ञ: "ny",
+  ट: "t",
+  ठ: "th",
+  ड: "d",
+  ढ: "dh",
+  ण: "n",
+  त: "t",
+  थ: "th",
+  द: "d",
+  ध: "dh",
+  न: "n",
+  प: "p",
+  फ: "f",
+  ब: "b",
+  भ: "bh",
+  म: "m",
+  य: "y",
+  र: "r",
+  ल: "l",
+  व: "v",
+  श: "sh",
+  ष: "sh",
+  स: "s",
+  ह: "h",
+  अ: "a",
+  आ: "aa",
+  इ: "i",
+  ई: "ee",
+  उ: "u",
+  ऊ: "oo",
+  ऋ: "ri",
+  ए: "e",
+  ऐ: "ai",
+  ओ: "o",
+  औ: "au",
+  "\u093E": "aa",
+  "\u093F": "i",
+  "\u0940": "ee",
+  "\u0941": "u",
+  "\u0942": "oo",
+  "\u0943": "ri",
+  "\u0947": "e",
+  "\u0948": "ai",
+  "\u094B": "o",
+  "\u094C": "au",
+  "\u0902": "n",
+  "\u0901": "n",
+  "\u0903": "h",
+  "\u094D": "",
+};
+
+function transliterateHindiWord(word: string): string {
+  const clean = word.replace(/[؟،۔!?,.]/g, "");
+  if (HINDI_TO_ROMAN_DICT[clean]) return HINDI_TO_ROMAN_DICT[clean];
+  let out = "";
+  for (let i = 0; i < word.length; i++) {
+    const ch = word[i]!;
+    out += DEVANAGARI_CHAR_MAP[ch] !== undefined ? DEVANAGARI_CHAR_MAP[ch] : ch;
+  }
+  return out;
+}
+
+/**
  * Phonetically transliterates a single Urdu word into Roman Urdu
  */
 function transliterateUrduWord(word: string): string {
@@ -428,14 +559,15 @@ function transliterateUrduWord(word: string): string {
 }
 
 /**
- * Transliterates an Urdu sentence into Roman Urdu.
- * Non-Urdu words and punctuation are preserved.
+ * Transliterates an Urdu or Hindi sentence into Roman Urdu / Hindi.
+ * Non-Urdu/Hindi words (e.g. English) and punctuation are preserved intact.
  *
  * Example:
  *   "کیسے ہو آپ" -> "kesy ho ap"
+ *   "कैसे हो आप" -> "kaise ho aap"
  */
 export function transliterateUrduToRoman(text: string): string {
-  if (!text || !containsUrdu(text)) {
+  if (!text || !containsUrduOrHindi(text)) {
     return text;
   }
 
@@ -444,10 +576,14 @@ export function transliterateUrduToRoman(text: string): string {
 
   return tokens
     .map((token) => {
-      if (!token || !containsUrdu(token)) {
-        return token;
+      if (!token) return token;
+      if (containsUrdu(token)) {
+        return transliterateUrduWord(token);
       }
-      return transliterateUrduWord(token);
+      if (containsHindi(token)) {
+        return transliterateHindiWord(token);
+      }
+      return token;
     })
     .join("");
 }
