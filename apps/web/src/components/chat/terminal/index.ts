@@ -4,3 +4,4 @@ export * from "./terminalStore";
 export * from "./TerminalCommandBox";
 export * from "./AiTerminalQuickCommand";
 export * from "./TerminalFeed";
+export * from "./AiTerminalCommandBar";

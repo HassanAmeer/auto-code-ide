@@ -1,4 +1,5 @@
 import type { TerminalExecResult, TerminalAccessKey } from "./terminalTypes";
+import { resolvePrimaryEnvironmentHttpUrl } from "../../../environments/primary";
 
 export async function executeTerminalCommand(
   command: string,
@@ -7,7 +8,7 @@ export async function executeTerminalCommand(
 ): Promise<TerminalExecResult> {
   const startTime = Date.now();
   try {
-    const response = await fetch("/api/terminal/exec", {
+    const response = await fetch(resolvePrimaryEnvironmentHttpUrl("/api/terminal/exec"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

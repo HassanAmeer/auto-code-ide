@@ -1,7 +1,16 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useEffect } from "react";
+import { terminalStore } from "../components/chat/terminal";
 
-import { AiTerminalPage } from "../components/terminal/AiTerminalPage";
+function AiTerminalRouteHandler() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    terminalStore.setQuickBarOpen(true);
+    void navigate({ to: "/" });
+  }, [navigate]);
+  return null;
+}
 
 export const Route = createFileRoute("/ai-terminal")({
-  component: AiTerminalPage,
+  component: AiTerminalRouteHandler,
 });

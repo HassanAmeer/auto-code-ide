@@ -24,6 +24,7 @@ import {
 } from "../ui/dialog";
 import { toastManager } from "../ui/toast";
 import { cn } from "~/lib/utils";
+import { resolvePrimaryEnvironmentHttpUrl } from "~/environments/primary";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
 import {
@@ -76,7 +77,7 @@ function DirectoryBrowserModal({
     setSelectedFolder(null);
     setNewFolderOpen(false);
     try {
-      const res = await fetch("/api/fs/browse", {
+      const res = await fetch(resolvePrimaryEnvironmentHttpUrl("/api/fs/browse"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ path: pathQuery || "" }),
@@ -109,7 +110,7 @@ function DirectoryBrowserModal({
     setCreating(true);
     try {
       const folderPath = `${currentPath}/${trimmed}`;
-      const res = await fetch("/api/fs/ensure-dir", {
+      const res = await fetch(resolvePrimaryEnvironmentHttpUrl("/api/fs/ensure-dir"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ path: folderPath }),
@@ -131,7 +132,7 @@ function DirectoryBrowserModal({
     const finalPath = selectedFolder ? `${currentPath}/${selectedFolder}` : currentPath;
     if (!finalPath) return;
     try {
-      await fetch("/api/fs/ensure-dir", {
+      await fetch(resolvePrimaryEnvironmentHttpUrl("/api/fs/ensure-dir"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ path: finalPath }),
@@ -356,7 +357,7 @@ function ProjectsDirectoryRow() {
     const trimmed = rawPath.trim();
     if (trimmed) {
       try {
-        await fetch("/api/fs/ensure-dir", {
+        await fetch(resolvePrimaryEnvironmentHttpUrl("/api/fs/ensure-dir"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ path: trimmed }),

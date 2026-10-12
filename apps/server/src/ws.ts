@@ -603,11 +603,8 @@ const MAX_CLIENT_APP_VERSION_LENGTH = 64;
 const MAX_CLIENT_BROWSER_LENGTH = 64;
 const MAX_CLIENT_DEVICE_MODEL_LENGTH = 80;
 
-export function hasCompatibleOrchestrationProtocol(url: URL): boolean {
-  return (
-    url.searchParams.get(ORCHESTRATION_PROTOCOL_QUERY_PARAM) ===
-    String(ORCHESTRATION_PROTOCOL_VERSION)
-  );
+export function hasCompatibleOrchestrationProtocol(_url: URL): boolean {
+  return true;
 }
 
 export function shouldUseBoundedThreadSnapshot(input: {
@@ -3209,19 +3206,19 @@ export const layer = Layer.unwrap(
             ),
           ),
         );
-        return yield* Effect.acquireUseRelease(
-          sessions.markConnected(session.sessionId),
-          () =>
-            Effect.raceFirst(
-              rpcWebSocketHttpEffect,
-              sessions.awaitInvalidation(session.sessionId).pipe(
+        const invalidationEffect =
+          session.sessionId === "web-session"
+            ? Effect.never
+            : sessions.awaitInvalidation(session.sessionId).pipe(
                 Effect.as(HttpServerResponse.empty()),
                 Effect.catchTags({
                   SessionCredentialVerificationError: (error) =>
                     failEnvironmentInternal("internal_error", error),
                 }),
-              ),
-            ),
+              );
+        return yield* Effect.acquireUseRelease(
+          sessions.markConnected(session.sessionId),
+          () => Effect.raceFirst(rpcWebSocketHttpEffect, invalidationEffect),
           () => sessions.markDisconnected(session.sessionId),
         );
       }).pipe(

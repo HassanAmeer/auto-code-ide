@@ -2,6 +2,7 @@ import { PRIMARY_LOCAL_ENVIRONMENT_ID, type DesktopEnvironmentBootstrap } from "
 import * as Schema from "effect/Schema";
 
 import { isLocalEnvironmentDisabled } from "../../localEnvironment";
+import { getProxyPathPrefix } from "../../lib/proxyPath";
 
 const PrimaryEnvironmentTargetSource = Schema.Literals([
   "configured",
@@ -225,8 +226,9 @@ function resolveConfiguredPrimaryTarget(): PrimaryEnvironmentTarget | null {
 }
 
 function resolveWindowOriginPrimaryTarget(): PrimaryEnvironmentTarget {
+  const proxyPrefix = getProxyPathPrefix();
   const url = parseTargetUrl({
-    rawValue: window.location.origin,
+    rawValue: `${window.location.origin}${proxyPrefix}`,
     source: "window-origin",
     urlKind: "http-base-url",
   });
@@ -296,7 +298,9 @@ export function resolvePrimaryEnvironmentHttpUrl(
     source: primaryTarget.source,
     urlKind: "http-base-url",
   });
-  url.pathname = pathname;
+  const basePath = url.pathname.replace(/\/$/, "");
+  const cleanPathname = pathname.startsWith("/") ? pathname : `/${pathname}`;
+  url.pathname = `${basePath}${cleanPathname}`;
   if (searchParams) {
     url.search = new URLSearchParams(searchParams).toString();
   }

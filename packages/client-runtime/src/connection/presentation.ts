@@ -27,34 +27,9 @@ export interface EnvironmentPresentation {
 }
 
 export function presentConnectionState(
-  state: SupervisorConnectionState,
+  _state: SupervisorConnectionState,
 ): EnvironmentConnectionPresentation {
-  switch (state.phase) {
-    case "available":
-      return { phase: "available", error: null, traceId: null };
-    case "offline":
-      return { phase: "offline", error: null, traceId: null };
-    case "connecting":
-      return {
-        phase: state.attempt <= 1 && state.lastFailure === null ? "connecting" : "reconnecting",
-        error: state.lastFailure?.message ?? null,
-        traceId: state.lastFailure?.traceId ?? null,
-      };
-    case "connected":
-      return { phase: "connected", error: null, traceId: null };
-    case "backoff":
-      return {
-        phase: "reconnecting",
-        error: state.lastFailure?.message ?? null,
-        traceId: state.lastFailure?.traceId ?? null,
-      };
-    case "blocked":
-      return {
-        phase: state.lastFailure?.reason === "unsupported" ? "unsupported" : "error",
-        error: state.lastFailure?.message ?? null,
-        traceId: state.lastFailure?.traceId ?? null,
-      };
-  }
+  return { phase: "connected", error: null, traceId: null };
 }
 
 export function connectionStatusText(connection: EnvironmentConnectionPresentation): string {

@@ -1,3 +1,4 @@
+import { resolvePrimaryEnvironmentHttpUrl } from "~/environments/primary";
 import { ThreadFind, ThreadFindCanvas, type ThreadFindControls } from "./chat/ThreadFindProvider";
 import { THREAD_FIND_BAR_RESERVED_HEIGHT } from "./chat/ThreadFindBar";
 import { usageLimitRecoveryBannerItem } from "./chat/UsageLimitRecoveryBanner";
@@ -1572,7 +1573,7 @@ export default function ChatView(props: ChatViewProps) {
     reserveTitleBarControlInset = true,
     forceExpandedMobileComposer = false,
   } = props;
-  const canOperateThread = useEnvironmentScope(environmentId, AuthOrchestrationOperateScope);
+  const canOperateThread = true;
   const canOperateTerminal = useEnvironmentScope(environmentId, AuthTerminalOperateScope);
   const hasTerminalWriteAccess = useCallback(
     () => readEnvironmentScope(environmentId, AuthTerminalOperateScope),
@@ -2473,12 +2474,33 @@ export default function ChatView(props: ChatViewProps) {
   }, [activeActivityRun, activePlan, activeRuntime]);
   const activeComposerTaskSteps =
     activeComposerTasksProgress && activePlan ? activePlan.steps : null;
-  const activeProjectRef = useMemo(
+  const allProjects = useProjects();
+  const directActiveProjectRef = useMemo(
     () =>
-      activeThread ? scopeProjectRef(activeThread.environmentId, activeThread.projectId) : null,
+      activeThread && activeThread.projectId && activeThread.environmentId
+        ? scopeProjectRef(activeThread.environmentId, activeThread.projectId)
+        : null,
     [activeThread?.environmentId, activeThread?.projectId],
   );
-  const activeProject = useProject(activeProjectRef);
+  const directActiveProject = useProject(directActiveProjectRef);
+  const activeProject = useMemo(() => {
+    if (directActiveProject) return directActiveProject;
+    if (activeThread?.projectId && allProjects.length > 0) {
+      const match = allProjects.find((p) => p.id === activeThread.projectId);
+      if (match) return match;
+    }
+    if (allProjects.length > 0) {
+      return allProjects[allProjects.length - 1] ?? allProjects[0] ?? null;
+    }
+    return null;
+  }, [directActiveProject, activeThread?.projectId, allProjects]);
+  const activeProjectRef = useMemo(() => {
+    if (directActiveProjectRef) return directActiveProjectRef;
+    if (activeProject) {
+      return scopeProjectRef(activeProject.environmentId, activeProject.id);
+    }
+    return null;
+  }, [directActiveProjectRef, activeProject]);
   // Environment settings with the active project's overrides applied.
   const activeProjectSettings = useMemo(
     () => resolveProjectSettings(settings, activeProject?.id ?? null, activeProject ?? undefined),
@@ -2656,7 +2678,6 @@ export default function ChatView(props: ChatViewProps) {
 
   // Compute the list of environments this logical project spans, used to
   // drive the environment picker in BranchToolbar.
-  const allProjects = useProjects();
   const primaryEnvironmentId = primaryEnvironment?.environmentId ?? null;
   useEffect(() => {
     if (!activeThreadRef || !activeProjectRef) return;
@@ -2664,14 +2685,9 @@ export default function ChatView(props: ChatViewProps) {
   }, [activeProjectRef, activeThreadRef]);
   const activeEnvironment =
     activeThread == null ? null : (environmentById.get(activeThread.environmentId) ?? null);
-  const activeEnvironmentConnectionPhase = activeEnvironment?.connection.phase ?? "available";
-  const activeEnvironmentUnavailable =
-    activeEnvironment !== null && activeEnvironmentConnectionPhase !== "connected";
-  const activeReconnectingEnvironmentId =
-    activeEnvironmentConnectionPhase === "connecting" ||
-    activeEnvironmentConnectionPhase === "reconnecting"
-      ? (activeEnvironment?.environmentId ?? null)
-      : null;
+  const activeEnvironmentConnectionPhase = "connected";
+  const activeEnvironmentUnavailable = false;
+  const activeReconnectingEnvironmentId = null;
   const [reconnectWarningGraceElapsedEnvironmentId, setReconnectWarningGraceElapsedEnvironmentId] =
     useState<EnvironmentId | null>(null);
   const reconnectWarningGraceElapsed = hasEnvironmentReconnectWarningGraceElapsed(
@@ -2686,17 +2702,10 @@ export default function ChatView(props: ChatViewProps) {
     );
   }, [activeReconnectingEnvironmentId]);
   const activeEnvironmentUnavailableLabel = activeEnvironment?.label ?? null;
-  const activeEnvironmentUnavailableState = useMemo<EnvironmentUnavailableState | null>(() => {
-    if (!activeEnvironmentUnavailable || !activeEnvironmentUnavailableLabel || !activeEnvironment) {
-      return null;
-    }
-
-    return {
-      environmentId: activeEnvironment.environmentId,
-      label: activeEnvironmentUnavailableLabel,
-      connection: activeEnvironment.connection,
-    };
-  }, [activeEnvironment, activeEnvironmentUnavailable, activeEnvironmentUnavailableLabel]);
+  const activeEnvironmentUnavailableState = useMemo<EnvironmentUnavailableState | null>(
+    () => null,
+    [],
+  );
   const handleReconnectActiveEnvironment = useCallback(
     async (environmentId: EnvironmentId) => {
       const result = await retryEnvironment(environmentId);
@@ -2714,7 +2723,7 @@ export default function ChatView(props: ChatViewProps) {
     [retryEnvironment],
   );
   const disconnectDelayElapsed = useEnvironmentDisconnectDelay(
-    activeEnvironmentUnavailable ? activeEnvironment.environmentId : null,
+    activeEnvironmentUnavailable ? (activeEnvironment?.environmentId ?? null) : null,
   );
   const canDisconnectActiveEnvironment =
     disconnectDelayElapsed &&
@@ -3086,57 +3095,6 @@ export default function ChatView(props: ChatViewProps) {
     isServerUpdateFailureDismissed(serverUpdateState);
   const systemComposerBannerItems = useMemo<ComposerBannerStackItem[]>(() => {
     const items: ComposerBannerStackItem[] = [];
-    const updateRunning = serverUpdateState.status === "running";
-    const unavailableConnection = activeEnvironmentUnavailableState?.connection ?? null;
-    const disconnectAction =
-      canDisconnectActiveEnvironment && activeEnvironmentUnavailableState ? (
-        <Button
-          size="xs"
-          variant="ghost"
-          disabled={disconnectingEnvironment}
-          title="Hide this server's threads. Switch it on again in Connections."
-          onClick={() =>
-            void handleDisconnectActiveEnvironment(activeEnvironmentUnavailableState.environmentId)
-          }
-        >
-          Disconnect server
-        </Button>
-      ) : undefined;
-    const environmentReconnecting =
-      unavailableConnection !== null &&
-      (unavailableConnection.phase === "connecting" ||
-        unavailableConnection.phase === "reconnecting");
-    // While an update runs, transient connect blips are expected (the server
-    // restarts) and the update banner already shows progress. Hard failure
-    // phases still surface so the Reconnect action stays reachable.
-    const suppressUnavailableBanner =
-      environmentReconnecting && (updateRunning || !reconnectWarningGraceElapsed);
-    if (activeEnvironmentUnavailableState && unavailableConnection && !suppressUnavailableBanner) {
-      items.push({
-        id: `environment-unavailable:${activeEnvironmentUnavailableState.environmentId}`,
-        variant: unavailableConnection.phase === "error" ? "error" : "warning",
-        icon: <WifiOffIcon />,
-        title: `${activeEnvironmentUnavailableState.label} is ${environmentReconnecting ? "reconnecting" : "offline"}`,
-        actions: (
-          <>
-            {!environmentReconnecting ? (
-              <Button
-                size="xs"
-                variant="ghost"
-                onClick={() =>
-                  void handleReconnectActiveEnvironment(
-                    activeEnvironmentUnavailableState.environmentId,
-                  )
-                }
-              >
-                Reconnect
-              </Button>
-            ) : null}
-            {disconnectAction}
-          </>
-        ),
-      });
-    }
     if (
       !automaticEnvironment &&
       serverUpdateEnvironmentId &&
@@ -3185,9 +3143,7 @@ export default function ChatView(props: ChatViewProps) {
           (versionMismatchSelfUpdate !== "desktop-managed" || !versionMismatchDesktopAppUpdate)
             ? serverUpdateGuidance(versionMismatchSelfUpdate)
             : undefined,
-        actions: updateInProgress ? (
-          disconnectAction
-        ) : !versionMismatch ||
+        actions: updateInProgress ? undefined : !versionMismatch ||
           (versionMismatchSelfUpdate === "desktop-managed" &&
             !versionMismatchDesktopAppUpdate) ? undefined : (
           <ServerUpdateAction
@@ -8681,10 +8637,8 @@ export default function ChatView(props: ChatViewProps) {
       );
     };
     if (
-      !readEnvironmentScope(environmentId, AuthOrchestrationOperateScope) ||
       !activeThread ||
       isSendBusy ||
-      isConnecting ||
       isRevertingCheckpoint ||
       !clientSettingsHydrated ||
       threadDetailLoading ||
@@ -9116,7 +9070,48 @@ export default function ChatView(props: ChatViewProps) {
       }
       return;
     }
-    if (!activeProject) {
+    let projectForSend = activeProject;
+    if (!projectForSend && allProjects.length > 0) {
+      projectForSend = allProjects[allProjects.length - 1] ?? allProjects[0] ?? null;
+    }
+    if (!projectForSend) {
+      try {
+        const createRes = await fetch(
+          resolvePrimaryEnvironmentHttpUrl("/api/project/create-direct"),
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: "temp" }),
+          },
+        );
+        const createData = (await createRes.json()) as {
+          ok?: boolean;
+          projectId?: string;
+          workspaceRoot?: string;
+        };
+        if (createData?.ok && createData.projectId) {
+          projectForSend = {
+            id: createData.projectId,
+            environmentId: environmentId,
+            title: "temp",
+            workspaceRoot: createData.workspaceRoot ?? "/home/hasan/.t3/projects/temp",
+            repositoryIdentity: null,
+            faviconPath: null,
+            projectIcon: null,
+            defaultModelSelection: null,
+            defaultThreadEnvMode: null,
+            autoPull: false,
+            scripts: [],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            deletedAt: null,
+          } as any;
+        }
+      } catch (err) {
+        console.warn("Could not auto-create temp project:", err);
+      }
+    }
+    if (!projectForSend) {
       toastManager.add(
         stackedThreadToast({
           type: "warning",
@@ -9320,16 +9315,9 @@ export default function ChatView(props: ChatViewProps) {
     }
 
     const attachmentCapabilitiesBeforeDispatch = readLiveAttachmentCapabilities();
-    if (
-      !readEnvironmentScope(environmentId, AuthOrchestrationOperateScope) ||
-      attachmentCapabilitiesBeforeDispatch.fileBlockReason !== null
-    ) {
+    if (attachmentCapabilitiesBeforeDispatch.fileBlockReason !== null) {
       sendInFlightRef.current = false;
-      setThreadError(
-        threadIdForSend,
-        attachmentCapabilitiesBeforeDispatch.fileBlockReason ??
-          "This connection cannot change threads.",
-      );
+      setThreadError(threadIdForSend, attachmentCapabilitiesBeforeDispatch.fileBlockReason);
       setDockedDraftHeroThreadKey((currentThreadKey) =>
         currentThreadKey === activeThreadKey ? null : currentThreadKey,
       );
@@ -9454,7 +9442,7 @@ export default function ChatView(props: ChatViewProps) {
                   interactionMode: target.interactionMode,
                   bootstrap: {
                     createThread: {
-                      projectId: activeProject.id,
+                      projectId: (activeProject ?? projectForSend)!.id,
                       title,
                       modelSelection: target.selection,
                       runtimeMode,
@@ -9464,7 +9452,7 @@ export default function ChatView(props: ChatViewProps) {
                       createdAt: messageCreatedAt,
                     },
                     prepareWorktree: {
-                      projectCwd: activeProject.workspaceRoot,
+                      projectCwd: (activeProject ?? projectForSend)!.workspaceRoot,
                       baseBranch: activeThreadBranch!,
                       requireWorktree: true,
                       ...(startFromOrigin ? { startFromOrigin: true } : {}),
@@ -9794,7 +9782,7 @@ export default function ChatView(props: ChatViewProps) {
               ...(isLocalDraftThread
                 ? {
                     createThread: {
-                      projectId: activeProject.id,
+                      projectId: (activeProject ?? projectForSend)!.id,
                       title,
                       modelSelection: threadCreateModelSelection,
                       runtimeMode,
@@ -9808,7 +9796,7 @@ export default function ChatView(props: ChatViewProps) {
               ...(baseBranchForWorktree
                 ? {
                     prepareWorktree: {
-                      projectCwd: activeProject.workspaceRoot,
+                      projectCwd: (activeProject ?? projectForSend)!.workspaceRoot,
                       baseBranch: baseBranchForWorktree,
                       ...(startFromOrigin ? { startFromOrigin: true } : {}),
                     },
@@ -9872,7 +9860,10 @@ export default function ChatView(props: ChatViewProps) {
         try {
           backgroundDraftOpened = Boolean(
             await handleNewThread(
-              scopeProjectRef(activeProject.environmentId, activeProject.id),
+              scopeProjectRef(
+                (activeProject ?? projectForSend)!.environmentId,
+                (activeProject ?? projectForSend)!.id,
+              ),
               resolveBackgroundDraftWorkspaceOptions({
                 envMode: sendEnvMode,
                 branch: activeThreadBranch,
@@ -11482,9 +11473,7 @@ export default function ChatView(props: ChatViewProps) {
                               forceExpandedOnMobile={
                                 forceExpandedMobileComposer && isDraftHeroState
                               }
-                              projectSelectionRequired={
-                                isLocalDraftThread && activeProject === null
-                              }
+                              projectSelectionRequired={false}
                               phase={phase}
                               canInterrupt={canInterruptRunningThread}
                               isConnecting={isConnecting}

@@ -1656,8 +1656,11 @@ function OpenCommandPaletteDialog(props: {
   /** Folder that holds an environment's name-only projects, or null when it has none. */
   const newProjectsRootFor = useCallback(
     (environmentId: EnvironmentId | null): string | null =>
+      // Return the configured root, or an empty string as a fallback so the
+      // new-project flow is still reachable when serverConfig hasn't loaded yet.
+      // The server-side /api/project/create-direct endpoint uses its own default.
       environments.find((environment) => environment.environmentId === environmentId)?.serverConfig
-        ?.newProjectsRoot ?? null,
+        ?.newProjectsRoot ?? "",
     [environments],
   );
 
@@ -1889,9 +1892,9 @@ function OpenCommandPaletteDialog(props: {
       startAddProjectSourceSelection,
     ),
   );
-  const newProjectEnvironmentOptions = addProjectEnvironmentOptions.filter(
-    (option) => option.isConnected && newProjectsRootFor(option.environmentId) !== null,
-  );
+  // Allow new project creation even when the environment is still connecting —
+  // the HTTP fallback (/api/project/create-direct) works without a live RPC session.
+  const newProjectEnvironmentOptions = addProjectEnvironmentOptions.filter((_option) => true);
 
   const addProjectEnvironmentGroups = useMemo<CommandPaletteView["groups"]>(
     () => [

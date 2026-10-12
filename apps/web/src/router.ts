@@ -1,11 +1,14 @@
 import { createRouter, RouterHistory } from "@tanstack/react-router";
 
 import { routeTree } from "./routeTree.gen";
+import { getProxyPathPrefix } from "./lib/proxyPath";
 
 export function getRouter(history: RouterHistory) {
+  const basepath = getProxyPathPrefix();
   return createRouter({
     routeTree,
     history,
+    ...(basepath ? { basepath } : {}),
     context: {},
     // Route components are split chunks (autoCodeSplitting in vite.config);
     // fetching them on hover/focus intent hides the load from the first

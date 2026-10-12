@@ -13,6 +13,7 @@ import { projectUploadStore } from "~/state/projectUploadProgress";
 import { projectEnvironment } from "~/state/projects";
 import { sourceControlEnvironment } from "~/state/sourceControl";
 import { useAtomCommand } from "~/state/use-atom-command";
+import { resolvePrimaryEnvironmentHttpUrl } from "~/environments/primary";
 import { useNewThreadHandler } from "./useHandleNewThread";
 
 function errorMessage(error: unknown): string {
@@ -110,14 +111,17 @@ export function useNewProject() {
       } else {
         // Direct HTTP fallback for standalone web / VPS environment
         try {
-          const response = await fetch("/api/project/create-direct", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              name: input.name,
-              template: input.template,
-            }),
-          });
+          const response = await fetch(
+            resolvePrimaryEnvironmentHttpUrl("/api/project/create-direct"),
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                name: input.name,
+                template: input.template,
+              }),
+            },
+          );
           const data = (await response.json()) as {
             ok?: boolean;
             projectId?: string;
@@ -132,7 +136,7 @@ export function useNewProject() {
               commitError: data.commitError,
             };
           } else {
-            const err = data?.error ?? errorMessage(squashAtomCommandFailure(result));
+            const err = data?.error ?? "Server could not create the project. Please try again.";
             projectUploadStore.setState({
               isImporting: false,
               error: err,
@@ -149,7 +153,7 @@ export function useNewProject() {
             return false;
           }
         } catch (httpError) {
-          const err = errorMessage(squashAtomCommandFailure(result));
+          const err = "Could not reach the server. Please check your connection and try again.";
           projectUploadStore.setState({
             isImporting: false,
             error: err,

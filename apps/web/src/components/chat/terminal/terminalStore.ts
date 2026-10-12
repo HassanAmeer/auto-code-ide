@@ -26,7 +26,7 @@ const initialCwd =
   typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY_CWD) || "/" : "/";
 
 const initialOpen =
-  typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY_OPEN) !== "false" : true;
+  typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY_OPEN) === "true" : false;
 
 let initialSshProfiles: SshProfile[] = [];
 if (typeof window !== "undefined") {

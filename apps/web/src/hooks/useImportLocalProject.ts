@@ -16,6 +16,7 @@ import { useEnvironments, usePrimaryEnvironmentId } from "~/state/environments";
 import { projectUploadStore, useProjectUploadProgress } from "~/state/projectUploadProgress";
 import { projectEnvironment } from "~/state/projects";
 import { useAtomCommand } from "~/state/use-atom-command";
+import { resolvePrimaryEnvironmentHttpUrl } from "~/environments/primary";
 import { useNewThreadHandler } from "./useHandleNewThread";
 
 function errorMessage(error: unknown): string {
@@ -157,14 +158,17 @@ export function useImportLocalProject() {
             percent: 75,
           });
           try {
-            const response = await fetch("/api/project/import-zip-direct", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                name: projectName,
-                zipBase64: base64Data,
-              }),
-            });
+            const response = await fetch(
+              resolvePrimaryEnvironmentHttpUrl("/api/project/import-zip-direct"),
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  name: projectName,
+                  zipBase64: base64Data,
+                }),
+              },
+            );
             const data = (await response.json()) as {
               ok?: boolean;
               projectId?: string;
@@ -179,7 +183,7 @@ export function useImportLocalProject() {
                 commitError: data.commitError,
               };
             } else {
-              const errDetail = data?.error ?? errorMessage(squashAtomCommandFailure(result));
+              const errDetail = data?.error ?? "Server could not import the ZIP. Please try again.";
               projectUploadStore.setState({
                 isImporting: false,
                 error: errDetail,
@@ -196,7 +200,8 @@ export function useImportLocalProject() {
               return false;
             }
           } catch (httpError) {
-            const errDetail = errorMessage(squashAtomCommandFailure(result));
+            const errDetail =
+              "Could not reach the server. Please check your connection and try again.";
             projectUploadStore.setState({
               isImporting: false,
               error: errDetail,
@@ -429,14 +434,17 @@ export function useImportLocalProject() {
           createdProjectResult = result.value;
         } else {
           try {
-            const resp = await fetch("/api/project/import-files-direct", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                name: projectName,
-                files: uploadedFiles,
-              }),
-            });
+            const resp = await fetch(
+              resolvePrimaryEnvironmentHttpUrl("/api/project/import-files-direct"),
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  name: projectName,
+                  files: uploadedFiles,
+                }),
+              },
+            );
             const data = (await resp.json()) as {
               ok?: boolean;
               projectId?: string;
@@ -451,7 +459,8 @@ export function useImportLocalProject() {
                 commitError: data.commitError,
               };
             } else {
-              const errDetail = data?.error ?? errorMessage(squashAtomCommandFailure(result));
+              const errDetail =
+                data?.error ?? "Server could not import the project. Please try again.";
               projectUploadStore.setState({ isImporting: false, error: errDetail });
               if (!isAtomCommandInterrupted(result)) {
                 toastManager.add(
@@ -465,7 +474,8 @@ export function useImportLocalProject() {
               return false;
             }
           } catch {
-            const errDetail = errorMessage(squashAtomCommandFailure(result));
+            const errDetail =
+              "Could not reach the server. Please check your connection and try again.";
             projectUploadStore.setState({ isImporting: false, error: errDetail });
             if (!isAtomCommandInterrupted(result)) {
               toastManager.add(
@@ -579,14 +589,17 @@ export function useImportLocalProject() {
       });
 
       try {
-        const response = await fetch("/api/project/clone-direct", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: projectName,
-            repoUrl: repoUrl.trim(),
-          }),
-        });
+        const response = await fetch(
+          resolvePrimaryEnvironmentHttpUrl("/api/project/clone-direct"),
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: projectName,
+              repoUrl: repoUrl.trim(),
+            }),
+          },
+        );
         const data = (await response.json()) as {
           ok?: boolean;
           projectId?: string;

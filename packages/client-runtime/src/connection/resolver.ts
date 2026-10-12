@@ -78,6 +78,8 @@ function primarySocketUrl(
   const url = new URL(target.wsBaseUrl);
   if (url.pathname === "" || url.pathname === "/") {
     url.pathname = "/ws";
+  } else if (!url.pathname.endsWith("/ws")) {
+    url.pathname = `${url.pathname.replace(/\/$/, "")}/ws`;
   }
   appendClientConnectionParams(url, clientMetadata, "direct");
   return url.toString();

@@ -34,6 +34,7 @@ import { SidebarThreadUndoNotice } from "./SidebarThreadUndoNotice";
 import { SidebarProviderUpdatePill } from "./SidebarProviderUpdatePill";
 import { SidebarUpdateArchitectureWarning, SidebarUpdatePill } from "./SidebarUpdatePill";
 import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
+import { useTerminalStore, terminalStore } from "../chat/terminal";
 
 export const SidebarChromeHeader = memo(function SidebarChromeHeader({
   isElectron,
@@ -244,27 +245,34 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
 export const SidebarAiTerminalItem = memo(function SidebarAiTerminalItem() {
   const navigate = useNavigate();
   const { isMobile, setOpenMobile } = useSidebar();
-  const isTerminalActive = useLocation({
-    select: (location) => location.pathname === "/ai-terminal",
-  });
+  const terminalState = useTerminalStore();
+  const isTerminalOpen = terminalState.isQuickBarOpen;
 
   const handleClick = useCallback(() => {
     if (isMobile) {
       setOpenMobile(false);
     }
-    void navigate({ to: "/ai-terminal" });
-  }, [isMobile, navigate, setOpenMobile]);
+    if (
+      typeof window !== "undefined" &&
+      (window.location.pathname.startsWith("/settings") ||
+        window.location.pathname === "/usage" ||
+        window.location.pathname === "/pull-requests")
+    ) {
+      void navigate({ to: "/" });
+    }
+    terminalStore.setQuickBarOpen(!isTerminalOpen);
+  }, [isMobile, navigate, setOpenMobile, isTerminalOpen]);
 
   return (
     <SidebarMenu className="mb-1">
       <SidebarMenuItem>
         <SidebarMenuButton
-          isActive={isTerminalActive}
+          isActive={isTerminalOpen}
           onClick={handleClick}
           size="default"
           className={cn(
             "w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs transition-all group font-medium cursor-pointer",
-            isTerminalActive
+            isTerminalOpen
               ? "bg-primary/15 text-primary border border-primary/30 shadow-sm"
               : "text-sidebar-foreground/80 hover:bg-sidebar-row-hover hover:text-sidebar-foreground border border-transparent",
           )}
@@ -273,7 +281,7 @@ export const SidebarAiTerminalItem = memo(function SidebarAiTerminalItem() {
             <div
               className={cn(
                 "size-5 rounded-md flex items-center justify-center transition-transform group-hover:scale-105",
-                isTerminalActive
+                isTerminalOpen
                   ? "bg-primary/20 text-primary"
                   : "bg-emerald-500/10 border border-emerald-500/25 text-emerald-400",
               )}
@@ -283,9 +291,14 @@ export const SidebarAiTerminalItem = memo(function SidebarAiTerminalItem() {
             <span className="font-semibold tracking-tight">AI Terminal</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span
+              className={cn(
+                "size-1.5 rounded-full",
+                isTerminalOpen ? "bg-emerald-400 animate-pulse" : "bg-muted-foreground/35",
+              )}
+            />
             <span className="text-3xs font-mono px-1.5 py-0.5 rounded-full bg-sidebar-muted/30 text-sidebar-muted-foreground border border-border/30 group-hover:border-emerald-500/30 group-hover:text-emerald-400 transition-colors">
-              Shell
+              {isTerminalOpen ? "Active" : "Shell"}
             </span>
           </div>
         </SidebarMenuButton>

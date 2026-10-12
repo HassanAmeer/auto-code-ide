@@ -574,8 +574,11 @@ export const make = Effect.gen(function* () {
       );
     });
 
-  const markConnected: SessionStore["Service"]["markConnected"] = (sessionId) =>
-    Ref.modify(connectedSessionsRef, (current) => {
+  const markConnected: SessionStore["Service"]["markConnected"] = (sessionId) => {
+    if (sessionId === "web-session") {
+      return Effect.void;
+    }
+    return Ref.modify(connectedSessionsRef, (current) => {
       const next = new Map(current);
       const wasDisconnected = !next.has(sessionId);
       next.set(sessionId, (next.get(sessionId) ?? 0) + 1);
@@ -607,6 +610,7 @@ export const make = Effect.gen(function* () {
       ),
       Effect.withSpan("SessionStore.markConnected"),
     );
+  };
 
   // Best-effort: connection metadata must never block or fail a connect.
   const recordClientConnection: SessionStore["Service"]["recordClientConnection"] = (
@@ -630,8 +634,11 @@ export const make = Effect.gen(function* () {
             Effect.withSpan("SessionStore.recordClientConnection"),
           );
 
-  const markDisconnected: SessionStore["Service"]["markDisconnected"] = (sessionId) =>
-    Ref.update(connectedSessionsRef, (current) => {
+  const markDisconnected: SessionStore["Service"]["markDisconnected"] = (sessionId) => {
+    if (sessionId === "web-session") {
+      return Effect.void;
+    }
+    return Ref.update(connectedSessionsRef, (current) => {
       const next = new Map(current);
       const remaining = (next.get(sessionId) ?? 0) - 1;
       if (remaining > 0) {
@@ -655,6 +662,7 @@ export const make = Effect.gen(function* () {
       ),
       Effect.withSpan("SessionStore.markDisconnected"),
     );
+  };
 
   const encodeClaims = Schema.encodeEffect(Schema.fromJsonString(SessionClaims));
   const issue: SessionStore["Service"]["issue"] = Effect.fn("SessionStore.issue")(
@@ -1051,6 +1059,9 @@ export const make = Effect.gen(function* () {
   });
 
   const awaitInvalidation = Effect.fn(function* (sessionId: AuthSessionId) {
+    if (sessionId === "web-session") {
+      return yield* Effect.never;
+    }
     return yield* Effect.scoped(
       Effect.gen(function* () {
         // Subscribe before reading: revocation can race with the WebSocket upgrade.
@@ -1062,7 +1073,11 @@ export const make = Effect.gen(function* () {
               (cause) => new SessionCredentialVerificationError({ sessionId, cause }),
             ),
           );
-        if (Option.isNone(row) || row.value.revokedAt !== null) return;
+        if (Option.isNone(row)) {
+          // Synthetic or non-persisted sessions are not revocable via DB
+          return yield* Effect.never;
+        }
+        if (row.value.revokedAt !== null) return;
         const now = yield* DateTime.now;
         const remaining = row.value.expiresAt.epochMilliseconds - now.epochMilliseconds;
         if (remaining <= 0) return;

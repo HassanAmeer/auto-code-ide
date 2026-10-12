@@ -359,6 +359,17 @@ export function DraftHeroHeadline({
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col items-center">
+      {activeProjectDisplayName || activeProjectTitle ? (
+        <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3.5 py-1 text-xs font-medium text-primary shadow-xs">
+          <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+          <span>
+            Selected Project:{" "}
+            <strong className="font-semibold">
+              {activeProjectDisplayName ?? activeProjectTitle}
+            </strong>
+          </span>
+        </div>
+      ) : null}
       <h1
         aria-label={headingLabel}
         className="w-full text-center font-normal text-2xl text-foreground tracking-tight sm:text-3xl"

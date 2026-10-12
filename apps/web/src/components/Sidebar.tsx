@@ -5125,7 +5125,7 @@ export default function Sidebar() {
               }
               onNewProject={openAddProjectCommandPalette}
               onNewThread={handleNewThreadClick}
-              newThreadDisabled={projects.length === 0}
+              newThreadDisabled={false}
               newThreadShortcutLabel={newThreadShortcutLabel}
               newThreadInProjectShortcutLabel={newThreadInProjectShortcutLabel}
               showNewThreadInProjectHint={projectGroups.length > 1}
@@ -5141,6 +5141,45 @@ export default function Sidebar() {
               activeSearchResultIndex={activeSearchResultIndex}
               onClearSearch={clearThreadSearch}
             />
+            {projectGroups.length > 0 && !isSearchingThreads ? (
+              <div className="flex items-center gap-1 overflow-x-auto pt-1.5 pb-0.5 px-0.5 text-2xs scrollbar-none">
+                <button
+                  type="button"
+                  onClick={() => setProjectScopeKey(null)}
+                  className={cn(
+                    "shrink-0 rounded px-2 py-0.5 text-xs font-medium transition-colors cursor-pointer",
+                    projectScopeKey === null
+                      ? "bg-primary/20 text-primary border border-primary/30"
+                      : "text-muted-foreground hover:bg-sidebar-row-hover hover:text-foreground",
+                  )}
+                >
+                  All
+                </button>
+                {projectGroups.map((group) => {
+                  const isSelected = projectScopeKey === group.projectKey;
+                  return (
+                    <button
+                      key={group.projectKey}
+                      type="button"
+                      onClick={() => {
+                        setProjectScopeKey(group.projectKey);
+                        handleNewThreadClick();
+                      }}
+                      className={cn(
+                        "flex items-center gap-1.5 shrink-0 rounded px-2 py-0.5 text-xs font-medium transition-colors cursor-pointer max-w-[140px]",
+                        isSelected
+                          ? "bg-primary/20 text-primary border border-primary/30"
+                          : "text-muted-foreground hover:bg-sidebar-row-hover hover:text-foreground border border-transparent",
+                      )}
+                      title={group.displayName}
+                    >
+                      <ProjectFavicon project={group} className="size-3.5 shrink-0" />
+                      <span className="truncate">{group.displayName}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
           </SidebarGroup>
         }
       >
@@ -5555,7 +5594,7 @@ export default function Sidebar() {
             snoozedThreads.length +
             settledThreads.length ===
             0 ? (
-            <div className="flex flex-col items-center gap-2 px-2 py-6 text-center text-xs text-muted-foreground/60">
+            <div className="flex flex-col items-center gap-2 px-2 py-4 text-center text-xs text-muted-foreground/60">
               {projects.length === 0 ? (
                 <div className="flex flex-col items-center gap-2.5 w-full px-1">
                   <span className="text-muted-foreground/80 font-medium">No projects yet</span>
@@ -5590,10 +5629,71 @@ export default function Sidebar() {
                     </button>
                   </div>
                 </div>
-              ) : scopedProjectGroup ? (
-                `No threads in ${scopedProjectGroup.displayName} yet`
               ) : (
-                "No threads yet"
+                <div className="flex flex-col gap-2.5 w-full px-1 text-left">
+                  <div className="flex items-center justify-between px-1">
+                    <span className="text-2xs font-semibold uppercase tracking-wider text-muted-foreground/80">
+                      Projects ({projectGroups.length})
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        projectCreateModalStore.open(primaryEnvironmentId ?? undefined)
+                      }
+                      className="text-2xs text-primary hover:underline flex items-center gap-1 font-medium cursor-pointer"
+                    >
+                      <PlusIcon className="size-3" /> New
+                    </button>
+                  </div>
+                  <div className="flex flex-col gap-1 w-full">
+                    {projectGroups.map((group) => {
+                      const isSelected = projectScopeKey === group.projectKey;
+                      return (
+                        <button
+                          key={group.projectKey}
+                          type="button"
+                          onClick={() => {
+                            setProjectScopeKey(group.projectKey);
+                            handleNewThreadClick();
+                          }}
+                          className={cn(
+                            "flex items-center justify-between w-full rounded-md px-2.5 py-2 text-xs transition-colors cursor-pointer",
+                            isSelected
+                              ? "bg-primary/15 text-primary font-medium border border-primary/25"
+                              : "hover:bg-sidebar-row-hover text-sidebar-foreground/90 border border-transparent",
+                          )}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <ProjectFavicon project={group} className="size-4 shrink-0" />
+                            <span className="truncate">{group.displayName}</span>
+                          </div>
+                          <span
+                            className={cn(
+                              "text-2xs shrink-0 font-medium",
+                              isSelected ? "text-primary" : "text-muted-foreground/60",
+                            )}
+                          >
+                            {isSelected ? "Active" : "Select"}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {scopedProjectGroup ? (
+                    <div className="mt-2 pt-2 border-t border-sidebar-border/50 flex flex-col items-center gap-1 text-center">
+                      <p className="text-2xs text-muted-foreground/60">
+                        No threads in {scopedProjectGroup.displayName} yet
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setProjectScopeKey(null)}
+                        className="text-2xs text-primary/80 hover:text-primary underline cursor-pointer"
+                      >
+                        Show all projects
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
               )}
             </div>
           ) : null}

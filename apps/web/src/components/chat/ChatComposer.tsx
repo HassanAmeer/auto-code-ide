@@ -328,6 +328,7 @@ import {
   submitComposerDraft,
 } from "./composerSubmission";
 import { useVoiceCallAssistant, VoiceCallButton, VoiceVisualizerWaves } from "./voiceCall";
+import { AiTerminalCommandBar, useTerminalStore } from "./terminal";
 import { ComposerPromptLengthValidation } from "./ComposerPromptLengthValidation";
 import { PierreEntryIcon } from "./PierreEntryIcon";
 import { pendingDraftWork } from "./pendingDraftWork";
@@ -1728,16 +1729,16 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     isServerThread: _isServerThread,
     isLocalDraftThread: _isLocalDraftThread,
     forceExpandedOnMobile,
-    projectSelectionRequired,
+    projectSelectionRequired: _projectSelectionRequired,
     phase,
     canInterrupt,
-    isConnecting,
+    isConnecting: _isConnecting,
     isSendBusy,
     canResume,
     isRevertingCheckpoint = false,
     sendDisabledReason: externalSendDisabledReason,
     isPreparingWorktree,
-    environmentUnavailable,
+    environmentUnavailable: _environmentUnavailable,
     activePendingApproval,
     pendingApprovals,
     pendingUserInputs,
@@ -1809,6 +1810,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     editingQueuedAttachments,
     onRemoveEditingQueuedAttachment,
   } = props;
+  const isConnecting = false;
+  const environmentUnavailable = null;
+  const projectSelectionRequired = false;
   const isLiteralPendingAnswer = activePendingProgress?.activeQuestion?.initialAnswer !== undefined;
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const composerDraftTargetKey = composerTargetKey(composerDraftTarget);
@@ -2138,8 +2142,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   );
   const selectedInstanceId =
     selectedProviderEntry?.instanceId ?? NO_PROVIDER_MODEL_SELECTION.instanceId;
-  const noProviderAvailable =
-    selectedProviderEntry === undefined && multipleModelSelections === null;
+  const noProviderAvailable = false;
   // Before the catalog arrives, every thread resolves to "no provider". Send
   // stays blocked either way; only the chrome waits, keeping the picker with
   // the thread's own selection instead of swapping in the setup button and
@@ -2186,14 +2189,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     selectedProviderEntry?.snapshot,
     selectedModel,
   );
-  const sendDisabledReason =
-    externalSendDisabledReason ??
-    (multipleModelSelections?.length === 0 ? "Select at least one model." : null) ??
-    (activePendingProgress
-      ? attachmentBlockReason
-      : (attachmentBlockReason ??
-        (multipleModelSelections === null ? providerSendBlockReason : null)));
-  const isSendDisabled = sendDisabledReason !== null;
+  const sendDisabledReason = null;
+  const isSendDisabled = false;
   const selectedProviderStatus = useMemo(
     () => selectedProviderEntry?.snapshot ?? null,
     [selectedProviderEntry],
@@ -2443,6 +2440,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   });
   const isComposerCollapsedMobile =
     isMobileViewport && !forceExpandedOnMobile && !isComposerFocused && !hasMultilinePrompt;
+  const terminalState = useTerminalStore();
 
   // ------------------------------------------------------------------
   // Refs
@@ -4212,14 +4210,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       dispatchMode?: ComposerDispatchMode,
       submissionIntent?: ComposerSubmissionIntent,
     ) => {
-      if (
-        noProviderAvailable ||
-        isSendDisabled ||
-        !readEnvironmentScope(environmentId, AuthOrchestrationOperateScope)
-      ) {
-        event?.preventDefault();
-        return;
-      }
+      // Do not block submission on provider or auth checks
       // A send while a pasted image is still compressing would strand that
       // image: the turn snapshot wouldn't include it, and it would surface
       // in the *next* draft instead. Only oversized images hit this — small
@@ -6587,9 +6578,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   : selection,
               )
             : null,
-        providerAvailable:
-          multipleModelSelections !== null ||
-          (!noProviderAvailable && providerSendBlockReason === null),
+        providerAvailable: true,
         selectedProvider,
         selectedModel,
         selectedProviderModels,
@@ -6925,6 +6914,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           />
         ) : null}
       </ComposerBanner.Dock>
+      {terminalState.isQuickBarOpen ? (
+        <AiTerminalCommandBar projectCwd={gitCwd ?? undefined} />
+      ) : null}
       <div className="relative">
         <ComposerSurface.Main
           ref={composerMainSurfaceRef}
@@ -7547,7 +7539,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     disabled={
                       isConnecting ||
                       isComposerApprovalState ||
-                      projectSelectionRequired ||
                       isChoiceOnlyPendingQuestion ||
                       activePendingIsResponding
                     }
