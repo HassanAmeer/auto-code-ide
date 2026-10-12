@@ -1,4 +1,3 @@
-import * as NodePath from "node:path";
 import { runBashCommandOnHost } from "./terminalExec.ts";
 import * as ManagedProjectFolders from "./project/ManagedProjectFolders.ts";
 import * as Mime from "effect/http/Mime";
@@ -10,6 +9,7 @@ import {
 import { isDevProxiedPath } from "@t3tools/shared/devProxy";
 import { decodeOtlpTraceRecords } from "@t3tools/shared/observability";
 import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -32,6 +32,10 @@ import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
 import { OtlpTracer, OtlpSerialization } from "effect/observability";
 
 import * as ServerConfig from "./config.ts";
+import {
+  registerFallbackCustomProvider,
+  unregisterFallbackCustomProvider,
+} from "./provider/Drivers/CustomDriver.ts";
 import { ASSET_ROUTE_PREFIX, resolveAsset } from "./assets/AssetAccess.ts";
 import { githubMediaResponse } from "./assets/GitHubMediaFetch.ts";
 import { statMediaFile, streamMediaFile, type OpenMediaFile } from "./assets/MediaFile.ts";
@@ -525,7 +529,7 @@ export const layerCustomProviderFetchModelsRoute = HttpRouter.add(
   "/api/custom-provider/fetch-models",
   Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
-    const bodyJson = (yield* request.json.pipe(Effect.catch(() => Effect.succeed({} as any)))) as {
+    const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
       baseUrl?: string;
       apiKey?: string;
       headers?: Array<{ key: string; value: string }>;
@@ -662,12 +666,104 @@ export const layerCustomProviderFetchModelsRoute = HttpRouter.add(
   }),
 );
 
+export const layerCustomProviderSaveRoute = HttpRouter.add(
+  "POST",
+  "/api/custom-provider/save",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      id?: string;
+      name?: string;
+      baseUrl?: string;
+      apiKey?: string;
+      headers?: Array<{ key: string; value: string }>;
+      models?: Array<{ id: string; name?: string }>;
+      enabled?: boolean;
+    };
+
+    const nowMs = yield* Clock.currentTimeMillis;
+    const cleanId = (bodyJson?.id ?? "").startsWith("custom_")
+      ? bodyJson.id!
+      : `custom_${bodyJson?.id || nowMs}`;
+
+    registerFallbackCustomProvider({
+      instanceId: cleanId,
+      displayName: bodyJson?.name ?? "Custom Provider",
+      baseUrl: bodyJson?.baseUrl ?? "",
+      ...(bodyJson?.apiKey ? { apiKey: bodyJson.apiKey } : {}),
+      ...(bodyJson?.headers ? { headers: bodyJson.headers } : {}),
+      ...(bodyJson?.models ? { models: bodyJson.models } : {}),
+      enabled: bodyJson?.enabled ?? true,
+    });
+
+    return HttpServerResponse.jsonUnsafe({ ok: true, id: cleanId });
+  }),
+);
+
+export const layerCustomProviderDeleteRoute = HttpRouter.add(
+  "POST",
+  "/api/custom-provider/delete",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      id?: string;
+    };
+
+    if (bodyJson?.id) {
+      unregisterFallbackCustomProvider(bodyJson.id);
+    }
+
+    return HttpServerResponse.jsonUnsafe({ ok: true });
+  }),
+);
+
+export const layerCustomProviderSyncRoute = HttpRouter.add(
+  "POST",
+  "/api/custom-provider/sync",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      providers?: Array<{
+        id?: string;
+        name?: string;
+        baseUrl?: string;
+        apiKey?: string;
+        headers?: Array<{ key: string; value: string }>;
+        models?: Array<{ id: string; name?: string }>;
+        enabled?: boolean;
+      }>;
+    };
+
+    const nowMs = yield* Clock.currentTimeMillis;
+    if (Array.isArray(bodyJson?.providers)) {
+      for (const p of bodyJson.providers) {
+        if (!p) continue;
+        const cleanId = (p.id ?? "").startsWith("custom_") ? p.id! : `custom_${p.id || nowMs}`;
+        registerFallbackCustomProvider({
+          instanceId: cleanId,
+          displayName: p.name ?? "Custom Provider",
+          baseUrl: p.baseUrl ?? "",
+          ...(p.apiKey ? { apiKey: p.apiKey } : {}),
+          ...(p.headers ? { headers: p.headers } : {}),
+          ...(p.models ? { models: p.models } : {}),
+          enabled: p.enabled ?? true,
+        });
+      }
+    }
+
+    return HttpServerResponse.jsonUnsafe({
+      ok: true,
+      count: bodyJson?.providers?.length ?? 0,
+    });
+  }),
+);
+
 export const layerDirectProjectCreateRoute = HttpRouter.add(
   "POST",
   "/api/project/create-direct",
   Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
-    const bodyJson = (yield* request.json.pipe(Effect.catch(() => Effect.succeed({} as any)))) as {
+    const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
       name?: string;
       template?: string;
     };
@@ -714,7 +810,7 @@ export const layerDirectProjectImportZipRoute = HttpRouter.add(
   "/api/project/import-zip-direct",
   Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
-    const bodyJson = (yield* request.json.pipe(Effect.catch(() => Effect.succeed({} as any)))) as {
+    const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
       name?: string;
       zipBase64?: string;
     };
@@ -762,7 +858,7 @@ export const layerDirectProjectImportFilesRoute = HttpRouter.add(
   "/api/project/import-files-direct",
   Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
-    const bodyJson = (yield* request.json.pipe(Effect.catch(() => Effect.succeed({} as any)))) as {
+    const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
       name?: string;
       files?: ReadonlyArray<{
         relativePath: string;
@@ -818,7 +914,7 @@ export const layerDirectProjectCloneRoute = HttpRouter.add(
   "/api/project/clone-direct",
   Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
-    const bodyJson = (yield* request.json.pipe(Effect.catch(() => Effect.succeed({} as any)))) as {
+    const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
       name?: string;
       repoUrl?: string;
     };
@@ -876,7 +972,8 @@ export const layerFsBrowseRoute = HttpRouter.add(
   "/api/fs/browse",
   Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
-    const bodyJson = (yield* request.json.pipe(Effect.catch(() => Effect.succeed({} as any)))) as {
+    const pathService = yield* Path.Path;
+    const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
       path?: string;
     };
 
@@ -885,7 +982,7 @@ export const layerFsBrowseRoute = HttpRouter.add(
     if (target.startsWith("~")) {
       target = target.replace(/^~/, homeDir);
     }
-    const resolved = NodePath.resolve(target);
+    const resolved = pathService.resolve(target);
 
     const fileSystem = yield* FileSystem.FileSystem;
     const exists = yield* fileSystem.exists(resolved).pipe(Effect.orElseSucceed(() => false));
@@ -894,7 +991,7 @@ export const layerFsBrowseRoute = HttpRouter.add(
         ok: true,
         currentPath: resolved,
         exists: false,
-        parentPath: NodePath.dirname(resolved),
+        parentPath: pathService.dirname(resolved),
         homePath: homeDir,
         directories: [],
       });
@@ -905,7 +1002,7 @@ export const layerFsBrowseRoute = HttpRouter.add(
 
     for (const entry of entries) {
       if (entry.startsWith(".")) continue;
-      const full = NodePath.join(resolved, entry);
+      const full = pathService.join(resolved, entry);
       const stat = yield* fileSystem.stat(full).pipe(Effect.option);
       if (Option.isSome(stat) && stat.value.type === "Directory") {
         directories.push(entry);
@@ -918,7 +1015,7 @@ export const layerFsBrowseRoute = HttpRouter.add(
       ok: true,
       currentPath: resolved,
       exists: true,
-      parentPath: NodePath.dirname(resolved),
+      parentPath: pathService.dirname(resolved),
       homePath: homeDir,
       directories,
     });
@@ -929,30 +1026,36 @@ export const layerFsBrowseRoute = HttpRouter.add(
   ),
 );
 
+class CreateDirectoryError extends Data.TaggedError("CreateDirectoryError")<{
+  readonly message: string;
+}> {}
+
 export const layerFsEnsureDirRoute = HttpRouter.add(
   "POST",
   "/api/fs/ensure-dir",
   Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
-    const bodyJson = (yield* request.json.pipe(Effect.catch(() => Effect.succeed({} as any)))) as {
+    const pathService = yield* Path.Path;
+    const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
       path?: string;
     };
 
     const homeDir = process.env.HOME || process.env.USERPROFILE || "/";
-    let target = bodyJson?.path?.trim() || NodePath.join(homeDir, "autodeskprojects");
+    let target = bodyJson?.path?.trim() || pathService.join(homeDir, "autodeskprojects");
     if (target.startsWith("~")) {
       target = target.replace(/^~/, homeDir);
     }
-    const resolved = NodePath.resolve(target);
+    const resolved = pathService.resolve(target);
 
     const fileSystem = yield* FileSystem.FileSystem;
-    yield* fileSystem
-      .makeDirectory(resolved, { recursive: true })
-      .pipe(
-        Effect.mapError(
-          (cause) => new Error(`Could not create directory ${resolved}: ${String(cause)}`),
-        ),
-      );
+    yield* fileSystem.makeDirectory(resolved, { recursive: true }).pipe(
+      Effect.mapError(
+        (cause) =>
+          new CreateDirectoryError({
+            message: `Could not create directory ${resolved}: ${String(cause)}`,
+          }),
+      ),
+    );
 
     return HttpServerResponse.jsonUnsafe({
       ok: true,

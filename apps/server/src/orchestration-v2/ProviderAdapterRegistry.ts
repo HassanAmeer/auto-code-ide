@@ -19,6 +19,10 @@ import {
   type AnyProviderAdapterDriver,
 } from "@t3tools/provider-core/server/adapterDriver";
 import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
+import {
+  getFallbackCustomInstance,
+  listFallbackCustomInstanceIds,
+} from "../provider/Drivers/CustomDriver.ts";
 
 const isProviderSetupError = Schema.is(ProviderSetupError);
 
@@ -83,10 +87,11 @@ export const layerFromProviderInstanceRegistry: Layer.Layer<
       get: (instanceId) =>
         instances.getInstance(instanceId).pipe(
           Effect.flatMap((instance) => {
-            if (instance === undefined)
+            const resolvedInstance = instance ?? getFallbackCustomInstance(instanceId);
+            if (resolvedInstance === undefined)
               return new ProviderAdapterRegistryLookupError({ instanceId });
-            const adapter = instance.orchestrationAdapter;
-            const auth = instance.auth;
+            const adapter = resolvedInstance.orchestrationAdapter;
+            const auth = resolvedInstance.auth;
             if (!auth) return Effect.succeed(adapter);
             return Effect.succeed({
               ...adapter,
@@ -99,7 +104,7 @@ export const layerFromProviderInstanceRegistry: Layer.Layer<
                           instance.auth?.credentialBinding?.key === binding.key &&
                           instance.auth.credentialBinding.owner === binding.owner,
                       )
-                    : [instance];
+                    : [resolvedInstance];
                   for (const instance of related) {
                     if (
                       instance.auth?.isChangingCredentials &&
@@ -139,11 +144,21 @@ export const layerFromProviderInstanceRegistry: Layer.Layer<
         ),
       list: () =>
         instances.listInstances.pipe(
-          Effect.map((available) => available.map((instance) => instance.instanceId)),
+          Effect.map((available) => {
+            const ids = available.map((instance) => instance.instanceId);
+            for (const fallbackId of listFallbackCustomInstanceIds()) {
+              const typedId = ProviderInstanceId.make(fallbackId);
+              if (!ids.includes(typedId)) {
+                ids.push(typedId);
+              }
+            }
+            return ids;
+          }),
         ),
       getMetadata: (instanceId) =>
         Effect.gen(function* () {
-          const instance = yield* instances.getInstance(instanceId);
+          const instance =
+            (yield* instances.getInstance(instanceId)) ?? getFallbackCustomInstance(instanceId);
           if (instance === undefined) {
             return yield* new ProviderAdapterRegistryLookupError({ instanceId });
           }

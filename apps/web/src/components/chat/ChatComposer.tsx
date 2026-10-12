@@ -4349,6 +4349,10 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     onAutoSend: useCallback(() => {
       submitComposer();
     }, [submitComposer]),
+    onInterrupt: useCallback(() => {
+      void onInterrupt();
+    }, [onInterrupt]),
+    canInterrupt,
     prompt,
     phase,
     promptHistoryMessages,

@@ -97,6 +97,12 @@ export function saveCustomProviders(providers: CustomProvider[]): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(providers));
     window.dispatchEvent(new CustomEvent(EVENT_KEY, { detail: providers }));
+    // Synchronize with server in the background
+    void fetch("/api/custom-provider/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ providers }),
+    }).catch(() => {});
   } catch (error) {
     console.error("Failed to save custom providers:", error);
   }
@@ -151,6 +157,27 @@ export function deleteCustomProvider(id: string): void {
   const providers = getCustomProviders();
   const filtered = providers.filter((p) => p.id !== id);
   saveCustomProviders(filtered);
+  if (typeof window !== "undefined") {
+    void fetch("/api/custom-provider/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    }).catch(() => {});
+  }
+}
+
+// Auto-sync existing custom providers to the server on module load
+if (typeof window !== "undefined") {
+  setTimeout(() => {
+    const list = getCustomProviders();
+    if (list.length > 0) {
+      void fetch("/api/custom-provider/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ providers: list }),
+      }).catch(() => {});
+    }
+  }, 200);
 }
 
 export function subscribeCustomProviders(
