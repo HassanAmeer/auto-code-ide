@@ -344,6 +344,12 @@ import { useRemoveClonedProject } from "../hooks/useRemoveClonedProject";
 import { useOpenPanelPullRequestUrl } from "../hooks/useOpenPanelPullRequestUrl";
 import { resolveAppModelSelectionForInstance } from "../modelSelection";
 import {
+  customProviderToServerProvider,
+  getCustomProviders,
+  subscribeCustomProviders,
+  type CustomProvider,
+} from "../lib/customProviders";
+import {
   getComposerPromptInjectionState,
   getComposerProviderState,
 } from "./chat/composerProviderState";
@@ -3006,10 +3012,25 @@ export default function ChatView(props: ChatViewProps) {
 
   // Once a thread selects an environment, never substitute the primary
   // environment's config while the selected environment is still loading.
+  const [customProvidersList, setCustomProvidersList] = useState<CustomProvider[]>(() =>
+    getCustomProviders(),
+  );
+
+  useEffect(() => {
+    return subscribeCustomProviders((list) => {
+      setCustomProvidersList(list);
+    });
+  }, []);
+
   const serverConfig = activeThread
     ? (activeEnvironment?.serverConfig ?? null)
     : (primaryEnvironment?.serverConfig ?? null);
-  const providerStatuses = serverConfig?.providers ?? EMPTY_PROVIDERS;
+  const rawProviderStatuses = serverConfig?.providers ?? EMPTY_PROVIDERS;
+  const providerStatuses = useMemo(() => {
+    if (customProvidersList.length === 0) return rawProviderStatuses;
+    const customStatuses = customProvidersList.map(customProviderToServerProvider);
+    return [...rawProviderStatuses, ...customStatuses];
+  }, [rawProviderStatuses, customProvidersList]);
   const selectedProviderByThreadId = composerActiveProvider ?? null;
   const threadProvider =
     activeThread?.modelSelection.instanceId ??

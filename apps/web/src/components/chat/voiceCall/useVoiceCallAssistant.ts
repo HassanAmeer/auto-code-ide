@@ -62,6 +62,9 @@ export function useVoiceCallAssistant({
   const promptRef = useRef(prompt);
   promptRef.current = prompt;
 
+  const promptHistoryMessagesRef = useRef(promptHistoryMessages);
+  promptHistoryMessagesRef.current = promptHistoryMessages;
+
   // Track speech vs manual edits to ensure manual corrections are NEVER overwritten
   const lastTranscribedTextRef = useRef<string>("");
   const manualBaselineRef = useRef<string>("");
@@ -92,15 +95,34 @@ export function useVoiceCallAssistant({
     }
   }, []);
 
+  // Completely aborts and detaches event listeners from current SpeechRecognition instance
+  const cleanupRecognition = useCallback(() => {
+    if (recognitionRef.current) {
+      const rec = recognitionRef.current;
+      recognitionRef.current = null;
+      try {
+        rec.onstart = null;
+        rec.onend = null;
+        rec.onerror = null;
+        rec.onresult = null;
+        rec.abort();
+      } catch {
+        // ignore
+      }
+    }
+  }, []);
+
   const endCall = useCallback(() => {
     isCallActiveRef.current = false;
     isTtsActiveRef.current = false;
     manualBaselineRef.current = "";
     lastTranscribedTextRef.current = "";
+    lastSpokenAssistantMessageIdRef.current = null;
 
     clearSilenceTimer();
     clearRestartTimer();
     clearTtsCooldownTimer();
+    cleanupRecognition();
 
     if (levelCheckIntervalRef.current) {
       clearInterval(levelCheckIntervalRef.current);
@@ -120,20 +142,6 @@ export function useVoiceCallAssistant({
     }
     analyserRef.current = null;
 
-    // Stop speech recognition immediately
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.onstart = null;
-        recognitionRef.current.onend = null;
-        recognitionRef.current.onerror = null;
-        recognitionRef.current.onresult = null;
-        recognitionRef.current.abort();
-      } catch {
-        // ignore
-      }
-      recognitionRef.current = null;
-    }
-
     // Stop ambient thinking sound
     thinkingAmbientSound.stop();
 
@@ -142,7 +150,144 @@ export function useVoiceCallAssistant({
 
     setIsCallActive(false);
     setCallStatus("idle");
-  }, [clearSilenceTimer, clearRestartTimer, clearTtsCooldownTimer]);
+  }, [clearSilenceTimer, clearRestartTimer, clearTtsCooldownTimer, cleanupRecognition]);
+
+  // Creates and starts a fresh SpeechRecognition instance
+  // In Blink/WebKit, reusing an aborted SpeechRecognition object can fail or throw InvalidStateError.
+  // Creating a new instance on every restart guarantees continuous and glitch-free listening.
+  const startFreshRecognition = useCallback(() => {
+    if (
+      !isCallActiveRef.current ||
+      isTtsActiveRef.current ||
+      callStatusRef.current === "thinking" ||
+      callStatusRef.current === "speaking"
+    ) {
+      return;
+    }
+
+    cleanupRecognition();
+    clearRestartTimer();
+
+    try {
+      const SpeechRecognitionClass =
+        (window as unknown as { SpeechRecognition: any }).SpeechRecognition ||
+        (window as unknown as { webkitSpeechRecognition: any }).webkitSpeechRecognition;
+
+      if (!SpeechRecognitionClass) return;
+
+      const recognition = new SpeechRecognitionClass();
+      const sttSettings = loadSttSettings();
+      recognition.lang = getRecognitionLanguageCode(sttSettings.language);
+      recognition.continuous = true;
+      recognition.interimResults = true;
+
+      recognition.onstart = () => {
+        if (
+          !isTtsActiveRef.current &&
+          callStatusRef.current !== "speaking" &&
+          callStatusRef.current !== "thinking"
+        ) {
+          setCallStatus("listening");
+        }
+      };
+
+      recognition.onresult = (event: any) => {
+        if (
+          !isCallActiveRef.current ||
+          isTtsActiveRef.current ||
+          callStatusRef.current === "speaking" ||
+          callStatusRef.current === "thinking"
+        ) {
+          return;
+        }
+
+        let accumulatedFinal = "";
+        let currentInterim = "";
+
+        for (let i = 0; i < event.results.length; ++i) {
+          const item = event.results[i];
+          if (item.isFinal) {
+            accumulatedFinal += (accumulatedFinal ? " " : "") + item[0].transcript.trim();
+          } else {
+            currentInterim += (currentInterim ? " " : "") + item[0].transcript.trim();
+          }
+        }
+
+        const rawSpeech = (accumulatedFinal + (currentInterim ? " " + currentInterim : "")).trim();
+        if (!rawSpeech) return;
+
+        const lower = rawSpeech.toLowerCase();
+
+        for (const trigger of END_CALL_TRIGGERS) {
+          if (lower.includes(trigger)) {
+            endCall();
+            return;
+          }
+        }
+
+        let processedSpeech = rawSpeech;
+        if (sttSettings.language === "roman-urdu" || sttSettings.language === "auto") {
+          processedSpeech = transliterateUrduToRoman(rawSpeech);
+        }
+
+        const combinedText = manualBaselineRef.current
+          ? (manualBaselineRef.current + " " + processedSpeech).trim()
+          : processedSpeech.trim();
+
+        if (combinedText) {
+          lastTranscribedTextRef.current = combinedText;
+          setCallStatus("user-speaking");
+          onTranscriptChange(combinedText);
+          resetSilenceTimer();
+        }
+      };
+
+      recognition.onerror = (event: any) => {
+        console.warn("Speech recognition event in call:", event.error);
+        if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+          endCall();
+        } else {
+          // "no-speech", "audio-capture", "network" are non-fatal; schedule a restart
+          scheduleRestartRecognition();
+        }
+      };
+
+      recognition.onend = () => {
+        if (
+          isCallActiveRef.current &&
+          !isTtsActiveRef.current &&
+          callStatusRef.current !== "thinking" &&
+          callStatusRef.current !== "speaking"
+        ) {
+          scheduleRestartRecognition();
+        }
+      };
+
+      recognition.start();
+      recognitionRef.current = recognition;
+    } catch (err) {
+      console.warn("Failed to instantiate fresh speech recognition:", err);
+      scheduleRestartRecognition(600);
+    }
+  }, [cleanupRecognition, clearRestartTimer, endCall, onTranscriptChange]);
+
+  const scheduleRestartRecognition = useCallback(
+    (delay = 200) => {
+      if (
+        !isCallActiveRef.current ||
+        isTtsActiveRef.current ||
+        callStatusRef.current === "thinking" ||
+        callStatusRef.current === "speaking"
+      ) {
+        return;
+      }
+      clearRestartTimer();
+      restartTimerRef.current = setTimeout(() => {
+        startFreshRecognition();
+      }, delay);
+    },
+    [clearRestartTimer, startFreshRecognition],
+  );
 
   const dispatchAutoSend = useCallback(() => {
     clearSilenceTimer();
@@ -155,14 +300,8 @@ export function useVoiceCallAssistant({
       return;
     }
 
-    // Completely abort speech recognition so it doesn't listen to anything while thinking/sending
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.abort();
-      } catch {
-        // ignore
-      }
-    }
+    // Stop speech recognition while thinking/sending
+    cleanupRecognition();
 
     // Switch call status to thinking & start ambient sound
     setCallStatus("thinking");
@@ -174,7 +313,7 @@ export function useVoiceCallAssistant({
 
     // Auto-send prompt turn
     onAutoSend();
-  }, [clearSilenceTimer, onAutoSend]);
+  }, [clearSilenceTimer, cleanupRecognition, onAutoSend]);
 
   const resetSilenceTimer = useCallback(() => {
     clearSilenceTimer();
@@ -190,39 +329,7 @@ export function useVoiceCallAssistant({
     }, 2000);
   }, [clearSilenceTimer, dispatchAutoSend]);
 
-  // Safely restarts speech recognition while call is active and assistant is NOT speaking
-  const restartRecognition = useCallback(() => {
-    if (
-      !isCallActiveRef.current ||
-      isTtsActiveRef.current ||
-      callStatusRef.current === "thinking" ||
-      callStatusRef.current === "speaking"
-    ) {
-      return;
-    }
-    clearRestartTimer();
-    restartTimerRef.current = setTimeout(() => {
-      if (
-        !isCallActiveRef.current ||
-        isTtsActiveRef.current ||
-        callStatusRef.current === "thinking" ||
-        callStatusRef.current === "speaking"
-      ) {
-        return;
-      }
-      try {
-        if (recognitionRef.current) {
-          recognitionRef.current.start();
-        }
-      } catch {
-        // Recognition might already be running or transitioning; ignore
-      }
-    }, 200);
-  }, [clearRestartTimer]);
-
   // Handle external/manual edits in the input box:
-  // If the user manually edits, corrects, or deletes words in the input box,
-  // we update our baseline and abort current speech recognition so old words NEVER overwrite user changes!
   useEffect(() => {
     promptRef.current = prompt;
 
@@ -231,29 +338,22 @@ export function useVoiceCallAssistant({
       manualBaselineRef.current = prompt;
       lastTranscribedTextRef.current = prompt;
 
-      // Abort recognition to flush its internal event.results buffer
       if (
         isCallActiveRef.current &&
         !isTtsActiveRef.current &&
         callStatusRef.current !== "thinking" &&
         callStatusRef.current !== "speaking"
       ) {
-        try {
-          recognitionRef.current?.abort();
-        } catch {
-          // ignore
-        }
-        restartRecognition();
+        startFreshRecognition();
       }
 
-      // If user typed something and stopped for 2s, auto-send their edit
       if (prompt.trim().length > 0) {
         resetSilenceTimer();
       } else {
         clearSilenceTimer();
       }
     }
-  }, [prompt, restartRecognition, resetSilenceTimer, clearSilenceTimer]);
+  }, [prompt, startFreshRecognition, resetSilenceTimer, clearSilenceTimer]);
 
   const startCall = useCallback(async () => {
     if (!isSpeechRecognitionSupported()) {
@@ -334,118 +434,22 @@ export function useVoiceCallAssistant({
         }
       }, 100);
 
-      // 4. Initialize Speech Recognition
-      const SpeechRecognitionClass =
-        (window as unknown as { SpeechRecognition: any }).SpeechRecognition ||
-        (window as unknown as { webkitSpeechRecognition: any }).webkitSpeechRecognition;
-      const recognition = new SpeechRecognitionClass();
+      // 4. Anchor previous chat messages so old history is NEVER spoken on call start!
+      const existingLatestAssistant = promptHistoryMessagesRef.current
+        ? [...promptHistoryMessagesRef.current]
+            .reverse()
+            .find((m) => m.role === "assistant" && m.text.trim().length > 0 && !m.streaming)
+        : null;
+      lastSpokenAssistantMessageIdRef.current =
+        existingLatestAssistant?.id ?? "__call_start_anchor__";
 
-      const sttSettings = loadSttSettings();
-      recognition.lang = getRecognitionLanguageCode(sttSettings.language);
-      recognition.continuous = true;
-      recognition.interimResults = true;
-
-      recognition.onstart = () => {
-        if (
-          !isTtsActiveRef.current &&
-          callStatusRef.current !== "speaking" &&
-          callStatusRef.current !== "thinking"
-        ) {
-          setCallStatus("listening");
-        }
-      };
-
-      recognition.onresult = (event: any) => {
-        // Discard any sound if call is inactive, TTS is speaking, or echo cooldown is active
-        if (
-          !isCallActiveRef.current ||
-          isTtsActiveRef.current ||
-          callStatusRef.current === "speaking" ||
-          callStatusRef.current === "thinking"
-        ) {
-          return;
-        }
-
-        let accumulatedFinal = "";
-        let currentInterim = "";
-
-        // Accumulate complete utterance across current session results
-        for (let i = 0; i < event.results.length; ++i) {
-          const item = event.results[i];
-          if (item.isFinal) {
-            accumulatedFinal += (accumulatedFinal ? " " : "") + item[0].transcript.trim();
-          } else {
-            currentInterim += (currentInterim ? " " : "") + item[0].transcript.trim();
-          }
-        }
-
-        const rawSpeech = (accumulatedFinal + (currentInterim ? " " + currentInterim : "")).trim();
-        if (!rawSpeech) return;
-
-        const lower = rawSpeech.toLowerCase();
-
-        // Check voice triggers to end call
-        for (const trigger of END_CALL_TRIGGERS) {
-          if (lower.includes(trigger)) {
-            endCall();
-            return;
-          }
-        }
-
-        // Process transcript (Urdu/Hindi transliterated to Roman Urdu if configured)
-        let processedSpeech = rawSpeech;
-        if (sttSettings.language === "roman-urdu" || sttSettings.language === "auto") {
-          processedSpeech = transliterateUrduToRoman(rawSpeech);
-        }
-
-        // Combine with any existing manual baseline from user's manual edits
-        const combinedText = manualBaselineRef.current
-          ? (manualBaselineRef.current + " " + processedSpeech).trim()
-          : processedSpeech.trim();
-
-        if (combinedText) {
-          lastTranscribedTextRef.current = combinedText;
-          setCallStatus("user-speaking");
-          onTranscriptChange(combinedText);
-
-          // Reset the 2-second silence timer
-          resetSilenceTimer();
-        }
-      };
-
-      recognition.onerror = (event: any) => {
-        console.warn("Speech recognition event in call:", event.error);
-        if (event.error === "not-allowed" || event.error === "service-not-allowed") {
-          endCall();
-        } else {
-          // "no-speech", "audio-capture", "network" are non-fatal; schedule a restart
-          restartRecognition();
-        }
-      };
-
-      recognition.onend = () => {
-        // Automatically restart recognition while call is active and assistant is NOT speaking
-        if (
-          isCallActiveRef.current &&
-          !isTtsActiveRef.current &&
-          callStatusRef.current !== "thinking" &&
-          callStatusRef.current !== "speaking"
-        ) {
-          restartRecognition();
-        }
-      };
-
-      try {
-        recognition.start();
-      } catch (e) {
-        console.warn("Initial recognition start warning:", e);
-      }
-      recognitionRef.current = recognition;
+      // 5. Start fresh speech recognition instance
+      startFreshRecognition();
     } catch (err) {
       console.error("Failed to start voice call assistant:", err);
       endCall();
     }
-  }, [endCall, onTranscriptChange, resetSilenceTimer, restartRecognition, clearSilenceTimer]);
+  }, [endCall, startFreshRecognition]);
 
   const toggleCall = useCallback(() => {
     if (isCallActive) {
@@ -467,16 +471,13 @@ export function useVoiceCallAssistant({
     if (!isCallActive) return;
 
     if (phase === "running") {
-      // While running, ensure speech recognition is stopped
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.abort();
-        } catch {
-          // ignore
-        }
+      cleanupRecognition();
+      if (callStatusRef.current !== "thinking") {
+        setCallStatus("thinking");
+        thinkingAmbientSound.start();
       }
     }
-  }, [isCallActive, phase]);
+  }, [isCallActive, phase, cleanupRecognition]);
 
   // Speak assistant messages aloud during active call
   useEffect(() => {
@@ -489,7 +490,7 @@ export function useVoiceCallAssistant({
 
     if (!latestAssistantMessage) return;
 
-    // If message is new and has non-empty text
+    // Only speak new assistant messages that arrived AFTER the call started
     if (latestAssistantMessage.id !== lastSpokenAssistantMessageIdRef.current) {
       lastSpokenAssistantMessageIdRef.current = latestAssistantMessage.id;
 
@@ -499,21 +500,17 @@ export function useVoiceCallAssistant({
       // Stop ambient thinking sound immediately
       thinkingAmbientSound.stop();
 
-      // Completely abort speech recognition so it CANNOT pick up loudspeaker sound!
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.abort();
-        } catch {
-          // ignore
-        }
-      }
+      // Completely stop recognition so it CANNOT pick up loudspeaker sound!
+      cleanupRecognition();
 
       // Switch status to assistant speaking
       setCallStatus("speaking");
 
-      // Speak response aloud via TTS using user-configured settings (auto-male, auto-female, etc.)
-      speakText(latestAssistantMessage.text, undefined, () => {
-        // Once speech completes, apply a 700ms cooldown so loudspeaker reverberation fully dissipates
+      let hasFinished = false;
+      const onFinished = () => {
+        if (hasFinished) return;
+        hasFinished = true;
+
         clearTtsCooldownTimer();
         ttsCooldownTimerRef.current = setTimeout(() => {
           if (!isCallActiveRef.current) return;
@@ -523,11 +520,28 @@ export function useVoiceCallAssistant({
           lastTranscribedTextRef.current = "";
 
           setCallStatus("listening");
-          restartRecognition();
+          startFreshRecognition();
         }, 700);
-      });
+      };
+
+      // Speak response aloud via TTS using user-configured voice & accent
+      speakText(latestAssistantMessage.text, undefined, onFinished);
+
+      // Safety fallback timeout in case browser drops onend
+      const fallbackTimeoutMs = Math.max(5000, latestAssistantMessage.text.length * 150);
+      setTimeout(() => {
+        if (!hasFinished && isCallActiveRef.current && callStatusRef.current === "speaking") {
+          onFinished();
+        }
+      }, fallbackTimeoutMs);
     }
-  }, [isCallActive, promptHistoryMessages, restartRecognition, clearTtsCooldownTimer]);
+  }, [
+    isCallActive,
+    promptHistoryMessages,
+    startFreshRecognition,
+    cleanupRecognition,
+    clearTtsCooldownTimer,
+  ]);
 
   return {
     isCallActive,

@@ -1,7 +1,9 @@
-/**
- * Custom Providers storage and API client for OpenAI-compatible, Ollama,
- * OpenRouter, and other third-party LLM endpoints.
- */
+import {
+  ProviderDriverKind,
+  ProviderInstanceId,
+  type ServerProvider,
+  type ServerProviderModel,
+} from "@t3tools/contracts";
 
 export interface CustomHeader {
   key: string;
@@ -25,13 +27,62 @@ export interface CustomProvider {
   updatedAt: string;
 }
 
+export function customProviderToServerProvider(cp: CustomProvider): ServerProvider {
+  const cleanId = cp.id.startsWith("custom_") ? cp.id : `custom_${cp.id}`;
+  const instanceId = ProviderInstanceId.make(cleanId);
+  const driver = ProviderDriverKind.make("custom");
+  const models: ServerProviderModel[] =
+    cp.models && cp.models.length > 0
+      ? cp.models.map((m) => ({
+          id: m.id,
+          slug: m.id,
+          name: m.name ?? m.id,
+          displayName: m.name ?? m.id,
+          isCustom: false,
+          capabilities: null,
+        }))
+      : [
+          {
+            id: "default",
+            slug: "default",
+            name: `${cp.name} (Default)`,
+            displayName: `${cp.name} (Default)`,
+            isCustom: false,
+            capabilities: null,
+          },
+        ];
+
+  return {
+    instanceId,
+    driver,
+    displayName: cp.name,
+    name: cp.name,
+    enabled: cp.enabled,
+    installed: true,
+    version: null,
+    status: cp.enabled ? "ready" : "disabled",
+    auth: { status: "authenticated" },
+    checkedAt: new Date().toISOString(),
+    availability: cp.enabled ? "available" : "unavailable",
+    models,
+    slashCommands: [],
+    skills: [],
+  } as unknown as ServerProvider;
+}
+
 const STORAGE_KEY = "t3_custom_providers_v1";
 const EVENT_KEY = "t3_custom_providers_updated";
 
 export function getCustomProviders(): CustomProvider[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    let raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      raw =
+        localStorage.getItem("t3code_custom_providers") ||
+        localStorage.getItem("custom_providers") ||
+        localStorage.getItem("t3_custom_providers");
+    }
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
@@ -144,6 +195,33 @@ export async function fetchModelsFromProvider(
     return { success: false, models: [], error: "Base URL is required." };
   }
 
+  // 1. First attempt via local server-side proxy to completely bypass browser CORS limitations
+  try {
+    const proxyResp = await fetch("/api/custom-provider/fetch-models", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ baseUrl: cleanBase, apiKey, headers }),
+      signal: AbortSignal.timeout(12000),
+    });
+
+    if (proxyResp.ok) {
+      const proxyResult = (await proxyResp.json()) as {
+        ok: boolean;
+        models?: CustomProviderModel[];
+        error?: string;
+      };
+      if (proxyResult.ok && Array.isArray(proxyResult.models) && proxyResult.models.length > 0) {
+        return { success: true, models: proxyResult.models };
+      }
+      if (proxyResult.error) {
+        return { success: false, models: [], error: proxyResult.error };
+      }
+    }
+  } catch {
+    // If backend proxy endpoint is unavailable, fallback to direct browser fetch
+  }
+
+  // 2. Fallback to direct client-side fetch
   const requestHeaders: Record<string, string> = {
     Accept: "application/json",
   };
@@ -200,11 +278,18 @@ export async function fetchModelsFromProvider(
       // Format 1: OpenAI standard: { data: [{ id: "model-name" }] }
       if (data && Array.isArray(data.data)) {
         const models: CustomProviderModel[] = data.data
-          .filter((item: unknown) => typeof item === "object" && item !== null && "id" in item)
-          .map((item: { id: string; name?: string }) => ({
-            id: String(item.id),
-            name: typeof item.name === "string" ? item.name : undefined,
-          }));
+          .filter(
+            (item: unknown) =>
+              typeof item === "object" &&
+              item !== null &&
+              ("id" in item || "serviceId" in item || "name" in item),
+          )
+          .map(
+            (item: { id?: string; serviceId?: string; name?: string; displayName?: string }) => ({
+              id: String(item.id || item.serviceId || item.name),
+              name: typeof item.name === "string" ? item.name : item.displayName || undefined,
+            }),
+          );
 
         if (models.length > 0) {
           return { success: true, models };
@@ -216,10 +301,12 @@ export async function fetchModelsFromProvider(
         const models: CustomProviderModel[] = data.models
           .filter(
             (item: unknown) =>
-              typeof item === "object" && item !== null && ("name" in item || "id" in item),
+              typeof item === "object" &&
+              item !== null &&
+              ("name" in item || "id" in item || "serviceId" in item),
           )
-          .map((item: { id?: string; name?: string }) => ({
-            id: String(item.id || item.name),
+          .map((item: { id?: string; name?: string; serviceId?: string }) => ({
+            id: String(item.id || item.name || item.serviceId),
             name: typeof item.name === "string" ? item.name : undefined,
           }));
 
@@ -233,10 +320,12 @@ export async function fetchModelsFromProvider(
         const models: CustomProviderModel[] = (data as Array<Record<string, unknown>>)
           .filter(
             (item): item is Record<string, unknown> =>
-              typeof item === "object" && item !== null && ("id" in item || "name" in item),
+              typeof item === "object" &&
+              item !== null &&
+              ("id" in item || "serviceId" in item || "name" in item),
           )
           .map((item) => ({
-            id: String(item.id ?? item.name ?? ""),
+            id: String(item.id ?? item.serviceId ?? item.name ?? ""),
             name: typeof item.name === "string" ? item.name : undefined,
           }))
           .filter((m) => m.id.length > 0);

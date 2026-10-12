@@ -165,6 +165,45 @@ export function CustomProvidersSettingsPanel() {
     }
   };
 
+  const [fetchingCardId, setFetchingCardId] = useState<string | null>(null);
+
+  const handleCardFetchModels = async (p: CustomProvider) => {
+    setFetchingCardId(p.id);
+    try {
+      const result = await fetchModelsFromProvider(p.baseUrl, p.apiKey, p.headers);
+      if (result.success && result.models.length > 0) {
+        saveCustomProvider({
+          ...p,
+          models: result.models,
+        });
+        setProviders(getCustomProviders());
+        if (editingProviderId === p.id) {
+          setLoadedModels(result.models);
+          setModelIdsInput(result.models.map((m) => m.id).join(", "));
+        }
+        toastManager.add({
+          type: "success",
+          title: "Models updated",
+          description: `Discovered and saved ${result.models.length} model(s) for "${p.name}".`,
+        });
+      } else {
+        toastManager.add({
+          type: "error",
+          title: "Could not load models",
+          description: result.error ?? "Failed to fetch models from endpoint.",
+        });
+      }
+    } catch (err: unknown) {
+      toastManager.add({
+        type: "error",
+        title: "Fetch error",
+        description: err instanceof Error ? err.message : "Network error",
+      });
+    } finally {
+      setFetchingCardId(null);
+    }
+  };
+
   const handleAddHeader = () => {
     setHeaders((prev) => [...prev, { key: "", value: "" }]);
   };
@@ -361,8 +400,20 @@ export function CustomProvidersSettingsPanel() {
                       </div>
                     </div>
 
-                    {/* Actions: Pause, Edit, Delete */}
+                    {/* Actions: Fetch Models, Pause, Edit, Delete */}
                     <div className="flex items-center gap-2">
+                      <Button
+                        size="xs"
+                        variant="outline"
+                        disabled={fetchingCardId === p.id}
+                        onClick={() => handleCardFetchModels(p)}
+                        title="Fetch / Reload models from endpoint"
+                      >
+                        <RefreshCwIcon
+                          className={cn("size-3", fetchingCardId === p.id && "animate-spin")}
+                        />
+                        {fetchingCardId === p.id ? "Fetching..." : "Fetch Models"}
+                      </Button>
                       <Button
                         size="xs"
                         variant="outline"
@@ -403,14 +454,43 @@ export function CustomProvidersSettingsPanel() {
 
                   {/* Loaded Models pills */}
                   <div className="mt-3 border-t border-border/40 pt-3">
-                    <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                      <LayersIcon className="size-3" />
-                      <span>Loaded Models ({p.models.length}):</span>
+                    <div className="flex items-center justify-between gap-2 text-xs font-medium text-muted-foreground">
+                      <div className="flex items-center gap-2">
+                        <LayersIcon className="size-3" />
+                        <span>Loaded Models ({p.models.length}):</span>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={fetchingCardId === p.id}
+                        onClick={() => handleCardFetchModels(p)}
+                        className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                        title="Reload models list"
+                      >
+                        <RefreshCwIcon
+                          className={cn("size-2.5", fetchingCardId === p.id && "animate-spin")}
+                        />
+                        Reload
+                      </button>
                     </div>
                     {p.models.length === 0 ? (
-                      <p className="mt-1 text-xs italic text-muted-foreground">
-                        No models added yet. Click &quot;Edit&quot; to fetch or specify models.
-                      </p>
+                      <div className="mt-2 flex items-center justify-between rounded-lg border border-dashed border-border/70 bg-muted/20 p-2.5">
+                        <p className="text-xs text-muted-foreground">
+                          No models loaded yet. Click &quot;Load Models&quot; to auto-discover
+                          models.
+                        </p>
+                        <Button
+                          size="xs"
+                          variant="secondary"
+                          disabled={fetchingCardId === p.id}
+                          onClick={() => handleCardFetchModels(p)}
+                          className="shrink-0 font-medium"
+                        >
+                          <RefreshCwIcon
+                            className={cn("size-3", fetchingCardId === p.id && "animate-spin")}
+                          />
+                          {fetchingCardId === p.id ? "Loading..." : "Load Models"}
+                        </Button>
+                      </div>
                     ) : (
                       <div className="mt-2 flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
                         {p.models.map((m) => (

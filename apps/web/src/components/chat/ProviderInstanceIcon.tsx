@@ -13,6 +13,7 @@ import {
   officialAcpRegistryIconUrlForAgentId,
   resolveOfficialAcpRegistryIconUrl,
 } from "../settings/AcpRegistryIcon";
+import { ServerIcon } from "lucide-react";
 
 const PROVIDER_ICON_BY_PROVIDER: Partial<Record<ProviderDriverKind, Icon>> = {
   [ProviderDriverKind.make("codex")]: OpenAI,
@@ -103,6 +104,11 @@ export const ProviderInstanceIcon = memo(function ProviderInstanceIcon(props: {
         <ProviderPackageIcon
           icon={packageIcon}
           className={cn("size-5 shrink-0", props.iconClassName)}
+          aria-hidden
+        />
+      ) : props.driverKind === "custom" || (props.driverKind as string).startsWith("custom") ? (
+        <ServerIcon
+          className={cn("size-4 shrink-0 text-cyan-400", props.iconClassName)}
           aria-hidden
         />
       ) : Icon ? (

@@ -520,6 +520,148 @@ export const layerTerminalExecRoute = HttpRouter.add(
   }),
 );
 
+export const layerCustomProviderFetchModelsRoute = HttpRouter.add(
+  "POST",
+  "/api/custom-provider/fetch-models",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const bodyJson = (yield* request.json.pipe(Effect.catch(() => Effect.succeed({} as any)))) as {
+      baseUrl?: string;
+      apiKey?: string;
+      headers?: Array<{ key: string; value: string }>;
+    };
+
+    const baseUrl = bodyJson?.baseUrl?.trim();
+    if (!baseUrl) {
+      return HttpServerResponse.jsonUnsafe({
+        ok: false,
+        error: "Base URL is required",
+        models: [],
+      });
+    }
+
+    const result = yield* Effect.promise(async () => {
+      try {
+        const cleanBase = baseUrl.replace(/\/+$/, "");
+        const requestHeaders: Record<string, string> = {
+          Accept: "application/json",
+          "User-Agent": "T3-Code/1.0",
+        };
+
+        if (bodyJson.apiKey && bodyJson.apiKey.trim().length > 0) {
+          requestHeaders["Authorization"] = `Bearer ${bodyJson.apiKey.trim()}`;
+        }
+
+        if (bodyJson.headers && Array.isArray(bodyJson.headers)) {
+          for (const h of bodyJson.headers) {
+            if (h.key && h.key.trim().length > 0) {
+              requestHeaders[h.key.trim()] = h.value.trim();
+            }
+          }
+        }
+
+        const modelsUrl = cleanBase.endsWith("/v1")
+          ? `${cleanBase}/models`
+          : cleanBase.includes("/v1/")
+            ? `${cleanBase}/models`
+            : `${cleanBase}/v1/models`;
+
+        const directUrl = `${cleanBase}/models`;
+        const urlsToTry = [modelsUrl];
+        if (modelsUrl !== directUrl) {
+          urlsToTry.push(directUrl);
+        }
+        if (cleanBase.includes("11434") || cleanBase.toLowerCase().includes("ollama")) {
+          const rootUrl = cleanBase.replace(/\/v1$/, "");
+          urlsToTry.push(`${rootUrl}/api/tags`);
+        }
+
+        let lastError = "Could not connect to provider";
+
+        const fetchFn = (globalThis as unknown as { fetch: typeof fetch })["fetch"];
+        for (const url of urlsToTry) {
+          try {
+            const resp = await fetchFn(url, {
+              method: "GET",
+              headers: requestHeaders,
+              signal: AbortSignal.timeout(10000),
+            });
+
+            if (!resp.ok) {
+              lastError = `Server responded with ${resp.status} ${resp.statusText}`;
+              continue;
+            }
+
+            const data = (await resp.json()) as any;
+
+            // Format 1: OpenAI standard: { data: [{ id, name, serviceId }] }
+            if (data && Array.isArray(data.data)) {
+              const models = data.data
+                .filter(
+                  (item: any) =>
+                    typeof item === "object" &&
+                    item !== null &&
+                    (item.id || item.serviceId || item.name),
+                )
+                .map((item: any) => ({
+                  id: String(item.id || item.serviceId || item.name),
+                  name: typeof item.name === "string" ? item.name : item.displayName || undefined,
+                }));
+              if (models.length > 0) {
+                return { ok: true, models };
+              }
+            }
+
+            // Format 2: Ollama /api/tags: { models: [...] }
+            if (data && Array.isArray(data.models)) {
+              const models = data.models
+                .filter(
+                  (item: any) =>
+                    typeof item === "object" &&
+                    item !== null &&
+                    (item.id || item.serviceId || item.name),
+                )
+                .map((item: any) => ({
+                  id: String(item.id || item.name || item.serviceId),
+                  name: typeof item.name === "string" ? item.name : undefined,
+                }));
+              if (models.length > 0) {
+                return { ok: true, models };
+              }
+            }
+
+            // Format 3: Direct array: [{ id, ... }]
+            if (Array.isArray(data)) {
+              const models = data
+                .filter(
+                  (item: any) =>
+                    typeof item === "object" &&
+                    item !== null &&
+                    (item.id || item.serviceId || item.name),
+                )
+                .map((item: any) => ({
+                  id: String(item.id || item.serviceId || item.name),
+                  name: typeof item.name === "string" ? item.name : undefined,
+                }));
+              if (models.length > 0) {
+                return { ok: true, models };
+              }
+            }
+          } catch (e: any) {
+            lastError = e?.message || String(e);
+          }
+        }
+
+        return { ok: false, error: lastError, models: [] };
+      } catch (err: any) {
+        return { ok: false, error: err?.message || String(err), models: [] };
+      }
+    });
+
+    return HttpServerResponse.jsonUnsafe(result);
+  }),
+);
+
 export const layerDirectProjectCreateRoute = HttpRouter.add(
   "POST",
   "/api/project/create-direct",

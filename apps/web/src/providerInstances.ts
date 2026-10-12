@@ -185,6 +185,9 @@ export function applyProviderInstanceSettings(
   settings: Pick<ServerSettings, "providerInstances">,
 ): ReadonlyArray<ProviderInstanceEntry> {
   return entries.map((entry) => {
+    if (entry.driverKind === "custom" || (entry.instanceId as string).startsWith("custom_")) {
+      return entry;
+    }
     const explicitInstance = Object.hasOwn(settings.providerInstances, entry.instanceId)
       ? settings.providerInstances[entry.instanceId]
       : undefined;
