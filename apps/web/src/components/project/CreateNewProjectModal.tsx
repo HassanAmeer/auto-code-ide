@@ -83,6 +83,7 @@ export function CreateNewProjectModal() {
   const [isCloneMode, setIsCloneMode] = useState(false);
   const [gitRepoUrl, setGitRepoUrl] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -92,6 +93,7 @@ export function CreateNewProjectModal() {
       setIsCloneMode(false);
       setGitRepoUrl("");
       setIsSubmitting(false);
+      isSubmittingRef.current = false;
       setTimeout(() => {
         inputRef.current?.focus();
       }, 50);
@@ -101,10 +103,16 @@ export function CreateNewProjectModal() {
   if (!isOpen) return null;
 
   const handleSubmit = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     const trimmed = projectName.trim();
-    if (!trimmed || isSubmitting) return;
+    if (!trimmed || isSubmittingRef.current || isSubmitting) return;
     if (isCloneMode && !gitRepoUrl.trim()) return;
+
+    isSubmittingRef.current = true;
+    setIsSubmitting(true);
 
     const targetEnv = (environmentId ??
       primaryEnvId ??
@@ -114,7 +122,6 @@ export function CreateNewProjectModal() {
     // Auto-hide popup immediately so user can see top progress bar and read toasts freely
     projectCreateModalStore.close();
 
-    setIsSubmitting(true);
     try {
       if (isCloneMode) {
         await cloneGitRepo(targetEnv, gitRepoUrl.trim(), trimmed);
@@ -126,6 +133,7 @@ export function CreateNewProjectModal() {
         });
       }
     } finally {
+      isSubmittingRef.current = false;
       setIsSubmitting(false);
     }
   };

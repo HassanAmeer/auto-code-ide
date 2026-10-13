@@ -813,50 +813,150 @@ header('Content-Type: text/html; charset=utf-8');
       );
   });
 
+  const inFlightNamedProjects = new Map<
+    string,
+    Promise<{
+      readonly projectId: ProjectId;
+      readonly workspaceRoot: string;
+      readonly commitError?: string | undefined;
+    }>
+  >();
+
   const createNamedProject: ManagedProjectFolders["Service"]["createNamedProject"] = Effect.fn(
     "ManagedProjectFolders.createNamedProject",
   )(function* (input) {
-    const workspaceRoot = yield* claimNamedFolder(input.name);
-    const removeFolder = fileSystem.remove(workspaceRoot, { recursive: true }).pipe(Effect.ignore);
-    // Until the create is dispatched nothing else can use the folder, so any
-    // exit but success removes it, an interrupt included.
-    const prepared = yield* Effect.all([
-      scaffoldRepository(workspaceRoot, input.name, input.template).pipe(
-        Effect.mapError((cause) => new NamedProjectFolderError({ folder: workspaceRoot, cause })),
-      ),
-      crypto.randomUUIDv4.pipe(
-        Effect.mapError((cause) => new NamedProjectCreateError({ workspaceRoot, cause })),
-      ),
-    ]).pipe(Effect.onExit((exit) => (Exit.isSuccess(exit) ? Effect.void : removeFolder)));
-    const [commitError, id] = prepared;
-    const project = yield* projects
-      .create({
-        commandId: CommandId.make(`named-project:${id}`),
-        projectId: ProjectId.make(id),
-        title: input.name,
-        workspaceRoot,
-      })
-      .pipe(
-        // A rejected create leaves the folder unused, so remove it. An
-        // interrupt can land after the create is committed, and a conflict
-        // means another project owns the folder, so it stays then; the owner
-        // is checked again first, since deleting another project's files is
-        // never acceptable.
-        Effect.tapError((error) =>
-          error._tag === "ProjectConflictError"
-            ? Effect.void
-            : projects.getByWorkspaceRoot(workspaceRoot).pipe(
-                Effect.flatMap((owner) => (Option.isNone(owner) ? removeFolder : Effect.void)),
-                Effect.ignore,
-              ),
+    const currentRoot = yield* resolveNamedProjectsRoot;
+    const folderName = newProjectFolderName(input.name) || "project";
+    const expectedRoot = path.join(currentRoot, folderName);
+    const inFlightKey = expectedRoot.toLowerCase();
+
+    // 1. Idempotency check: if project is already registered, return it immediately
+    const existingOwner = yield* projects.getByWorkspaceRoot(expectedRoot);
+    if (Option.isSome(existingOwner)) {
+      return {
+        projectId: existingOwner.value.id,
+        workspaceRoot: existingOwner.value.workspaceRoot,
+      };
+    }
+
+    // 2. Concurrency check: if another creation for this root is in flight, await it
+    const activePromise = inFlightNamedProjects.get(inFlightKey);
+    if (activePromise !== undefined) {
+      return yield* Effect.promise(() => activePromise);
+    }
+
+    let resolveInFlight!: (res: {
+      readonly projectId: ProjectId;
+      readonly workspaceRoot: string;
+      readonly commitError?: string | undefined;
+    }) => void;
+    let rejectInFlight!: (err: unknown) => void;
+    const currentPromise = new Promise<{
+      readonly projectId: ProjectId;
+      readonly workspaceRoot: string;
+      readonly commitError?: string | undefined;
+    }>((resolve, reject) => {
+      resolveInFlight = resolve;
+      rejectInFlight = reject;
+    });
+    inFlightNamedProjects.set(inFlightKey, currentPromise);
+
+    const runCreation = Effect.gen(function* () {
+      // 3. If expectedRoot folder already exists on disk, reuse it instead of creating duplicate (-2)
+      const rootStat = yield* fileSystem.stat(expectedRoot).pipe(Effect.option);
+      if (Option.isSome(rootStat) && rootStat.value.type === "Directory") {
+        const id = yield* crypto.randomUUIDv4.pipe(
+          Effect.mapError(
+            (cause) => new NamedProjectCreateError({ workspaceRoot: expectedRoot, cause }),
+          ),
+        );
+        const bootstrapped = yield* projects
+          .bootstrap({
+            commandId: CommandId.make(`named-project-existing:${id}`),
+            projectId: ProjectId.make(id),
+            title: input.name,
+            workspaceRoot: expectedRoot,
+          })
+          .pipe(
+            Effect.catchTags({
+              ProjectConflictError: (conflict) =>
+                Effect.succeed({
+                  project: { id: conflict.conflictingProjectId },
+                  created: false,
+                }),
+            }),
+            Effect.mapError(
+              (cause) => new NamedProjectCreateError({ workspaceRoot: expectedRoot, cause }),
+            ),
+          );
+        return {
+          projectId: bootstrapped.project.id,
+          workspaceRoot: expectedRoot,
+        };
+      }
+
+      const workspaceRoot = yield* claimNamedFolder(input.name);
+      const removeFolder = fileSystem
+        .remove(workspaceRoot, { recursive: true })
+        .pipe(Effect.ignore);
+      // Until the create is dispatched nothing else can use the folder, so any
+      // exit but success removes it, an interrupt included.
+      const prepared = yield* Effect.all([
+        scaffoldRepository(workspaceRoot, input.name, input.template).pipe(
+          Effect.mapError((cause) => new NamedProjectFolderError({ folder: workspaceRoot, cause })),
         ),
-        Effect.mapError((cause) => new NamedProjectCreateError({ workspaceRoot, cause })),
-      );
-    return {
-      projectId: project.id,
-      workspaceRoot,
-      ...(commitError === undefined ? {} : { commitError }),
-    };
+        crypto.randomUUIDv4.pipe(
+          Effect.mapError((cause) => new NamedProjectCreateError({ workspaceRoot, cause })),
+        ),
+      ]).pipe(Effect.onExit((exit) => (Exit.isSuccess(exit) ? Effect.void : removeFolder)));
+      const [commitError, id] = prepared;
+      const project = yield* projects
+        .create({
+          commandId: CommandId.make(`named-project:${id}`),
+          projectId: ProjectId.make(id),
+          title: input.name,
+          workspaceRoot,
+        })
+        .pipe(
+          // A rejected create leaves the folder unused, so remove it. An
+          // interrupt can land after the create is committed, and a conflict
+          // means another project owns the folder, so it stays then; the owner
+          // is checked again first, since deleting another project's files is
+          // never acceptable.
+          Effect.tapError((error) =>
+            error._tag === "ProjectConflictError"
+              ? Effect.void
+              : projects.getByWorkspaceRoot(workspaceRoot).pipe(
+                  Effect.flatMap((owner) => (Option.isNone(owner) ? removeFolder : Effect.void)),
+                  Effect.ignore,
+                ),
+          ),
+          Effect.mapError((cause) => new NamedProjectCreateError({ workspaceRoot, cause })),
+        );
+      return {
+        projectId: project.id,
+        workspaceRoot,
+        ...(commitError === undefined ? {} : { commitError }),
+      };
+    });
+
+    return yield* runCreation.pipe(
+      Effect.tap((result) =>
+        Effect.sync(() => {
+          resolveInFlight(result);
+        }),
+      ),
+      Effect.tapError((err) =>
+        Effect.sync(() => {
+          rejectInFlight(err);
+        }),
+      ),
+      Effect.ensuring(
+        Effect.sync(() => {
+          inFlightNamedProjects.delete(inFlightKey);
+        }),
+      ),
+    );
   });
 
   const importUploadedProject: ManagedProjectFolders["Service"]["importUploadedProject"] =

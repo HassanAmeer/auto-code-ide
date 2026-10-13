@@ -343,9 +343,26 @@ export function makeCustomAdapterV2(
                 }
 
                 const client = yield* HttpClient.HttpClient;
-                const response = yield* client
-                  .execute(request)
-                  .pipe(Effect.flatMap(HttpClientResponse.filterStatusOk));
+                const rawResponse = yield* client.execute(request);
+
+                if (rawResponse.status < 200 || rawResponse.status >= 300) {
+                  const errorBody = yield* rawResponse.text.pipe(Effect.orElseSucceed(() => ""));
+                  let detail = "";
+                  try {
+                    const parsed = JSON.parse(errorBody);
+                    detail =
+                      parsed?.error?.message ??
+                      parsed?.message ??
+                      (typeof parsed?.error === "string" ? parsed.error : "") ??
+                      (typeof parsed === "string" ? parsed : "");
+                  } catch {
+                    detail = errorBody.trim();
+                  }
+                  const statusMsg = `HTTP ${rawResponse.status}${detail ? `: ${detail}` : ""}`;
+                  return yield* Effect.fail(new Error(statusMsg));
+                }
+
+                const response = rawResponse;
 
                 let accumulatedText = "";
                 let lastEmitted = yield* Clock.currentTimeMillis;

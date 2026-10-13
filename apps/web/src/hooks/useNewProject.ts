@@ -30,6 +30,8 @@ function errorMessage(error: unknown): string {
  *
  * Resolves to whether the project was created.
  */
+const inFlightNewProjects = new Set<string>();
+
 export function useNewProject() {
   const createNew = useAtomCommand(projectEnvironment.createNew, { reportFailure: false });
   const publishRepository = useAtomCommand(sourceControlEnvironment.publishRepository, {
@@ -82,61 +84,85 @@ export function useNewProject() {
       readonly template?: ProjectTemplateType | undefined;
       readonly github?: { readonly account: string | null } | null | undefined;
     }): Promise<boolean> => {
-      let createdProject: {
-        readonly projectId: any;
-        readonly workspaceRoot: string;
-        readonly commitError?: string | undefined;
-      } | null = null;
+      const lockKey = `${input.environmentId}:${input.name.trim().toLowerCase()}`;
+      if (inFlightNewProjects.has(lockKey)) {
+        return false;
+      }
+      inFlightNewProjects.add(lockKey);
 
-      projectUploadStore.setState({
-        isImporting: true,
-        projectName: input.name,
-        stage: "Setting up workspace template...",
-        current: 1,
-        total: 4,
-        percent: 25,
-        error: null,
-      });
+      try {
+        let createdProject: {
+          readonly projectId: any;
+          readonly workspaceRoot: string;
+          readonly commitError?: string | undefined;
+        } | null = null;
 
-      const result = await createNew({
-        environmentId: input.environmentId,
-        input: {
-          name: input.name,
-          ...(input.template ? { template: input.template } : {}),
-        },
-      });
+        projectUploadStore.setState({
+          isImporting: true,
+          projectName: input.name,
+          stage: "Setting up workspace template...",
+          current: 1,
+          total: 4,
+          percent: 25,
+          error: null,
+        });
 
-      if (result._tag === "Success") {
-        createdProject = result.value;
-      } else {
-        // Direct HTTP fallback for standalone web / VPS environment
-        try {
-          const response = await fetch(
-            resolvePrimaryEnvironmentHttpUrl("/api/project/create-direct"),
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                name: input.name,
-                template: input.template,
-              }),
-            },
-          );
-          const data = (await response.json()) as {
-            ok?: boolean;
-            projectId?: string;
-            workspaceRoot?: string;
-            commitError?: string;
-            error?: string;
-          };
-          if (data && data.ok && data.projectId && data.workspaceRoot) {
-            createdProject = {
-              projectId: data.projectId,
-              workspaceRoot: data.workspaceRoot,
-              commitError: data.commitError,
+        const result = await createNew({
+          environmentId: input.environmentId,
+          input: {
+            name: input.name,
+            ...(input.template ? { template: input.template } : {}),
+          },
+        });
+
+        if (result._tag === "Success") {
+          createdProject = result.value;
+        } else {
+          // Direct HTTP fallback for standalone web / VPS environment
+          try {
+            const response = await fetch(
+              resolvePrimaryEnvironmentHttpUrl("/api/project/create-direct"),
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  name: input.name,
+                  template: input.template,
+                }),
+              },
+            );
+            const data = (await response.json()) as {
+              ok?: boolean;
+              projectId?: string;
+              workspaceRoot?: string;
+              commitError?: string;
+              error?: string;
             };
-          } else {
-            const err = data?.error ?? "Server could not create the project. Please try again.";
+            if (data && data.ok && data.projectId && data.workspaceRoot) {
+              createdProject = {
+                projectId: data.projectId,
+                workspaceRoot: data.workspaceRoot,
+                commitError: data.commitError,
+              };
+            } else {
+              const err = data?.error ?? "Server could not create the project. Please try again.";
+              projectUploadStore.setState({
+                isImporting: false,
+                error: err,
+              });
+              if (!isAtomCommandInterrupted(result)) {
+                toastManager.add(
+                  stackedThreadToast({
+                    type: "error",
+                    title: "Could not create the project",
+                    description: err,
+                  }),
+                );
+              }
+              return false;
+            }
+          } catch (httpError) {
+            const err = "Could not reach the server. Please check your connection and try again.";
             projectUploadStore.setState({
               isImporting: false,
               error: err,
@@ -152,82 +178,68 @@ export function useNewProject() {
             }
             return false;
           }
-        } catch (httpError) {
-          const err = "Could not reach the server. Please check your connection and try again.";
-          projectUploadStore.setState({
-            isImporting: false,
-            error: err,
-          });
-          if (!isAtomCommandInterrupted(result)) {
-            toastManager.add(
-              stackedThreadToast({
-                type: "error",
-                title: "Could not create the project",
-                description: err,
-              }),
-            );
-          }
-          return false;
         }
-      }
 
-      projectUploadStore.setState({
-        stage: "Initializing repository...",
-        current: 2,
-        total: 4,
-        percent: 65,
-      });
-
-      const { projectId, workspaceRoot, commitError } = createdProject;
-      // The folder sits in T3 Code's data directory, so always say where.
-      toastManager.add(
-        stackedThreadToast(
-          commitError === undefined
-            ? { type: "success", title: `Created ${input.name}`, description: workspaceRoot }
-            : {
-                type: "warning",
-                title: `Created ${input.name} without a first commit`,
-                description: `${commitError} The project is in ${workspaceRoot}.`,
-              },
-        ),
-      );
-      if (input.github) {
-        void publishToGitHub({
-          environmentId: input.environmentId,
-          workspaceRoot,
-          account: input.github.account,
+        projectUploadStore.setState({
+          stage: "Initializing repository...",
+          current: 2,
+          total: 4,
+          percent: 65,
         });
+
+        const { projectId, workspaceRoot, commitError } = createdProject;
+        // The folder sits in T3 Code's data directory, so always say where.
+        toastManager.add(
+          stackedThreadToast(
+            commitError === undefined
+              ? { type: "success", title: `Created ${input.name}`, description: workspaceRoot }
+              : {
+                  type: "warning",
+                  title: `Created ${input.name} without a first commit`,
+                  description: `${commitError} The project is in ${workspaceRoot}.`,
+                },
+          ),
+        );
+        if (input.github) {
+          void publishToGitHub({
+            environmentId: input.environmentId,
+            workspaceRoot,
+            account: input.github.account,
+          });
+        }
+
+        const projectRef = scopeProjectRef(input.environmentId, projectId);
+
+        projectUploadStore.setState({
+          stage: "Opening workspace thread...",
+          current: 3,
+          total: 4,
+          percent: 90,
+        });
+
+        // Quick check if already in store (2s max), never failing or showing error toast if still propagating
+        await waitForProject(projectRef, 2_000).catch(() => null);
+
+        projectUploadStore.setState({
+          stage: "Ready!",
+          current: 4,
+          total: 4,
+          percent: 100,
+        });
+
+        // Open new thread draft directly without error toast
+        await handleNewThread(projectRef).catch((error: unknown) => {
+          console.warn("Could not auto-open thread draft:", error);
+        });
+
+        setTimeout(() => {
+          projectUploadStore.reset();
+        }, 1200);
+
+        return true;
+      } finally {
+        inFlightNewProjects.delete(lockKey);
       }
-
-      const projectRef = scopeProjectRef(input.environmentId, projectId);
-
-      projectUploadStore.setState({
-        stage: "Opening workspace thread...",
-        current: 3,
-        total: 4,
-        percent: 90,
-      });
-
-      // Quick check if already in store (2s max), never failing or showing error toast if still propagating
-      await waitForProject(projectRef, 2_000).catch(() => null);
-
-      projectUploadStore.setState({
-        stage: "Ready!",
-        current: 4,
-        total: 4,
-        percent: 100,
-      });
-
-      // Open new thread draft directly without error toast
-      await handleNewThread(projectRef).catch((error: unknown) => {
-        console.warn("Could not auto-open thread draft:", error);
-      });
-
-      setTimeout(() => {
-        projectUploadStore.reset();
-      }, 1200);
-
-      return true;
     },
     [createNew, handleNewThread, publishToGitHub],
   );
