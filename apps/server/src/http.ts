@@ -550,7 +550,14 @@ export const layerCustomProviderFetchModelsRoute = HttpRouter.add(
 
     const result = yield* Effect.promise(async () => {
       try {
+        if (typeof process !== "undefined" && process.env) {
+          process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+        }
+
         const cleanBase = baseUrl.replace(/\/+$/, "");
+        const baseWithoutChat = cleanBase
+          .replace(/\/chat\/completions\/?$/i, "")
+          .replace(/\/+$/, "");
         const requestHeaders: Record<string, string> = {
           Accept: "application/json",
           "User-Agent": "T3-Code/1.0",
@@ -568,19 +575,19 @@ export const layerCustomProviderFetchModelsRoute = HttpRouter.add(
           }
         }
 
-        const modelsUrl = cleanBase.endsWith("/v1")
-          ? `${cleanBase}/models`
-          : cleanBase.includes("/v1/")
-            ? `${cleanBase}/models`
-            : `${cleanBase}/v1/models`;
+        const modelsUrl = baseWithoutChat.endsWith("/v1")
+          ? `${baseWithoutChat}/models`
+          : baseWithoutChat.includes("/v1/")
+            ? `${baseWithoutChat}/models`
+            : `${baseWithoutChat}/v1/models`;
 
-        const directUrl = `${cleanBase}/models`;
+        const directUrl = `${baseWithoutChat}/models`;
         const urlsToTry = [modelsUrl];
         if (modelsUrl !== directUrl) {
           urlsToTry.push(directUrl);
         }
         if (cleanBase.includes("11434") || cleanBase.toLowerCase().includes("ollama")) {
-          const rootUrl = cleanBase.replace(/\/v1$/, "");
+          const rootUrl = baseWithoutChat.replace(/\/v1$/, "");
           urlsToTry.push(`${rootUrl}/api/tags`);
         }
 

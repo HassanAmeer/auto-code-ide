@@ -110,6 +110,32 @@ describe("CustomDriver", () => {
 
       expect(session.driver).toBe("custom");
       expect(session.providerSessionId).toBe("session-1");
+
+      const th = yield* session.ensureThread({
+        threadId: ThreadId.make("th-1"),
+        modelSelection: { instanceId: testId, model: "model-a" } as any,
+        runtimePolicy: { cwd: "/test", interactionMode: "default" } as any,
+        providerSessionId: ProviderSessionId.make("session-1"),
+      });
+      expect(th.nativeThreadRef).toBeDefined();
+      expect(th.nativeThreadRef?.nativeId).toBe("native_th-1");
+
+      if (session.injectHistory) {
+        yield* session.injectHistory({
+          providerThread: th,
+          messages: [{ itemId: "item-1" as any, role: "user", text: "hello" }],
+          context: "system instruction",
+        });
+      }
+
+      const resumed = yield* session.resumeThread({
+        providerThread: th,
+        threadId: ThreadId.make("th-1"),
+        modelSelection: { instanceId: testId, model: "model-a" } as any,
+        runtimePolicy: { cwd: "/test", interactionMode: "default" } as any,
+      });
+      expect(resumed.nativeThreadRef?.nativeId).toBe("native_th-1");
+
       const snapshot = yield* session.readThreadSnapshot({
         providerThread: {
           id: ProviderThreadId.make("th-1"),

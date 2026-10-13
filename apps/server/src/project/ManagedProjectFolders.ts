@@ -896,7 +896,12 @@ header('Content-Type: text/html; charset=utf-8');
         };
       }
 
-      const workspaceRoot = yield* claimNamedFolder(input.name);
+      const workspaceRoot = expectedRoot;
+      yield* fileSystem
+        .makeDirectory(workspaceRoot, { recursive: true })
+        .pipe(
+          Effect.mapError((cause) => new NamedProjectFolderError({ folder: workspaceRoot, cause })),
+        );
       const removeFolder = fileSystem
         .remove(workspaceRoot, { recursive: true })
         .pipe(Effect.ignore);
@@ -911,31 +916,25 @@ header('Content-Type: text/html; charset=utf-8');
         ),
       ]).pipe(Effect.onExit((exit) => (Exit.isSuccess(exit) ? Effect.void : removeFolder)));
       const [commitError, id] = prepared;
-      const project = yield* projects
-        .create({
+      const bootstrapped = yield* projects
+        .bootstrap({
           commandId: CommandId.make(`named-project:${id}`),
           projectId: ProjectId.make(id),
           title: input.name,
           workspaceRoot,
         })
         .pipe(
-          // A rejected create leaves the folder unused, so remove it. An
-          // interrupt can land after the create is committed, and a conflict
-          // means another project owns the folder, so it stays then; the owner
-          // is checked again first, since deleting another project's files is
-          // never acceptable.
-          Effect.tapError((error) =>
-            error._tag === "ProjectConflictError"
-              ? Effect.void
-              : projects.getByWorkspaceRoot(workspaceRoot).pipe(
-                  Effect.flatMap((owner) => (Option.isNone(owner) ? removeFolder : Effect.void)),
-                  Effect.ignore,
-                ),
-          ),
+          Effect.catchTags({
+            ProjectConflictError: (conflict) =>
+              Effect.succeed({
+                project: { id: conflict.conflictingProjectId },
+                created: false,
+              }),
+          }),
           Effect.mapError((cause) => new NamedProjectCreateError({ workspaceRoot, cause })),
         );
       return {
-        projectId: project.id,
+        projectId: bootstrapped.project.id,
         workspaceRoot,
         ...(commitError === undefined ? {} : { commitError }),
       };

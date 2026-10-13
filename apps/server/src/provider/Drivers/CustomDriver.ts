@@ -46,6 +46,11 @@ import type { ServerProviderShape } from "@t3tools/provider-core/server/snapshot
 import type { ProviderTextGeneration } from "@t3tools/provider-core/server/textGeneration";
 import { AcpProviderCapabilitiesV2 } from "@t3tools/provider-acp/server/adapter";
 
+// Allow HTTPS requests with IP addresses and self-signed certificates for custom providers
+if (typeof process !== "undefined" && process.env) {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+}
+
 const DRIVER = ProviderDriverKind.make("custom");
 
 export interface CustomHeaderConfig {
@@ -196,7 +201,10 @@ export function makeCustomAdapterV2(
 
         const eventsQueue = yield* Queue.unbounded<ProviderAdapterV2Event>();
         let currentThread: OrchestrationV2ProviderThread | null = null;
-        const threadHistory: Array<{ role: "user" | "assistant"; text: string }> = [];
+        const threadHistories = new Map<
+          string,
+          Array<{ role: "system" | "user" | "assistant"; content: string }>
+        >();
         let currentTurnFiber: Fiber.Fiber<void, unknown> | null = null;
 
         const runtime: ProviderAdapterV2SessionRuntime = {
@@ -210,6 +218,7 @@ export function makeCustomAdapterV2(
               const now = yield* DateTime.now;
               const thId =
                 input.existingProviderThread?.id ?? ProviderThreadId.make(`th_${input.threadId}`);
+              const nativeId = `native_${input.threadId}`;
               currentThread = {
                 id: thId,
                 driver: DRIVER,
@@ -217,7 +226,11 @@ export function makeCustomAdapterV2(
                 providerSessionId: sessionId,
                 appThreadId: input.threadId,
                 ownerNodeId: null,
-                nativeThreadRef: null,
+                nativeThreadRef: {
+                  driver: DRIVER,
+                  nativeId,
+                  strength: "strong",
+                },
                 nativeConversationHeadRef: null,
                 status: "idle",
                 firstRunOrdinal: null,
@@ -231,16 +244,34 @@ export function makeCustomAdapterV2(
             }),
           resumeThread: (input) =>
             Effect.gen(function* () {
-              currentThread = input.providerThread;
+              currentThread = {
+                ...input.providerThread,
+                nativeThreadRef: input.providerThread.nativeThreadRef ?? {
+                  driver: DRIVER,
+                  nativeId: `native_${input.threadId}`,
+                  strength: "strong",
+                },
+                status: "idle",
+              };
               return currentThread;
             }),
           injectHistory: (args) =>
             Effect.sync(() => {
+              const threadKey = String(args.providerThread.appThreadId ?? args.providerThread.id);
+              const msgs: Array<{ role: "system" | "user" | "assistant"; content: string }> = [];
+              if (args.context && args.context.trim()) {
+                msgs.push({ role: "system", content: args.context.trim() });
+              }
               for (const msg of args.messages) {
-                threadHistory.push({
+                const text = msg.text?.trim();
+                if (!text) continue;
+                msgs.push({
                   role: msg.role === "assistant" ? "assistant" : "user",
-                  text: msg.text,
+                  content: text,
                 });
+              }
+              if (msgs.length > 0) {
+                threadHistories.set(threadKey, msgs);
               }
               return true;
             }),
@@ -293,28 +324,89 @@ export function makeCustomAdapterV2(
                   },
                 });
 
-                const cleanBase = (config.baseUrl ?? "").trim().replace(/\/+$/, "");
-                if (!cleanBase) {
+                const rawBase = (config.baseUrl ?? "").trim().replace(/\/+$/, "");
+                if (!rawBase) {
                   return yield* Effect.fail(
                     "Custom provider base URL is missing or not configured.",
                   );
                 }
 
-                const chatUrl = cleanBase.endsWith("/v1")
-                  ? `${cleanBase}/chat/completions`
-                  : cleanBase.includes("/v1/")
-                    ? `${cleanBase}/chat/completions`
-                    : `${cleanBase}/v1/chat/completions`;
+                let chatUrl: string;
+                if (rawBase.endsWith("/chat/completions")) {
+                  chatUrl = rawBase;
+                } else {
+                  const baseWithoutChat = rawBase
+                    .replace(/\/chat\/completions\/?$/i, "")
+                    .replace(/\/+$/, "");
+                  if (baseWithoutChat.endsWith("/v1")) {
+                    chatUrl = `${baseWithoutChat}/chat/completions`;
+                  } else if (baseWithoutChat.includes("/v1/")) {
+                    chatUrl = `${baseWithoutChat}/chat/completions`;
+                  } else {
+                    chatUrl = `${baseWithoutChat}/v1/chat/completions`;
+                  }
+                }
 
-                const conversationMessages = [
-                  ...threadHistory.map((m) => ({ role: m.role, content: m.text })),
-                  { role: "user", content: turnInput.message.text || "Hello" },
-                ];
+                const threadKey = String(
+                  turnInput.providerThread.appThreadId ?? turnInput.providerThread.id,
+                );
+                const history = threadHistories.get(threadKey) ?? [];
 
-                const selectedModel =
+                let userPrompt = (turnInput.message.text || "Hello").trim();
+                if (userPrompt.includes("User message:\n")) {
+                  const parts = userPrompt.split("User message:\n");
+                  userPrompt = (parts[parts.length - 1] || userPrompt).trim();
+                }
+
+                const candidateMessages: Array<{
+                  role: "system" | "user" | "assistant";
+                  content: string;
+                }> = [...history, { role: "user" as const, content: userPrompt || "Hello" }];
+
+                // Sanitize messages for OpenAI API compatibility:
+                // 1. Filter out empty contents
+                // 2. Collapse contiguous same-role messages
+                const conversationMessages: Array<{
+                  role: "system" | "user" | "assistant";
+                  content: string;
+                }> = [];
+                for (const msg of candidateMessages) {
+                  const content = msg.content?.trim();
+                  if (!content) continue;
+                  const prev = conversationMessages[conversationMessages.length - 1];
+                  if (prev && prev.role === msg.role) {
+                    prev.content += `\n\n${content}`;
+                  } else {
+                    conversationMessages.push({ role: msg.role, content });
+                  }
+                }
+
+                if (
+                  conversationMessages.length === 0 ||
+                  conversationMessages[0]!.role === "assistant"
+                ) {
+                  conversationMessages.unshift({ role: "user", content: "Hello" });
+                }
+
+                let selectedModel =
                   turnInput.modelSelection?.model && turnInput.modelSelection.model !== "default"
                     ? turnInput.modelSelection.model
                     : (config.models?.[0]?.id ?? "default");
+
+                if (
+                  (selectedModel === "default" || !selectedModel) &&
+                  (rawBase.includes("8377") ||
+                    rawBase.includes("antseed") ||
+                    rawBase.includes("cheaprouter"))
+                ) {
+                  selectedModel = "glm-4.5-flash";
+                } else if (
+                  selectedModel === "default" &&
+                  config.models &&
+                  config.models.length > 0
+                ) {
+                  selectedModel = config.models[0]!.id;
+                }
 
                 let request = HttpClientRequest.post(chatUrl).pipe(
                   HttpClientRequest.setHeader("Content-Type", "application/json"),
@@ -459,11 +551,19 @@ export function makeCustomAdapterV2(
                   threadDisposition: "reusable",
                 });
 
-                threadHistory.push({
-                  role: "user",
-                  text: turnInput.message.text || "",
-                });
-                threadHistory.push({ role: "assistant", text: accumulatedText });
+                // Save turn to thread history on successful completion
+                const updatedHistory: Array<{
+                  role: "system" | "user" | "assistant";
+                  content: string;
+                }> = [
+                  ...history,
+                  { role: "user" as const, content: userPrompt || "Hello" },
+                  {
+                    role: "assistant" as const,
+                    content: accumulatedText.trim() || "(Response received)",
+                  },
+                ];
+                threadHistories.set(threadKey, updatedHistory);
               }).pipe(
                 Effect.provide(FetchHttpClient.layer),
                 Effect.catch((err: unknown) =>
