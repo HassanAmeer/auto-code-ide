@@ -73,6 +73,30 @@ export function customProviderToServerProvider(cp: CustomProvider): ServerProvid
 const STORAGE_KEY = "t3_custom_providers_v1";
 const EVENT_KEY = "t3_custom_providers_updated";
 
+export const DEFAULT_CUSTOM_PROVIDERS: CustomProvider[] = [
+  {
+    id: "custom_openrouter",
+    name: "OpenRouter",
+    baseUrl: "https://openrouter.ai/api/v1",
+    apiKey: "",
+    headers: [
+      { key: "HTTP-Referer", value: "https://autojobs.tokendeal.cloud" },
+      { key: "X-Title", value: "Jobi Code" },
+    ],
+    models: [
+      { id: "meta-llama/llama-3.3-70b-instruct:free", name: "Llama 3.3 70B (Free)" },
+      { id: "google/gemini-2.0-flash-exp:free", name: "Gemini 2.0 Flash Exp (Free)" },
+      { id: "deepseek/deepseek-r1:free", name: "DeepSeek R1 (Free)" },
+      { id: "anthropic/claude-3.5-sonnet", name: "Claude 3.5 Sonnet" },
+      { id: "openai/gpt-4o", name: "GPT-4o" },
+      { id: "deepseek/deepseek-chat", name: "DeepSeek V3" },
+    ],
+    enabled: true,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  },
+];
+
 export function getCustomProviders(): CustomProvider[] {
   if (typeof window === "undefined") return [];
   try {
@@ -83,12 +107,19 @@ export function getCustomProviders(): CustomProvider[] {
         localStorage.getItem("custom_providers") ||
         localStorage.getItem("t3_custom_providers");
     }
-    if (!raw) return [];
+    if (!raw) {
+      saveCustomProviders(DEFAULT_CUSTOM_PROVIDERS);
+      return DEFAULT_CUSTOM_PROVIDERS;
+    }
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      saveCustomProviders(DEFAULT_CUSTOM_PROVIDERS);
+      return DEFAULT_CUSTOM_PROVIDERS;
+    }
+    return parsed;
   } catch (error) {
     console.error("Failed to load custom providers:", error);
-    return [];
+    return DEFAULT_CUSTOM_PROVIDERS;
   }
 }
 

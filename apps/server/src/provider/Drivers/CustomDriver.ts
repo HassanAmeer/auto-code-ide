@@ -173,6 +173,11 @@ export function makeUnsupportedTextGeneration(): ProviderTextGeneration {
   };
 }
 
+export const GLOBAL_CUSTOM_THREAD_HISTORIES = new Map<
+  string,
+  Array<{ role: "system" | "user" | "assistant"; content: string }>
+>();
+
 export function makeCustomAdapterV2(
   instanceId: ProviderInstanceId,
   config: CustomDriverConfig,
@@ -201,10 +206,6 @@ export function makeCustomAdapterV2(
 
         const eventsQueue = yield* Queue.unbounded<ProviderAdapterV2Event>();
         let currentThread: OrchestrationV2ProviderThread | null = null;
-        const threadHistories = new Map<
-          string,
-          Array<{ role: "system" | "user" | "assistant"; content: string }>
-        >();
         let currentTurnFiber: Fiber.Fiber<void, unknown> | null = null;
 
         const runtime: ProviderAdapterV2SessionRuntime = {
@@ -271,7 +272,7 @@ export function makeCustomAdapterV2(
                 });
               }
               if (msgs.length > 0) {
-                threadHistories.set(threadKey, msgs);
+                GLOBAL_CUSTOM_THREAD_HISTORIES.set(threadKey, msgs);
               }
               return true;
             }),
@@ -335,26 +336,28 @@ export function makeCustomAdapterV2(
                   );
                 }
 
+                let cleanBase = rawBase.replace(/\/chat\/completions\/?$/i, "").replace(/\/+$/, "");
+                if (cleanBase.includes("openrouter.ai")) {
+                  cleanBase = "https://openrouter.ai/api/v1";
+                }
+
                 let chatUrl: string;
-                if (rawBase.endsWith("/chat/completions")) {
-                  chatUrl = rawBase;
+                if (cleanBase.endsWith("/chat/completions")) {
+                  chatUrl = cleanBase;
+                } else if (cleanBase.endsWith("/v1")) {
+                  chatUrl = `${cleanBase}/chat/completions`;
+                } else if (cleanBase.includes("/v1/")) {
+                  chatUrl = `${cleanBase}/chat/completions`;
                 } else {
-                  const baseWithoutChat = rawBase
-                    .replace(/\/chat\/completions\/?$/i, "")
-                    .replace(/\/+$/, "");
-                  if (baseWithoutChat.endsWith("/v1")) {
-                    chatUrl = `${baseWithoutChat}/chat/completions`;
-                  } else if (baseWithoutChat.includes("/v1/")) {
-                    chatUrl = `${baseWithoutChat}/chat/completions`;
-                  } else {
-                    chatUrl = `${baseWithoutChat}/v1/chat/completions`;
-                  }
+                  chatUrl = `${cleanBase}/v1/chat/completions`;
                 }
 
                 const threadKey = String(
-                  turnInput.providerThread.appThreadId ?? turnInput.providerThread.id,
+                  turnInput.providerThread.appThreadId ??
+                    turnInput.threadId ??
+                    turnInput.providerThread.id,
                 );
-                const history = threadHistories.get(threadKey) ?? [];
+                const history = GLOBAL_CUSTOM_THREAD_HISTORIES.get(threadKey) ?? [];
 
                 let userPrompt = (turnInput.message.text || "Hello").trim();
                 if (userPrompt.includes("User message:\n")) {
@@ -405,6 +408,11 @@ export function makeCustomAdapterV2(
                 ) {
                   selectedModel = "glm-4.5-flash";
                 } else if (
+                  (selectedModel === "default" || !selectedModel) &&
+                  (rawBase.includes("openrouter.ai") || chatUrl.includes("openrouter.ai"))
+                ) {
+                  selectedModel = "meta-llama/llama-3.3-70b-instruct:free";
+                } else if (
                   selectedModel === "default" &&
                   config.models &&
                   config.models.length > 0
@@ -422,11 +430,17 @@ export function makeCustomAdapterV2(
                   }),
                 );
 
-                if (config.apiKey && config.apiKey.trim().length > 0) {
+                let cleanApiKey = (config.apiKey ?? "").trim();
+                if (cleanApiKey.startsWith("Bearer ")) {
+                  cleanApiKey = cleanApiKey.slice(7).trim();
+                }
+                cleanApiKey = cleanApiKey.replace(/^["']|["']$/g, "").trim();
+
+                if (cleanApiKey.length > 0) {
                   request = HttpClientRequest.setHeader(
                     request,
                     "Authorization",
-                    `Bearer ${config.apiKey.trim()}`,
+                    `Bearer ${cleanApiKey}`,
                   );
                 }
 
@@ -435,6 +449,24 @@ export function makeCustomAdapterV2(
                     if (h.key && h.key.trim().length > 0) {
                       request = HttpClientRequest.setHeader(request, h.key.trim(), h.value.trim());
                     }
+                  }
+                }
+
+                // If targeting OpenRouter, guarantee required/recommended headers
+                if (chatUrl.includes("openrouter.ai")) {
+                  const hasReferer = config.headers?.some(
+                    (h) => h.key.toLowerCase() === "http-referer",
+                  );
+                  const hasTitle = config.headers?.some((h) => h.key.toLowerCase() === "x-title");
+                  if (!hasReferer) {
+                    request = HttpClientRequest.setHeader(
+                      request,
+                      "HTTP-Referer",
+                      "https://autojobs.tokendeal.cloud",
+                    );
+                  }
+                  if (!hasTitle) {
+                    request = HttpClientRequest.setHeader(request, "X-Title", "Jobi Code");
                   }
                 }
 
@@ -454,7 +486,14 @@ export function makeCustomAdapterV2(
                   } catch {
                     detail = errorBody.trim();
                   }
-                  const statusMsg = `HTTP ${rawResponse.status}${detail ? `: ${detail}` : ""}`;
+                  let statusMsg = `HTTP ${rawResponse.status}${detail ? `: ${detail}` : ""}`;
+                  if (
+                    rawResponse.status === 401 &&
+                    detail.toLowerCase().includes("user not found")
+                  ) {
+                    statusMsg +=
+                      "\n[OpenRouter Explanation]: OpenRouter rejected the API Key: 'User not found.' Please verify that your OpenRouter API Key is correct and active at https://openrouter.ai/settings/keys.";
+                  }
                   return yield* Effect.fail(new Error(statusMsg));
                 }
 
@@ -561,6 +600,22 @@ export function makeCustomAdapterV2(
                 });
 
                 yield* Queue.offer(eventsQueue, {
+                  type: "provider_turn.updated",
+                  driver: DRIVER,
+                  providerTurn: {
+                    id: providerTurnId,
+                    providerThreadId: turnInput.providerThread.id,
+                    nodeId: turnInput.rootNodeId,
+                    runAttemptId: turnInput.attemptId,
+                    nativeTurnRef: null,
+                    ordinal: turnOrdinal,
+                    status: "completed",
+                    startedAt: turnStartedAt,
+                    completedAt: finishedTime,
+                  },
+                });
+
+                yield* Queue.offer(eventsQueue, {
                   type: "turn.terminal",
                   driver: DRIVER,
                   providerThreadId: turnInput.providerThread.id,
@@ -583,7 +638,7 @@ export function makeCustomAdapterV2(
                     content: accumulatedText.trim() || "(Response received)",
                   },
                 ];
-                threadHistories.set(threadKey, updatedHistory);
+                GLOBAL_CUSTOM_THREAD_HISTORIES.set(threadKey, updatedHistory);
               }).pipe(
                 Effect.provide(FetchHttpClient.layer),
                 Effect.catch((err: unknown) =>
@@ -615,6 +670,21 @@ export function makeCustomAdapterV2(
                         messageId: assistantMessageId,
                         text: `Error connecting to custom provider: ${message}`,
                         streaming: false,
+                      },
+                    });
+                    yield* Queue.offer(eventsQueue, {
+                      type: "provider_turn.updated",
+                      driver: DRIVER,
+                      providerTurn: {
+                        id: providerTurnId,
+                        providerThreadId: turnInput.providerThread.id,
+                        nodeId: turnInput.rootNodeId,
+                        runAttemptId: turnInput.attemptId,
+                        nativeTurnRef: null,
+                        ordinal: turnOrdinal,
+                        status: "failed",
+                        startedAt: turnStartedAt,
+                        completedAt: failTime,
                       },
                     });
                     yield* Queue.offer(eventsQueue, {

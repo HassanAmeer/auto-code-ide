@@ -40,23 +40,41 @@ interface ProviderPreset {
   name: string;
   baseUrl: string;
   defaultHeaders?: CustomHeader[];
+  defaultModels?: CustomProviderModel[];
   hint: string;
 }
 
 const PRESETS: ProviderPreset[] = [
   {
-    name: "Ollama (Local)",
-    baseUrl: "http://127.0.0.1:11434/v1",
-    hint: "No API key needed by default",
-  },
-  {
     name: "OpenRouter",
     baseUrl: "https://openrouter.ai/api/v1",
     defaultHeaders: [
-      { key: "HTTP-Referer", value: "https://t3.codes" },
-      { key: "X-Title", value: "T3 Code" },
+      { key: "HTTP-Referer", value: "https://autojobs.tokendeal.cloud" },
+      { key: "X-Title", value: "Jobi Code" },
     ],
-    hint: "Requires OpenRouter API key",
+    defaultModels: [
+      { id: "meta-llama/llama-3.3-70b-instruct:free", name: "Llama 3.3 70B (Free)" },
+      { id: "google/gemini-2.0-flash-exp:free", name: "Gemini 2.0 Flash Exp (Free)" },
+      { id: "deepseek/deepseek-r1:free", name: "DeepSeek R1 (Free)" },
+      { id: "anthropic/claude-3.5-sonnet", name: "Claude 3.5 Sonnet" },
+      { id: "openai/gpt-4o", name: "GPT-4o" },
+      { id: "deepseek/deepseek-chat", name: "DeepSeek V3" },
+    ],
+    hint: "Requires OpenRouter API key from openrouter.ai/settings/keys",
+  },
+  {
+    name: "CheapRouter (Local 8377)",
+    baseUrl: "http://127.0.0.1:8377/v1",
+    defaultModels: [
+      { id: "glm-4.5-flash", name: "GLM 4.5 Flash" },
+      { id: "deepseek-ai/DeepSeek-V3", name: "DeepSeek V3" },
+    ],
+    hint: "Local Antseed / CheapRouter gateway",
+  },
+  {
+    name: "Ollama (Local)",
+    baseUrl: "http://127.0.0.1:11434/v1",
+    hint: "No API key needed by default",
   },
   {
     name: "LM Studio",
@@ -114,6 +132,15 @@ export function CustomProvidersSettingsPanel() {
     setBaseUrl(preset.baseUrl);
     if (preset.defaultHeaders) {
       setHeaders(preset.defaultHeaders);
+    } else {
+      setHeaders([]);
+    }
+    if (preset.defaultModels && preset.defaultModels.length > 0) {
+      setLoadedModels(preset.defaultModels);
+      setModelIdsInput(preset.defaultModels.map((m) => m.id).join(", "));
+    } else {
+      setLoadedModels([]);
+      setModelIdsInput("");
     }
     setFetchError(null);
   };
