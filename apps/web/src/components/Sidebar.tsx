@@ -2530,14 +2530,34 @@ export default function Sidebar() {
       threads,
       sidebarProjectSortOrder,
     );
-    const seen = new Set<string>();
-    return sorted.filter((group) => {
-      if (seen.has(group.projectKey)) return false;
-      if (group.displayName === "No project" && seen.has("No project")) return false;
-      seen.add(group.projectKey);
-      if (group.displayName === "No project") seen.add("No project");
-      return true;
-    });
+    const seenNames = new Map<string, SidebarProjectSnapshot>();
+    const result: SidebarProjectSnapshot[] = [];
+    for (const group of sorted) {
+      const normalizedName = group.displayName.trim().toLowerCase();
+      const existing = seenNames.get(normalizedName);
+      if (existing) {
+        existing.memberProjects = [
+          ...existing.memberProjects,
+          ...group.memberProjects.filter(
+            (p) => !existing.memberProjects.some((ep) => ep.id === p.id),
+          ),
+        ];
+        existing.memberProjectRefs = [
+          ...existing.memberProjectRefs,
+          ...group.memberProjectRefs.filter(
+            (r) =>
+              !existing.memberProjectRefs.some(
+                (er) => er.environmentId === r.environmentId && er.projectId === r.projectId,
+              ),
+          ),
+        ];
+        continue;
+      }
+      const cloned = { ...group };
+      seenNames.set(normalizedName, cloned);
+      result.push(cloned);
+    }
+    return result;
   }, [sidebarProjectSortOrder, threads, unsortedProjectGroups]);
   const projectGroupsRef = useRef(projectGroups);
   projectGroupsRef.current = projectGroups;

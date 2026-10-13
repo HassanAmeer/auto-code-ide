@@ -3941,7 +3941,7 @@ export default function LegacySidebar() {
   );
 
   const sidebarProjects = useMemo<SidebarProjectSnapshot[]>(() => {
-    return buildSidebarProjectSnapshots({
+    const raw = buildSidebarProjectSnapshots({
       projects: orderedProjects,
       settings: projectGroupingSettings,
       primaryEnvironmentId,
@@ -3949,6 +3949,34 @@ export default function LegacySidebar() {
       isDesktopLocalEnvironment: (environmentId) => desktopLocalEnvironmentIds.has(environmentId),
       isWslEnvironment: (environmentId) => wslEnvironmentIds.has(environmentId),
     });
+    const seenNames = new Map<string, SidebarProjectSnapshot>();
+    const result: SidebarProjectSnapshot[] = [];
+    for (const project of raw) {
+      const normalizedName = project.displayName.trim().toLowerCase();
+      const existing = seenNames.get(normalizedName);
+      if (existing) {
+        existing.memberProjects = [
+          ...existing.memberProjects,
+          ...project.memberProjects.filter(
+            (p) => !existing.memberProjects.some((ep) => ep.id === p.id),
+          ),
+        ];
+        existing.memberProjectRefs = [
+          ...existing.memberProjectRefs,
+          ...project.memberProjectRefs.filter(
+            (r) =>
+              !existing.memberProjectRefs.some(
+                (er) => er.environmentId === r.environmentId && er.projectId === r.projectId,
+              ),
+          ),
+        ];
+        continue;
+      }
+      const cloned = { ...project };
+      seenNames.set(normalizedName, cloned);
+      result.push(cloned);
+    }
+    return result;
   }, [
     environmentLabelById,
     desktopLocalEnvironmentIds,
@@ -3991,21 +4019,36 @@ export default function LegacySidebar() {
   // are displayed together.
   const threadsByProjectKey = useMemo(() => {
     const next = new Map<string, SidebarThreadSummary[]>();
+    const canonicalKeyByProjectKey = new Map<string, string>();
+    for (const project of sidebarProjects) {
+      canonicalKeyByProjectKey.set(project.projectKey, project.projectKey);
+      for (const member of project.memberProjects) {
+        canonicalKeyByProjectKey.set(member.physicalProjectKey, project.projectKey);
+        canonicalKeyByProjectKey.set(`${member.environmentId}:${member.id}`, project.projectKey);
+      }
+      for (const ref of project.memberProjectRefs) {
+        canonicalKeyByProjectKey.set(`${ref.environmentId}:${ref.projectId}`, project.projectKey);
+      }
+    }
+
     for (const thread of sidebarThreads) {
-      const physicalKey =
-        projectPhysicalKeyByScopedRef.get(
-          scopedProjectKey(scopeProjectRef(thread.environmentId, thread.projectId)),
-        ) ?? scopedProjectKey(scopeProjectRef(thread.environmentId, thread.projectId));
+      const scopedRef = scopedProjectKey(scopeProjectRef(thread.environmentId, thread.projectId));
+      const physicalKey = projectPhysicalKeyByScopedRef.get(scopedRef) ?? scopedRef;
       const logicalKey = physicalToLogicalKey.get(physicalKey) ?? physicalKey;
-      const existing = next.get(logicalKey);
+      const targetKey =
+        canonicalKeyByProjectKey.get(logicalKey) ??
+        canonicalKeyByProjectKey.get(physicalKey) ??
+        canonicalKeyByProjectKey.get(scopedRef) ??
+        logicalKey;
+      const existing = next.get(targetKey);
       if (existing) {
         existing.push(thread);
       } else {
-        next.set(logicalKey, [thread]);
+        next.set(targetKey, [thread]);
       }
     }
     return next;
-  }, [sidebarThreads, physicalToLogicalKey, projectPhysicalKeyByScopedRef]);
+  }, [sidebarThreads, physicalToLogicalKey, projectPhysicalKeyByScopedRef, sidebarProjects]);
   const getCurrentSidebarShortcutContext = useCallback(
     () => ({
       terminalFocus: isTerminalFocused(),
@@ -4133,6 +4176,7 @@ export default function LegacySidebar() {
       };
     });
     const seenKeys = new Set<string>();
+    const seenNames = new Set<string>();
     return sortProjectsForSidebar(
       sortableProjects,
       sortableThreads,
@@ -4141,9 +4185,10 @@ export default function LegacySidebar() {
       const resolvedProject = sidebarProjectByKey.get(project.id);
       if (!resolvedProject) return [];
       if (seenKeys.has(resolvedProject.projectKey)) return [];
-      if (resolvedProject.displayName === "No project" && seenKeys.has("No project")) return [];
+      const normalizedName = resolvedProject.displayName.trim().toLowerCase();
+      if (seenNames.has(normalizedName)) return [];
       seenKeys.add(resolvedProject.projectKey);
-      if (resolvedProject.displayName === "No project") seenKeys.add("No project");
+      seenNames.add(normalizedName);
       return [resolvedProject];
     });
   }, [

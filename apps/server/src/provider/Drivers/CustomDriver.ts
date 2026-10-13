@@ -212,7 +212,7 @@ export function makeCustomAdapterV2(
           driver: DRIVER,
           providerSessionId: sessionId,
           providerSession,
-          events: Stream.fromQueue(eventsQueue),
+          events: Stream.fromEffectRepeat(Queue.take(eventsQueue)),
           ensureThread: (input: ProviderAdapterV2EnsureThreadInput) =>
             Effect.gen(function* () {
               const now = yield* DateTime.now;
@@ -281,6 +281,10 @@ export function makeCustomAdapterV2(
               const providerTurnId = ProviderTurnId.make(`turn_${turnInput.runId}`);
               const assistantTurnItemId = TurnItemId.make(`item_assist_${turnInput.runId}`);
               const assistantMessageId = MessageId.make(`msg_assist_${turnInput.runId}`);
+              const turnOrdinal = PositiveInt.make(
+                Math.max(1, turnInput.providerTurnOrdinal ?? turnInput.runOrdinal ?? 1),
+              );
+              const itemOrdinal = NonNegativeInt.make(turnOrdinal * 100 + 1);
 
               const runTurn = Effect.gen(function* () {
                 yield* Queue.offer(eventsQueue, {
@@ -292,7 +296,7 @@ export function makeCustomAdapterV2(
                     nodeId: turnInput.rootNodeId,
                     runAttemptId: turnInput.attemptId,
                     nativeTurnRef: null,
-                    ordinal: PositiveInt.make(1),
+                    ordinal: turnOrdinal,
                     status: "running",
                     startedAt: turnStartedAt,
                     completedAt: null,
@@ -311,7 +315,7 @@ export function makeCustomAdapterV2(
                     providerTurnId,
                     nativeItemRef: null,
                     parentItemId: null,
-                    ordinal: NonNegativeInt.make(1),
+                    ordinal: itemOrdinal,
                     status: "running",
                     title: null,
                     startedAt: turnStartedAt,
@@ -495,7 +499,7 @@ export function makeCustomAdapterV2(
                                 providerTurnId,
                                 nativeItemRef: null,
                                 parentItemId: null,
-                                ordinal: NonNegativeInt.make(1),
+                                ordinal: itemOrdinal,
                                 status: "running",
                                 title: null,
                                 startedAt: turnStartedAt,
@@ -516,6 +520,22 @@ export function makeCustomAdapterV2(
 
                 const finishedTime = yield* DateTime.now;
                 yield* Queue.offer(eventsQueue, {
+                  type: "message.updated",
+                  driver: DRIVER,
+                  message: {
+                    id: assistantMessageId,
+                    threadId: turnInput.threadId,
+                    runId: turnInput.runId,
+                    nodeId: turnInput.rootNodeId,
+                    role: "assistant",
+                    text: accumulatedText,
+                    streaming: false,
+                    createdAt: turnStartedAt,
+                    updatedAt: finishedTime,
+                  },
+                });
+
+                yield* Queue.offer(eventsQueue, {
                   type: "turn_item.updated",
                   driver: DRIVER,
                   turnItem: {
@@ -527,7 +547,7 @@ export function makeCustomAdapterV2(
                     providerTurnId,
                     nativeItemRef: null,
                     parentItemId: null,
-                    ordinal: NonNegativeInt.make(1),
+                    ordinal: itemOrdinal,
                     status: "completed",
                     title: null,
                     startedAt: turnStartedAt,
@@ -585,7 +605,7 @@ export function makeCustomAdapterV2(
                         providerTurnId,
                         nativeItemRef: null,
                         parentItemId: null,
-                        ordinal: NonNegativeInt.make(1),
+                        ordinal: itemOrdinal,
                         status: "failed",
                         title: null,
                         startedAt: turnStartedAt,
@@ -603,7 +623,7 @@ export function makeCustomAdapterV2(
                       providerThreadId: turnInput.providerThread.id,
                       providerTurnId,
                       runOrdinal: PositiveInt.make(turnInput.runOrdinal),
-                      failureItemOrdinal: PositiveInt.make(1),
+                      failureItemOrdinal: PositiveInt.make(itemOrdinal),
                       status: "failed",
                       failure: makeProviderFailure({
                         message,
