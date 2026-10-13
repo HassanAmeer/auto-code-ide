@@ -315,16 +315,13 @@ const resolveAutoBootstrapWelcomeTargets = Effect.gen(function* () {
 
 const resolveStartupBrowserTarget = Effect.gen(function* () {
   const serverConfig = yield* ServerConfig.ServerConfig;
-  const serverAuth = yield* EnvironmentAuth.EnvironmentAuth;
   const localUrl = `http://localhost:${serverConfig.port}`;
   const bindUrl =
     serverConfig.host && !isWildcardHost(serverConfig.host)
       ? `http://${formatHostForUrl(serverConfig.host)}:${serverConfig.port}`
       : localUrl;
   const baseTarget = serverConfig.devUrl?.toString() ?? bindUrl;
-  return serverConfig.mode === "desktop"
-    ? baseTarget
-    : yield* serverAuth.issueStartupPairingUrl(baseTarget);
+  return baseTarget;
 });
 
 const maybeOpenBrowser = (target: string) =>
@@ -596,9 +593,7 @@ const make = (options?: StartupOptions) =>
             yield* Effect.logDebug("startup phase: browser open check");
             const startupBrowserTarget = yield* resolveStartupBrowserTarget;
             if (serverConfig.mode !== "desktop") {
-              yield* Effect.logInfo(
-                "Authentication required. Open T3 Code using the pairing URL.",
-              ).pipe(Effect.annotateLogs({ pairingUrl: startupBrowserTarget }));
+              yield* Effect.logInfo(`Server ready at ${startupBrowserTarget}`);
             }
             yield* runStartupPhase("browser.open", maybeOpenBrowser(startupBrowserTarget));
           }

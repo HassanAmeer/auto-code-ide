@@ -129,8 +129,13 @@ function DirectoryBrowserModal({
   };
 
   const handleConfirmSelect = async () => {
-    const finalPath = selectedFolder ? `${currentPath}/${selectedFolder}` : currentPath;
-    if (!finalPath) return;
+    const base = selectedFolder ? `${currentPath}/${selectedFolder}` : currentPath;
+    if (!base) return;
+    const storageName = "autocode-storage";
+    const norm = base.replace(/\/+$/, "");
+    const finalPath = norm.toLowerCase().endsWith(storageName.toLowerCase())
+      ? norm
+      : `${norm}/${storageName}`;
     try {
       await fetch(resolvePrimaryEnvironmentHttpUrl("/api/fs/ensure-dir"), {
         method: "POST",
@@ -213,7 +218,7 @@ function DirectoryBrowserModal({
             <div className="flex items-center gap-2 p-2 bg-accent/20 rounded-lg border border-accent/30">
               <Input
                 size="sm"
-                placeholder="Folder name (e.g. autodeskprojects)"
+                placeholder="Folder name (e.g. autocode-storage)"
                 value={newFolderName}
                 onChange={(e) => setNewFolderName(e.target.value)}
                 onKeyDown={(e) => {
@@ -310,9 +315,14 @@ function DirectoryBrowserModal({
             <span className="truncate">
               Target:{" "}
               <strong className="text-foreground font-mono">
-                {selectedFolder
-                  ? `${currentPath}/${selectedFolder}`
-                  : currentPath || "~/autodeskprojects"}
+                {(() => {
+                  const base = selectedFolder ? `${currentPath}/${selectedFolder}` : currentPath;
+                  if (!base) return "~/autocode-storage";
+                  const norm = base.replace(/\/+$/, "");
+                  return norm.toLowerCase().endsWith("autocode-storage")
+                    ? norm
+                    : `${norm}/autocode-storage`;
+                })()}
               </strong>
             </span>
             <span className="text-[10px] text-muted-foreground/60 shrink-0 ml-2">
@@ -355,21 +365,27 @@ function ProjectsDirectoryRow() {
 
   const savePath = async (rawPath: string) => {
     const trimmed = rawPath.trim();
+    let finalPath = trimmed;
     if (trimmed) {
+      const storageName = "autocode-storage";
+      const norm = trimmed.replace(/\/+$/, "");
+      finalPath = norm.toLowerCase().endsWith(storageName.toLowerCase())
+        ? norm
+        : `${norm}/${storageName}`;
       try {
         await fetch(resolvePrimaryEnvironmentHttpUrl("/api/fs/ensure-dir"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ path: trimmed }),
+          body: JSON.stringify({ path: finalPath }),
         });
       } catch {
         // ignore
       }
     }
-    updateSettings({ projectsDirectory: trimmed });
+    updateSettings({ projectsDirectory: finalPath });
     toastManager.add({
-      title: "Projects location updated",
-      description: trimmed || "~/autodeskprojects (default)",
+      title: "Storage location updated",
+      description: finalPath || "~/autocode-storage (default)",
       type: "success",
     });
   };
@@ -378,14 +394,14 @@ function ProjectsDirectoryRow() {
     <>
       <SettingsRow
         {...searchableSetting("storage-projects-location")}
-        title="Projects location (autodeskprojects)"
+        title="Storage location (autocode-storage)"
         description={
-          "Folder where all new projects, uploads, and Git clones are created and stored (e.g. ~/autodeskprojects or a custom path). Automatically created if it does not exist."
+          "Folder where all projects, zip uploads, and Git clones are created and stored inside the fixed 'autocode-storage' folder (e.g. ~/autocode-storage or a custom path). Automatically created if it does not exist."
         }
         resetAction={
           mixed || (settings.projectsDirectory && settings.projectsDirectory !== "") ? (
             <SettingResetButton
-              label="projects location"
+              label="storage location"
               onClick={() => {
                 void savePath("");
                 setInputValue("");
@@ -396,10 +412,10 @@ function ProjectsDirectoryRow() {
         control={
           <div className="flex items-center gap-1.5 w-full max-w-sm">
             <Input
-              aria-label="Projects location"
+              aria-label="Storage location"
               autoCapitalize="none"
               spellCheck={false}
-              placeholder={mixed ? "Mixed" : "~/autodeskprojects"}
+              placeholder={mixed ? "Mixed" : "~/autocode-storage"}
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onBlur={() => {

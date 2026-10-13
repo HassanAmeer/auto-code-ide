@@ -1021,24 +1021,6 @@ export function ThreadRowTrailingStatus({ thread }: { thread: SidebarThreadSumma
           <TooltipPopup side="top">{terminalStatus.label}</TooltipPopup>
         </Tooltip>
       ) : null}
-      {isRemoteThread ? (
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <span
-                aria-label={threadEnvironmentLabel ?? "Remote"}
-                className="inline-flex items-center justify-center"
-              />
-            }
-          >
-            <EnvironmentMachineIcon
-              kind={remoteMachine}
-              className="size-3 text-muted-foreground/60"
-            />
-          </TooltipTrigger>
-          <TooltipPopup side="top">{threadEnvironmentLabel}</TooltipPopup>
-        </Tooltip>
-      ) : null}
     </span>
   );
 }

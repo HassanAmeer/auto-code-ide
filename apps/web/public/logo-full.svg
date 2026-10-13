@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 540 140" fill="none">
+  <defs>
+    <linearGradient id="silverChromeFull" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="25%" stop-color="#E2E8F0"/>
+      <stop offset="60%" stop-color="#CBD5E1"/>
+      <stop offset="85%" stop-color="#94A3B8"/>
+      <stop offset="100%" stop-color="#64748B"/>
+    </linearGradient>
+
+    <linearGradient id="silverSheenFull" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#94A3B8"/>
+      <stop offset="45%" stop-color="#F8FAFC"/>
+      <stop offset="55%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#CBD5E1"/>
+    </linearGradient>
+
+    <linearGradient id="silverCrownFull" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="40%" stop-color="#E2E8F0"/>
+      <stop offset="70%" stop-color="#94A3B8"/>
+      <stop offset="100%" stop-color="#475569"/>
+    </linearGradient>
+
+    <filter id="silverGlowFull" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="2" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Icon Section -->
+  <g transform="translate(10, 6)">
+    <!-- Pitch Black Plate -->
+    <rect width="128" height="128" rx="28" fill="#000000"/>
+    <rect width="126" height="126" x="1" y="1" rx="27" stroke="url(#silverChromeFull)" stroke-width="1.2" stroke-opacity="0.35"/>
+
+    <!-- Left Code Bracket -->
+    <path d="M 38 48 C 30 54 30 58 24 64 C 30 70 30 74 38 80" 
+          stroke="url(#silverSheenFull)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- Right Code Bracket -->
+    <path d="M 90 48 C 98 54 98 58 104 64 C 98 70 98 74 90 80" 
+          stroke="url(#silverSheenFull)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- AC Monogram -->
+    <text x="64" y="73" 
+          text-anchor="middle" 
+          font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" 
+          font-size="30" 
+          font-weight="900" 
+          letter-spacing="1" 
+          fill="url(#silverChromeFull)">AC</text>
+
+    <!-- Royal Silver Crown on Top-Left Corner -->
+    <g transform="translate(18, 14) rotate(-15)" filter="url(#silverGlowFull)">
+      <path d="M 4 22 L 8 8 L 16 16 L 24 6 L 32 16 L 40 8 L 44 22 Z" 
+            fill="url(#silverCrownFull)" stroke="#FFFFFF" stroke-width="0.9" stroke-linejoin="round"/>
+      <path d="M 2 22 C 14 26 34 26 46 22 L 45 25 C 33 29 15 29 3 25 Z" 
+            fill="#334155"/>
+      <circle cx="8" cy="8" r="2" fill="#FFFFFF"/>
+      <circle cx="24" cy="6" r="2.5" fill="#FFFFFF"/>
+      <circle cx="40" cy="8" r="2" fill="#FFFFFF"/>
+      <circle cx="24" cy="18" r="1.5" fill="#FFFFFF"/>
+      <circle cx="15" cy="19" r="1.2" fill="#E2E8F0"/>
+      <circle cx="33" cy="19" r="1.2" fill="#E2E8F0"/>
+    </g>
+  </g>
+
+  <!-- Typography Section -->
+  <g transform="translate(160, 0)">
+    <!-- Main Title: AutoCode in White and Silver -->
+    <text x="0" y="74" 
+          font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" 
+          font-size="48" 
+          font-weight="800" 
+          letter-spacing="-0.5">
+      <tspan fill="#FFFFFF">Auto</tspan><tspan fill="url(#silverChromeFull)">Code</tspan>
+    </text>
+
+    <!-- Subtitle: Automatically code your project in elegant silver -->
+    <text x="2" y="106" 
+          font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" 
+          font-size="16" 
+          font-weight="500" 
+          letter-spacing="0.2" 
+          fill="#94A3B8">
+      Automatically code your project
+    </text>
+  </g>
+</svg>

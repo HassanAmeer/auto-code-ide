@@ -2408,3 +2408,26 @@ code {
   mask-composite: exclude;
   animation: streaming-border-spin 2.2s linear infinite;
 }
+
+@keyframes tts-ripple-wave {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.85;
+  }
+  50% {
+    opacity: 0.45;
+  }
+  100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+
+.animate-tts-ripple {
+  animation: tts-ripple-wave 1.6s cubic-bezier(0, 0.2, 0.8, 1) infinite;
+}
+
+.animate-tts-ripple-delayed {
+  animation: tts-ripple-wave 1.6s cubic-bezier(0, 0.2, 0.8, 1) infinite;
+  animation-delay: 0.65s;
+}

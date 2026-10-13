@@ -16,8 +16,11 @@ export const HOSTED_APP_CHANNEL =
   hostedAppChannel === "latest" || hostedAppChannel === "nightly" ? hostedAppChannel : null;
 export const HOSTED_APP_CHANNEL_LABEL =
   HOSTED_APP_CHANNEL === "nightly" ? "Nightly" : HOSTED_APP_CHANNEL === "latest" ? "Latest" : null;
-export const APP_BASE_NAME = injectedDesktopAppBranding?.baseName ?? "Autodesk Code";
-export const APP_SHORT_NAME = "ADC";
+export const APP_BASE_NAME =
+  injectedDesktopAppBranding?.baseName ?? (import.meta.env.VITE_APP_NAME?.trim() || "AutoCode");
+export const APP_SHORT_NAME = import.meta.env.VITE_APP_SHORT_NAME?.trim() || "AC";
+export const APP_SUBTITLE =
+  import.meta.env.VITE_APP_SUBTITLE?.trim() || "Automatically code your project";
 export const APP_STAGE_LABEL =
   injectedDesktopAppBranding?.stageLabel ??
   HOSTED_APP_CHANNEL_LABEL ??
@@ -25,4 +28,4 @@ export const APP_STAGE_LABEL =
 export const APP_DISPLAY_NAME =
   injectedDesktopAppBranding?.displayName ??
   formatAppDisplayName({ baseName: APP_BASE_NAME, stageLabel: APP_STAGE_LABEL });
-export const APP_VERSION = import.meta.env.APP_VERSION || "0.0.0";
+export const APP_VERSION = import.meta.env.APP_VERSION || "1.0";

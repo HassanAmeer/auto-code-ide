@@ -23,6 +23,7 @@ import {
 } from "../threadNotifications";
 import { resolveSidebarThreadStatus } from "./Sidebar.logic";
 import { toastManager } from "./ui/toast";
+import { isVoiceCallActive } from "./chat/voiceCall";
 
 export function ThreadNotificationCoordinator() {
   const environmentIds = useEnvironmentIds();
@@ -164,13 +165,14 @@ function EnvironmentNotifications({
               : status === "failed"
                 ? "Thread failed"
                 : "Input needed";
-      if (hasNotificationSound(mode)) {
+      if (hasNotificationSound(mode) && !isVoiceCallActive(thread.id)) {
         void playNotificationSound(kind, () =>
           hasNotificationSound(getClientSettings().notificationMode),
         );
       }
       if (
         inAppNotificationsEnabled &&
+        !isVoiceCallActive(thread.id) &&
         document.visibilityState === "visible" &&
         document.hasFocus() &&
         (activeEnvironmentId !== environmentId || activeThreadId !== thread.id)

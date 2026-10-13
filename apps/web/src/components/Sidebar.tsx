@@ -484,15 +484,6 @@ function SidebarThreadTooltip({
             <div className="min-w-0 truncate text-foreground/75">{projectDisplayName}</div>
           </div>
         ) : null}
-        {environmentLabel ? (
-          <div className="flex min-w-0 items-center gap-2">
-            <EnvironmentMachineIcon
-              kind={environmentMachine}
-              className="size-3 shrink-0 stroke-muted-foreground"
-            />
-            <div className="min-w-0 truncate text-foreground/75">{environmentLabel}</div>
-          </div>
-        ) : null}
         {thread.branch ? (
           <div className="flex min-w-0 items-center gap-2">
             <GitBranchIcon className="size-3 shrink-0 stroke-muted-foreground" />
@@ -2197,15 +2188,6 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
                 aria-hidden
                 className="pointer-events-none ml-auto inline-flex shrink-0 items-center gap-1"
               >
-                {isRemote && !showsScratchMachine ? (
-                  <span className="inline-flex shrink-0 items-center text-sidebar-muted-foreground/70">
-                    <EnvironmentMachineIcon
-                      aria-hidden
-                      kind={props.environmentMachine}
-                      className="size-3.5"
-                    />
-                  </span>
-                ) : null}
                 <SidebarProviderStack
                   thread={thread}
                   providerEntryByInstanceId={props.providerEntryByInstanceId}
@@ -2542,10 +2524,21 @@ export default function Sidebar() {
       sidebarProjectSortOrder,
     ],
   );
-  const projectGroups = useMemo(
-    () => sortSidebarV2ProjectGroups(unsortedProjectGroups, threads, sidebarProjectSortOrder),
-    [sidebarProjectSortOrder, threads, unsortedProjectGroups],
-  );
+  const projectGroups = useMemo(() => {
+    const sorted = sortSidebarV2ProjectGroups(
+      unsortedProjectGroups,
+      threads,
+      sidebarProjectSortOrder,
+    );
+    const seen = new Set<string>();
+    return sorted.filter((group) => {
+      if (seen.has(group.projectKey)) return false;
+      if (group.displayName === "No project" && seen.has("No project")) return false;
+      seen.add(group.projectKey);
+      if (group.displayName === "No project") seen.add("No project");
+      return true;
+    });
+  }, [sidebarProjectSortOrder, threads, unsortedProjectGroups]);
   const projectGroupsRef = useRef(projectGroups);
   projectGroupsRef.current = projectGroups;
   // Threads on non-primary environments (T3 Connect, hosted) resolve their

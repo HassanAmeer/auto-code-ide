@@ -15,6 +15,13 @@ import {
 import { AppRoot } from "./AppRoot";
 import { clearChunkReloadGuard, reloadOnceForChunkLoadError } from "./lib/chunkReloadGuard";
 
+// Clean up any residual /pair or #token= from location so user never sees tokens or /pair
+if (typeof window !== "undefined") {
+  if (window.location.pathname === "/pair" || window.location.hash.includes("token=")) {
+    window.history.replaceState(null, "", "/");
+  }
+}
+
 prepareProviderAuthDelivery();
 
 // Electron loads the app from a file-backed shell, so hash history avoids path resolution issues.

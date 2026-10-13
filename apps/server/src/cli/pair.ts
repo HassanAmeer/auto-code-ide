@@ -179,18 +179,7 @@ const formatPairOutput = (input: {
   readonly token: string;
   readonly expiresAt: DateTime.Utc;
   readonly notes: ReadonlyArray<string>;
-}): string =>
-  [
-    `Pairing with ${input.serverLabel} (${input.origin}).`,
-    "",
-    renderTerminalQrCode(input.pairingUrl),
-    "",
-    `Pairing URL: ${input.pairingUrl}`,
-    `Token: ${input.token}`,
-    `Expires: ${DateTime.formatIso(input.expiresAt)}`,
-    ...input.notes.flatMap((note) => ["", `Note: ${note}`]),
-    "",
-  ].join("\n");
+}): string => [`AutoCode Server: ${input.serverLabel}`, `URL: ${input.origin}`, ""].join("\n");
 
 /**
  * Three outcomes, because they drive different decisions: a T3 descriptor

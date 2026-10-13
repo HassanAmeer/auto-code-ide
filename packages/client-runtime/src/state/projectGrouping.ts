@@ -127,11 +127,23 @@ export function deriveLogicalProjectKey(
   project: Pick<
     EnvironmentProject,
     "environmentId" | "id" | "workspaceRoot" | "repositoryIdentity"
-  >,
+  > & { readonly title?: string },
   options?: {
     readonly groupingMode?: SidebarProjectGroupingMode;
   },
 ): string {
+  const normalizedRoot = normalizeProjectPathForComparison(project.workspaceRoot);
+  if (
+    project.title === "No project" ||
+    normalizedRoot.endsWith("/scratch") ||
+    normalizedRoot.endsWith("\\scratch") ||
+    normalizedRoot === "scratch" ||
+    normalizedRoot.includes("/.t3/scratch") ||
+    normalizedRoot.includes("\\.t3\\scratch")
+  ) {
+    return "scratch:global";
+  }
+
   const groupingMode = options?.groupingMode ?? "repository";
   if (groupingMode === "separate") {
     return derivePhysicalProjectKey(project);
@@ -148,7 +160,7 @@ export function deriveLogicalProjectKeyFromSettings(
   project: Pick<
     EnvironmentProject,
     "environmentId" | "id" | "workspaceRoot" | "repositoryIdentity"
-  >,
+  > & { readonly title?: string },
   settings: ProjectGroupingSettings,
 ): string {
   return deriveLogicalProjectKey(project, {
@@ -160,6 +172,12 @@ export function deriveProjectGroupLabel(input: {
   readonly representative: Pick<EnvironmentProject, "title" | "repositoryIdentity">;
   readonly members: ReadonlyArray<Pick<EnvironmentProject, "title" | "repositoryIdentity">>;
 }): string {
+  if (
+    input.representative.title === "No project" ||
+    input.members.some((member) => member.title === "No project")
+  ) {
+    return "No project";
+  }
   const sharedTitles = uniqueNonEmptyValues(input.members.map((member) => member.title));
   const sharedDisplayNames = uniqueNonEmptyValues(
     input.members.map((member) =>
@@ -314,12 +332,14 @@ export function buildProjectGroups<TProject extends EnvironmentProject>(input: {
     return {
       key,
       label:
-        members.length > 1
-          ? deriveProjectGroupLabel({
-              representative,
-              members: members.map((member) => member.project),
-            })
-          : representative.title,
+        key === "scratch:global"
+          ? "No project"
+          : members.length > 1
+            ? deriveProjectGroupLabel({
+                representative,
+                members: members.map((member) => member.project),
+              })
+            : representative.title,
       representative,
       members,
       memberProjectRefs: projectRefsByLogicalKey.get(key) ?? [],

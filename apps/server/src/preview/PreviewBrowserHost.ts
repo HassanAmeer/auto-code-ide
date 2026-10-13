@@ -1,3 +1,4 @@
+// @effect-diagnostics nodeBuiltinImport:off
 /**
  * Host setup the shared headless browser needs, and the one command that does
  * it. Every failure here names that command, so the server log, an agent's tool
@@ -14,19 +15,43 @@ import * as Schema from "effect/Schema";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 
+import * as NodeFS from "node:fs";
+
 /** The subcommand that sets the host up; callers render it, with `sudo`, for how T3 was launched. */
 export const SETUP_SUBCOMMAND = "browser setup";
 
 /** What Chrome prints before aborting when it cannot sandbox itself. */
 export const NO_SANDBOX_SIGNATURE = "No usable sandbox";
 
-/** Whether an operator explicitly allowed Chrome to run without its sandbox. */
-export const sandboxDisabled = (env: Readonly<Record<string, string | undefined>>) =>
-  env.T3CODE_SERVER_BROWSER_SANDBOX === "0";
-
 /** Set on Ubuntu 23.10+: unprivileged user namespaces need an AppArmor profile. */
 const USERNS_RESTRICTION = "/proc/sys/kernel/apparmor_restrict_unprivileged_userns";
 export const APPARMOR_PROFILE_PATH = "/etc/apparmor.d/t3-chrome-headless-shell";
+
+/** Whether an operator or environment allowed Chrome to run without its sandbox. */
+export const sandboxDisabled = (env: Readonly<Record<string, string | undefined>>) => {
+  if (
+    env.T3CODE_SERVER_BROWSER_SANDBOX === "0" ||
+    env.T3CODE_SERVER_BROWSER_SANDBOX === "false" ||
+    env.T3CODE_BROWSER_NO_SANDBOX === "1" ||
+    env.T3CODE_MODE === "web" ||
+    process.env.T3CODE_BROWSER_NO_SANDBOX === "1"
+  ) {
+    return true;
+  }
+  try {
+    if (
+      process.platform === "linux" &&
+      NodeFS.existsSync(USERNS_RESTRICTION) &&
+      NodeFS.readFileSync(USERNS_RESTRICTION, "utf8").trim() === "1" &&
+      !NodeFS.existsSync(APPARMOR_PROFILE_PATH)
+    ) {
+      return true;
+    }
+  } catch {
+    // ignore
+  }
+  return false;
+};
 
 /**
  * Lets T3's headless browser, in any T3 home and at any pinned version, create

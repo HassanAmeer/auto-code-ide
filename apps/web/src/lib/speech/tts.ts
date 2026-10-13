@@ -469,31 +469,63 @@ export function subscribeSpeechState(
   };
 }
 
+let keepAliveTimer: ReturnType<typeof setInterval> | null = null;
+function clearKeepAliveTimer(): void {
+  if (keepAliveTimer) {
+    clearInterval(keepAliveTimer);
+    keepAliveTimer = null;
+  }
+}
+
 export function isCurrentlySpeaking(): boolean {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return false;
-  return window.speechSynthesis.speaking;
+  return activeUtterance !== null;
 }
 
 export function stopSpeaking(): void {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-  window.speechSynthesis.cancel();
+  clearKeepAliveTimer();
+  try {
+    window.speechSynthesis.cancel();
+  } catch {
+    // ignore
+  }
   activeUtterance = null;
   notifySpeechState(false, null);
+}
+
+/**
+ * Completely strips markdown code blocks (both closed and unclosed/streaming)
+ * so that code blocks are NEVER read aloud.
+ */
+export function stripCodeBlocks(text: string): string {
+  if (!text) return "";
+  return text
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/~~~[\s\S]*?~~~/g, " ")
+    .replace(/```[\s\S]*$/g, " ")
+    .replace(/~~~[\s\S]*$/g, " ");
 }
 
 /**
  * Clean text from markdown formatting for cleaner speech output
  */
 export function sanitizeTextForSpeech(markdown: string): string {
-  return markdown
-    .replace(/```[\s\S]*?```/g, "Code block omitted.") // skip big code blocks
-    .replace(/`([^`]+)`/g, "$1") // inline code
+  if (!markdown) return "";
+  const withoutCodeBlocks = stripCodeBlocks(markdown);
+  return withoutCodeBlocks
+    .replace(/`([^`]+)`/g, "$1") // inline code: keep readable word
     .replace(/#+\s+/g, "") // headers
     .replace(/\*\*([^*]+)\*\*/g, "$1") // bold
     .replace(/\*([^*]+)\*/g, "$1") // italic
     .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1") // links
     .replace(/!\[.*?\]\(.*?\)/g, "") // images
-    .replace(/[>_~#*]/g, "") // extra symbols
+    .replace(/<[^>]+>/g, " ") // html tags
+    .replace(/^\s*[-*+]\s+/gm, "") // list bullets
+    .replace(/^\s*\d+\.\s+/gm, "") // list numbering
+    .replace(/^\s*>\s+/gm, "") // blockquotes
+    .replace(/[_~#*]/g, "") // extra symbols
+    .replace(/\s+/g, " ")
     .trim();
 }
 
@@ -507,7 +539,10 @@ export function speakText(text: string, options?: Partial<TtsSettings>, onEnd?: 
 
   const settings = { ...loadTtsSettings(), ...options };
   const clean = sanitizeTextForSpeech(text);
-  if (!clean) return;
+  if (!clean) {
+    onEnd?.();
+    return;
+  }
 
   const utterance = new SpeechSynthesisUtterance(clean);
   const voices = getAvailableVoices();
@@ -598,16 +633,27 @@ export function speakText(text: string, options?: Partial<TtsSettings>, onEnd?: 
 
   utterance.onstart = () => {
     activeUtterance = utterance;
+    clearKeepAliveTimer();
+    keepAliveTimer = setInterval(() => {
+      if (typeof window !== "undefined" && "speechSynthesis" in window && activeUtterance) {
+        window.speechSynthesis.pause();
+        window.speechSynthesis.resume();
+      } else {
+        clearKeepAliveTimer();
+      }
+    }, 10000);
     notifySpeechState(true, clean);
   };
 
   utterance.onend = () => {
+    clearKeepAliveTimer();
     activeUtterance = null;
     notifySpeechState(false, null);
     onEnd?.();
   };
 
   utterance.onerror = () => {
+    clearKeepAliveTimer();
     activeUtterance = null;
     notifySpeechState(false, null);
     onEnd?.();

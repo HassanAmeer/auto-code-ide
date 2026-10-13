@@ -116,7 +116,7 @@ export function makeCustomSnapshot(
   displayName: string,
   config: CustomDriverConfig,
   enabled = true,
-): ServerProviderShape {
+): ServerProvider {
   const models = formatCustomModels(config.models, displayName);
 
   return {
@@ -134,7 +134,22 @@ export function makeCustomSnapshot(
     models,
     slashCommands: [],
     skills: [],
-  } as unknown as ServerProviderShape;
+  } as unknown as ServerProvider;
+}
+
+export function makeCustomServerProviderShape(rawSnapshot: ServerProvider): ServerProviderShape {
+  return {
+    getSnapshot: Effect.succeed(rawSnapshot),
+    refresh: Effect.succeed(rawSnapshot),
+    streamChanges: Stream.empty,
+    resolveMaintenance: () =>
+      Effect.succeed({
+        provider: DRIVER,
+        packageName: null,
+        update: null,
+      }),
+    applyUsageLimits: () => Effect.void,
+  };
 }
 
 export function makeUnsupportedTextGeneration(): ProviderTextGeneration {
@@ -524,7 +539,13 @@ export function createCustomProviderInstance(
     instanceId: input.instanceId,
   });
   const displayName = input.displayName ?? "Custom Provider";
-  const snapshot = makeCustomSnapshot(input.instanceId, displayName, input.config, input.enabled);
+  const rawSnapshot = makeCustomSnapshot(
+    input.instanceId,
+    displayName,
+    input.config,
+    input.enabled,
+  );
+  const snapshot = makeCustomServerProviderShape(rawSnapshot);
   const orchestrationAdapter = makeCustomAdapterV2(input.instanceId, input.config);
   const textGeneration = makeUnsupportedTextGeneration();
 

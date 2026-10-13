@@ -83,6 +83,7 @@ import { CloudEnvironmentConnectRows } from "../cloud/CloudEnvironmentConnectLis
 import { presentSavedCloudEnvironmentConnection } from "../cloud/cloudEnvironmentConnectionPresentation";
 import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
 import { T3Wordmark } from "../T3Wordmark";
+import { AutoCodeIcon } from "../AutoCodeIcon";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
 import { CommandBlock } from "../CommandBlock";
@@ -226,12 +227,13 @@ export function WelcomeWizard({
     <Dialog open disablePointerDismissal onOpenChange={(_, event) => event.cancel()}>
       <WizardPopup size="wide" bottomStickOnMobile={false} showCloseButton={false}>
         <WizardHeader
-          title="Set up T3 Code"
+          title="Set up AutoCode"
           identity={
-            <div className="flex items-baseline gap-1.5" role="img" aria-label="T3 Code">
-              <T3Wordmark className="h-4 w-auto shrink-0" aria-hidden />
-              <span className="text-2xl font-medium tracking-tight text-muted-foreground">
-                Code
+            <div className="flex items-center gap-2" role="img" aria-label="AutoCode">
+              <AutoCodeIcon className="h-6 w-6 shrink-0 text-foreground" aria-hidden />
+              <span className="text-2xl font-bold tracking-tight">
+                <span className="text-foreground">Auto</span>
+                <span className="text-muted-foreground">Code</span>
               </span>
             </div>
           }

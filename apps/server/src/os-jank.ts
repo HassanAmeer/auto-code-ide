@@ -1,3 +1,4 @@
+// @effect-diagnostics nodeBuiltinImport:off
 import { HostProcessEnvironment, HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import {
   listLoginShellCandidates,
@@ -7,8 +8,8 @@ import {
   resolveWindowsEnvironment,
 } from "@t3tools/shared/shell";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 
 function logPathHydrationWarning(message: string, error?: unknown): void {
@@ -48,11 +49,7 @@ export function hydratePosixHome(
   }
 }
 
-export const fixPath = Effect.fn("fixPath")(function* (): Effect.fn.Return<
-  void,
-  never,
-  FileSystem.FileSystem | Path.Path
-> {
+export const fixPath = Effect.fn("fixPath")(function* () {
   const platform = yield* HostProcessPlatform;
   const env = yield* HostProcessEnvironment;
 
@@ -105,16 +102,17 @@ export const expandHomePath = Effect.fn(function* (input: string) {
 export const resolveBaseDir = Effect.fn(function* (raw: string | undefined) {
   const { join, resolve } = yield* Path.Path;
   if (!raw || raw.trim().length === 0) {
-    const fs = yield* FileSystem.FileSystem;
+    const autocodeDir = join(NodeOS.homedir(), ".autocode");
     const adcDir = join(NodeOS.homedir(), ".adc");
     const autodeskDir = join(NodeOS.homedir(), ".autodeskcode");
     const jobiDir = join(NodeOS.homedir(), ".jobi");
     const t3Dir = join(NodeOS.homedir(), ".t3");
-    if (yield* fs.exists(adcDir)) return adcDir;
-    if (yield* fs.exists(autodeskDir)) return autodeskDir;
-    if (yield* fs.exists(jobiDir)) return jobiDir;
-    if (yield* fs.exists(t3Dir)) return t3Dir;
-    return adcDir;
+    if (NodeFS.existsSync(autocodeDir)) return autocodeDir;
+    if (NodeFS.existsSync(adcDir)) return adcDir;
+    if (NodeFS.existsSync(autodeskDir)) return autodeskDir;
+    if (NodeFS.existsSync(jobiDir)) return jobiDir;
+    if (NodeFS.existsSync(t3Dir)) return t3Dir;
+    return autocodeDir;
   }
   return resolve(yield* expandHomePath(raw.trim()));
 });

@@ -1,10 +1,13 @@
 import { runBashCommandOnHost } from "./terminalExec.ts";
 import * as ManagedProjectFolders from "./project/ManagedProjectFolders.ts";
+import * as ProjectService from "./project/ProjectService.ts";
 import * as Mime from "effect/http/Mime";
 import {
   AuthOrchestrationOperateScope,
   AuthOrchestrationReadScope,
+  CommandId,
   EnvironmentHttpApi,
+  ProjectId,
 } from "@t3tools/contracts";
 import { isDevProxiedPath } from "@t3tools/shared/devProxy";
 import { decodeOtlpTraceRecords } from "@t3tools/shared/observability";
@@ -516,7 +519,8 @@ export const layerTerminalExecRoute = HttpRouter.add(
       });
     }
 
-    const targetCwd = bodyJson?.cwd && bodyJson.cwd.trim().length > 0 ? bodyJson.cwd.trim() : "/";
+    const targetCwd =
+      bodyJson?.cwd && bodyJson.cwd.trim().length > 0 ? bodyJson.cwd.trim() : process.cwd();
     const timeout = bodyJson?.timeoutMs || 120_000;
 
     const result = yield* Effect.promise(() => runBashCommandOnHost(command, targetCwd, timeout));
@@ -967,6 +971,45 @@ export const layerDirectProjectCloneRoute = HttpRouter.add(
   ),
 );
 
+export const layerDirectProjectDeleteRoute = HttpRouter.add(
+  "POST",
+  "/api/project/delete-direct",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => null))) as {
+      readonly projectId?: string;
+    } | null;
+
+    const projectId = typeof bodyJson?.projectId === "string" ? bodyJson.projectId.trim() : "";
+    if (!projectId) {
+      return HttpServerResponse.jsonUnsafe(
+        { ok: false, error: "Project ID is required" },
+        { status: 400 },
+      );
+    }
+
+    const projectService = yield* ProjectService.ProjectService;
+    const now = yield* Clock.currentTimeMillis;
+
+    yield* projectService
+      .delete({
+        commandId: CommandId.make(`direct-delete:${projectId}:${now}`),
+        projectId: ProjectId.make(projectId),
+        force: true,
+      })
+      .pipe(Effect.ignore);
+
+    return HttpServerResponse.jsonUnsafe({
+      ok: true,
+      projectId,
+    });
+  }).pipe(
+    Effect.catchCause((cause) =>
+      Effect.succeed(HttpServerResponse.jsonUnsafe({ ok: false, error: Cause.pretty(cause) })),
+    ),
+  ),
+);
+
 export const layerFsBrowseRoute = HttpRouter.add(
   "POST",
   "/api/fs/browse",
@@ -1041,11 +1084,15 @@ export const layerFsEnsureDirRoute = HttpRouter.add(
     };
 
     const homeDir = process.env.HOME || process.env.USERPROFILE || "/";
-    let target = bodyJson?.path?.trim() || pathService.join(homeDir, "autodeskprojects");
+    const storageFolderName = "autocode-storage";
+    let target = bodyJson?.path?.trim() || pathService.join(homeDir, storageFolderName);
     if (target.startsWith("~")) {
       target = target.replace(/^~/, homeDir);
     }
-    const resolved = pathService.resolve(target);
+    let resolved = pathService.resolve(target);
+    if (pathService.basename(resolved).toLowerCase() !== storageFolderName.toLowerCase()) {
+      resolved = pathService.join(resolved, storageFolderName);
+    }
 
     const fileSystem = yield* FileSystem.FileSystem;
     yield* fileSystem.makeDirectory(resolved, { recursive: true }).pipe(

@@ -1,6 +1,10 @@
 // @effect-diagnostics nodeBuiltinImport:off - Effect has no incremental digest.
 import * as EffectNodeStream from "@effect/platform-node/NodeStream";
-import { HostProcessArchitecture, HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import {
+  HostProcessArchitecture,
+  HostProcessEnvironment,
+  HostProcessPlatform,
+} from "@t3tools/shared/hostProcess";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
@@ -17,6 +21,7 @@ import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 import * as NodeCrypto from "node:crypto";
+import * as NodeOS from "node:os";
 
 import * as ServerConfig from "../config.ts";
 import { openZipArchive } from "../zipArchive.ts";
@@ -177,6 +182,7 @@ export const makePreviewBrowser = Effect.fn("PreviewBrowser.make")(function* (
   const serviceScope = yield* Effect.scope;
   const platform = yield* HostProcessPlatform;
   const arch = yield* HostProcessArchitecture;
+  const env = yield* HostProcessEnvironment;
   const release =
     options.release === undefined ? previewBrowserRelease(platform, arch) : options.release;
   const wait = options.wait ?? "45 seconds";
@@ -192,19 +198,27 @@ export const makePreviewBrowser = Effect.fn("PreviewBrowser.make")(function* (
   let state: InstallState = { _tag: "idle" };
   const progress = { downloadedBytes: 0, unpacking: false };
 
+  // Check both the worktree install root and global user directories for an already installed browser.
+  const candidateInstallRoots = (relPlatform: string) => [
+    installRoot,
+    path.join(NodeOS.homedir(), ".t3", "tools", "chrome-headless-shell", relPlatform),
+    path.join(NodeOS.homedir(), ".autocode", "tools", "chrome-headless-shell", relPlatform),
+  ];
+
   // The version directory appears by one rename of a fully unpacked tree, so a
   // runnable binary there is the complete-install marker.
-  const installedExecutable = (release: PreviewBrowserRelease) => {
-    const executable = path.join(installRoot, release.version, executableName);
-    return fs.stat(executable).pipe(
-      Effect.map((info) =>
-        info.type === "File" && (platform === "win32" || (info.mode & 0o111) !== 0)
-          ? Option.some(executable)
-          : Option.none<string>(),
-      ),
-      Effect.orElseSucceed(() => Option.none<string>()),
-    );
-  };
+  const installedExecutable = (release: PreviewBrowserRelease) =>
+    Effect.gen(function* () {
+      const candidateDirs = candidateInstallRoots(release.platform);
+      for (const dir of candidateDirs) {
+        const executable = path.join(dir, release.version, executableName);
+        const info = yield* fs.stat(executable).pipe(Effect.orElseSucceed(() => undefined));
+        if (info && info.type === "File" && (platform === "win32" || (info.mode & 0o111) !== 0)) {
+          return Option.some(executable);
+        }
+      }
+      return Option.none<string>();
+    });
 
   const download = Effect.fn("PreviewBrowser.download")(
     function* (release: PreviewBrowserRelease, archivePath: string) {
@@ -422,6 +436,46 @@ export const makePreviewBrowser = Effect.fn("PreviewBrowser.make")(function* (
     );
 
   const executable = Effect.gen(function* () {
+    const customPath = env.T3CODE_BROWSER_EXECUTABLE_PATH?.trim();
+    if (customPath) {
+      const exists = yield* fs.exists(customPath).pipe(Effect.orElseSucceed(() => false));
+      if (exists) {
+        return customPath;
+      }
+    }
+    if (release !== null) {
+      const alreadyInstalled = yield* installedExecutable(release);
+      if (Option.isSome(alreadyInstalled)) {
+        return alreadyInstalled.value;
+      }
+    }
+    // Check known system browser paths as a fallback before downloading
+    const systemCandidates =
+      platform === "linux"
+        ? [
+            "/usr/bin/google-chrome",
+            "/usr/bin/google-chrome-stable",
+            "/usr/bin/chromium",
+            "/usr/bin/chromium-browser",
+            "/snap/bin/chromium",
+          ]
+        : platform === "darwin"
+          ? [
+              "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+              "/Applications/Chromium.app/Contents/MacOS/Chromium",
+            ]
+          : platform === "win32"
+            ? [
+                "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+                "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+              ]
+            : [];
+    for (const sysPath of systemCandidates) {
+      const stat = yield* fs.stat(sysPath).pipe(Effect.orElseSucceed(() => undefined));
+      if (stat && stat.type === "File") {
+        return sysPath;
+      }
+    }
     if (release === null) {
       return yield* new PreviewBrowserUnsupportedError({ platform, arch });
     }

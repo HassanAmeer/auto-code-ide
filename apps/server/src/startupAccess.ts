@@ -5,7 +5,6 @@ import * as Effect from "effect/Effect";
 import { HttpServer } from "effect/http";
 
 import * as ServerConfig from "./config.ts";
-import * as EnvironmentAuth from "./auth/EnvironmentAuth.ts";
 
 export interface HeadlessServeAccessInfo {
   readonly connectionString: string;
@@ -89,11 +88,11 @@ export const resolveListeningPort = (address: unknown, fallbackPort: number): nu
   return fallbackPort;
 };
 
-export const buildPairingUrl = (connectionString: string, token: string): string => {
+export const buildPairingUrl = (connectionString: string, _token?: string): string => {
   const url = new URL(connectionString);
-  url.pathname = "/pair";
-  url.searchParams.delete("token");
-  url.hash = new URLSearchParams([["token", token]]).toString();
+  url.pathname = "/";
+  url.search = "";
+  url.hash = "";
   return url.toString();
 };
 
@@ -120,29 +119,19 @@ export const renderTerminalQrCode = (value: string, margin = 2): string => {
 };
 
 export const formatHeadlessServeOutput = (accessInfo: HeadlessServeAccessInfo): string =>
-  [
-    "T3 Code server is ready.",
-    `Connection string: ${accessInfo.connectionString}`,
-    `Token: ${accessInfo.token}`,
-    `Pairing URL: ${accessInfo.pairingUrl}`,
-    "",
-    renderTerminalQrCode(accessInfo.pairingUrl),
-    "",
-  ].join("\n");
+  ["AutoCode server is ready.", `URL: ${accessInfo.connectionString}`, ""].join("\n");
 
 export const issueHeadlessServeAccessInfo = Effect.fn("issueHeadlessServeAccessInfo")(function* () {
   const serverConfig = yield* ServerConfig.ServerConfig;
   const httpServer = yield* HttpServer.HttpServer;
-  const serverAuth = yield* EnvironmentAuth.EnvironmentAuth;
   const connectionString = resolveHeadlessConnectionString(
     serverConfig.host,
     resolveListeningPort(httpServer.address, serverConfig.port),
   );
-  const issued = yield* serverAuth.issueStartupPairingCredential();
 
   return {
     connectionString,
-    token: issued.credential,
-    pairingUrl: buildPairingUrl(connectionString, issued.credential),
+    token: "",
+    pairingUrl: connectionString,
   } satisfies HeadlessServeAccessInfo;
 });

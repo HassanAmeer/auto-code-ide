@@ -4339,6 +4339,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     analyserNode,
     toggleCall: toggleVoiceCall,
     endCall: _endVoiceCall,
+    interruptSpeaking,
   } = useVoiceCallAssistant({
     onTranscriptChange: useCallback(
       (text: string) => {
@@ -4347,8 +4348,16 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       [onPromptChange],
     ),
     onAutoSend: useCallback(() => {
-      submitComposer();
-    }, [submitComposer]),
+      submitComposer(
+        undefined,
+        resolveComposerDispatchMode({
+          running: phase === "running",
+          alternateModifier: false,
+          activeTurnDefault: settings.followUpBehavior,
+        }),
+        "foreground",
+      );
+    }, [phase, settings.followUpBehavior, submitComposer]),
     onInterrupt: useCallback(() => {
       void onInterrupt();
     }, [onInterrupt]),
@@ -4356,6 +4365,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     prompt,
     phase,
     promptHistoryMessages,
+    threadId: activeThreadId,
     disabled: isConnecting || isComposerApprovalState,
   });
   const expandMobileComposer = useCallback(() => {
@@ -7596,6 +7606,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   callStatus={callStatus}
                   analyserNode={analyserNode}
                   className="w-full"
+                  onInterrupt={interruptSpeaking}
                 />
               </div>
             ) : (

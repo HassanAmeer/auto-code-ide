@@ -1,4 +1,4 @@
-import { assert, expect, it } from "@effect/vitest";
+import { assert, expect, it } from "vitest";
 
 import {
   buildPairingUrl,
@@ -52,28 +52,23 @@ it("prefers the actual bound port when an http server address is available", () 
   expect(resolveListeningPort(null, 3773)).toBe(3773);
 });
 
-it("builds a pairing URL that embeds the token in the hash", () => {
-  expect(buildPairingUrl("http://192.168.1.42:3773", "PAIRCODE")).toBe(
-    "http://192.168.1.42:3773/pair#token=PAIRCODE",
-  );
+it("builds a clean root URL", () => {
+  expect(buildPairingUrl("http://192.168.1.42:3773", "PAIRCODE")).toBe("http://192.168.1.42:3773/");
 });
 
 it("renders terminal QR codes as a multi-line unicode block grid", () => {
-  const qrCode = renderTerminalQrCode("http://192.168.1.42:3773/pair#token=PAIRCODE");
+  const qrCode = renderTerminalQrCode("http://192.168.1.42:3773/");
 
   assert.isTrue(qrCode.includes("█"));
   assert.isTrue(qrCode.split("\n").length > 10);
 });
 
-it("formats headless serve output with the connection string, token, pairing url, and qr code", () => {
+it("formats headless serve output with the connection string", () => {
   const output = formatHeadlessServeOutput({
     connectionString: "http://192.168.1.42:3773",
-    token: "PAIRCODE",
-    pairingUrl: "http://192.168.1.42:3773/pair#token=PAIRCODE",
+    token: "",
+    pairingUrl: "http://192.168.1.42:3773",
   });
 
-  expect(output).toContain("Connection string: http://192.168.1.42:3773");
-  expect(output).toContain("Token: PAIRCODE");
-  expect(output).toContain("Pairing URL: http://192.168.1.42:3773/pair#token=PAIRCODE");
-  assert.isTrue(output.includes("█") || output.includes("▀") || output.includes("▄"));
+  expect(output).toContain("URL: http://192.168.1.42:3773");
 });

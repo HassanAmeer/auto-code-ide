@@ -456,6 +456,7 @@ import {
   resolveScrollToEndClearance,
 } from "./composerFooterLayout";
 import { ChatHeader } from "./chat/ChatHeader";
+import { MobileProjectThreadTabs } from "./chat/MobileProjectThreadTabs";
 import { useRemoteOpenState } from "~/remoteOpen";
 import { shouldShowOpenInPicker } from "./chat/OpenInPicker.logic";
 import { useOpenFavoriteEditorShortcut } from "./chat/OpenInPickerShortcut";
@@ -486,6 +487,7 @@ import {
   shouldShowThreadErrorBanner,
   ThreadErrorBanner,
 } from "./chat/ThreadErrorBanner";
+import { useAutoRetrySettings } from "~/lib/autoRetrySettings";
 import {
   QueuedRunsControl,
   type QueuedRunsControlHandle,
@@ -2200,6 +2202,11 @@ export default function ChatView(props: ChatViewProps) {
   // session.lastError. Bump a tick so the banner hides immediately. Mirrors
   // the branch mismatch banner.
   const [, setThreadErrorBannerDismissTick] = useState(0);
+  const [autoRetrySettings] = useAutoRetrySettings();
+  const [autoRetryCountdown, setAutoRetryCountdown] = useState<number | null>(null);
+  const [autoRetryCancelledBannerKey, setAutoRetryCancelledBannerKey] = useState<string | null>(
+    null,
+  );
   const defaultRuntimeMode = resolveProjectSettings(settings, activeThread?.projectId ?? null)
     .settings.defaultRuntimeMode;
   // Implicit drafts follow their current project/environment, including retargets.
@@ -3027,9 +3034,12 @@ export default function ChatView(props: ChatViewProps) {
     : (primaryEnvironment?.serverConfig ?? null);
   const rawProviderStatuses = serverConfig?.providers ?? EMPTY_PROVIDERS;
   const providerStatuses = useMemo(() => {
-    if (customProvidersList.length === 0) return rawProviderStatuses;
+    const nonCustomRaw = rawProviderStatuses.filter(
+      (p) => p.driver !== "custom" && p.instanceId !== "custom",
+    );
+    if (customProvidersList.length === 0) return nonCustomRaw;
     const customStatuses = customProvidersList.map(customProviderToServerProvider);
-    return [...rawProviderStatuses, ...customStatuses];
+    return [...nonCustomRaw, ...customStatuses];
   }, [rawProviderStatuses, customProvidersList]);
   const selectedProviderByThreadId = composerActiveProvider ?? null;
   const threadProvider =
@@ -10847,6 +10857,145 @@ export default function ChatView(props: ChatViewProps) {
     void onRevertToTurnCountRef.current(targetTurnCount, messageId);
   }, []);
 
+  const handleAutoRetryNow = useCallback(async () => {
+    setAutoRetryCountdown(null);
+    if (!activeThread || isWorking || isSendBusy || isResuming || sendInFlightRef.current) {
+      return;
+    }
+
+    if (resumableRunId !== null || hasHeldQueuedRuns) {
+      await onResume();
+      return;
+    }
+
+    if (promptRef.current && promptRef.current.trim().length > 0) {
+      await onSend();
+      return;
+    }
+
+    const threadId = activeThread.id;
+    sendInFlightRef.current = true;
+    setResumingThreadKeys((current) => new Set(current).add(routeThreadKey));
+    setThreadError(threadId, null);
+    if (threadErrorBannerKey) {
+      dismissThreadErrorBannerForSession(threadErrorBannerKey);
+      setThreadErrorBannerDismissTick((tick) => tick + 1);
+    }
+
+    try {
+      const createdAt = new Date().toISOString();
+      const settingsResult = await persistThreadSettingsForNextTurn({
+        threadId,
+        createdAt,
+        ...(localCheckoutBranchMismatch
+          ? { branch: localCheckoutBranchMismatch.currentBranch }
+          : {}),
+        runtimeMode,
+        interactionMode,
+      });
+      if (settingsResult._tag === "Failure") {
+        const error = squashAtomCommandFailure(settingsResult);
+        setThreadError(threadId, error instanceof Error ? error.message : "Retry failed.");
+        return;
+      }
+
+      const turnResult = await startThreadTurn({
+        environmentId,
+        input: {
+          threadId,
+          message: {
+            messageId: newMessageId(),
+            role: "user",
+            text: "Please retry the previous response.",
+            attachments: [],
+          },
+          runtimeMode,
+          interactionMode,
+          dispatchMode: "start",
+        },
+      });
+
+      if (turnResult._tag === "Failure" && !isAtomCommandInterrupted(turnResult)) {
+        const error = squashAtomCommandFailure(turnResult);
+        setThreadError(
+          threadId,
+          error instanceof Error ? error.message : "Could not retry thread.",
+        );
+      }
+    } finally {
+      sendInFlightRef.current = false;
+      setResumingThreadKeys((current) => {
+        const next = new Set(current);
+        next.delete(routeThreadKey);
+        return next;
+      });
+    }
+  }, [
+    activeThread,
+    environmentId,
+    hasHeldQueuedRuns,
+    interactionMode,
+    isResuming,
+    isSendBusy,
+    isWorking,
+    localCheckoutBranchMismatch,
+    onResume,
+    onSend,
+    persistThreadSettingsForNextTurn,
+    resumableRunId,
+    routeThreadKey,
+    runtimeMode,
+    setThreadError,
+    startThreadTurn,
+    threadErrorBannerKey,
+  ]);
+
+  const handleAutoRetryNowRef = useRef(handleAutoRetryNow);
+  handleAutoRetryNowRef.current = handleAutoRetryNow;
+
+  useEffect(() => {
+    const hasError = Boolean(
+      visibleThreadError || (isServerThread && serverRuntime?.status === "failed"),
+    );
+    if (!autoRetrySettings.enabled || !hasError || isWorking || !activeThread) {
+      setAutoRetryCountdown(null);
+      return;
+    }
+
+    if (threadErrorBannerKey && autoRetryCancelledBannerKey === threadErrorBannerKey) {
+      return;
+    }
+
+    if (autoRetryCountdown === null) {
+      setAutoRetryCountdown(Math.max(1, autoRetrySettings.delaySeconds));
+      return;
+    }
+
+    if (autoRetryCountdown <= 1) {
+      const timer = setTimeout(() => {
+        setAutoRetryCountdown(null);
+        void handleAutoRetryNowRef.current();
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+
+    const timer = setTimeout(() => {
+      setAutoRetryCountdown((current) => (current !== null ? current - 1 : null));
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [
+    activeThread,
+    autoRetryCancelledBannerKey,
+    autoRetryCountdown,
+    autoRetrySettings.delaySeconds,
+    autoRetrySettings.enabled,
+    isServerThread,
+    isWorking,
+    serverRuntime?.status,
+    threadErrorBannerKey,
+    visibleThreadError,
+  ]);
+
   const pendingSidebarFileDrops = useSidebarPendingFileDropStore((state) => state.pending);
   const consumePendingFileDrop = useSidebarPendingFileDropStore(
     (state) => state.consumePendingFileDrop,
@@ -11254,7 +11403,19 @@ export default function ChatView(props: ChatViewProps) {
                     ? (serverRuntime?.lastErrorClass ?? null)
                     : null
                 }
+                autoRetryCountdown={autoRetryCountdown}
+                onRetryNow={handleAutoRetryNow}
+                onCancelAutoRetry={() => {
+                  if (threadErrorBannerKey) {
+                    setAutoRetryCancelledBannerKey(threadErrorBannerKey);
+                  }
+                  setAutoRetryCountdown(null);
+                }}
                 onDismiss={() => {
+                  if (threadErrorBannerKey) {
+                    setAutoRetryCancelledBannerKey(threadErrorBannerKey);
+                  }
+                  setAutoRetryCountdown(null);
                   setThreadError(activeThread.id, null);
                   dismissThreadErrorBannerForSession(threadErrorBannerKey);
                   setThreadErrorBannerDismissTick((tick) => tick + 1);
@@ -11712,9 +11873,14 @@ export default function ChatView(props: ChatViewProps) {
                         </div>
                       </div>
                     </ComposerSurface.Shell>
+                    <MobileProjectThreadTabs
+                      activeProject={activeProject}
+                      activeThreadId={activeThread?.id ?? null}
+                      onNewThread={handleNewThreadInActiveProject}
+                    />
                     <div
                       aria-hidden
-                      className="h-[calc(env(safe-area-inset-bottom)+1rem)] sm:h-[calc(env(safe-area-inset-bottom)+1.25rem)]"
+                      className="h-[calc(env(safe-area-inset-bottom)+0.5rem)] sm:h-[calc(env(safe-area-inset-bottom)+1.25rem)]"
                     />
                   </div>
                 </div>

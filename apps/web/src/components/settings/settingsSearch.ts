@@ -17,7 +17,8 @@ export type SettingsPath =
   | "/settings/appearance"
   | "/settings/stt-tts"
   | "/settings/keybindings"
-  | "/settings/snap-shot"
+  | "/settings/browser"
+  | "/settings/skills"
   | "/settings/providers"
   | "/settings/custom-providers"
   | "/settings/integrations"
@@ -94,7 +95,8 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/appearance": "Appearance",
   "/settings/stt-tts": "STT-TTS",
   "/settings/keybindings": "Keybindings",
-  "/settings/snap-shot": "SnapShots",
+  "/settings/browser": "Browser",
+  "/settings/skills": "Skills",
   "/settings/providers": "Providers",
   "/settings/custom-providers": "Custom Providers",
   "/settings/integrations": "Integrations",
@@ -149,11 +151,11 @@ export const SETTINGS_SEARCH_ITEMS = [
   },
   {
     id: "storage-projects-location",
-    title: "Projects location (autodeskprojects)",
+    title: "Storage location (autocode-storage)",
     to: "/settings/storage",
     scope: "environment-defaults",
     searchTerms: [
-      "projects location autodeskprojects folder directory path save uploads clone zip",
+      "storage location autocode-storage projects folder directory path save uploads clone zip",
     ],
   },
   {
@@ -296,12 +298,6 @@ export const SETTINGS_SEARCH_ITEMS = [
     id: "composer-context",
     title: "Composer context",
     to: "/settings/appearance",
-  },
-  {
-    id: "project-grouping",
-    title: "Project grouping",
-    to: "/settings/general",
-    searchTerms: ["combine matching repositories environments sidebar"],
   },
   {
     id: "project-order",
@@ -448,15 +444,6 @@ export const SETTINGS_SEARCH_ITEMS = [
     ],
   },
   {
-    id: "background-activity",
-    title: "Background activity",
-    to: "/settings/general",
-    scope: "environment-defaults",
-    searchTerms: [
-      "balanced performance battery saver advanced git fetch provider health refresh host power monitor idle policy",
-    ],
-  },
-  {
     id: "new-threads",
     title: "New threads",
     to: "/settings/general",
@@ -469,20 +456,6 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/general",
     scope: "project-defaults",
     searchTerms: ["git submodule init recursive top-level none worktree t3.json"],
-  },
-  {
-    id: "start-from-origin",
-    title: "Start from origin",
-    to: "/settings/general",
-    scope: "project-defaults",
-    searchTerms: ["new worktrees latest matching remote branch local"],
-  },
-  {
-    id: "add-project-starts-in",
-    title: "Add project starts in",
-    to: "/settings/general",
-    scope: "environment-defaults",
-    searchTerms: ["base directory folder browser path home"],
   },
   {
     id: "unpin-confirmation",
@@ -524,21 +497,10 @@ export const SETTINGS_SEARCH_ITEMS = [
     desktopOnly: true,
   },
   {
-    id: "privacy-policy",
-    title: "Privacy policy",
-    to: "/settings/general",
-    searchTerms: ["telemetry analytics usage data tracking legal opt out"],
-  },
-  {
     id: "diagnostics",
     title: "Diagnostics",
     to: "/settings/general",
     searchTerms: ["logs traces processes resource history failures spans cpu memory"],
-  },
-  {
-    id: "open-source-licenses",
-    title: "Open source licenses",
-    to: "/settings/general",
   },
   {
     id: "legacy-plan-mode",
@@ -565,45 +527,6 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["keyboard shortcuts hotkeys commands bindings json"],
   },
   ...KEYBINDING_SEARCH_ITEMS,
-  {
-    id: "snap-shot-enabled",
-    title: "SnapShots",
-    searchTerms: ["window capture screenshot"],
-    to: "/settings/snap-shot",
-  },
-  {
-    id: "snap-shot-accessibility",
-    title: "Include app text",
-    to: "/settings/snap-shot",
-    targetId: "snap-shot-enabled",
-    searchTerms: [
-      "capture accessibility data text UI structure elements privacy omit agent context",
-    ],
-  },
-  {
-    id: "snap-shot-shortcut",
-    title: "Capture shortcut",
-    to: "/settings/snap-shot",
-    targetId: "snap-shot-enabled",
-  },
-  {
-    id: "snap-shot-sound",
-    title: "Capture sound",
-    to: "/settings/snap-shot",
-    targetId: "snap-shot-enabled",
-  },
-  {
-    id: "snap-shot-flash",
-    title: "Capture flash",
-    to: "/settings/snap-shot",
-    targetId: "snap-shot-enabled",
-  },
-  {
-    id: "snap-shot-animations",
-    title: "Capture animations",
-    to: "/settings/snap-shot",
-    targetId: "snap-shot-enabled",
-  },
   {
     id: "providers",
     title: "Providers",
@@ -926,10 +849,11 @@ const SETTINGS_CATEGORY_SCOPES: Readonly<Record<SettingsPath, SettingsSearchScop
   "/settings/general": null,
   "/settings/appearance": null,
   "/settings/stt-tts": null,
-  "/settings/snap-shot": null,
   // Keybindings fan out to the selection; Providers shows the representative
   // environment at any selection. Neither needs a particular scope to render.
   "/settings/keybindings": null,
+  "/settings/browser": null,
+  "/settings/skills": null,
   "/settings/providers": null,
   "/settings/custom-providers": null,
   "/settings/integrations": null,

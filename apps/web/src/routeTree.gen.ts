@@ -23,6 +23,7 @@ import { Route as SettingsSttRouteImport } from './routes/settings.stt'
 import { Route as SettingsStorageRouteImport } from './routes/settings.storage'
 import { Route as SettingsSourceControlRouteImport } from './routes/settings.source-control'
 import { Route as SettingsSnapShotRouteImport } from './routes/settings.snap-shot'
+import { Route as SettingsSkillsRouteImport } from './routes/settings.skills'
 import { Route as SettingsScheduledTasksRouteImport } from './routes/settings.scheduled-tasks'
 import { Route as SettingsProvidersRouteImport } from './routes/settings.providers'
 import { Route as SettingsProjectsRouteImport } from './routes/settings.projects'
@@ -33,6 +34,7 @@ import { Route as SettingsGeneralRouteImport } from './routes/settings.general'
 import { Route as SettingsDiagnosticsRouteImport } from './routes/settings.diagnostics'
 import { Route as SettingsCustomProvidersRouteImport } from './routes/settings.custom-providers'
 import { Route as SettingsConnectionsRouteImport } from './routes/settings.connections'
+import { Route as SettingsBrowserRouteImport } from './routes/settings.browser'
 import { Route as SettingsArchivedRouteImport } from './routes/settings.archived'
 import { Route as SettingsAppearanceRouteImport } from './routes/settings.appearance'
 import { Route as ProjectsProjectKeyRouteImport } from './routes/projects.$projectKey'
@@ -109,6 +111,11 @@ const SettingsSnapShotRoute = SettingsSnapShotRouteImport.update({
   path: '/snap-shot',
   getParentRoute: () => SettingsRoute,
 } as any)
+const SettingsSkillsRoute = SettingsSkillsRouteImport.update({
+  id: '/skills',
+  path: '/skills',
+  getParentRoute: () => SettingsRoute,
+} as any)
 const SettingsScheduledTasksRoute = SettingsScheduledTasksRouteImport.update({
   id: '/scheduled-tasks',
   path: '/scheduled-tasks',
@@ -160,6 +167,11 @@ const SettingsConnectionsRoute = SettingsConnectionsRouteImport.update({
   path: '/connections',
   getParentRoute: () => SettingsRoute,
 } as any)
+const SettingsBrowserRoute = SettingsBrowserRouteImport.update({
+  id: '/browser',
+  path: '/browser',
+  getParentRoute: () => SettingsRoute,
+} as any)
 const SettingsArchivedRoute = SettingsArchivedRouteImport.update({
   id: '/archived',
   path: '/archived',
@@ -204,6 +216,7 @@ export interface FileRoutesByFullPath {
   '/projects/$projectKey': typeof ProjectsProjectKeyRoute
   '/settings/appearance': typeof SettingsAppearanceRoute
   '/settings/archived': typeof SettingsArchivedRoute
+  '/settings/browser': typeof SettingsBrowserRoute
   '/settings/connections': typeof SettingsConnectionsRoute
   '/settings/custom-providers': typeof SettingsCustomProvidersRoute
   '/settings/diagnostics': typeof SettingsDiagnosticsRoute
@@ -214,6 +227,7 @@ export interface FileRoutesByFullPath {
   '/settings/projects': typeof SettingsProjectsRoute
   '/settings/providers': typeof SettingsProvidersRoute
   '/settings/scheduled-tasks': typeof SettingsScheduledTasksRoute
+  '/settings/skills': typeof SettingsSkillsRoute
   '/settings/snap-shot': typeof SettingsSnapShotRoute
   '/settings/source-control': typeof SettingsSourceControlRoute
   '/settings/storage': typeof SettingsStorageRoute
@@ -234,6 +248,7 @@ export interface FileRoutesByTo {
   '/projects/$projectKey': typeof ProjectsProjectKeyRoute
   '/settings/appearance': typeof SettingsAppearanceRoute
   '/settings/archived': typeof SettingsArchivedRoute
+  '/settings/browser': typeof SettingsBrowserRoute
   '/settings/connections': typeof SettingsConnectionsRoute
   '/settings/custom-providers': typeof SettingsCustomProvidersRoute
   '/settings/diagnostics': typeof SettingsDiagnosticsRoute
@@ -244,6 +259,7 @@ export interface FileRoutesByTo {
   '/settings/projects': typeof SettingsProjectsRoute
   '/settings/providers': typeof SettingsProvidersRoute
   '/settings/scheduled-tasks': typeof SettingsScheduledTasksRoute
+  '/settings/skills': typeof SettingsSkillsRoute
   '/settings/snap-shot': typeof SettingsSnapShotRoute
   '/settings/source-control': typeof SettingsSourceControlRoute
   '/settings/storage': typeof SettingsStorageRoute
@@ -267,6 +283,7 @@ export interface FileRoutesById {
   '/projects/$projectKey': typeof ProjectsProjectKeyRoute
   '/settings/appearance': typeof SettingsAppearanceRoute
   '/settings/archived': typeof SettingsArchivedRoute
+  '/settings/browser': typeof SettingsBrowserRoute
   '/settings/connections': typeof SettingsConnectionsRoute
   '/settings/custom-providers': typeof SettingsCustomProvidersRoute
   '/settings/diagnostics': typeof SettingsDiagnosticsRoute
@@ -277,6 +294,7 @@ export interface FileRoutesById {
   '/settings/projects': typeof SettingsProjectsRoute
   '/settings/providers': typeof SettingsProvidersRoute
   '/settings/scheduled-tasks': typeof SettingsScheduledTasksRoute
+  '/settings/skills': typeof SettingsSkillsRoute
   '/settings/snap-shot': typeof SettingsSnapShotRoute
   '/settings/source-control': typeof SettingsSourceControlRoute
   '/settings/storage': typeof SettingsStorageRoute
@@ -301,6 +319,7 @@ export interface FileRouteTypes {
     | '/projects/$projectKey'
     | '/settings/appearance'
     | '/settings/archived'
+    | '/settings/browser'
     | '/settings/connections'
     | '/settings/custom-providers'
     | '/settings/diagnostics'
@@ -311,6 +330,7 @@ export interface FileRouteTypes {
     | '/settings/projects'
     | '/settings/providers'
     | '/settings/scheduled-tasks'
+    | '/settings/skills'
     | '/settings/snap-shot'
     | '/settings/source-control'
     | '/settings/storage'
@@ -331,6 +351,7 @@ export interface FileRouteTypes {
     | '/projects/$projectKey'
     | '/settings/appearance'
     | '/settings/archived'
+    | '/settings/browser'
     | '/settings/connections'
     | '/settings/custom-providers'
     | '/settings/diagnostics'
@@ -341,6 +362,7 @@ export interface FileRouteTypes {
     | '/settings/projects'
     | '/settings/providers'
     | '/settings/scheduled-tasks'
+    | '/settings/skills'
     | '/settings/snap-shot'
     | '/settings/source-control'
     | '/settings/storage'
@@ -363,6 +385,7 @@ export interface FileRouteTypes {
     | '/projects/$projectKey'
     | '/settings/appearance'
     | '/settings/archived'
+    | '/settings/browser'
     | '/settings/connections'
     | '/settings/custom-providers'
     | '/settings/diagnostics'
@@ -373,6 +396,7 @@ export interface FileRouteTypes {
     | '/settings/projects'
     | '/settings/providers'
     | '/settings/scheduled-tasks'
+    | '/settings/skills'
     | '/settings/snap-shot'
     | '/settings/source-control'
     | '/settings/storage'
@@ -495,6 +519,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsSnapShotRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/settings/skills': {
+      id: '/settings/skills'
+      path: '/skills'
+      fullPath: '/settings/skills'
+      preLoaderRoute: typeof SettingsSkillsRouteImport
+      parentRoute: typeof SettingsRoute
+    }
     '/settings/scheduled-tasks': {
       id: '/settings/scheduled-tasks'
       path: '/scheduled-tasks'
@@ -565,6 +596,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsConnectionsRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/settings/browser': {
+      id: '/settings/browser'
+      path: '/browser'
+      fullPath: '/settings/browser'
+      preLoaderRoute: typeof SettingsBrowserRouteImport
+      parentRoute: typeof SettingsRoute
+    }
     '/settings/archived': {
       id: '/settings/archived'
       path: '/archived'
@@ -629,6 +667,7 @@ const ChatRouteWithChildren = ChatRoute._addFileChildren(ChatRouteChildren)
 interface SettingsRouteChildren {
   SettingsAppearanceRoute: typeof SettingsAppearanceRoute
   SettingsArchivedRoute: typeof SettingsArchivedRoute
+  SettingsBrowserRoute: typeof SettingsBrowserRoute
   SettingsConnectionsRoute: typeof SettingsConnectionsRoute
   SettingsCustomProvidersRoute: typeof SettingsCustomProvidersRoute
   SettingsDiagnosticsRoute: typeof SettingsDiagnosticsRoute
@@ -639,6 +678,7 @@ interface SettingsRouteChildren {
   SettingsProjectsRoute: typeof SettingsProjectsRoute
   SettingsProvidersRoute: typeof SettingsProvidersRoute
   SettingsScheduledTasksRoute: typeof SettingsScheduledTasksRoute
+  SettingsSkillsRoute: typeof SettingsSkillsRoute
   SettingsSnapShotRoute: typeof SettingsSnapShotRoute
   SettingsSourceControlRoute: typeof SettingsSourceControlRoute
   SettingsStorageRoute: typeof SettingsStorageRoute
@@ -650,6 +690,7 @@ interface SettingsRouteChildren {
 const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsAppearanceRoute: SettingsAppearanceRoute,
   SettingsArchivedRoute: SettingsArchivedRoute,
+  SettingsBrowserRoute: SettingsBrowserRoute,
   SettingsConnectionsRoute: SettingsConnectionsRoute,
   SettingsCustomProvidersRoute: SettingsCustomProvidersRoute,
   SettingsDiagnosticsRoute: SettingsDiagnosticsRoute,
@@ -660,6 +701,7 @@ const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsProjectsRoute: SettingsProjectsRoute,
   SettingsProvidersRoute: SettingsProvidersRoute,
   SettingsScheduledTasksRoute: SettingsScheduledTasksRoute,
+  SettingsSkillsRoute: SettingsSkillsRoute,
   SettingsSnapShotRoute: SettingsSnapShotRoute,
   SettingsSourceControlRoute: SettingsSourceControlRoute,
   SettingsStorageRoute: SettingsStorageRoute,

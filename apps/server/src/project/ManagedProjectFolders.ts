@@ -399,45 +399,64 @@ const make = Effect.gen(function* () {
     );
   });
 
-  // Projects are saved in autodeskprojects under the user's home or configured directory
+  // Projects are saved in autocode-storage under the user's home or configured directory
   const procEnv = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process
     ?.env;
   const userHomeDir = procEnv?.HOME || procEnv?.USERPROFILE || config.baseDir;
-  const defaultAutodeskProjectsDir = path.resolve(userHomeDir, "autodeskprojects");
+  const storageFolderName = "autocode-storage";
+  const defaultAutocodeStorageDir = path.resolve(userHomeDir, storageFolderName);
+
+  const normalizeStorageRoot = (targetPath: string): string => {
+    let resolved = targetPath.trim();
+    if (resolved.startsWith("~")) {
+      resolved = resolved.replace(/^~/, userHomeDir);
+    }
+    resolved = path.resolve(resolved);
+    if (path.basename(resolved).toLowerCase() === storageFolderName.toLowerCase()) {
+      return resolved;
+    }
+    return path.join(resolved, storageFolderName);
+  };
 
   const resolveNamedProjectsRoot = Effect.gen(function* () {
     // 1. Explicit env vars
+    if (procEnv?.AUTOCODE_STORAGE_DIR && procEnv.AUTOCODE_STORAGE_DIR.trim().length > 0) {
+      return normalizeStorageRoot(procEnv.AUTOCODE_STORAGE_DIR);
+    }
+    if (procEnv?.AUTOCODE_PROJECTS_DIR && procEnv.AUTOCODE_PROJECTS_DIR.trim().length > 0) {
+      return normalizeStorageRoot(procEnv.AUTOCODE_PROJECTS_DIR);
+    }
     if (procEnv?.AUTODESK_PROJECTS_DIR && procEnv.AUTODESK_PROJECTS_DIR.trim().length > 0) {
-      return path.resolve(procEnv.AUTODESK_PROJECTS_DIR.trim());
+      return normalizeStorageRoot(procEnv.AUTODESK_PROJECTS_DIR);
     }
     if (procEnv?.T3CODE_PROJECTS_DIR && procEnv.T3CODE_PROJECTS_DIR.trim().length > 0) {
-      return path.resolve(procEnv.T3CODE_PROJECTS_DIR.trim());
+      return normalizeStorageRoot(procEnv.T3CODE_PROJECTS_DIR);
     }
 
     // 2. Read settings.json if exists
-    // @effect-diagnostics-next-line preferSchemaOverJson:off
     const settingsRaw = yield* fileSystem.readFileString(config.settingsPath).pipe(Effect.option);
     if (Option.isSome(settingsRaw)) {
       try {
+        // @effect-diagnostics-next-line preferSchemaOverJson:off
         const parsed = JSON.parse(settingsRaw.value);
         if (
           typeof parsed?.projectsDirectory === "string" &&
           parsed.projectsDirectory.trim().length > 0
         ) {
-          return path.resolve(parsed.projectsDirectory.trim());
+          return normalizeStorageRoot(parsed.projectsDirectory);
         }
       } catch {
         // ignore parse error
       }
     }
 
-    // 3. Default: autodeskprojects in user's home or root directory
-    return defaultAutodeskProjectsDir;
+    // 3. Default: autocode-storage in user's home or root directory
+    return defaultAutocodeStorageDir;
   });
 
-  // Ensure default autodeskprojects directory is created immediately
+  // Ensure default autocode-storage directory is created immediately
   yield* fileSystem
-    .makeDirectory(defaultAutodeskProjectsDir, { recursive: true })
+    .makeDirectory(defaultAutocodeStorageDir, { recursive: true })
     .pipe(Effect.ignore);
 
   const claimNamedFolder = Effect.fn("ManagedProjectFolders.claimNamedFolder")(function* (
@@ -564,7 +583,7 @@ export default function App() {
   return (
     <div style={{ fontFamily: 'system-ui, sans-serif', padding: '3rem', textAlign: 'center' }}>
       <h1>Welcome to ${name}</h1>
-      <p style={{ color: '#94a3b8' }}>Built with React + Vite & Autodesk Code AI</p>
+      <p style={{ color: '#94a3b8' }}>Built with React + Vite & AutoCode AI</p>
       <div style={{ marginTop: '2rem' }}>
         <button
           onClick={() => setCount((c) => c + 1)}
@@ -599,7 +618,7 @@ export default function App() {
       );
       yield* fileSystem.writeFileString(
         path.join(cwd, "README.md"),
-        `# ${name}\n\nReact + Vite project initialized with Autodesk Code (ADC).\n\n## Getting Started\n\`\`\`bash\nnpm install\nnpm run dev\n\`\`\`\n`,
+        `# ${name}\n\nReact + Vite project initialized with AutoCode (AC).\n\n## Getting Started\n\`\`\`bash\nnpm install\nnpm run dev\n\`\`\`\n`,
       );
     } else if (template === "nextjs") {
       const slug = name.toLowerCase().replace(/[^a-z0-9_-]/g, "-") || "nextjs-app";
@@ -632,7 +651,7 @@ export default function App() {
         path.join(appDir, "layout.jsx"),
         `export const metadata = {
   title: "${name}",
-  description: "Created with Autodesk Code (ADC) AI",
+  description: "Created with AutoCode (AC) AI",
 };
 
 export default function RootLayout({ children }) {
@@ -662,7 +681,7 @@ export default function RootLayout({ children }) {
       );
       yield* fileSystem.writeFileString(
         path.join(cwd, "README.md"),
-        `# ${name}\n\nNext.js project initialized with Autodesk Code (ADC).\n\n\`\`\`bash\nnpm install\nnpm run dev\n\`\`\`\n`,
+        `# ${name}\n\nNext.js project initialized with AutoCode (AC).\n\n\`\`\`bash\nnpm install\nnpm run dev\n\`\`\`\n`,
       );
     } else if (template === "node") {
       const slug = name.toLowerCase().replace(/[^a-z0-9_-]/g, "-") || "node-app";
@@ -707,7 +726,7 @@ app.listen(port, () => {
       yield* fileSystem.writeFileString(path.join(cwd, ".gitignore"), `node_modules/\n.env\n`);
       yield* fileSystem.writeFileString(
         path.join(cwd, "README.md"),
-        `# ${name}\n\nNode.js API project initialized with Autodesk Code (ADC).\n\n\`\`\`bash\nnpm install\nnpm run dev\n\`\`\`\n`,
+        `# ${name}\n\nNode.js API project initialized with AutoCode (AC).\n\n\`\`\`bash\nnpm install\nnpm run dev\n\`\`\`\n`,
       );
     } else if (template === "python") {
       yield* fileSystem.writeFileString(
@@ -731,7 +750,7 @@ if __name__ == "__main__":
       );
       yield* fileSystem.writeFileString(
         path.join(cwd, "README.md"),
-        `# ${name}\n\nPython project initialized with Autodesk Code (ADC).\n\n\`\`\`bash\npython main.py\n\`\`\`\n`,
+        `# ${name}\n\nPython project initialized with AutoCode (AC).\n\n\`\`\`bash\npython main.py\n\`\`\`\n`,
       );
     } else if (template === "php") {
       yield* fileSystem.writeFileString(
@@ -750,14 +769,14 @@ header('Content-Type: text/html; charset=utf-8');
 </head>
 <body>
     <h1><?= htmlspecialchars("${name}") ?></h1>
-    <p>PHP Application initialized with Autodesk Code (ADC).</p>
+    <p>PHP Application initialized with AutoCode (AC).</p>
 </body>
 </html>\n`,
       );
       yield* fileSystem.writeFileString(path.join(cwd, ".gitignore"), `vendor/\n.env\n`);
       yield* fileSystem.writeFileString(
         path.join(cwd, "README.md"),
-        `# ${name}\n\nPHP project initialized with Autodesk Code (ADC).\n\n\`\`\`bash\nphp -S localhost:8000\n\`\`\`\n`,
+        `# ${name}\n\nPHP project initialized with AutoCode (AC).\n\n\`\`\`bash\nphp -S localhost:8000\n\`\`\`\n`,
       );
     } else {
       yield* fileSystem.writeFileString(path.join(cwd, "README.md"), namedProjectReadme(name));
@@ -1076,14 +1095,34 @@ header('Content-Type: text/html; charset=utf-8');
     };
   });
 
+  const syncProjectsFromDisk = Effect.fn("ManagedProjectFolders.syncProjectsFromDisk")(
+    function* () {
+      const root = yield* resolveNamedProjectsRoot;
+      const entries = yield* fileSystem
+        .readDirectory(root)
+        .pipe(Effect.orElseSucceed(() => [] as string[]));
+      const projectDirs: string[] = [];
+      for (const entry of entries) {
+        if (entry.startsWith(".")) continue;
+        const fullPath = path.join(root, entry);
+        const stat = yield* fileSystem.stat(fullPath).pipe(Effect.option);
+        if (Option.isSome(stat) && stat.value.type === "Directory") {
+          projectDirs.push(fullPath);
+        }
+      }
+      return projectDirs;
+    },
+  );
+
   return ManagedProjectFolders.of({
     scratchRoot,
     ensureScratchProject,
     folderForThread,
-    namedProjectsRoot: defaultAutodeskProjectsDir,
+    namedProjectsRoot: defaultAutocodeStorageDir,
     createNamedProject,
     importUploadedProject,
     importZipProject,
+    syncProjectsFromDisk,
   });
 });
 

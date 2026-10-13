@@ -10,7 +10,14 @@ import { formatProviderUpdateRequiredNotice } from "@t3tools/client-runtime/prov
 import { useNavigate } from "@tanstack/react-router";
 import { LegendList, type LegendListRef } from "@legendapp/list/react";
 import { memo, useMemo, useState, useCallback, useEffect, useLayoutEffect, useRef } from "react";
-import { ChevronRightIcon } from "lucide-react";
+import { ChevronRightIcon, RotateCwIcon } from "lucide-react";
+import {
+  fetchModelsFromProvider,
+  getCustomProviders,
+  saveCustomProvider,
+  subscribeCustomProviders,
+  type CustomProvider,
+} from "~/lib/customProviders";
 import { ModelListRow } from "./ModelListRow";
 import { ModelPickerSidebar } from "./ModelPickerSidebar";
 import { getProviderStatusMessage, hasProviderSetup } from "./ProviderStatusBanner";
@@ -283,15 +290,87 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
     searchInputRef.current?.focus({ preventScroll: true });
   }, []);
 
+  const [customProvidersList, setCustomProvidersList] = useState<CustomProvider[]>(() =>
+    getCustomProviders(),
+  );
+
+  useEffect(() => {
+    return subscribeCustomProviders((list) => {
+      setCustomProvidersList(list);
+    });
+  }, []);
+
+  const currentCustomProvider = useMemo(() => {
+    if (!selectedInstanceId || selectedInstanceId === "favorites") return null;
+    return (
+      customProvidersList.find(
+        (cp) =>
+          cp.id === selectedInstanceId ||
+          `custom_${cp.id}` === selectedInstanceId ||
+          cp.id === `custom_${selectedInstanceId}`,
+      ) ?? null
+    );
+  }, [selectedInstanceId, customProvidersList]);
+
+  const [isRefreshingModels, setIsRefreshingModels] = useState(false);
+
+  const refreshCustomProviderModels = useCallback(
+    async (cp: CustomProvider) => {
+      if (isRefreshingModels) return;
+      setIsRefreshingModels(true);
+      try {
+        const res = await fetchModelsFromProvider(cp.baseUrl, cp.apiKey, cp.headers);
+        if (res.success && res.models.length > 0) {
+          saveCustomProvider({
+            ...cp,
+            models: res.models,
+          });
+        }
+      } catch (err) {
+        console.error("Failed to load models for custom provider:", err);
+      } finally {
+        setIsRefreshingModels(false);
+      }
+    },
+    [isRefreshingModels],
+  );
+
   const handleSelectInstance = useCallback(
     (instanceId: ProviderInstanceId | "favorites") => {
       setSelectedInstanceId(instanceId);
       window.requestAnimationFrame(() => {
         focusSearchInput();
       });
+
+      if (instanceId !== "favorites") {
+        const cp = customProvidersList.find(
+          (p) =>
+            p.id === instanceId ||
+            `custom_${p.id}` === instanceId ||
+            p.id === `custom_${instanceId}`,
+        );
+        if (
+          cp &&
+          (cp.models.length === 0 || (cp.models.length === 1 && cp.models[0]?.id === "default"))
+        ) {
+          void refreshCustomProviderModels(cp);
+        }
+      }
     },
-    [focusSearchInput],
+    [focusSearchInput, customProvidersList, refreshCustomProviderModels],
   );
+
+  useEffect(() => {
+    if (currentCustomProvider) {
+      if (
+        currentCustomProvider.models.length === 0 ||
+        (currentCustomProvider.models.length === 1 &&
+          currentCustomProvider.models[0]?.id === "default")
+      ) {
+        void refreshCustomProviderModels(currentCustomProvider);
+      }
+    }
+  }, [currentCustomProvider, refreshCustomProviderModels]);
 
   useLayoutEffect(() => {
     focusSearchInput();
@@ -847,7 +926,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
     <TooltipProvider delay={0}>
       <div
         ref={pickerContentRef}
-        className="relative flex max-h-86.5 w-screen max-w-90 flex-row overflow-hidden"
+        className="relative flex max-h-86.5 w-[calc(100vw-1.5rem)] max-w-96 flex-row overflow-hidden"
         // Hold the height from when the search started; results scroll instead of resizing.
         style={isSearching ? { height: searchHeight } : undefined}
         data-model-picker-content="true"
@@ -920,65 +999,88 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
               showSidebar && "border-l border-border/70",
             )}
           >
-            <ComboboxSearchInput
-              ref={searchInputRef}
-              placeholder="Search models..."
-              value={searchQuery}
-              onChange={(e) => {
-                if (!isSearching) setSearchHeight(pickerContentRef.current?.offsetHeight ?? 0);
-                setSearchQuery(e.target.value);
-              }}
-              onKeyDown={(e) => {
-                if (
-                  showSidebar &&
-                  !e.altKey &&
-                  !e.ctrlKey &&
-                  !e.metaKey &&
-                  ((e.key === "ArrowLeft" && !e.shiftKey && searchQuery.length === 0) ||
-                    (e.key === "Tab" && e.shiftKey))
-                ) {
-                  const sidebar = e.currentTarget
-                    .closest("[data-model-picker-content]")
-                    ?.querySelector("[data-model-picker-sidebar]");
-                  const button =
-                    sidebar?.querySelector<HTMLButtonElement>(
-                      'button[aria-pressed="true"]:not(:disabled)',
-                    ) ?? sidebar?.querySelector<HTMLButtonElement>("button:not(:disabled)");
-                  if (button) {
+            <div className="relative">
+              <ComboboxSearchInput
+                ref={searchInputRef}
+                placeholder="Search models..."
+                value={searchQuery}
+                className={currentCustomProvider ? "[&_input]:pe-7" : undefined}
+                onChange={(e) => {
+                  if (!isSearching) setSearchHeight(pickerContentRef.current?.offsetHeight ?? 0);
+                  setSearchQuery(e.target.value);
+                }}
+                onKeyDown={(e) => {
+                  if (
+                    showSidebar &&
+                    !e.altKey &&
+                    !e.ctrlKey &&
+                    !e.metaKey &&
+                    ((e.key === "ArrowLeft" && !e.shiftKey && searchQuery.length === 0) ||
+                      (e.key === "Tab" && e.shiftKey))
+                  ) {
+                    const sidebar = e.currentTarget
+                      .closest("[data-model-picker-content]")
+                      ?.querySelector("[data-model-picker-sidebar]");
+                    const button =
+                      sidebar?.querySelector<HTMLButtonElement>(
+                        'button[aria-pressed="true"]:not(:disabled)',
+                      ) ?? sidebar?.querySelector<HTMLButtonElement>("button:not(:disabled)");
+                    if (button) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      button.focus();
+                      return;
+                    }
+                  }
+                  if (e.key === "Escape") {
                     e.preventDefault();
                     e.stopPropagation();
-                    button.focus();
+                    props.onRequestClose?.();
                     return;
                   }
-                }
-                if (e.key === "Escape") {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  props.onRequestClose?.();
-                  return;
-                }
-                if (e.key === "Enter" && highlightedModelKeyRef.current) {
-                  (e as typeof e & { preventBaseUIHandler?: () => void }).preventBaseUIHandler?.();
-                  e.preventDefault();
-                  e.stopPropagation();
-                  const legacyInstanceId = parseModelPickerLegacySectionKey(
-                    highlightedModelKeyRef.current,
-                  );
-                  if (legacyInstanceId) {
-                    toggleLegacySection(legacyInstanceId);
+                  if (e.key === "Enter" && highlightedModelKeyRef.current) {
+                    (
+                      e as typeof e & { preventBaseUIHandler?: () => void }
+                    ).preventBaseUIHandler?.();
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const legacyInstanceId = parseModelPickerLegacySectionKey(
+                      highlightedModelKeyRef.current,
+                    );
+                    if (legacyInstanceId) {
+                      toggleLegacySection(legacyInstanceId);
+                      return;
+                    }
+                    const model = parseModelPickerModelKey(highlightedModelKeyRef.current);
+                    if (model) {
+                      handleModelSelect(model.slug, model.instanceId, e.shiftKey);
+                    }
                     return;
                   }
-                  const model = parseModelPickerModelKey(highlightedModelKeyRef.current);
-                  if (model) {
-                    handleModelSelect(model.slug, model.instanceId, e.shiftKey);
-                  }
-                  return;
-                }
-                e.stopPropagation();
-              }}
-              onMouseDown={(e) => e.stopPropagation()}
-              onTouchStart={(e) => e.stopPropagation()}
-            />
+                  e.stopPropagation();
+                }}
+                onMouseDown={(e) => e.stopPropagation()}
+                onTouchStart={(e) => e.stopPropagation()}
+              />
+              {currentCustomProvider && (
+                <button
+                  type="button"
+                  title="Reload models from provider"
+                  aria-label="Reload models from provider"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    void refreshCustomProviderModels(currentCustomProvider);
+                  }}
+                  disabled={isRefreshingModels}
+                  className="absolute right-3 top-2.5 inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+                >
+                  <RotateCwIcon
+                    className={cn("size-3.5", isRefreshingModels && "animate-spin text-primary")}
+                  />
+                </button>
+              )}
+            </div>
 
             {/* Model list */}
             <div

@@ -41,11 +41,17 @@ export const ThreadErrorBanner = memo(function ThreadErrorBanner({
   onDismiss,
   errorClass,
   chatGptUsageLimit = false,
+  autoRetryCountdown,
+  onRetryNow,
+  onCancelAutoRetry,
 }: {
   error: string | null;
   errorClass?: OrchestrationV2ProviderFailureClass | null;
   onDismiss?: () => void;
   chatGptUsageLimit?: boolean;
+  autoRetryCountdown?: number | null;
+  onRetryNow?: () => void;
+  onCancelAutoRetry?: () => void;
 }) {
   if (!error) return null;
   const variant = errorClass === "usage_limit" ? "warning" : "error";
@@ -64,12 +70,44 @@ export const ThreadErrorBanner = memo(function ThreadErrorBanner({
               <p>Review your usage settings in ChatGPT to continue.</p>
             </div>
           ) : (
-            <Tooltip>
-              <TooltipTrigger render={<div className="line-clamp-3" />}>{error}</TooltipTrigger>
-              <TooltipPopup side="top" className="whitespace-pre-wrap">
-                {error}
-              </TooltipPopup>
-            </Tooltip>
+            <div>
+              <Tooltip>
+                <TooltipTrigger render={<div className="line-clamp-3" />}>{error}</TooltipTrigger>
+                <TooltipPopup side="top" className="whitespace-pre-wrap">
+                  {error}
+                </TooltipPopup>
+              </Tooltip>
+              {autoRetryCountdown !== null && autoRetryCountdown !== undefined ? (
+                <div className="mt-2 flex flex-wrap items-center gap-2 font-sans">
+                  <span className="text-xs font-medium text-amber-500 dark:text-amber-400 flex items-center gap-1.5">
+                    <span className="inline-block size-2 rounded-full bg-amber-500 animate-pulse" />
+                    Auto-retrying in {autoRetryCountdown}s...
+                  </span>
+                  {onRetryNow ? (
+                    <Button
+                      type="button"
+                      size="xs"
+                      variant="outline"
+                      onClick={onRetryNow}
+                      className="h-5 text-2xs px-2"
+                    >
+                      Retry now
+                    </Button>
+                  ) : null}
+                  {onCancelAutoRetry ? (
+                    <Button
+                      type="button"
+                      size="xs"
+                      variant="ghost"
+                      onClick={onCancelAutoRetry}
+                      className="h-5 text-2xs px-2 text-muted-foreground hover:text-foreground"
+                    >
+                      Cancel
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
           )}
         </AlertDescription>
         {(chatGptUsageLimit || onDismiss) && (

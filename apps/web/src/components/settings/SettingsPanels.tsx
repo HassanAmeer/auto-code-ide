@@ -1,14 +1,13 @@
+import { useAutoRetrySettings } from "~/lib/autoRetrySettings";
 import { SettingsGroup } from "./SettingsGroup";
 import { useScopedSettingsWriteAllowed } from "./useScopedSettings";
 import { Spinner } from "~/components/ui/spinner";
 import { NotificationSettings } from "./NotificationSettings";
-import { PRIVACY_POLICY_URL } from "../../legalLinks";
 import { ArchiveIcon, ArchiveX, CheckIcon, ChevronRightIcon, SettingsIcon } from "lucide-react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import type { CSSProperties, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  type BackgroundActivityProfile,
   type DesktopUpdateChannel,
   ProviderDriverKind,
   type ProviderInstanceId,
@@ -48,7 +47,6 @@ import {
   type QuitConfirmationMode,
   SidebarProjectSortOrder,
 } from "@t3tools/contracts/settings";
-import { resolveServerBackgroundActivitySettings } from "@t3tools/shared/backgroundActivitySettings";
 import { createModelSelection } from "@t3tools/shared/model";
 import * as Duration from "effect/Duration";
 import * as Equal from "effect/Equal";
@@ -143,19 +141,8 @@ import { stackedThreadToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { ThemeLibrary } from "./ThemeSettings";
 import {
-  backgroundActivityOverrideSettings,
-  backgroundActivitySharedPolicySettings,
-  durationToSeconds,
   getChangedBrowserSettingLabels,
   getChangedTypographySettingLabels,
-  normalizeIntervalSeconds,
-  PROVIDER_HEALTH_INTERVAL_STEP_SECONDS,
-  hasChangedBackgroundActivitySettings,
-  isProjectGroupingEnabled,
-  projectGroupingModeFromToggle,
-  readLastEnabledProjectGroupingMode,
-  rememberEnabledProjectGroupingMode,
-  resolveBackgroundActivityProfileOption,
 } from "./SettingsPanels.logic";
 import {
   PolicyTooltip,
@@ -217,57 +204,7 @@ const QUIT_CONFIRMATION_MODE_LABELS: Record<QuitConfirmationMode, string> = {
   "double-click": "Double press",
 };
 
-const BACKGROUND_ACTIVITY_PROFILE_LABELS: Record<BackgroundActivityProfile, string> = {
-  balanced: "Balanced",
-  performance: "Performance",
-  "battery-saver": "Battery saver",
-};
-
-type BackgroundActivityProfileOption = BackgroundActivityProfile | "advanced";
-
-const BACKGROUND_ACTIVITY_PROFILE_OPTION_LABELS: Record<BackgroundActivityProfileOption, string> = {
-  ...BACKGROUND_ACTIVITY_PROFILE_LABELS,
-  advanced: "Advanced",
-};
-
-const BACKGROUND_ACTIVITY_PROFILE_DESCRIPTIONS: Record<BackgroundActivityProfile, string> = {
-  balanced: "Pauses probes for idle clients, locked hosts, or low power mode.",
-  performance: "Allows scoped background probes while any subscribed client remains connected.",
-  "battery-saver": "Also pauses background probes when the host or client is on battery.",
-};
-
-const ADVANCED_BACKGROUND_ACTIVITY_DESCRIPTION = "Uses custom intervals.";
-
 const DEFAULT_DRIVER_KIND = ProviderDriverKind.make("codex");
-const BACKGROUND_ACTIVITY_BOOLEAN_OVERRIDES: ReadonlyArray<{
-  readonly key:
-    | "pauseWhenHostLocked"
-    | "pauseWhenHostLowPower"
-    | "pauseWhenClientLowPower"
-    | "pauseWhenOnBattery";
-  readonly label: string;
-}> = [
-  { key: "pauseWhenHostLocked", label: "Pause when host is locked" },
-  { key: "pauseWhenHostLowPower", label: "Pause on host low power" },
-  { key: "pauseWhenClientLowPower", label: "Pause on client low power" },
-  { key: "pauseWhenOnBattery", label: "Pause on battery" },
-];
-
-function resetBackgroundActivitySettings() {
-  return {
-    backgroundActivity: DEFAULT_UNIFIED_SETTINGS.backgroundActivity,
-  };
-}
-
-function backgroundActivityProfileSettings(profile: BackgroundActivityProfile) {
-  return {
-    backgroundActivity: {
-      schemaVersion: 1 as const,
-      profile,
-      overrides: {},
-    },
-  };
-}
 
 function AboutVersionTitle() {
   return (
@@ -532,7 +469,6 @@ export function useSettingsRestore(onRestored?: () => void) {
     settings.textGenerationModelSelection ?? null,
     DEFAULT_UNIFIED_SETTINGS.textGenerationModelSelection ?? null,
   );
-  const isBackgroundActivityDirty = hasChangedBackgroundActivitySettings(settings);
 
   const changedSettingLabels = useMemo(
     () => [
@@ -633,16 +569,8 @@ export function useSettingsRestore(onRestored?: () => void) {
       DEFAULT_UNIFIED_SETTINGS.continueThreadsAfterServerUpdate
         ? ["Continue threads after restarts"]
         : []),
-      ...(isBackgroundActivityDirty ? ["Background activity"] : []),
       ...(settings.defaultThreadEnvMode !== DEFAULT_UNIFIED_SETTINGS.defaultThreadEnvMode
         ? ["New thread mode"]
-        : []),
-      ...(settings.newWorktreesStartFromOrigin !==
-      DEFAULT_UNIFIED_SETTINGS.newWorktreesStartFromOrigin
-        ? ["New worktrees start from origin"]
-        : []),
-      ...(settings.addProjectBaseDirectory !== DEFAULT_UNIFIED_SETTINGS.addProjectBaseDirectory
-        ? ["Add project base directory"]
         : []),
       ...(settings.confirmThreadUnpin !== DEFAULT_UNIFIED_SETTINGS.confirmThreadUnpin
         ? ["Unpin confirmation"]
@@ -662,7 +590,6 @@ export function useSettingsRestore(onRestored?: () => void) {
     ],
     [
       isTextGenerationModelDirty,
-      isBackgroundActivityDirty,
       settings.browserDefaultViewport,
       settings.browserDefaultZoomFactor,
       settings.browserDefaultAppearance,
@@ -683,9 +610,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.composerRichTextEnabled,
       settings.sendShortcut,
       settings.followUpBehavior,
-      settings.addProjectBaseDirectory,
       settings.defaultThreadEnvMode,
-      settings.newWorktreesStartFromOrigin,
       settings.diffFilesCollapsed,
       settings.diffIgnoreWhitespace,
       settings.diffLayout,
@@ -870,283 +795,6 @@ export function useSettingsRestore(onRestored?: () => void) {
     changedSettingLabels,
     restoreDefaults,
   };
-}
-
-function BackgroundActivityAdvancedDialog({
-  open,
-  onOpenChange,
-}: {
-  readonly open: boolean;
-  readonly onOpenChange: (open: boolean) => void;
-}) {
-  const canWriteSettings = useScopedSettingsWriteAllowed();
-  const settings = useScopedSettings();
-  const updateSettings = useUpdateScopedSettings();
-  const resolvedBackgroundActivity = resolveServerBackgroundActivitySettings(settings);
-  const activeProfile = resolvedBackgroundActivity.profile;
-  const automaticGitFetchIntervalSeconds = durationToSeconds(
-    resolvedBackgroundActivity.automaticGitFetchInterval,
-  );
-  const providerHealthRefreshIntervalSeconds = durationToSeconds(
-    resolvedBackgroundActivity.providerHealthRefreshInterval,
-  );
-  const hostPowerMonitorActiveIntervalSeconds = durationToSeconds(
-    resolvedBackgroundActivity.hostPowerMonitorActiveInterval,
-  );
-  const hostPowerMonitorIdleIntervalSeconds = durationToSeconds(
-    resolvedBackgroundActivity.hostPowerMonitorIdleInterval,
-  );
-
-  return (
-    <Dialog open={open && canWriteSettings} onOpenChange={onOpenChange}>
-      <DialogPopup className="max-w-xl">
-        <DialogHeader>
-          <DialogTitle>Background Activity</DialogTitle>
-          <DialogDescription>
-            Tune the shared power policy and the background intervals that feed it.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogPanel>
-          <fieldset
-            disabled={!canWriteSettings}
-            className="min-w-0 overflow-hidden rounded-xl border bg-card text-card-foreground"
-          >
-            <div className="flex flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0 space-y-1">
-                <div className="text-sm font-medium">Shared policy</div>
-                <p className="text-xs leading-relaxed text-muted-foreground">
-                  Controls whether background work may run after a subscribed interval fires.
-                </p>
-              </div>
-              <Select
-                value={activeProfile}
-                onValueChange={(value) => {
-                  if (
-                    value === "balanced" ||
-                    value === "performance" ||
-                    value === "battery-saver"
-                  ) {
-                    updateSettings({
-                      backgroundActivity: backgroundActivitySharedPolicySettings(settings, value),
-                    });
-                  }
-                }}
-              >
-                <SelectTrigger
-                  size="sm"
-                  className="w-full sm:w-40"
-                  aria-label="Shared background policy"
-                >
-                  <SelectValue>{BACKGROUND_ACTIVITY_PROFILE_LABELS[activeProfile]}</SelectValue>
-                </SelectTrigger>
-                <SelectPopup align="end" alignItemWithTrigger={false}>
-                  <SelectItem hideIndicator value="balanced">
-                    {BACKGROUND_ACTIVITY_PROFILE_LABELS.balanced}
-                  </SelectItem>
-                  <SelectItem hideIndicator value="performance">
-                    {BACKGROUND_ACTIVITY_PROFILE_LABELS.performance}
-                  </SelectItem>
-                  <SelectItem hideIndicator value="battery-saver">
-                    {BACKGROUND_ACTIVITY_PROFILE_LABELS["battery-saver"]}
-                  </SelectItem>
-                </SelectPopup>
-              </Select>
-            </div>
-
-            <div className="flex flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0 space-y-1">
-                <div className="text-sm font-medium">
-                  {searchableSetting("git-fetch-interval").title}
-                </div>
-                <p className="text-xs leading-relaxed text-muted-foreground">
-                  Refresh remote branch status in the background.
-                </p>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <NumberField
-                  value={automaticGitFetchIntervalSeconds}
-                  min={0}
-                  step={5}
-                  size="sm"
-                  className="w-32"
-                  onValueChange={(value) =>
-                    updateSettings(
-                      backgroundActivityOverrideSettings(
-                        settings.backgroundActivity,
-                        resolvedBackgroundActivity,
-                        {
-                          automaticGitFetchInterval: Duration.seconds(
-                            normalizeIntervalSeconds(value),
-                          ),
-                        },
-                      ),
-                    )
-                  }
-                >
-                  <NumberFieldGroup>
-                    <NumberFieldDecrement aria-label="Decrease Git fetch interval" />
-                    <NumberFieldInput aria-label="Git fetch interval in seconds" />
-                    <NumberFieldIncrement aria-label="Increase Git fetch interval" />
-                  </NumberFieldGroup>
-                </NumberField>
-                <span className="text-xs text-muted-foreground">seconds</span>
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0 space-y-1">
-                <div className="text-sm font-medium">Provider health interval</div>
-                <p className="text-xs leading-relaxed text-muted-foreground">
-                  Refresh provider availability, versions, auth state, and model metadata.
-                </p>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <NumberField
-                  value={providerHealthRefreshIntervalSeconds}
-                  min={0}
-                  step={PROVIDER_HEALTH_INTERVAL_STEP_SECONDS}
-                  size="sm"
-                  className="w-32"
-                  onValueChange={(value) =>
-                    updateSettings(
-                      backgroundActivityOverrideSettings(
-                        settings.backgroundActivity,
-                        resolvedBackgroundActivity,
-                        {
-                          providerHealthRefreshInterval: Duration.seconds(
-                            normalizeIntervalSeconds(value),
-                          ),
-                        },
-                      ),
-                    )
-                  }
-                >
-                  <NumberFieldGroup>
-                    <NumberFieldDecrement aria-label="Decrease provider health interval" />
-                    <NumberFieldInput aria-label="Provider health interval in seconds" />
-                    <NumberFieldIncrement aria-label="Increase provider health interval" />
-                  </NumberFieldGroup>
-                </NumberField>
-                <span className="text-xs text-muted-foreground">seconds</span>
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-3 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0 space-y-1">
-                <div className="text-sm font-medium">Host power monitor</div>
-                <p className="text-xs leading-relaxed text-muted-foreground">
-                  Poll host power state while clients are active.
-                </p>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <NumberField
-                  value={hostPowerMonitorActiveIntervalSeconds}
-                  min={5}
-                  step={5}
-                  size="sm"
-                  className="w-32"
-                  onValueChange={(value) =>
-                    updateSettings(
-                      backgroundActivityOverrideSettings(
-                        settings.backgroundActivity,
-                        resolvedBackgroundActivity,
-                        {
-                          hostPowerMonitorActiveInterval: Duration.seconds(
-                            normalizeIntervalSeconds(value, 5),
-                          ),
-                        },
-                      ),
-                    )
-                  }
-                >
-                  <NumberFieldGroup>
-                    <NumberFieldDecrement aria-label="Decrease active host power interval" />
-                    <NumberFieldInput aria-label="Active host power interval in seconds" />
-                    <NumberFieldIncrement aria-label="Increase active host power interval" />
-                  </NumberFieldGroup>
-                </NumberField>
-                <span className="text-xs text-muted-foreground">seconds</span>
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-3 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0 space-y-1">
-                <div className="text-sm font-medium">Idle host monitor</div>
-                <p className="text-xs leading-relaxed text-muted-foreground">
-                  Poll host power state when no foreground client is active.
-                </p>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <NumberField
-                  value={hostPowerMonitorIdleIntervalSeconds}
-                  min={5}
-                  step={30}
-                  size="sm"
-                  className="w-32"
-                  onValueChange={(value) =>
-                    updateSettings(
-                      backgroundActivityOverrideSettings(
-                        settings.backgroundActivity,
-                        resolvedBackgroundActivity,
-                        {
-                          hostPowerMonitorIdleInterval: Duration.seconds(
-                            normalizeIntervalSeconds(value, 5),
-                          ),
-                        },
-                      ),
-                    )
-                  }
-                >
-                  <NumberFieldGroup>
-                    <NumberFieldDecrement aria-label="Decrease idle host power interval" />
-                    <NumberFieldInput aria-label="Idle host power interval in seconds" />
-                    <NumberFieldIncrement aria-label="Increase idle host power interval" />
-                  </NumberFieldGroup>
-                </NumberField>
-                <span className="text-xs text-muted-foreground">seconds</span>
-              </div>
-            </div>
-
-            <div className="grid gap-0 border-t sm:grid-cols-2">
-              {BACKGROUND_ACTIVITY_BOOLEAN_OVERRIDES.map(({ key, label }) => (
-                <label
-                  key={key}
-                  className="flex items-center justify-between gap-3 border-b px-4 py-3 last:border-b-0 sm:border-r sm:even:border-r-0"
-                >
-                  <span className="text-sm font-medium">{label}</span>
-                  <Switch
-                    checked={resolvedBackgroundActivity[key]}
-                    onCheckedChange={(checked) =>
-                      updateSettings(
-                        backgroundActivityOverrideSettings(
-                          settings.backgroundActivity,
-                          resolvedBackgroundActivity,
-                          {
-                            [key]: Boolean(checked),
-                          },
-                        ),
-                      )
-                    }
-                    aria-label={label}
-                  />
-                </label>
-              ))}
-            </div>
-          </fieldset>
-        </DialogPanel>
-        <DialogFooter>
-          <Button
-            variant="outline"
-            disabled={!canWriteSettings}
-            onClick={() => updateSettings(resetBackgroundActivitySettings())}
-          >
-            Reset all
-          </Button>
-          <Button onClick={() => onOpenChange(false)}>Done</Button>
-        </DialogFooter>
-      </DialogPopup>
-    </Dialog>
-  );
 }
 
 export function AppearanceSettingsPanel() {
@@ -2080,6 +1728,46 @@ function AutoSettleDaysInput({
   );
 }
 
+function AutoRetryDelayInput({
+  value,
+  onCommit,
+}: {
+  value: number;
+  onCommit: (seconds: number) => void;
+}) {
+  const [draft, setDraft] = useState(String(value));
+  useEffect(() => {
+    setDraft(String(value));
+  }, [value]);
+
+  return (
+    <Input
+      size="sm"
+      type="number"
+      min={1}
+      max={86400}
+      className="w-full sm:w-28 text-right font-mono"
+      value={draft}
+      onChange={(event) => {
+        setDraft(event.target.value);
+        const parsed = Number(event.target.value);
+        if (Number.isInteger(parsed) && parsed >= 1 && parsed <= 86400) {
+          onCommit(parsed);
+        }
+      }}
+      onBlur={() => {
+        const parsed = Number(draft);
+        if (Number.isInteger(parsed) && parsed >= 1 && parsed <= 86400) {
+          onCommit(parsed);
+        } else {
+          setDraft(String(value));
+        }
+      }}
+      aria-label="Auto retry delay in seconds"
+    />
+  );
+}
+
 // The legacy rows sit behind the fold, so a settings-search jump has to
 // expand the section before its target can mount and scroll.
 const LEGACY_FEATURE_TARGET_IDS: ReadonlySet<string> = new Set([
@@ -2173,6 +1861,7 @@ function LegacyFeaturesSection() {
 }
 
 export function GeneralSettingsPanel() {
+  const [autoRetrySettings, updateAutoRetrySettings] = useAutoRetrySettings();
   const modifierLabel = isMacPlatform(navigator.platform) ? "⌘" : "Ctrl";
   const sendShortcutOptions = [
     { value: "enter", label: "Enter" },
@@ -2190,11 +1879,7 @@ export function GeneralSettingsPanel() {
   const environmentId = environment?.environmentId ?? null;
   const isEnvironmentScope = scope.environmentIds.length === 1 && environmentId !== null;
   const hasServerTargets = connectedEnvironments.length > 0;
-  const [backgroundActivityDialogOpen, setBackgroundActivityDialogOpen] = useState(false);
   const mixedResponseStreamingMode = useScopedSettingsMixed(["responseStreamingMode"]);
-  const lastEnabledProjectGroupingMode = useRef<SidebarProjectGroupingMode>(
-    readLastEnabledProjectGroupingMode(),
-  );
   const serverProviders = environment?.serverConfig?.providers ?? EMPTY_SERVER_PROVIDERS;
   const supportsAutoSettlement =
     connectedEnvironments.length > 0 &&
@@ -2242,62 +1927,42 @@ export function GeneralSettingsPanel() {
     settings,
     textGenerationModelInstanceEntries,
   );
-  const resolvedBackgroundActivity = resolveServerBackgroundActivitySettings(settings);
-  const activeBackgroundActivityProfile = resolvedBackgroundActivity.profile;
-  const backgroundActivityProfileOption = resolveBackgroundActivityProfileOption(settings);
-  const mixedBackgroundActivity = useScopedSettingsMixed(["backgroundActivity"]);
-  const mixedAddProjectBaseDirectory = useScopedSettingsMixed(["addProjectBaseDirectory"]);
   const mixedTextGenerationModel = useScopedSettingsMixed(["textGenerationModelSelection"]);
-  const backgroundActivityDescription =
-    backgroundActivityProfileOption === "advanced"
-      ? `${ADVANCED_BACKGROUND_ACTIVITY_DESCRIPTION} Shared policy: ${
-          BACKGROUND_ACTIVITY_PROFILE_LABELS[activeBackgroundActivityProfile]
-        }.`
-      : BACKGROUND_ACTIVITY_PROFILE_DESCRIPTIONS[resolvedBackgroundActivity.profile];
-  const canResetBackgroundActivity = !Equal.equals(
-    settings.backgroundActivity,
-    DEFAULT_UNIFIED_SETTINGS.backgroundActivity,
-  );
 
   return (
     <SettingsPageContainer>
-      <ProjectDefaultsSettings category="general" />
-      <SettingsSection id="organization" title="Organization">
+      <SettingsSection id="auto-retry" title="Auto Retry">
         <SettingsRow
-          {...searchableSetting("project-grouping")}
-          description="Combine matching repositories across environments."
-          resetAction={
-            settings.sidebarProjectGroupingMode !==
-            DEFAULT_UNIFIED_SETTINGS.sidebarProjectGroupingMode ? (
-              <SettingResetButton
-                label="project grouping"
-                onClick={() =>
-                  updateSettings({
-                    sidebarProjectGroupingMode: DEFAULT_UNIFIED_SETTINGS.sidebarProjectGroupingMode,
-                  })
-                }
-              />
-            ) : null
-          }
+          id="auto-retry-enabled"
+          title="Auto-retry on error"
+          description="Automatically retry the turn after an error (such as a model failure or disconnection)."
           control={
             <Switch
-              checked={isProjectGroupingEnabled(settings.sidebarProjectGroupingMode)}
-              onCheckedChange={(checked) => {
-                if (!checked && settings.sidebarProjectGroupingMode !== "separate") {
-                  lastEnabledProjectGroupingMode.current = settings.sidebarProjectGroupingMode;
-                  rememberEnabledProjectGroupingMode(settings.sidebarProjectGroupingMode);
-                }
-                updateSettings({
-                  sidebarProjectGroupingMode: projectGroupingModeFromToggle(
-                    checked,
-                    lastEnabledProjectGroupingMode.current,
-                  ),
-                });
-              }}
-              aria-label="Project grouping"
+              checked={autoRetrySettings.enabled}
+              onCheckedChange={(checked) => updateAutoRetrySettings({ enabled: Boolean(checked) })}
+              aria-label="Auto-retry on error"
             />
           }
         />
+        {autoRetrySettings.enabled ? (
+          <SettingsRow
+            id="auto-retry-delay"
+            title="Retry delay"
+            description="Number of seconds to wait before automatically retrying."
+            control={
+              <div className="flex items-center gap-2">
+                <AutoRetryDelayInput
+                  value={autoRetrySettings.delaySeconds}
+                  onCommit={(seconds) => updateAutoRetrySettings({ delaySeconds: seconds })}
+                />
+                <span className="text-xs text-muted-foreground">seconds</span>
+              </div>
+            }
+          />
+        ) : null}
+      </SettingsSection>
+      <ProjectDefaultsSettings category="general" />
+      <SettingsSection id="organization" title="Organization">
         <SettingsRow
           {...searchableSetting("project-order")}
           description="Order of projects in the sidebar project picker and command palette."
@@ -2947,162 +2612,6 @@ export function GeneralSettingsPanel() {
             />
           }
         />
-
-        <SettingsRow
-          serverScoped
-          settingKeys={["backgroundActivity"]}
-          id={searchableSetting("background-activity").id}
-          title={
-            <span className="inline-flex items-center gap-1.5">
-              {searchableSetting("background-activity").title}
-              <PolicyTooltip>
-                This shared policy gates background work such as Git refreshes and provider health
-                probes after their individual intervals elapse.
-              </PolicyTooltip>
-            </span>
-          }
-          description={backgroundActivityDescription}
-          resetAction={
-            canResetBackgroundActivity ? (
-              <SettingResetButton
-                label="background activity"
-                onClick={() => updateSettings(resetBackgroundActivitySettings())}
-              />
-            ) : null
-          }
-          control={
-            <>
-              <Select
-                value={mixedBackgroundActivity ? null : backgroundActivityProfileOption}
-                onValueChange={(value) => {
-                  if (value === "advanced") {
-                    if (isEnvironmentScope) setBackgroundActivityDialogOpen(true);
-                    return;
-                  }
-                  if (
-                    value === "balanced" ||
-                    value === "performance" ||
-                    value === "battery-saver"
-                  ) {
-                    updateSettings(backgroundActivityProfileSettings(value));
-                  }
-                }}
-              >
-                <SelectTrigger
-                  size="sm"
-                  className="w-full sm:w-40"
-                  aria-label="Background activity profile"
-                >
-                  <SelectValue>
-                    {(value: BackgroundActivityProfileOption | null) =>
-                      value === null ? "Mixed" : BACKGROUND_ACTIVITY_PROFILE_OPTION_LABELS[value]
-                    }
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectPopup align="end" alignItemWithTrigger={false}>
-                  <SelectItem hideIndicator value="balanced">
-                    {BACKGROUND_ACTIVITY_PROFILE_LABELS.balanced}
-                  </SelectItem>
-                  <SelectItem hideIndicator value="performance">
-                    {BACKGROUND_ACTIVITY_PROFILE_LABELS.performance}
-                  </SelectItem>
-                  <SelectItem hideIndicator value="battery-saver">
-                    {BACKGROUND_ACTIVITY_PROFILE_LABELS["battery-saver"]}
-                  </SelectItem>
-                  <SelectItem hideIndicator value="advanced" disabled={!isEnvironmentScope}>
-                    {isEnvironmentScope
-                      ? BACKGROUND_ACTIVITY_PROFILE_OPTION_LABELS.advanced
-                      : `${BACKGROUND_ACTIVITY_PROFILE_OPTION_LABELS.advanced} (one environment)`}
-                  </SelectItem>
-                </SelectPopup>
-              </Select>
-              {backgroundActivityProfileOption === "advanced" && isEnvironmentScope ? (
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <Button
-                        size="icon-sm"
-                        variant="outline"
-                        aria-label="Configure advanced background activity"
-                        onClick={() => setBackgroundActivityDialogOpen(true)}
-                      >
-                        <SettingsIcon className="size-4" />
-                      </Button>
-                    }
-                  />
-                  <TooltipPopup side="top">Configure background activity</TooltipPopup>
-                </Tooltip>
-              ) : null}
-              <BackgroundActivityAdvancedDialog
-                open={backgroundActivityDialogOpen && isEnvironmentScope}
-                onOpenChange={setBackgroundActivityDialogOpen}
-              />
-            </>
-          }
-        />
-      </SettingsSection>
-
-      <SettingsSection id="projects-and-threads" title="Projects & threads">
-        <SettingsRow
-          serverScoped
-          settingKeys={["newWorktreesStartFromOrigin"]}
-          {...searchableSetting("start-from-origin")}
-          description="Creates the worktree from the latest matching branch on origin instead of your local branch."
-          resetAction={
-            settings.newWorktreesStartFromOrigin !==
-            DEFAULT_UNIFIED_SETTINGS.newWorktreesStartFromOrigin ? (
-              <SettingResetButton
-                label="new worktrees start from origin"
-                onClick={() =>
-                  updateSettings({
-                    newWorktreesStartFromOrigin:
-                      DEFAULT_UNIFIED_SETTINGS.newWorktreesStartFromOrigin,
-                  })
-                }
-              />
-            ) : null
-          }
-          control={
-            <ScopedSwitch
-              settingKeys={["newWorktreesStartFromOrigin"]}
-              checked={settings.newWorktreesStartFromOrigin}
-              onCheckedChange={(checked) =>
-                updateSettings({ newWorktreesStartFromOrigin: Boolean(checked) })
-              }
-              aria-label="Start new worktrees from origin by default"
-            />
-          }
-        />
-        <SettingsRow
-          serverScoped
-          settingKeys={["addProjectBaseDirectory"]}
-          {...searchableSetting("add-project-starts-in")}
-          description='Leave empty to use "~/" when the Add Project browser opens.'
-          resetAction={
-            settings.addProjectBaseDirectory !==
-            DEFAULT_UNIFIED_SETTINGS.addProjectBaseDirectory ? (
-              <SettingResetButton
-                label="add project base directory"
-                onClick={() =>
-                  updateSettings({
-                    addProjectBaseDirectory: DEFAULT_UNIFIED_SETTINGS.addProjectBaseDirectory,
-                  })
-                }
-              />
-            ) : null
-          }
-          control={
-            <DraftInput
-              size="sm"
-              className="w-full sm:w-72"
-              value={mixedAddProjectBaseDirectory ? "" : settings.addProjectBaseDirectory}
-              onCommit={(next) => updateSettings({ addProjectBaseDirectory: next })}
-              placeholder={mixedAddProjectBaseDirectory ? "Mixed" : "~/"}
-              spellCheck={false}
-              aria-label="Add project base directory"
-            />
-          }
-        />
       </SettingsSection>
 
       <SettingsSection id="confirmations" title="Confirmations">
@@ -3351,19 +2860,6 @@ export function GeneralSettingsPanel() {
             {IS_NIGHTLY_BUILD ? <NightlyMobileBetaRow /> : null}
           </>
         )}
-        <SettingsRow
-          {...searchableSetting("privacy-policy")}
-          description="How we handle your data, including the anonymous usage data T3 Code collects."
-          control={
-            <Button
-              render={<a href={PRIVACY_POLICY_URL} target="_blank" rel="noreferrer noopener" />}
-              size="sm"
-              variant="outline"
-            >
-              View policy
-            </Button>
-          }
-        />
       </SettingsSection>
       <SettingsSection title="Diagnostics">
         <SettingsRow
@@ -3382,19 +2878,6 @@ export function GeneralSettingsPanel() {
               variant="outline"
             >
               View diagnostics
-            </Button>
-          }
-        />
-        <SettingsRow
-          {...searchableSetting("open-source-licenses")}
-          description="Notices for dependencies, assets, and optional tools used by T3 Code."
-          control={
-            <Button
-              render={<Link to="/settings/open-source-licenses" />}
-              size="sm"
-              variant="outline"
-            >
-              View licenses
             </Button>
           }
         />

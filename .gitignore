@@ -17,6 +17,8 @@ release/
 release-mock/
 .t3
 .jobi
+.adc
+.autocode
 .idea/
 apps/web/.playwright
 apps/web/playwright-report

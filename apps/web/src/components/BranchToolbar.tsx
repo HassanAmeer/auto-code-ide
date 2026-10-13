@@ -694,15 +694,8 @@ export const BranchToolbar = memo(function BranchToolbar({
     ],
   );
 
-  const showEnvironmentPicker = Boolean(
-    availableEnvironments && availableEnvironments.length > 1 && onEnvironmentChange,
-  );
-  const activeEnvironmentOption =
-    availableEnvironments?.find((env) => env.environmentId === environmentId) ?? null;
-  const showEnvironmentIndicator = shouldShowEnvironmentIndicator({
-    activeEnvironment: activeEnvironmentOption,
-    canPickEnvironment: showEnvironmentPicker,
-  });
+  const showEnvironmentPicker = false;
+  const showEnvironmentIndicator = false;
   const [stripElement, setStripElement] = useState<HTMLDivElement | null>(null);
   const labelsOverflow = useLabelsOverflow(stripElement);
 
@@ -723,7 +716,7 @@ export const BranchToolbar = memo(function BranchToolbar({
             environmentId={environmentId}
             availableEnvironments={availableEnvironments}
             showEnvironmentPicker={showEnvironmentPicker}
-            showEnvironmentIndicator={activeEnvironmentOption !== null}
+            showEnvironmentIndicator={false}
             onEnvironmentChange={onEnvironmentChange}
             effectiveEnvMode={effectiveEnvMode}
             activeWorktreePath={activeWorktreePath}

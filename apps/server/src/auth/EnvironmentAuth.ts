@@ -1086,17 +1086,17 @@ export const make = Effect.gen(function* () {
       Effect.withSpan("EnvironmentAuth.revokeOtherClientSessions"),
     );
 
-  const issueStartupPairingUrl: EnvironmentAuth["Service"]["issueStartupPairingUrl"] = (baseUrl) =>
-    issueStartupPairingCredential().pipe(
-      Effect.map((issued) => {
-        const url = new URL(baseUrl);
-        url.pathname = "/pair";
-        url.searchParams.delete("token");
-        url.hash = new URLSearchParams([["token", issued.credential]]).toString();
-        return url.toString();
-      }),
+  const issueStartupPairingUrl: EnvironmentAuth["Service"]["issueStartupPairingUrl"] = (
+    baseUrl,
+  ) => {
+    const url = new URL(baseUrl);
+    url.pathname = "/";
+    url.search = "";
+    url.hash = "";
+    return Effect.succeed(url.toString()).pipe(
       Effect.withSpan("EnvironmentAuth.issueStartupPairingUrl"),
     );
+  };
 
   const issueWebSocketTicket: EnvironmentAuth["Service"]["issueWebSocketTicket"] = (session) =>
     sessions.issueWebSocketToken(session.sessionId).pipe(

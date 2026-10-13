@@ -7,7 +7,8 @@
       content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content"
     />
     <meta name="theme-color" content="#0a0a0a" />
-    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <script>
@@ -428,24 +429,123 @@
         min-height: 100%;
         align-items: center;
         justify-content: center;
-        background: inherit;
-        color: inherit;
+        background: #000000;
+        color: #ffffff;
       }
 
       html[data-theme-selected="true"] #boot-shell {
-        background: var(--boot-background);
-        color: var(--boot-foreground);
+        background: #000000;
+        color: #ffffff;
       }
 
       #boot-shell-card {
         position: relative;
         z-index: 1;
         display: flex;
+        flex-direction: column;
         align-items: center;
         justify-content: center;
-        width: 96px;
-        height: 96px;
-        animation: bootFadeIn 0.3s ease-out;
+        text-align: center;
+        gap: 14px;
+        animation: bootFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+
+      .boot-logo-wrapper {
+        position: relative;
+        width: 88px;
+        height: 88px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 24px;
+        background: #000000;
+        box-shadow:
+          0 10px 30px -5px rgba(0, 0, 0, 0.9),
+          0 0 25px rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+      }
+
+      #boot-shell-logo {
+        width: 72px;
+        height: 72px;
+        object-fit: contain;
+        filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.8));
+      }
+
+      .boot-text-wrapper {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+      }
+
+      .boot-brand-name {
+        font-family:
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          Roboto,
+          sans-serif;
+        font-size: 26px;
+        font-weight: 800;
+        letter-spacing: -0.5px;
+        line-height: 1.2;
+      }
+
+      .boot-brand-auto {
+        color: #ffffff;
+      }
+
+      .boot-brand-code {
+        background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 50%, #94a3b8 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+      }
+
+      .boot-brand-subtitle {
+        font-family:
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          Roboto,
+          sans-serif;
+        font-size: 13px;
+        font-weight: 500;
+        color: #94a3b8;
+        letter-spacing: 0.2px;
+      }
+
+      .boot-loader-bar {
+        width: 140px;
+        height: 3px;
+        background: rgba(255, 255, 255, 0.08);
+        border-radius: 999px;
+        overflow: hidden;
+        margin-top: 8px;
+      }
+
+      .boot-loader-progress {
+        width: 40%;
+        height: 100%;
+        background: linear-gradient(90deg, #ffffff, #94a3b8);
+        border-radius: 999px;
+        animation: bootProgress 1.2s ease-in-out infinite;
+      }
+
+      @keyframes bootProgress {
+        0% {
+          transform: translateX(-100%);
+          width: 30%;
+        }
+        50% {
+          width: 60%;
+        }
+        100% {
+          transform: translateX(350%);
+          width: 30%;
+        }
       }
 
       @keyframes bootFadeIn {
@@ -457,12 +557,6 @@
           opacity: 1;
           transform: scale(1);
         }
-      }
-
-      #boot-shell-logo {
-        width: 64px;
-        height: 64px;
-        object-fit: contain;
       }
 
       #boot-error {
@@ -489,13 +583,24 @@
         cursor: pointer;
       }
     </style>
-    <title>Autodesk Code</title>
+    <title>AutoCode</title>
   </head>
   <body>
     <div id="root">
       <div id="boot-shell">
-        <div id="boot-shell-card" aria-label="Autodesk Code splash screen">
-          <img id="boot-shell-logo" src="/apple-touch-icon.png" alt="Autodesk Code" />
+        <div id="boot-shell-card" aria-label="AutoCode splash screen">
+          <div class="boot-logo-wrapper">
+            <img id="boot-shell-logo" src="/favicon.svg" alt="AutoCode" />
+          </div>
+          <div class="boot-text-wrapper">
+            <div class="boot-brand-name">
+              <span class="boot-brand-auto">Auto</span><span class="boot-brand-code">Code</span>
+            </div>
+            <div class="boot-brand-subtitle">Automatically code your project</div>
+          </div>
+          <div class="boot-loader-bar">
+            <div class="boot-loader-progress"></div>
+          </div>
         </div>
       </div>
     </div>

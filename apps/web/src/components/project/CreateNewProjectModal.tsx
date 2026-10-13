@@ -332,9 +332,9 @@ export function CreateNewProjectModal() {
             <span>Saved in:</span>
             <span
               className="font-mono text-primary/90 font-medium truncate max-w-[280px] bg-primary/10 px-2 py-0.5 rounded"
-              title="Default projects directory: autodeskprojects"
+              title="Default storage directory: autocode-storage"
             >
-              ~/autodeskprojects/{projectName.trim() || "<name>"}
+              ~/autocode-storage/{projectName.trim() || "<name>"}
             </span>
           </div>
 

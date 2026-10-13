@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vite-plus/test";
-import { ProviderInstanceId, ProviderSessionId, ProviderThreadId } from "@t3tools/contracts";
+import {
+  ProviderInstanceId,
+  ProviderSessionId,
+  ProviderThreadId,
+  ThreadId,
+} from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Scope from "effect/Scope";
@@ -58,8 +63,9 @@ describe("CustomDriver", () => {
     const instance = getFallbackCustomInstance(testId);
     expect(instance).toBeDefined();
     if (instance) {
-      expect(instance.snapshot.name).toBe("In Memory Provider");
-      expect(instance.snapshot.models[0]?.slug).toBe("test-model");
+      const snap = Effect.runSync(instance.snapshot.getSnapshot);
+      expect(snap.displayName).toBe("In Memory Provider");
+      expect(snap.models[0]?.slug).toBe("test-model");
       expect(instance.driverKind).toBe("custom");
     }
 
@@ -89,9 +95,16 @@ describe("CustomDriver", () => {
       const scope = yield* Scope.make();
       const session = yield* adapter
         .openSession({
+          threadId: ThreadId.make("th-1"),
           providerSessionId: ProviderSessionId.make("session-1"),
-          cwd: "/test",
-          mode: "full-access",
+          modelSelection: {
+            instanceId: testId,
+            model: "model-a",
+          },
+          runtimePolicy: {
+            cwd: "/test",
+            interactionMode: "default",
+          } as any,
         })
         .pipe(Scope.provide(scope));
 

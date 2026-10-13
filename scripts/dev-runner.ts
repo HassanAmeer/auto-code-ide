@@ -2,6 +2,7 @@
 
 import * as NodeOS from "node:os";
 import * as NodeFS from "node:fs";
+import * as NodePath from "node:path";
 
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -68,15 +69,17 @@ export function isProxiableBindHost(host: string): boolean {
 }
 
 export const DEFAULT_T3_HOME = Effect.map(Effect.service(Path.Path), (path) => {
+  const autocodeDir = path.join(NodeOS.homedir(), ".autocode");
   const adcDir = path.join(NodeOS.homedir(), ".adc");
   const autodeskDir = path.join(NodeOS.homedir(), ".autodeskcode");
   const jobiDir = path.join(NodeOS.homedir(), ".jobi");
   const t3Dir = path.join(NodeOS.homedir(), ".t3");
+  if (NodeFS.existsSync(autocodeDir)) return autocodeDir;
   if (NodeFS.existsSync(adcDir)) return adcDir;
   if (NodeFS.existsSync(autodeskDir)) return autodeskDir;
   if (NodeFS.existsSync(jobiDir)) return jobiDir;
   if (NodeFS.existsSync(t3Dir)) return t3Dir;
-  return adcDir;
+  return autocodeDir;
 });
 
 const MODE_ARGS = {
@@ -327,11 +330,24 @@ export function createDevRunnerEnv({
       VITE_DEV_SERVER_URL: devUrl?.toString() ?? `http://localhost:${webPort}`,
     };
 
+    const modernNodeDir = NodePath.join(
+      NodeOS.homedir(),
+      ".nodejs",
+      "node-v22.23.2-linux-x64",
+      "bin",
+    );
+    if (NodeFS.existsSync(modernNodeDir) && !output.PATH?.includes(modernNodeDir)) {
+      output.PATH = `${modernNodeDir}:${output.PATH ?? ""}`;
+    }
+
     if (configuredBaseDir !== undefined) {
       output.T3CODE_HOME = resolvedBaseDir;
     } else {
       delete output.T3CODE_HOME;
     }
+
+    output.T3CODE_BROWSER_NO_SANDBOX = "1";
+    output.T3CODE_SERVER_BROWSER_SANDBOX = "0";
 
     // A dev-runner server is never launcher-managed. When the shell that runs
     // this script was itself spawned by the machine's managed t3 service (an
@@ -656,7 +672,8 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
     const resolvedT3Home =
       (input.t3Home?.trim() || undefined) ??
       worktreeHome ??
-      (hostEnvironment.AUTODESKCODE_HOME?.trim() ||
+      (hostEnvironment.AUTOCODE_HOME?.trim() ||
+        hostEnvironment.AUTODESKCODE_HOME?.trim() ||
         hostEnvironment.ADC_HOME?.trim() ||
         hostEnvironment.JOBICODE_HOME?.trim() ||
         hostEnvironment.T3CODE_HOME?.trim() ||

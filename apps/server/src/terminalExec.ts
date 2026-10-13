@@ -16,7 +16,7 @@ export interface TerminalExecutionPayload {
 
 export function runBashCommandOnHost(
   command: string,
-  cwd: string = "/",
+  cwd: string = process.cwd(),
   timeoutMs: number = 120_000,
 ): Promise<TerminalExecutionPayload> {
   return new Promise<TerminalExecutionPayload>((resolve) => {

@@ -1055,8 +1055,8 @@ export const ServerSettings = Schema.Struct({
   worktreesDirectory: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   /**
    * Absolute directory where new projects are created and saved,
-   * e.g. `/home/user/autodeskprojects` or `~/autodeskprojects`.
-   * Empty defaults to `<home>/autodeskprojects`.
+   * e.g. `/home/user/autocode-storage` or `~/autocode-storage`.
+   * Empty defaults to `<home>/autocode-storage`.
    */
   projectsDirectory: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   /**

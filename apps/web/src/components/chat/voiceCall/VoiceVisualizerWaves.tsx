@@ -9,12 +9,14 @@ export interface VoiceVisualizerWavesProps {
   callStatus: VoiceCallStatus;
   analyserNode: AnalyserNode | null;
   className?: string;
+  onInterrupt?: () => void;
 }
 
 export const VoiceVisualizerWaves = memo(function VoiceVisualizerWaves({
   callStatus,
   analyserNode,
   className,
+  onInterrupt,
 }: VoiceVisualizerWavesProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const barsRef = useRef<(HTMLDivElement | null)[]>([]);
@@ -143,8 +145,21 @@ export const VoiceVisualizerWaves = memo(function VoiceVisualizerWaves({
       ref={containerRef}
       role="region"
       aria-label="Voice Call Audio Visualizer"
+      title={
+        callStatus === "speaking"
+          ? "Assistant is speaking. Click anywhere or press Esc to stop."
+          : callStatus === "thinking"
+            ? "Assistant is thinking. Click anywhere or press Esc to cancel."
+            : undefined
+      }
+      onClick={() => {
+        if (callStatus === "speaking" || callStatus === "thinking") {
+          onInterrupt?.();
+        }
+      }}
       className={cn(
         "relative flex h-11 w-full items-center justify-between px-3 py-1.5 transition-all duration-200",
+        (callStatus === "speaking" || callStatus === "thinking") && "cursor-pointer group",
         className,
       )}
     >

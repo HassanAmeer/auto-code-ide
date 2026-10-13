@@ -1,8 +1,10 @@
 import { RefreshIcon } from "~/components/ui/refresh-icon";
-import { ChevronDownIcon } from "lucide-react";
+import { ChevronDownIcon, DownloadIcon, Trash2Icon } from "lucide-react";
 import * as Duration from "effect/Duration";
 import * as Option from "effect/Option";
 import { useEffect, useState, type ReactNode } from "react";
+import { Spinner } from "../ui/spinner";
+import { toastManager } from "../ui/toast";
 import type {
   BackgroundActivitySettings,
   SourceControlProviderKind,
@@ -272,12 +274,48 @@ function itemSummary({
   return <span>Available</span>;
 }
 
+interface CliToolActionConfig {
+  readonly name: string;
+  readonly installCommand: string;
+  readonly uninstallCommand: string;
+}
+
+const CLI_TOOL_ACTIONS: Partial<
+  Record<SourceControlProviderKind | VcsDriverKind, CliToolActionConfig>
+> = {
+  github: {
+    name: "GitHub CLI (gh)",
+    installCommand:
+      'mkdir -p ~/.local/bin && curl -sL "https://github.com/cli/cli/releases/download/v2.102.0/gh_2.102.0_linux_amd64.tar.gz" | tar -xz -C /tmp && cp /tmp/gh_2.102.0_linux_amd64/bin/gh ~/.local/bin/gh && chmod +x ~/.local/bin/gh',
+    uninstallCommand: "rm -f ~/.local/bin/gh",
+  },
+  gitlab: {
+    name: "GitLab CLI (glab)",
+    installCommand:
+      'mkdir -p ~/.local/bin && curl -sL "https://gitlab.com/gitlab-org/cli/-/releases/v1.122.0/downloads/glab_1.122.0_linux_amd64.tar.gz" | tar -xz -C /tmp && (cp /tmp/bin/glab ~/.local/bin/glab 2>/dev/null || cp /tmp/glab ~/.local/bin/glab 2>/dev/null); chmod +x ~/.local/bin/glab',
+    uninstallCommand: "rm -f ~/.local/bin/glab",
+  },
+  "azure-devops": {
+    name: "Azure CLI (az)",
+    installCommand: "pip3 install --user --break-system-packages azure-cli",
+    uninstallCommand: "pip3 uninstall -y azure-cli 2>/dev/null; rm -f ~/.local/bin/az",
+  },
+  jj: {
+    name: "Jujutsu (jj)",
+    installCommand:
+      'mkdir -p ~/.local/bin && curl -sL "https://github.com/martinvonz/jj/releases/latest/download/jj-v0.25.0-x86_64-unknown-linux-musl.tar.gz" | tar -xz -C ~/.local/bin 2>/dev/null; chmod +x ~/.local/bin/jj 2>/dev/null || true',
+    uninstallCommand: "rm -f ~/.local/bin/jj",
+  },
+};
+
 function DiscoveryItemRow({
   item,
   children,
+  onRefresh,
 }: {
   readonly item: VcsDiscoveryItem | SourceControlProviderDiscoveryItem;
   readonly children?: ReactNode;
+  readonly onRefresh?: () => void;
 }) {
   const version = optionLabel(item.version);
   const enabled = isProviderDiscoveryItem(item)
@@ -287,8 +325,64 @@ function DiscoveryItemRow({
   const authStatus = auth ? authPresentation(auth) : null;
   const authAccount = auth ? optionLabel(auth.account) : null;
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isActionRunning, setIsActionRunning] = useState(false);
   const hasDetails = children !== undefined;
   const searchTargetId = useSettingsSearchTargetId();
+  const cliAction = CLI_TOOL_ACTIONS[item.kind];
+
+  const handleToolAction = async (action: "install" | "uninstall") => {
+    if (!cliAction) return;
+    if (
+      action === "uninstall" &&
+      !window.confirm(`Are you sure you want to uninstall ${cliAction.name}?`)
+    ) {
+      return;
+    }
+    setIsActionRunning(true);
+    const command = action === "install" ? cliAction.installCommand : cliAction.uninstallCommand;
+    try {
+      const res = await fetch("/api/terminal/exec", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ command, timeoutMs: 180_000 }),
+      });
+      if (!res.ok) {
+        throw new Error(`Execution request returned status ${res.status}`);
+      }
+      const data = (await res.json()) as {
+        ok: boolean;
+        stderr?: string;
+        stdout?: string;
+        exitCode?: number;
+      };
+      if (data.ok || data.exitCode === 0) {
+        toastManager.add({
+          type: "success",
+          title:
+            action === "install" ? `${cliAction.name} installed` : `${cliAction.name} uninstalled`,
+          description:
+            action === "install"
+              ? `${cliAction.name} is now available on this system.`
+              : `${cliAction.name} was successfully removed.`,
+        });
+        onRefresh?.();
+      } else {
+        toastManager.add({
+          type: "error",
+          title: action === "install" ? "Installation failed" : "Uninstallation failed",
+          description: data.stderr || "Command returned non-zero exit code.",
+        });
+      }
+    } catch (err) {
+      toastManager.add({
+        type: "error",
+        title: "Could not execute action",
+        description: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setIsActionRunning(false);
+    }
+  };
 
   useEffect(() => {
     if (
@@ -331,6 +425,41 @@ function DiscoveryItemRow({
             </p>
           </div>
           <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto sm:justify-end">
+            {cliAction ? (
+              item.status === "available" ? (
+                <Button
+                  size="xs"
+                  variant="destructive-outline"
+                  disabled={isActionRunning}
+                  onClick={() => void handleToolAction("uninstall")}
+                  aria-label={`Uninstall ${cliAction.name}`}
+                  title={`Uninstall ${cliAction.name}`}
+                >
+                  {isActionRunning ? (
+                    <Spinner size="xs" />
+                  ) : (
+                    <Trash2Icon className="size-3 text-destructive" />
+                  )}
+                  <span>Uninstall</span>
+                </Button>
+              ) : (
+                <Button
+                  size="xs"
+                  variant="outline"
+                  disabled={isActionRunning}
+                  onClick={() => void handleToolAction("install")}
+                  aria-label={`Install ${cliAction.name}`}
+                  title={`Install ${cliAction.name}`}
+                >
+                  {isActionRunning ? (
+                    <Spinner size="xs" />
+                  ) : (
+                    <DownloadIcon className="size-3 text-primary" />
+                  )}
+                  <span>Install</span>
+                </Button>
+              )
+            ) : null}
             {hasDetails ? (
               <Button
                 size="icon-xs"
@@ -345,7 +474,31 @@ function DiscoveryItemRow({
               </Button>
             ) : null}
             {!isVcsNotReady(item) ? (
-              <Switch checked={enabled} disabled aria-label={`${item.label} availability`} />
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <span
+                      className="inline-flex cursor-pointer"
+                      onClick={() => {
+                        if (hasDetails) setIsExpanded((open) => !open);
+                      }}
+                    >
+                      <Switch
+                        checked={enabled}
+                        disabled
+                        aria-label={`${item.label} availability`}
+                      />
+                    </span>
+                  }
+                />
+                <TooltipPopup side="top">
+                  {enabled
+                    ? `${item.label} is active and ready.`
+                    : isProviderDiscoveryItem(item)
+                      ? `${item.label} requires authentication. ${hasDetails ? "Click to configure credentials." : "Sign in via CLI."}`
+                      : `${item.label} is not installed.`}
+                </TooltipPopup>
+              </Tooltip>
             ) : null}
           </div>
         </div>
@@ -587,7 +740,7 @@ export function SourceControlSettingsPanel() {
               headerAction={scanButton}
             >
               {result.versionControlSystems.map((item) => (
-                <DiscoveryItemRow key={`vcs:${item.kind}`} item={item}>
+                <DiscoveryItemRow key={`vcs:${item.kind}`} item={item} onRefresh={handleScan}>
                   {item.kind === "git" ? <GitFetchIntervalSettings /> : undefined}
                 </DiscoveryItemRow>
               ))}
@@ -605,7 +758,7 @@ export function SourceControlSettingsPanel() {
               headerAction={hasVersionControlSystems ? null : scanButton}
             >
               {result.sourceControlProviders.map((item) => (
-                <DiscoveryItemRow key={`provider:${item.kind}`} item={item}>
+                <DiscoveryItemRow key={`provider:${item.kind}`} item={item} onRefresh={handleScan}>
                   {item.kind === "bitbucket" ? (
                     <SettingsSearchTarget id={searchableSetting("bitbucket-credentials").id}>
                       <BitbucketCredentialsSettings

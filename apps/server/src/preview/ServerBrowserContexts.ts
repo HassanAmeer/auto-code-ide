@@ -92,9 +92,10 @@ export class ServerBrowserContexts {
     this.options = options;
   }
 
-  private async launchOptions() {
+  private async launchOptions(forceNoSandbox = false) {
     const executablePath = await this.options.executable();
     const env = this.options.env ?? process.env;
+    const noSandbox = forceNoSandbox || sandboxDisabled(env);
     return {
       executablePath,
       env,
@@ -103,11 +104,13 @@ export class ServerBrowserContexts {
         "--disable-gpu",
         "--force-device-scale-factor=2",
         "--disable-blink-features=AutomationControlled",
+        ...(noSandbox
+          ? ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
+          : []),
       ],
       ignoreDefaultArgs: ["--enable-automation"],
       headless: true,
-      // Only an explicit operator opt-out disables sandboxing. Launch errors never do.
-      chromiumSandbox: !sandboxDisabled(env),
+      chromiumSandbox: !noSandbox,
     };
   }
 
@@ -115,6 +118,19 @@ export class ServerBrowserContexts {
     try {
       return await start();
     } catch (cause) {
+      if (
+        /sandboxing failed/i.test(String(cause)) ||
+        /No usable sandbox/i.test(String(cause)) ||
+        /SIGTRAP/i.test(String(cause))
+      ) {
+        try {
+          const { chromium } = loadPlaywright();
+          const fallback = await this.launchOptions(true);
+          return (await chromium.launch(fallback)) as A;
+        } catch {
+          // Fall through to diagnose
+        }
+      }
       throw (await this.options.diagnose?.(options.executablePath, cause)) ?? cause;
     }
   }

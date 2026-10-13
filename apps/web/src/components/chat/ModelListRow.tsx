@@ -60,8 +60,8 @@ export const ModelListRow = memo(function ModelListRow(props: {
       )}
     >
       <div className="min-w-0 flex-1 text-left">
-        <div className="flex min-w-0 items-center gap-2">
-          <div className="min-w-0 truncate text-xs font-medium leading-snug">
+        <div className="flex min-w-0 items-start gap-2">
+          <div className="min-w-0 flex-1 break-words [word-break:break-word] text-xs font-medium leading-snug whitespace-normal">
             {props.useTriggerLabel
               ? getTriggerDisplayModelLabel(props.model)
               : getDisplayModelName(
@@ -71,29 +71,29 @@ export const ModelListRow = memo(function ModelListRow(props: {
           </div>
           {props.showNewBadge ? (
             <span
-              className="shrink-0 rounded border border-update/35 bg-update/15 px-0.5 py-px text-3xs font-bold uppercase leading-none tracking-wide text-update-foreground"
+              className="mt-0.5 shrink-0 rounded border border-update/35 bg-update/15 px-0.5 py-px text-3xs font-bold uppercase leading-none tracking-wide text-update-foreground"
               aria-label="New model"
             >
               New
             </span>
           ) : null}
           {props.unavailable ? (
-            <Badge variant="outline" size="sm">
+            <Badge variant="outline" size="sm" className="mt-0.5 shrink-0">
               Unavailable
             </Badge>
           ) : null}
         </div>
         {props.showProvider && (
-          <div className="mt-1 flex items-center gap-1.5">
+          <div className="mt-1 flex items-start gap-1.5">
             <ProviderInstanceIcon
               driverKind={props.driverKind}
               displayName={props.providerDisplayName}
               acpRegistryAgentId={props.acpRegistryAgentId}
               acpRegistryIconUrl={props.acpRegistryIconUrl}
-              className="size-3"
+              className="mt-0.5 size-3 shrink-0"
               iconClassName="size-3"
             />
-            <span className="truncate text-xs font-normal leading-snug text-muted-foreground/70">
+            <span className="min-w-0 flex-1 break-words [word-break:break-word] text-xs font-normal leading-snug text-muted-foreground/70 whitespace-normal">
               {providerLabel}
             </span>
           </div>
