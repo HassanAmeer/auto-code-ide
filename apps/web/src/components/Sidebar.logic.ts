@@ -571,15 +571,28 @@ export function filterSidebarV2VisibleThreads<
   T extends Pick<SidebarThreadSummary, "archivedAt" | "lineage"> & {
     environmentId: string;
     projectId: string;
+    id?: string;
   },
 >(threads: readonly T[], scopedProjectKeys: ReadonlySet<string> | null): T[] {
-  return threads.filter(
-    (thread) =>
-      thread.archivedAt === null &&
-      !isSidebarSubagentThread(thread) &&
-      (scopedProjectKeys === null ||
-        scopedProjectKeys.has(`${thread.environmentId}:${thread.projectId}`)),
-  );
+  const seenIds = new Set<string>();
+  return threads.filter((thread) => {
+    if (thread.archivedAt !== null || isSidebarSubagentThread(thread)) {
+      return false;
+    }
+    if (
+      scopedProjectKeys !== null &&
+      !scopedProjectKeys.has(`${thread.environmentId}:${thread.projectId}`)
+    ) {
+      return false;
+    }
+    if (thread.id) {
+      if (seenIds.has(thread.id)) {
+        return false;
+      }
+      seenIds.add(thread.id);
+    }
+    return true;
+  });
 }
 
 export function getSidebarForkParentThreadId(
