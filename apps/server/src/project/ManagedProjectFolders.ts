@@ -830,16 +830,7 @@ header('Content-Type: text/html; charset=utf-8');
     const expectedRoot = path.join(currentRoot, folderName);
     const inFlightKey = expectedRoot.toLowerCase();
 
-    // 1. Idempotency check: if project is already registered, return it immediately
-    const existingOwner = yield* projects.getByWorkspaceRoot(expectedRoot);
-    if (Option.isSome(existingOwner)) {
-      return {
-        projectId: existingOwner.value.id,
-        workspaceRoot: existingOwner.value.workspaceRoot,
-      };
-    }
-
-    // 2. Concurrency check: if another creation for this root is in flight, await it
+    // 1. Concurrency check: if another creation for this root is in flight, await it
     const activePromise = inFlightNamedProjects.get(inFlightKey);
     if (activePromise !== undefined) {
       return yield* Effect.promise(() => activePromise);
@@ -862,9 +853,19 @@ header('Content-Type: text/html; charset=utf-8');
     inFlightNamedProjects.set(inFlightKey, currentPromise);
 
     const runCreation = Effect.gen(function* () {
-      // 3. If expectedRoot folder already exists on disk, reuse it instead of creating duplicate (-2)
+      // 2. If expectedRoot folder already exists on disk, check if registered or bootstrap it
       const rootStat = yield* fileSystem.stat(expectedRoot).pipe(Effect.option);
       if (Option.isSome(rootStat) && rootStat.value.type === "Directory") {
+        const existingOwner = yield* projects
+          .getByWorkspaceRoot(expectedRoot)
+          .pipe(Effect.orElseSucceed(() => Option.none()));
+        if (Option.isSome(existingOwner)) {
+          return {
+            projectId: existingOwner.value.id,
+            workspaceRoot: existingOwner.value.workspaceRoot,
+          };
+        }
+
         const id = yield* crypto.randomUUIDv4.pipe(
           Effect.mapError(
             (cause) => new NamedProjectCreateError({ workspaceRoot: expectedRoot, cause }),
