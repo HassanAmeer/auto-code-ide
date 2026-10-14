@@ -881,13 +881,22 @@ export const layer: Layer.Layer<
                   providerThread: input.providerThread,
                   attempt: input.attempt,
                   terminal: makeFailedTerminalEvent(
-                    makeProviderFailure({
-                      cause: Cause.squash(cause),
-                      // Keep exact underlying text in the logged cause only;
-                      // the persisted turn item gets a bounded curated message.
-                      message: "Run preparation failed.",
-                      class: "unknown",
-                    }),
+                    (() => {
+                      const prepCause = Cause.squash(cause);
+                      const prepMsg =
+                        prepCause instanceof Error
+                          ? prepCause.message
+                          : typeof prepCause === "object" &&
+                              prepCause !== null &&
+                              "message" in prepCause
+                            ? String((prepCause as any).message)
+                            : "Run preparation failed.";
+                      return makeProviderFailure({
+                        cause: prepCause,
+                        message: prepMsg,
+                        class: "unknown",
+                      });
+                    })(),
                     input.providerTurnOrdinal * 100 + 1,
                   ),
                   failureItemPersisted: false,
@@ -1284,8 +1293,13 @@ export const layer: Layer.Layer<
             ),
             Effect.catchCause((cause) =>
               Ref.get(rootRunFinalized).pipe(
-                Effect.flatMap((finalized) =>
-                  Effect.logWarning("orchestration V2 provider event ingestion failed", {
+                Effect.flatMap((finalized) => {
+                  try {
+                    console.error("EXACT INGESTION CAUSE:", Cause.pretty(cause));
+                  } catch (e) {
+                    console.error("EXACT INGESTION CAUSE (raw):", cause);
+                  }
+                  return Effect.logWarning("orchestration V2 provider event ingestion failed", {
                     runId: input.run.id,
                     cause,
                   }).pipe(
@@ -1312,10 +1326,22 @@ export const layer: Layer.Layer<
                                         },
                                         openRunOwnedSubagents: openSubagents,
                                         terminal: makeFailedTerminalEvent(
-                                          makeProviderFailure({
-                                            cause: Cause.squash(cause),
-                                            class: "unknown",
-                                          }),
+                                          (() => {
+                                            const ingestCause = Cause.squash(cause);
+                                            const ingestMsg =
+                                              ingestCause instanceof Error
+                                                ? ingestCause.message
+                                                : typeof ingestCause === "object" &&
+                                                    ingestCause !== null &&
+                                                    "message" in ingestCause
+                                                  ? String((ingestCause as any).message)
+                                                  : undefined;
+                                            return makeProviderFailure({
+                                              cause: ingestCause,
+                                              message: ingestMsg,
+                                              class: "unknown",
+                                            });
+                                          })(),
                                           latestItemOrdinal + 1,
                                         ),
                                         failureItemPersisted: false,
@@ -1335,8 +1361,8 @@ export const layer: Layer.Layer<
                           cause: { ingest: cause, write: writeCause },
                         }),
                     ),
-                  ),
-                ),
+                  );
+                }),
               ),
             ),
             Effect.ensuring(eventSubscription.close),
@@ -1439,11 +1465,22 @@ export const layer: Layer.Layer<
                             },
                             openRunOwnedSubagents: openSubagents,
                             terminal: makeFailedTerminalEvent(
-                              makeProviderFailure({
-                                cause: Cause.squash(cause),
-                                // A failed ownership read is not the provider's fault.
-                                class: Exit.isFailure(shouldStart) ? "unknown" : "provider_error",
-                              }),
+                              (() => {
+                                const startCause = Cause.squash(cause);
+                                const startMsg =
+                                  startCause instanceof Error
+                                    ? startCause.message
+                                    : typeof startCause === "object" &&
+                                        startCause !== null &&
+                                        "message" in startCause
+                                      ? String((startCause as any).message)
+                                      : undefined;
+                                return makeProviderFailure({
+                                  cause: startCause,
+                                  message: startMsg,
+                                  class: Exit.isFailure(shouldStart) ? "unknown" : "provider_error",
+                                });
+                              })(),
                               latestItemOrdinal + 1,
                             ),
                             failureItemPersisted: false,

@@ -502,14 +502,14 @@ or for HTML/web:
 All generated files will automatically be saved into the project workspace directory (${projectCwd}).
 Provide full, complete, production-ready code with no placeholders.`;
 
+                // Free/open models on OpenRouter often reject "system" role (returning HTTP 400).
+                // Embed system prompt into user message to guarantee 100% compatibility across all models.
+                const fullUserPrompt = `${systemPrompt}\n\n[User Request]:\n${userPrompt || "Hello"}`;
+
                 const candidateMessages: Array<{
                   role: "system" | "user" | "assistant";
                   content: string;
-                }> = [
-                  { role: "system", content: systemPrompt },
-                  ...history,
-                  { role: "user" as const, content: userPrompt || "Hello" },
-                ];
+                }> = [...history, { role: "user" as const, content: fullUserPrompt }];
 
                 // Sanitize messages for OpenAI API compatibility:
                 // 1. Filter out empty contents
@@ -821,6 +821,7 @@ Provide full, complete, production-ready code with no placeholders.`;
                 Effect.catchCause((cause: unknown) =>
                   Effect.gen(function* () {
                     const squashed = Cause.isCause(cause) ? Cause.squash(cause) : cause;
+                    console.error("CUSTOM DRIVER RUN TURN ERROR:", squashed);
                     const message =
                       squashed instanceof Error
                         ? squashed.message
@@ -828,6 +829,23 @@ Provide full, complete, production-ready code with no placeholders.`;
                           ? String((squashed as any).message)
                           : String(squashed);
                     const failTime = yield* DateTime.now;
+
+                    yield* Queue.offer(eventsQueue, {
+                      type: "message.updated",
+                      driver: DRIVER,
+                      message: {
+                        id: assistantMessageId,
+                        threadId: turnInput.threadId,
+                        runId: turnInput.runId,
+                        nodeId: turnInput.rootNodeId,
+                        role: "assistant",
+                        text: `⚠️ **Error connecting to custom provider:**\n\n\`\`\`\n${message}\n\`\`\``,
+                        streaming: false,
+                        createdAt: turnStartedAt,
+                        updatedAt: failTime,
+                      },
+                    });
+
                     yield* Queue.offer(eventsQueue, {
                       type: "turn_item.updated",
                       driver: DRIVER,
@@ -841,17 +859,18 @@ Provide full, complete, production-ready code with no placeholders.`;
                         nativeItemRef: null,
                         parentItemId: null,
                         ordinal: itemOrdinal,
-                        status: "failed",
+                        status: "completed",
                         title: null,
                         startedAt: turnStartedAt,
                         completedAt: failTime,
                         updatedAt: failTime,
                         type: "assistant_message",
                         messageId: assistantMessageId,
-                        text: `Error connecting to custom provider: ${message}`,
+                        text: `⚠️ **Error connecting to custom provider:**\n\n\`\`\`\n${message}\n\`\`\``,
                         streaming: false,
                       },
                     });
+
                     yield* Queue.offer(eventsQueue, {
                       type: "provider_turn.updated",
                       driver: DRIVER,
@@ -867,6 +886,7 @@ Provide full, complete, production-ready code with no placeholders.`;
                         completedAt: failTime,
                       },
                     });
+
                     yield* Queue.offer(eventsQueue, {
                       type: "turn.terminal",
                       driver: DRIVER,
@@ -951,16 +971,62 @@ export function createCustomProviderInstance(
 
 // In-memory fallback registry for custom provider instances
 const fallbackInstances = new Map<string, ProviderInstance>();
+const fallbackParams = new Map<string, any>();
 
-export function registerFallbackCustomProvider(params: {
-  instanceId: string;
-  displayName?: string;
-  baseUrl: string;
-  apiKey?: string;
-  headers?: Array<CustomHeaderConfig>;
-  models?: Array<CustomModelConfig>;
-  enabled?: boolean;
-}): ProviderInstance {
+function getCustomProvidersFilePath(): string {
+  const procEnv = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process
+    ?.env;
+  const baseDir = procEnv?.T3CODE_HOME || "/root/autojobs/data";
+  const userDir = NodePath.resolve(baseDir, "userdata");
+  try {
+    if (!NodeFS.existsSync(userDir)) {
+      NodeFS.mkdirSync(userDir, { recursive: true });
+    }
+  } catch {}
+  return NodePath.resolve(userDir, "custom-providers-cache.json");
+}
+
+function saveCustomProvidersToDisk(): void {
+  try {
+    const filePath = getCustomProvidersFilePath();
+    const list = Array.from(fallbackParams.values());
+    NodeFS.writeFileSync(filePath, JSON.stringify(list, null, 2), "utf-8");
+  } catch (err) {
+    console.error("Failed saving custom providers to disk:", err);
+  }
+}
+
+function loadPersistedCustomProviders(): void {
+  try {
+    const filePath = getCustomProvidersFilePath();
+    if (NodeFS.existsSync(filePath)) {
+      const content = NodeFS.readFileSync(filePath, "utf-8");
+      const list = JSON.parse(content);
+      if (Array.isArray(list)) {
+        for (const p of list) {
+          if (p && p.instanceId) {
+            registerFallbackCustomProvider(p, false);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Failed loading persisted custom providers:", err);
+  }
+}
+
+export function registerFallbackCustomProvider(
+  params: {
+    instanceId: string;
+    displayName?: string;
+    baseUrl: string;
+    apiKey?: string;
+    headers?: Array<CustomHeaderConfig>;
+    models?: Array<CustomModelConfig>;
+    enabled?: boolean;
+  },
+  shouldPersist = true,
+): ProviderInstance {
   const cleanId = params.instanceId.startsWith("custom_")
     ? params.instanceId
     : `custom_${params.instanceId}`;
@@ -979,6 +1045,12 @@ export function registerFallbackCustomProvider(params: {
   });
   fallbackInstances.set(cleanId, instance);
   fallbackInstances.set(params.instanceId, instance);
+  fallbackParams.set(cleanId, { ...params, instanceId: cleanId });
+
+  if (shouldPersist) {
+    saveCustomProvidersToDisk();
+  }
+
   return instance;
 }
 
@@ -986,6 +1058,9 @@ export function unregisterFallbackCustomProvider(id: string): void {
   const cleanId = id.startsWith("custom_") ? id : `custom_${id}`;
   fallbackInstances.delete(cleanId);
   fallbackInstances.delete(id);
+  fallbackParams.delete(cleanId);
+  fallbackParams.delete(id);
+  saveCustomProvidersToDisk();
 }
 
 export function getFallbackCustomInstance(
@@ -997,6 +1072,9 @@ export function getFallbackCustomInstance(
 export function listFallbackCustomInstanceIds(): string[] {
   return Array.from(fallbackInstances.keys()).filter((k) => k.startsWith("custom_"));
 }
+
+// Load persisted custom providers on startup
+loadPersistedCustomProviders();
 
 export const CustomDriver: ProviderDriver<CustomDriverConfig, never> = {
   driverKind: DRIVER,

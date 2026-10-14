@@ -42,7 +42,12 @@ function causeMessage(cause: unknown): string | undefined {
         cause = Cause.squash(cause);
         continue;
       }
-      if (typeof cause !== "object") break;
+      if (typeof cause !== "object") {
+        if (typeof cause === "string" && cause.trim()) {
+          return cause.trim();
+        }
+        break;
+      }
       switch ((cause as Record<string, unknown>)._tag) {
         case "ContextHandoffBudgetError":
           return new ContextHandoffBudgetError().message;
@@ -52,20 +57,35 @@ function causeMessage(cause: unknown): string | undefined {
           return "T3 could not confirm whether conversation history reached the provider. Retry the turn to recover the session.";
         case "ProviderAdapterTurnStartError":
           message =
+            stringField(cause, "message") ||
             "The provider could not start this turn. Retry the turn; if it keeps failing, check the provider setup and server logs.";
           break;
         case "ProviderAdapterEventStreamError":
           message =
+            stringField(cause, "message") ||
             "The provider event stream closed unexpectedly. Retry the turn; if it keeps failing, check the provider and server logs.";
           break;
         case "ProviderAdapterOpenSessionError":
           message =
+            stringField(cause, "message") ||
             "The provider session could not be opened. Check that the provider is installed and signed in, then retry the turn.";
           break;
         case "ProviderAdapterResumeThreadError":
           message =
+            stringField(cause, "message") ||
             "The provider conversation could not be resumed. Retry the turn; if it keeps failing, check the provider and server logs.";
           break;
+      }
+      if (cause instanceof Error && cause.message && !message) {
+        message = cause.message;
+      } else if (!message) {
+        const candidate =
+          stringField(cause, "message") ||
+          stringField(cause, "detail") ||
+          stringField(cause, "error");
+        if (candidate) {
+          message = candidate;
+        }
       }
       cause = (cause as Record<string, unknown>).cause;
     } catch {
@@ -75,11 +95,16 @@ function causeMessage(cause: unknown): string | undefined {
   return message;
 }
 
-function stringField(value: unknown, key: "message" | "code"): string | undefined {
+function stringField(
+  value: unknown,
+  key: "message" | "code" | "detail" | "error",
+): string | undefined {
   if (typeof value !== "object" || value === null) return undefined;
   try {
     const candidate = (value as Record<string, unknown>)[key];
-    return typeof candidate === "string" ? candidate : undefined;
+    if (typeof candidate === "string" && candidate.trim()) return candidate.trim();
+    if (candidate instanceof Error && candidate.message) return candidate.message;
+    return undefined;
   } catch {
     return undefined;
   }
@@ -152,7 +177,11 @@ export function makeProviderFailure(input: {
   readonly retryable?: boolean | null;
   readonly resetAt?: string | null;
 }): OrchestrationV2ProviderFailure {
-  const rawMessage = input.message ?? causeMessage(input.cause) ?? DEFAULT_PROVIDER_FAILURE_MESSAGE;
+  const fromCause = causeMessage(input.cause);
+  const rawMessage =
+    input.message && input.message !== DEFAULT_PROVIDER_FAILURE_MESSAGE
+      ? input.message
+      : fromCause || input.message || DEFAULT_PROVIDER_FAILURE_MESSAGE;
   const message = boundedText(rawMessage, MAX_PROVIDER_FAILURE_MESSAGE_LENGTH);
   const rawCode = input.code ?? stringField(input.cause, "code") ?? null;
   const code =
