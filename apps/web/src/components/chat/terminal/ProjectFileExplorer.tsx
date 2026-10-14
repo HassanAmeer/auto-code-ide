@@ -22,6 +22,7 @@ import {
   Edit3,
   Layers,
   ArrowLeft,
+  ArrowUp,
 } from "lucide-react";
 import { resolvePrimaryEnvironmentHttpUrl } from "../../../environments/primary";
 import { useTerminalStore, terminalStore } from "./terminalStore";
@@ -91,10 +92,16 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
       ? store.activeCwd
       : projects[0]?.workspaceRoot || "/";
   const [rootPath, setRootPath] = useState<string>(initialRoot);
+  const [inputPath, setInputPath] = useState<string>(initialRoot);
 
   // Tree state: path -> DirNode
   const [nodes, setNodes] = useState<Map<string, DirNode>>(new Map());
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Sync inputPath when rootPath changes
+  useEffect(() => {
+    setInputPath(rootPath);
+  }, [rootPath]);
 
   // Active selected file for viewer/editor
   const [selectedFile, setSelectedFile] = useState<{
@@ -122,18 +129,6 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
   } | null>(null);
 
   const [copied, setCopied] = useState(false);
-
-  // Update root when activeCwd changes or opened
-  useEffect(() => {
-    if (isOpen) {
-      const activeProj = projects.find((p) => p.id === store.selectedProjectId);
-      const targetRoot =
-        activeProj?.workspaceRoot || (store.activeCwd !== "/" ? store.activeCwd : initialRoot);
-      if (targetRoot && targetRoot !== rootPath) {
-        setRootPath(targetRoot);
-      }
-    }
-  }, [isOpen, store.selectedProjectId, store.activeCwd, projects]);
 
   // Load a directory
   const loadDirectory = useCallback(async (dirPath: string) => {
@@ -182,6 +177,43 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
       });
     }
   }, []);
+
+  // Navigate to path (Windows Explorer style)
+  const handleNavigatePath = useCallback(
+    (target?: string) => {
+      const raw = target !== undefined ? target : inputPath;
+      const dest = raw.trim();
+      if (!dest) return;
+      setRootPath(dest);
+      setInputPath(dest);
+      terminalStore.setActiveCwd(dest);
+      void loadDirectory(dest);
+    },
+    [inputPath, loadDirectory],
+  );
+
+  // Navigate Up one directory level
+  const handleNavigateUp = useCallback(() => {
+    if (rootPath === "/" || !rootPath) return;
+    const parts = rootPath.split("/").filter(Boolean);
+    parts.pop();
+    const parent = "/" + parts.join("/");
+    const dest = parent === "" ? "/" : parent;
+    handleNavigatePath(dest);
+  }, [rootPath, handleNavigatePath]);
+
+  // Update root when activeCwd changes or opened
+  useEffect(() => {
+    if (isOpen) {
+      const activeProj = projects.find((p) => p.id === store.selectedProjectId);
+      const targetRoot =
+        activeProj?.workspaceRoot || (store.activeCwd !== "/" ? store.activeCwd : initialRoot);
+      if (targetRoot && targetRoot !== rootPath) {
+        setRootPath(targetRoot);
+        setInputPath(targetRoot);
+      }
+    }
+  }, [isOpen, store.selectedProjectId, store.activeCwd, projects]);
 
   // When rootPath changes, reload root
   useEffect(() => {
@@ -448,6 +480,17 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
+                      handleNavigatePath(subPath);
+                    }}
+                    title="Open this folder as root"
+                    className="p-1 rounded-[3px] text-zinc-400 hover:text-sky-300 hover:bg-zinc-700/60"
+                  >
+                    <FolderOpen className="size-3" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
                       setCreateModal({ parentPath: subPath, type: "file" });
                     }}
                     title="Add file inside this folder"
@@ -544,56 +587,104 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-5 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
       <div className="relative w-full max-w-6xl h-[88vh] flex flex-col rounded-[8px] bg-[#0c1017] border border-zinc-800 shadow-2xl text-zinc-100 overflow-hidden font-sans">
-        {/* Top Header Bar */}
-        <div className="flex items-center justify-between border-b border-zinc-800/80 bg-[#161b22] px-4 py-2.5 select-none shrink-0">
-          <div className="flex items-center gap-3">
+        {/* Top Header & Windows-style Address/Path Bar */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between border-b border-zinc-800/80 bg-[#161b22] px-3 py-2 select-none gap-2 shrink-0">
+          {/* Left section: Mac dots, Title & Navigation Controls */}
+          <div className="flex items-center gap-2 shrink-0">
             <div className="flex items-center gap-1.5 mr-1">
               <span className="size-3 rounded-full bg-[#ff5f56]" />
               <span className="size-3 rounded-full bg-[#ffbd2e]" />
               <span className="size-3 rounded-full bg-[#27c93f]" />
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 text-zinc-200">
               <Layers className="size-4 text-emerald-400" />
-              <span className="font-semibold text-sm text-zinc-100">Project File Manager</span>
+              <span className="font-semibold text-xs hidden md:inline">File Manager</span>
             </div>
 
-            {/* Active Project Selector */}
-            <div className="flex items-center gap-1.5 bg-zinc-900 border border-zinc-700/70 rounded-[5px] px-2 py-0.5 text-xs text-zinc-300">
-              <span className="text-zinc-500 text-3xs font-medium">Root:</span>
-              <select
-                value={rootPath}
-                onChange={(e) => {
-                  setRootPath(e.target.value);
-                  terminalStore.setActiveCwd(e.target.value);
-                }}
-                className="bg-transparent text-xs text-zinc-200 focus:outline-none font-mono max-w-[200px] sm:max-w-[320px] truncate"
-              >
-                {projects.map((p) => (
-                  <option key={p.id} value={p.workspaceRoot}>
-                    {p.title} ({p.workspaceRoot})
-                  </option>
-                ))}
-                {rootPath && !projects.some((p) => p.workspaceRoot === rootPath) && (
-                  <option value={rootPath}>{rootPath}</option>
-                )}
-              </select>
-            </div>
-          </div>
+            {/* Back / Up to parent folder button */}
+            <button
+              type="button"
+              onClick={handleNavigateUp}
+              disabled={rootPath === "/"}
+              title="Up to parent folder"
+              className={cn(
+                "p-1.5 rounded-[5px] border transition-colors cursor-pointer",
+                rootPath === "/"
+                  ? "border-zinc-800 text-zinc-600 cursor-not-allowed"
+                  : "border-zinc-700/80 text-zinc-300 hover:text-white hover:bg-zinc-800 bg-zinc-900",
+              )}
+            >
+              <ArrowUp className="size-3.5" />
+            </button>
 
-          <div className="flex items-center gap-2">
+            {/* Refresh button */}
             <button
               type="button"
               onClick={() => void loadDirectory(rootPath)}
               title="Refresh Tree"
-              className="p-1.5 rounded-[5px] text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
+              className="p-1.5 rounded-[5px] border border-zinc-700/80 text-zinc-300 hover:text-white hover:bg-zinc-800 bg-zinc-900 transition-colors cursor-pointer"
             >
               <RotateCw className="size-3.5" />
             </button>
+          </div>
+
+          {/* Center / Main: Windows Explorer Style Path Address Bar */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleNavigatePath();
+            }}
+            className="flex-1 flex items-center gap-1 min-w-0"
+          >
+            <div className="flex-1 relative flex items-center bg-zinc-900 border border-zinc-700/80 rounded-[5px] focus-within:border-sky-500 focus-within:ring-1 focus-within:ring-sky-500/20 px-2 py-1 transition-all">
+              <Folder className="size-3.5 text-amber-400 mr-1.5 shrink-0" />
+              <input
+                type="text"
+                value={inputPath}
+                onChange={(e) => setInputPath(e.target.value)}
+                placeholder="/path/to/folder (e.g. /, /root, /tmp)..."
+                className="w-full bg-transparent text-xs text-zinc-100 placeholder:text-zinc-500 font-mono focus:outline-none"
+              />
+              <button
+                type="submit"
+                title="Go to path (Enter)"
+                className="px-2 py-0.5 rounded-[4px] bg-sky-600 hover:bg-sky-500 text-white font-medium text-3xs shrink-0 cursor-pointer ml-1 transition-all"
+              >
+                Go
+              </button>
+            </div>
+          </form>
+
+          {/* Right section: Search bar & Close Button */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {/* Search field */}
+            <div className="relative flex items-center w-36 sm:w-44">
+              <Search className="size-3 text-zinc-500 absolute left-2 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Search files..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-6 pr-6 py-1 text-xs rounded-[5px] bg-zinc-900 border border-zinc-700/80 text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-sky-500/80 transition-colors"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-1.5 text-zinc-500 hover:text-zinc-300 cursor-pointer p-0.5"
+                >
+                  <X className="size-3" />
+                </button>
+              )}
+            </div>
+
+            {/* Close Modal Button */}
             <button
               type="button"
               onClick={() => terminalStore.setFileExplorerOpen(false)}
               className="p-1.5 rounded-[5px] text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
+              title="Close File Manager"
             >
               <X className="size-4" />
             </button>
