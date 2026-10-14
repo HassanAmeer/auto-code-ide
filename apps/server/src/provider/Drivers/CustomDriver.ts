@@ -16,6 +16,7 @@ import {
   TurnItemId,
   TextGenerationError,
 } from "@t3tools/contracts";
+import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -514,11 +515,19 @@ export function makeCustomAdapterV2(
                       const maybeJson = decodeJson(dataStr);
                       if (Option.isSome(maybeJson)) {
                         const parsed = maybeJson.value as {
+                          error?: { message?: string } | string;
                           choices?: Array<{
                             delta?: { content?: string };
                             text?: string;
                           }>;
                         };
+                        if (parsed.error) {
+                          const errorMsg =
+                            typeof parsed.error === "object" && parsed.error !== null
+                              ? parsed.error.message || JSON.stringify(parsed.error)
+                              : String(parsed.error);
+                          return yield* Effect.fail(new Error(errorMsg));
+                        }
                         const delta =
                           parsed.choices?.[0]?.delta?.content ?? parsed.choices?.[0]?.text ?? "";
                         if (delta) {
@@ -641,12 +650,15 @@ export function makeCustomAdapterV2(
                 GLOBAL_CUSTOM_THREAD_HISTORIES.set(threadKey, updatedHistory);
               }).pipe(
                 Effect.provide(FetchHttpClient.layer),
-                Effect.catch((err: unknown) =>
+                Effect.catchCause((cause: unknown) =>
                   Effect.gen(function* () {
+                    const squashed = Cause.isCause(cause) ? Cause.squash(cause) : cause;
                     const message =
-                      typeof err === "object" && err !== null && "message" in err
-                        ? String((err as any).message)
-                        : String(err);
+                      squashed instanceof Error
+                        ? squashed.message
+                        : typeof squashed === "object" && squashed !== null && "message" in squashed
+                          ? String((squashed as any).message)
+                          : String(squashed);
                     const failTime = yield* DateTime.now;
                     yield* Queue.offer(eventsQueue, {
                       type: "turn_item.updated",
@@ -693,7 +705,7 @@ export function makeCustomAdapterV2(
                       providerThreadId: turnInput.providerThread.id,
                       providerTurnId,
                       runOrdinal: PositiveInt.make(turnInput.runOrdinal),
-                      failureItemOrdinal: PositiveInt.make(itemOrdinal),
+                      failureItemOrdinal: PositiveInt.make(itemOrdinal + 1),
                       status: "failed",
                       failure: makeProviderFailure({
                         message,

@@ -357,7 +357,33 @@ export const V2ItemInspector = memo(function V2ItemInspector(props: V2ItemInspec
       ) : null}
       {item.type === "notification" ? <StructuredValue value={item.detail} /> : null}
       {item.type === "system_notice" ? <StructuredValue value={item.message} /> : null}
-      {item.type === "error" ? <StructuredValue value={item.failure.message} /> : null}
+      {item.type === "error" ? (
+        <div className="flex flex-col gap-2 p-1">
+          <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+            <div className="font-semibold mb-1.5 flex items-center gap-2">
+              <span>Failure Reason:</span>
+              {item.failure.class && (
+                <span className="rounded bg-destructive/20 px-1.5 py-0.5 text-xs font-mono text-destructive">
+                  {item.failure.class}
+                </span>
+              )}
+              {item.failure.code && (
+                <span className="rounded bg-destructive/20 px-1.5 py-0.5 text-xs font-mono text-destructive">
+                  code: {item.failure.code}
+                </span>
+              )}
+            </div>
+            <div className="whitespace-pre-wrap break-words font-mono text-xs select-text text-foreground/90 leading-relaxed bg-background/50 p-2.5 rounded border border-border/40">
+              {item.failure.message}
+            </div>
+            {item.failure.resetAt && (
+              <div className="mt-2 text-xs text-muted-foreground">
+                Reset at: {item.failure.resetAt}
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
       {item.type === "proposed_plan" ? <StructuredValue value={item.markdown} /> : null}
       {item.type === "todo_list" ? (
         <StructuredValue

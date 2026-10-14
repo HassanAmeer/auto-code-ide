@@ -74,6 +74,13 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
       return "bg-amber-500/15 text-amber-400 border-amber-500/30";
     if (method.includes("DELETE")) return "bg-rose-500/15 text-rose-400 border-rose-500/30";
     if (method.includes("WS ↗")) return "bg-purple-500/15 text-purple-400 border-purple-500/30";
+    if (
+      method.includes("WS ↘ ERROR") ||
+      method.includes("ERROR") ||
+      method.includes("REJECTION") ||
+      method.includes("CLOSE")
+    )
+      return "bg-rose-500/20 text-rose-300 border-rose-500/40";
     if (method.includes("WS ↘")) return "bg-cyan-500/15 text-cyan-400 border-cyan-500/30";
     return "bg-zinc-700/30 text-zinc-300 border-zinc-600/30";
   };

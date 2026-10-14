@@ -5,7 +5,7 @@ export interface RequestLogEntry {
   id: string;
   timestamp: number;
   timeFormatted: string;
-  type: "fetch" | "xhr" | "ws";
+  type: "fetch" | "xhr" | "ws" | "error";
   method: string;
   url: string;
   status?: number;
@@ -104,6 +104,7 @@ class NetworkLoggerService {
     this.interceptFetch();
     this.interceptXhr();
     this.interceptWebSocket();
+    this.interceptErrors();
   }
 
   private interceptFetch(): void {
@@ -360,9 +361,10 @@ class NetworkLoggerService {
   private interceptWebSocket(): void {
     if (typeof WebSocket === "undefined") return;
     const self = this;
+    const OriginalWebSocket = window.WebSocket;
 
-    const originalSend = WebSocket.prototype.send;
-    WebSocket.prototype.send = function (data: any) {
+    const originalSend = OriginalWebSocket.prototype.send;
+    OriginalWebSocket.prototype.send = function (data: any) {
       try {
         const date = new Date();
         const id = "ws-" + Math.random().toString(36).slice(2, 10);
@@ -392,47 +394,194 @@ class NetworkLoggerService {
       return originalSend.call(this, data);
     };
 
-    const originalAddEventListener = WebSocket.prototype.addEventListener;
-    WebSocket.prototype.addEventListener = function (
-      this: WebSocket,
-      type: string,
-      listener: EventListenerOrEventListenerObject,
-      options?: boolean | AddEventListenerOptions,
-    ) {
-      if (type === "message" && typeof listener === "function") {
-        const wrappedListener = function (this: WebSocket, event: MessageEvent) {
-          try {
-            const date = new Date();
-            const id = "ws-" + Math.random().toString(36).slice(2, 10);
-            let bodyText: string | null = null;
-            if (typeof event.data === "string") {
-              bodyText = self.safeStringify(event.data);
-            } else {
-              bodyText = "[Binary WebSocket Message]";
-            }
+    const attachSocketListeners = (ws: WebSocket) => {
+      try {
+        OriginalWebSocket.prototype.addEventListener.call(
+          ws,
+          "message",
+          function (event: MessageEvent) {
+            try {
+              const date = new Date();
+              const id = "ws-" + Math.random().toString(36).slice(2, 10);
+              let bodyText: string | null = null;
+              let isError = false;
+              if (typeof event.data === "string") {
+                bodyText = self.safeStringify(event.data);
+                if (
+                  bodyText.includes('"error"') ||
+                  bodyText.includes('"failed"') ||
+                  bodyText.includes('"failure"')
+                ) {
+                  isError = true;
+                }
+              } else {
+                bodyText = "[Binary WebSocket Message]";
+              }
 
-            self.addEntry({
-              id,
-              timestamp: date.getTime(),
-              timeFormatted: self.formatTime(date),
-              type: "ws",
-              method: "WS ↘ RECV",
-              url: (event.target as WebSocket)?.url || "WebSocket",
-              responseBody: bodyText,
-              state: "completed",
-              durationMs: 0,
-              status: 101,
-              statusText: "Switching Protocols",
-            });
-          } catch (e) {
-            console.warn("Error logging WS recv:", e);
-          }
-          return (listener as Function).apply(this, arguments as any);
-        };
-        return originalAddEventListener.call(this, type, wrappedListener as EventListener, options);
+              self.addEntry({
+                id,
+                timestamp: date.getTime(),
+                timeFormatted: self.formatTime(date),
+                type: "ws",
+                method: isError ? "WS ↘ ERROR" : "WS ↘ RECV",
+                url: ws.url || "WebSocket",
+                responseBody: bodyText,
+                state: isError ? "error" : "completed",
+                durationMs: 0,
+                status: isError ? 500 : 101,
+                statusText: isError ? "Internal Error Frame" : "Switching Protocols",
+                error: isError ? "Received error in WebSocket payload" : null,
+              });
+            } catch (e) {
+              console.warn("Error logging WS recv:", e);
+            }
+          },
+        );
+
+        OriginalWebSocket.prototype.addEventListener.call(ws, "error", function () {
+          const date = new Date();
+          self.addEntry({
+            id: "ws-err-" + Math.random().toString(36).slice(2, 10),
+            timestamp: date.getTime(),
+            timeFormatted: self.formatTime(date),
+            type: "ws",
+            method: "WS ERROR",
+            url: ws.url || "WebSocket",
+            state: "error",
+            durationMs: 0,
+            status: 500,
+            statusText: "WebSocket Error",
+            error: "WebSocket encountered network/transport error event",
+          });
+        });
+
+        OriginalWebSocket.prototype.addEventListener.call(
+          ws,
+          "close",
+          function (event: CloseEvent) {
+            if (event.code !== 1000 && event.code !== 1005) {
+              const date = new Date();
+              self.addEntry({
+                id: "ws-close-" + Math.random().toString(36).slice(2, 10),
+                timestamp: date.getTime(),
+                timeFormatted: self.formatTime(date),
+                type: "ws",
+                method: "WS CLOSE",
+                url: ws.url || "WebSocket",
+                state: "error",
+                durationMs: 0,
+                status: event.code,
+                statusText: `Closed: ${event.reason || "Abnormal"}`,
+                error: `WebSocket connection closed abnormally (code ${event.code}: ${event.reason || "no reason provided"})`,
+              });
+            }
+          },
+        );
+      } catch {
+        // ignore
       }
-      return originalAddEventListener.call(this, type, listener, options);
     };
+
+    // Intercept constructor
+    const PatchedWebSocket = function (
+      this: WebSocket,
+      url: string | URL,
+      protocols?: string | string[],
+    ) {
+      const ws =
+        protocols !== undefined
+          ? new OriginalWebSocket(url, protocols)
+          : new OriginalWebSocket(url);
+      attachSocketListeners(ws);
+      return ws;
+    } as any;
+
+    PatchedWebSocket.prototype = OriginalWebSocket.prototype;
+    PatchedWebSocket.CONNECTING = OriginalWebSocket.CONNECTING;
+    PatchedWebSocket.OPEN = OriginalWebSocket.OPEN;
+    PatchedWebSocket.CLOSING = OriginalWebSocket.CLOSING;
+    PatchedWebSocket.CLOSED = OriginalWebSocket.CLOSED;
+    (window as any).WebSocket = PatchedWebSocket;
+  }
+
+  private interceptErrors(): void {
+    if (typeof window === "undefined") return;
+    const self = this;
+
+    const originalConsoleError = console.error;
+    console.error = function (...args: any[]) {
+      try {
+        const date = new Date();
+        const errorText = args
+          .map((arg) =>
+            typeof arg === "object" && arg !== null ? self.safeStringify(arg) : String(arg),
+          )
+          .join(" ");
+
+        self.addEntry({
+          id: "err-" + Math.random().toString(36).slice(2, 10),
+          timestamp: date.getTime(),
+          timeFormatted: self.formatTime(date),
+          type: "error",
+          method: "CONSOLE ERROR",
+          url: "client://console.error",
+          state: "error",
+          durationMs: 0,
+          status: 500,
+          statusText: "Error Logged",
+          error: errorText,
+          responseBody: errorText,
+        });
+      } catch {
+        // ignore
+      }
+      return originalConsoleError.apply(this, args);
+    };
+
+    window.addEventListener("error", (event: ErrorEvent) => {
+      try {
+        const date = new Date();
+        const errorMsg = event.message || (event.error ? String(event.error) : "Uncaught Error");
+        self.addEntry({
+          id: "win-err-" + Math.random().toString(36).slice(2, 10),
+          timestamp: date.getTime(),
+          timeFormatted: self.formatTime(date),
+          type: "error",
+          method: "WINDOW ERROR",
+          url: event.filename ? `${event.filename}:${event.lineno}` : "client://window.error",
+          state: "error",
+          status: 500,
+          statusText: "Uncaught Error",
+          error: errorMsg,
+          responseBody: event.error?.stack || errorMsg,
+        });
+      } catch {
+        // ignore
+      }
+    });
+
+    window.addEventListener("unhandledrejection", (event: PromiseRejectionEvent) => {
+      try {
+        const date = new Date();
+        const reason = event.reason;
+        const msg = reason instanceof Error ? reason.message : self.safeStringify(reason);
+        self.addEntry({
+          id: "rejection-" + Math.random().toString(36).slice(2, 10),
+          timestamp: date.getTime(),
+          timeFormatted: self.formatTime(date),
+          type: "error",
+          method: "UNHANDLED REJECTION",
+          url: "client://promise-rejection",
+          state: "error",
+          status: 500,
+          statusText: "Unhandled Promise Rejection",
+          error: msg,
+          responseBody: reason?.stack || msg,
+        });
+      } catch {
+        // ignore
+      }
+    });
   }
 }
 
