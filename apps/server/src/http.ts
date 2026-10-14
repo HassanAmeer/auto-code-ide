@@ -38,6 +38,8 @@ import * as ServerConfig from "./config.ts";
 import {
   registerFallbackCustomProvider,
   unregisterFallbackCustomProvider,
+  GLOBAL_AI_MODEL_LOGS,
+  clearAiModelLogs,
 } from "./provider/Drivers/CustomDriver.ts";
 import { ASSET_ROUTE_PREFIX, resolveAsset } from "./assets/AssetAccess.ts";
 import { githubMediaResponse } from "./assets/GitHubMediaFetch.ts";
@@ -765,6 +767,28 @@ export const layerCustomProviderSyncRoute = HttpRouter.add(
     return HttpServerResponse.jsonUnsafe({
       ok: true,
       count: bodyJson?.providers?.length ?? 0,
+    });
+  }),
+);
+
+export const layerAiModelLogsRoute = HttpRouter.add(
+  "GET",
+  "/api/ai-model-logs",
+  Effect.gen(function* () {
+    return HttpServerResponse.jsonUnsafe({
+      ok: true,
+      logs: GLOBAL_AI_MODEL_LOGS,
+    });
+  }),
+);
+
+export const layerAiModelLogsClearRoute = HttpRouter.add(
+  "POST",
+  "/api/ai-model-logs/clear",
+  Effect.gen(function* () {
+    clearAiModelLogs();
+    return HttpServerResponse.jsonUnsafe({
+      ok: true,
     });
   }),
 );

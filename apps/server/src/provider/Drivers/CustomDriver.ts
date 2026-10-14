@@ -66,6 +66,55 @@ export interface CustomModelConfig {
   readonly name?: string | undefined;
 }
 
+export interface AiModelLogEntry {
+  readonly id: string;
+  readonly timestamp: number;
+  readonly timeFormatted: string;
+  readonly threadId?: string;
+  readonly runId?: string;
+  readonly provider: string;
+  readonly providerInstanceId: string;
+  readonly model: string;
+  readonly baseUrl: string;
+  readonly endpoint: string;
+  readonly requestHeaders: Record<string, string>;
+  readonly apiKeyMasked: string;
+  readonly userPrompt: string;
+  readonly messages: Array<{ role: string; content: string }>;
+  status?: number;
+  statusText?: string;
+  durationMs?: number;
+  state: "pending" | "streaming" | "completed" | "error";
+  responseBody?: string;
+  error?: string;
+  errorType?: string;
+}
+
+export const GLOBAL_AI_MODEL_LOGS: AiModelLogEntry[] = [];
+
+export function recordAiModelLog(entry: AiModelLogEntry): void {
+  const existingIdx = GLOBAL_AI_MODEL_LOGS.findIndex((l) => l.id === entry.id);
+  if (existingIdx !== -1) {
+    GLOBAL_AI_MODEL_LOGS[existingIdx] = entry;
+  } else {
+    GLOBAL_AI_MODEL_LOGS.unshift(entry);
+    if (GLOBAL_AI_MODEL_LOGS.length > 300) {
+      GLOBAL_AI_MODEL_LOGS.pop();
+    }
+  }
+}
+
+export function updateAiModelLog(id: string, updates: Partial<AiModelLogEntry>): void {
+  const existing = GLOBAL_AI_MODEL_LOGS.find((l) => l.id === id);
+  if (existing) {
+    Object.assign(existing, updates);
+  }
+}
+
+export function clearAiModelLogs(): void {
+  GLOBAL_AI_MODEL_LOGS.length = 0;
+}
+
 export const CustomDriverSettingsSchema = Schema.Struct({
   baseUrl: Schema.String.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   apiKey: Schema.String.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
@@ -611,6 +660,51 @@ Provide full, complete, production-ready code with no placeholders.`;
                   }
                 }
 
+                let currentAiLogId: string | null = null;
+                const currentStartMs = Date.now();
+                const timeFormatted = new Date().toLocaleTimeString();
+
+                const reqHeadersRecord: Record<string, string> = {
+                  "Content-Type": "application/json",
+                  Accept: "text/event-stream, application/json",
+                };
+                if (cleanApiKey) {
+                  reqHeadersRecord["Authorization"] =
+                    `Bearer ${cleanApiKey.slice(0, 8)}...${cleanApiKey.slice(-4)}`;
+                }
+                if (config.headers && Array.isArray(config.headers)) {
+                  for (const h of config.headers) {
+                    if (h.key) reqHeadersRecord[h.key] = h.value;
+                  }
+                }
+                if (chatUrl.includes("openrouter.ai")) {
+                  reqHeadersRecord["HTTP-Referer"] = "https://autojobs.tokendeal.cloud";
+                  reqHeadersRecord["X-Title"] = "Jobi Code";
+                }
+
+                const maskedKey = cleanApiKey
+                  ? `${cleanApiKey.slice(0, 7)}...${cleanApiKey.slice(-4)}`
+                  : "(No API key)";
+
+                currentAiLogId = `ai-log-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+                recordAiModelLog({
+                  id: currentAiLogId,
+                  timestamp: currentStartMs,
+                  timeFormatted,
+                  threadId: turnInput.threadId,
+                  runId: turnInput.runId,
+                  provider: "Custom Provider",
+                  providerInstanceId: String(instanceId),
+                  model: selectedModel,
+                  baseUrl: cleanBase,
+                  endpoint: chatUrl,
+                  requestHeaders: reqHeadersRecord,
+                  apiKeyMasked: maskedKey,
+                  userPrompt: userPrompt || "(Empty message)",
+                  messages: conversationMessages,
+                  state: "pending",
+                });
+
                 const client = yield* HttpClient.HttpClient;
                 const rawResponse = yield* client.execute(request);
 
@@ -634,6 +728,17 @@ Provide full, complete, production-ready code with no placeholders.`;
                   ) {
                     statusMsg +=
                       "\n[OpenRouter Explanation]: OpenRouter rejected the API Key: 'User not found.' Please verify that your OpenRouter API Key is correct and active at https://openrouter.ai/settings/keys.";
+                  }
+                  if (currentAiLogId) {
+                    updateAiModelLog(currentAiLogId, {
+                      status: rawResponse.status,
+                      statusText: rawResponse.statusText || "Error",
+                      durationMs: Date.now() - currentStartMs,
+                      state: "error",
+                      error: statusMsg,
+                      errorType: `HTTP_${rawResponse.status}`,
+                      responseBody: errorBody || statusMsg,
+                    });
                   }
                   return yield* Effect.fail(new Error(statusMsg));
                 }
@@ -675,6 +780,12 @@ Provide full, complete, production-ready code with no placeholders.`;
                           const nowMs = yield* Clock.currentTimeMillis;
                           if (nowMs - lastEmitted > 40) {
                             lastEmitted = nowMs;
+                            if (currentAiLogId) {
+                              updateAiModelLog(currentAiLogId, {
+                                state: "streaming",
+                                responseBody: accumulatedText,
+                              });
+                            }
                             yield* Queue.offer(eventsQueue, {
                               type: "turn_item.updated",
                               driver: DRIVER,
@@ -803,6 +914,16 @@ Provide full, complete, production-ready code with no placeholders.`;
                   threadDisposition: "reusable",
                 });
 
+                if (currentAiLogId) {
+                  updateAiModelLog(currentAiLogId, {
+                    status: rawResponse.status,
+                    statusText: rawResponse.statusText || "OK",
+                    durationMs: Date.now() - currentStartMs,
+                    state: "completed",
+                    responseBody: finalText,
+                  });
+                }
+
                 // Save turn to thread history on successful completion
                 const updatedHistory: Array<{
                   role: "system" | "user" | "assistant";
@@ -829,6 +950,18 @@ Provide full, complete, production-ready code with no placeholders.`;
                           ? String((squashed as any).message)
                           : String(squashed);
                     const failTime = yield* DateTime.now;
+
+                    if (currentAiLogId) {
+                      updateAiModelLog(currentAiLogId, {
+                        status: 500,
+                        statusText: "Error",
+                        durationMs: Date.now() - currentStartMs,
+                        state: "error",
+                        error: message,
+                        errorType: "TurnFailedError",
+                        responseBody: message,
+                      });
+                    }
 
                     yield* Queue.offer(eventsQueue, {
                       type: "message.updated",

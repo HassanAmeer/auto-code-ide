@@ -19,10 +19,35 @@ export interface RequestLogEntry {
   state: "pending" | "completed" | "error";
 }
 
+export interface AiModelLogEntry {
+  readonly id: string;
+  readonly timestamp: number;
+  readonly timeFormatted: string;
+  readonly threadId?: string;
+  readonly runId?: string;
+  readonly provider: string;
+  readonly providerInstanceId: string;
+  readonly model: string;
+  readonly baseUrl: string;
+  readonly endpoint: string;
+  readonly requestHeaders: Record<string, string>;
+  readonly apiKeyMasked: string;
+  readonly userPrompt: string;
+  readonly messages: Array<{ role: string; content: string }>;
+  status?: number;
+  statusText?: string;
+  durationMs?: number;
+  state: "pending" | "streaming" | "completed" | "error";
+  responseBody?: string;
+  error?: string;
+  errorType?: string;
+}
+
 type Listener = () => void;
 
 class NetworkLoggerService {
   private logs: RequestLogEntry[] = [];
+  private aiLogs: AiModelLogEntry[] = [];
   private listeners: Set<Listener> = new Set();
   private maxLogs = 300;
   private isInitialized = false;
@@ -30,11 +55,39 @@ class NetworkLoggerService {
   constructor() {
     if (typeof window !== "undefined") {
       this.initInterceptors();
+      this.fetchAiModelLogs();
     }
   }
 
   public getLogs(): readonly RequestLogEntry[] {
     return this.logs;
+  }
+
+  public getAiLogs(): readonly AiModelLogEntry[] {
+    return this.aiLogs;
+  }
+
+  public async fetchAiModelLogs(): Promise<void> {
+    try {
+      const res = await fetch("/api/ai-model-logs");
+      if (res.ok) {
+        const json = await res.json();
+        if (Array.isArray(json?.logs)) {
+          this.aiLogs = json.logs;
+          this.notify();
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  public async clearAiModelLogs(): Promise<void> {
+    try {
+      await fetch("/api/ai-model-logs/clear", { method: "POST" });
+    } catch {}
+    this.aiLogs = [];
+    this.notify();
   }
 
   public clear(): void {
@@ -396,47 +449,43 @@ class NetworkLoggerService {
 
     const attachSocketListeners = (ws: WebSocket) => {
       try {
-        OriginalWebSocket.prototype.addEventListener.call(
-          ws,
-          "message",
-          function (event: MessageEvent) {
-            try {
-              const date = new Date();
-              const id = "ws-" + Math.random().toString(36).slice(2, 10);
-              let bodyText: string | null = null;
-              let isError = false;
-              if (typeof event.data === "string") {
-                bodyText = self.safeStringify(event.data);
-                if (
-                  bodyText.includes('"error"') ||
-                  bodyText.includes('"failed"') ||
-                  bodyText.includes('"failure"')
-                ) {
-                  isError = true;
-                }
-              } else {
-                bodyText = "[Binary WebSocket Message]";
+        OriginalWebSocket.prototype.addEventListener.call(ws, "message", function (event: any) {
+          try {
+            const date = new Date();
+            const id = "ws-" + Math.random().toString(36).slice(2, 10);
+            let bodyText: string | null = null;
+            let isError = false;
+            if (typeof event.data === "string") {
+              bodyText = self.safeStringify(event.data);
+              if (
+                bodyText.includes('"error"') ||
+                bodyText.includes('"failed"') ||
+                bodyText.includes('"failure"')
+              ) {
+                isError = true;
               }
-
-              self.addEntry({
-                id,
-                timestamp: date.getTime(),
-                timeFormatted: self.formatTime(date),
-                type: "ws",
-                method: isError ? "WS ↘ ERROR" : "WS ↘ RECV",
-                url: ws.url || "WebSocket",
-                responseBody: bodyText,
-                state: isError ? "error" : "completed",
-                durationMs: 0,
-                status: isError ? 500 : 101,
-                statusText: isError ? "Internal Error Frame" : "Switching Protocols",
-                error: isError ? "Received error in WebSocket payload" : null,
-              });
-            } catch (e) {
-              console.warn("Error logging WS recv:", e);
+            } else {
+              bodyText = "[Binary WebSocket Message]";
             }
-          },
-        );
+
+            self.addEntry({
+              id,
+              timestamp: date.getTime(),
+              timeFormatted: self.formatTime(date),
+              type: "ws",
+              method: isError ? "WS ↘ ERROR" : "WS ↘ RECV",
+              url: ws.url || "WebSocket",
+              responseBody: bodyText,
+              state: isError ? "error" : "completed",
+              durationMs: 0,
+              status: isError ? 500 : 101,
+              statusText: isError ? "Internal Error Frame" : "Switching Protocols",
+              error: isError ? "Received error in WebSocket payload" : null,
+            });
+          } catch (e) {
+            console.warn("Error logging WS recv:", e);
+          }
+        });
 
         OriginalWebSocket.prototype.addEventListener.call(ws, "error", function () {
           const date = new Date();
@@ -455,28 +504,24 @@ class NetworkLoggerService {
           });
         });
 
-        OriginalWebSocket.prototype.addEventListener.call(
-          ws,
-          "close",
-          function (event: CloseEvent) {
-            if (event.code !== 1000 && event.code !== 1005) {
-              const date = new Date();
-              self.addEntry({
-                id: "ws-close-" + Math.random().toString(36).slice(2, 10),
-                timestamp: date.getTime(),
-                timeFormatted: self.formatTime(date),
-                type: "ws",
-                method: "WS CLOSE",
-                url: ws.url || "WebSocket",
-                state: "error",
-                durationMs: 0,
-                status: event.code,
-                statusText: `Closed: ${event.reason || "Abnormal"}`,
-                error: `WebSocket connection closed abnormally (code ${event.code}: ${event.reason || "no reason provided"})`,
-              });
-            }
-          },
-        );
+        OriginalWebSocket.prototype.addEventListener.call(ws, "close", function (event: any) {
+          if (event.code !== 1000 && event.code !== 1005) {
+            const date = new Date();
+            self.addEntry({
+              id: "ws-close-" + Math.random().toString(36).slice(2, 10),
+              timestamp: date.getTime(),
+              timeFormatted: self.formatTime(date),
+              type: "ws",
+              method: "WS CLOSE",
+              url: ws.url || "WebSocket",
+              state: "error",
+              durationMs: 0,
+              status: event.code,
+              statusText: `Closed: ${event.reason || "Abnormal"}`,
+              error: `WebSocket connection closed abnormally (code ${event.code}: ${event.reason || "no reason provided"})`,
+            });
+          }
+        });
       } catch {
         // ignore
       }
@@ -602,5 +647,23 @@ export function formatCurlCommand(entry: RequestLogEntry): string {
     const escaped = entry.requestBody.replace(/'/g, `'\\''`);
     curl += ` \\\n  --data '${escaped}'`;
   }
+  return curl;
+}
+
+export function formatAiCurlCommand(entry: AiModelLogEntry): string {
+  let curl = `curl -X POST "${entry.endpoint}"`;
+  for (const [key, value] of Object.entries(entry.requestHeaders)) {
+    curl += ` \\\n  -H "${key}: ${value}"`;
+  }
+  const payload = {
+    model: entry.model,
+    messages:
+      entry.messages && entry.messages.length > 0
+        ? entry.messages
+        : [{ role: "user", content: entry.userPrompt }],
+    stream: true,
+  };
+  const escaped = JSON.stringify(payload, null, 2).replace(/'/g, `'\\''`);
+  curl += ` \\\n  --data '${escaped}'`;
   return curl;
 }
