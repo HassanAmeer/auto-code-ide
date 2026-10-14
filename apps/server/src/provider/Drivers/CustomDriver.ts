@@ -16,6 +16,8 @@ import {
   TurnItemId,
   TextGenerationError,
 } from "@t3tools/contracts";
+import * as NodeFS from "node:fs";
+import * as NodePath from "node:path";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as DateTime from "effect/DateTime";
@@ -172,6 +174,97 @@ export function makeUnsupportedTextGeneration(): ProviderTextGeneration {
     generateBranchName: () => fail("branch-name"),
     generateThreadTitle: () => fail("thread-title"),
   };
+}
+
+export interface ExtractedProjectFile {
+  readonly path: string;
+  readonly content: string;
+}
+
+export function extractFilesFromMarkdown(markdown: string): Array<ExtractedProjectFile> {
+  const files: Array<ExtractedProjectFile> = [];
+  const seenPaths = new Set<string>();
+  const codeBlockRegex = /```([^\n]*)\n([\s\S]*?)```/g;
+  let match: RegExpExecArray | null;
+
+  let htmlCount = 0;
+  let cssCount = 0;
+  let jsCount = 0;
+  let pyCount = 0;
+
+  while ((match = codeBlockRegex.exec(markdown)) !== null) {
+    const header = match[1]?.trim() || "";
+    let content = match[2] || "";
+    let detectedPath: string | null = null;
+
+    // 1. Check header for filepath=... or path=... or filename
+    const headerMatch =
+      header.match(/(?:file|filepath|path)\s*=\s*["']?([^\s"']+)["']?/i) ||
+      header.match(/^[a-zA-Z0-9_-]+[:\s]+([a-zA-Z0-9_\-./]+\.[a-zA-Z0-9]+)$/) ||
+      header.match(/^([a-zA-Z0-9_\-./]+\.[a-zA-Z0-9]+)$/);
+
+    if (headerMatch && headerMatch[1]) {
+      detectedPath = headerMatch[1].trim();
+    }
+
+    // 2. Check first 3 lines of block for comment filename
+    if (!detectedPath) {
+      const lines = content.split("\n");
+      for (let i = 0; i < Math.min(3, lines.length); i++) {
+        const line = lines[i]?.trim() || "";
+        const commentMatch =
+          line.match(
+            /^(?:\/\/|#|\/\*|<!--)\s*(?:file|filepath|filename|path)\s*[:=]\s*([a-zA-Z0-9_\-./]+\.[a-zA-Z0-9]+)/i,
+          ) || line.match(/^(?:\/\/|#)\s*([a-zA-Z0-9_\-./]+\.[a-zA-Z0-9]+)$/);
+        if (commentMatch && commentMatch[1]) {
+          detectedPath = commentMatch[1].trim();
+          lines.splice(i, 1);
+          content = lines.join("\n");
+          break;
+        }
+      }
+    }
+
+    // 3. Fallback heuristics for common templates (like 2D game or website)
+    if (!detectedPath) {
+      const lowerHeader = header.toLowerCase();
+      const trimmed = content.trim();
+      if (
+        (lowerHeader.includes("html") ||
+          trimmed.startsWith("<!DOCTYPE html") ||
+          trimmed.startsWith("<html")) &&
+        htmlCount === 0
+      ) {
+        detectedPath = "index.html";
+        htmlCount++;
+      } else if (lowerHeader.includes("css") && cssCount === 0) {
+        detectedPath = "style.css";
+        cssCount++;
+      } else if (
+        (lowerHeader.includes("javascript") || lowerHeader.includes("js")) &&
+        (trimmed.includes("requestAnimationFrame") ||
+          trimmed.includes("canvas") ||
+          trimmed.includes("addEventListener")) &&
+        jsCount === 0
+      ) {
+        detectedPath = "game.js";
+        jsCount++;
+      } else if (lowerHeader.includes("python") && pyCount === 0) {
+        detectedPath = "main.py";
+        pyCount++;
+      }
+    }
+
+    if (detectedPath) {
+      const cleanPath = detectedPath.replace(/^[/\\]+/, "").replace(/\.\./g, "");
+      if (cleanPath && !seenPaths.has(cleanPath)) {
+        seenPaths.add(cleanPath);
+        files.push({ path: cleanPath, content });
+      }
+    }
+  }
+
+  return files;
 }
 
 export const GLOBAL_CUSTOM_THREAD_HISTORIES = new Map<
@@ -360,16 +453,63 @@ export function makeCustomAdapterV2(
                 );
                 const history = GLOBAL_CUSTOM_THREAD_HISTORIES.get(threadKey) ?? [];
 
+                const procEnv = (
+                  globalThis as { process?: { env?: Record<string, string | undefined> } }
+                ).process?.env;
+                const userHomeDir = procEnv?.HOME || procEnv?.USERPROFILE || "/root";
+                const storageFolderName = "autocode-storage";
+                const defaultAutocodeStorageDir = NodePath.resolve(userHomeDir, storageFolderName);
+
+                let projectCwd = turnInput.runtimePolicy?.cwd?.trim() || "";
+                if (!projectCwd || projectCwd === "/" || projectCwd === ".") {
+                  projectCwd = defaultAutocodeStorageDir;
+                }
+
+                try {
+                  if (!NodeFS.existsSync(projectCwd)) {
+                    NodeFS.mkdirSync(projectCwd, { recursive: true });
+                  }
+                } catch {
+                  // ignore
+                }
+
                 let userPrompt = (turnInput.message.text || "Hello").trim();
                 if (userPrompt.includes("User message:\n")) {
                   const parts = userPrompt.split("User message:\n");
                   userPrompt = (parts[parts.length - 1] || userPrompt).trim();
                 }
 
+                const systemPrompt = `You are AutoCode (AC) AI Developer.
+Project Workspace Directory: ${projectCwd}
+
+FILE CREATION INSTRUCTIONS:
+When you create or edit files (e.g. 2D game, website, scripts, components):
+Always clearly specify the file path for each file at the top of each code block using:
+\`\`\`<language> filepath=<relative/path>
+...content...
+\`\`\`
+or with a comment on the very first line inside the code block:
+\`\`\`<language>
+// filepath: <relative/path>
+...content...
+\`\`\`
+or for HTML/web:
+\`\`\`html
+<!-- filepath: index.html -->
+...content...
+\`\`\`
+
+All generated files will automatically be saved into the project workspace directory (${projectCwd}).
+Provide full, complete, production-ready code with no placeholders.`;
+
                 const candidateMessages: Array<{
                   role: "system" | "user" | "assistant";
                   content: string;
-                }> = [...history, { role: "user" as const, content: userPrompt || "Hello" }];
+                }> = [
+                  { role: "system", content: systemPrompt },
+                  ...history,
+                  { role: "user" as const, content: userPrompt || "Hello" },
+                ];
 
                 // Sanitize messages for OpenAI API compatibility:
                 // 1. Filter out empty contents
@@ -567,6 +707,34 @@ export function makeCustomAdapterV2(
                 );
 
                 const finishedTime = yield* DateTime.now;
+
+                // Automatically extract and save generated project files to disk in projectCwd
+                const extractedFiles = extractFilesFromMarkdown(accumulatedText);
+                const savedFiles: string[] = [];
+
+                for (const file of extractedFiles) {
+                  try {
+                    const fullPath = NodePath.resolve(projectCwd, file.path);
+                    if (fullPath.startsWith(projectCwd)) {
+                      const dir = NodePath.dirname(fullPath);
+                      if (!NodeFS.existsSync(dir)) {
+                        NodeFS.mkdirSync(dir, { recursive: true });
+                      }
+                      NodeFS.writeFileSync(fullPath, file.content, "utf-8");
+                      savedFiles.push(file.path);
+                    }
+                  } catch (saveErr) {
+                    console.error("Failed saving generated file to project:", file.path, saveErr);
+                  }
+                }
+
+                let finalText = accumulatedText;
+                if (savedFiles.length > 0) {
+                  finalText +=
+                    `\n\n---\n📁 **Saved ${savedFiles.length} file${savedFiles.length > 1 ? "s" : ""} to project (\`${NodePath.basename(projectCwd)}\`):**\n` +
+                    savedFiles.map((f) => `- \`${f}\``).join("\n");
+                }
+
                 yield* Queue.offer(eventsQueue, {
                   type: "message.updated",
                   driver: DRIVER,
@@ -576,7 +744,7 @@ export function makeCustomAdapterV2(
                     runId: turnInput.runId,
                     nodeId: turnInput.rootNodeId,
                     role: "assistant",
-                    text: accumulatedText,
+                    text: finalText,
                     streaming: false,
                     createdAt: turnStartedAt,
                     updatedAt: finishedTime,
@@ -603,7 +771,7 @@ export function makeCustomAdapterV2(
                     updatedAt: finishedTime,
                     type: "assistant_message",
                     messageId: assistantMessageId,
-                    text: accumulatedText,
+                    text: finalText,
                     streaming: false,
                   },
                 });
@@ -644,7 +812,7 @@ export function makeCustomAdapterV2(
                   { role: "user" as const, content: userPrompt || "Hello" },
                   {
                     role: "assistant" as const,
-                    content: accumulatedText.trim() || "(Response received)",
+                    content: finalText.trim() || "(Response received)",
                   },
                 ];
                 GLOBAL_CUSTOM_THREAD_HISTORIES.set(threadKey, updatedHistory);
