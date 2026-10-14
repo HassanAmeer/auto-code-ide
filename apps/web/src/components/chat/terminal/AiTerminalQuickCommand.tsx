@@ -534,17 +534,6 @@ export function AiTerminalQuickCommand({
 
         {/* Right side controls */}
         <div className="flex items-center gap-1.5 flex-wrap">
-          {/* Commands Library Button */}
-          <button
-            type="button"
-            onClick={() => setShowCommandsMenu(true)}
-            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/30 text-purple-300 font-medium text-2xs transition-all hover:scale-105 active:scale-95"
-            title="Open Commands Library with Urdu/English explanations"
-          >
-            <Sparkles className="size-3 text-purple-400" />
-            <span>⚡ Commands Library</span>
-          </button>
-
           {/* Browse Files Button */}
           <button
             type="button"
@@ -903,6 +892,16 @@ export function AiTerminalQuickCommand({
               : "border-zinc-800 focus-within:border-emerald-500/70 focus-within:ring-1 focus-within:ring-emerald-500/30"
           }`}
         >
+          {/* Dropdown Icon Button on Left (No text, saves space!) */}
+          <button
+            type="button"
+            onClick={() => setShowCommandsMenu(true)}
+            title="Common Commands Dropdown (PM2, Git, Docker, System, Ports, Deploy)"
+            className="flex items-center justify-center size-5 rounded-[4px] bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-emerald-400 transition-colors cursor-pointer shrink-0"
+          >
+            <ChevronDown className="size-3" />
+          </button>
+
           {store.inputMode === "ai" ? (
             <Sparkles className="size-3.5 text-purple-400 select-none shrink-0" />
           ) : (

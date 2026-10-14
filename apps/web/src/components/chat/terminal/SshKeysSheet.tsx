@@ -40,11 +40,27 @@ export const SshKeysSheet = memo(function SshKeysSheet() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen]);
 
+  // Auto load key for editing if opened via chip edit icon
+  useEffect(() => {
+    if (isOpen && store.editingKeyId) {
+      const targetKey = store.accessKeys.find((k) => k.id === store.editingKeyId);
+      if (targetKey) {
+        setEditingId(targetKey.id);
+        setName(targetKey.name);
+        setDescription(targetKey.notes || "");
+        setHost(targetKey.host || "");
+        setUser(targetKey.user || "root");
+        setPort(String(targetKey.port || 22));
+      }
+    }
+  }, [isOpen, store.editingKeyId, store.accessKeys]);
+
   if (!isOpen) return null;
 
   const handleClose = () => {
     terminalStore.setSshSheetOpen(false);
     setEditingId(null);
+    terminalStore.setEditingKeyId(null);
   };
 
   const handleEdit = (key: TerminalAccessKey) => {
@@ -54,10 +70,12 @@ export const SshKeysSheet = memo(function SshKeysSheet() {
     setHost(key.host || "");
     setUser(key.user || "root");
     setPort(String(key.port || 22));
+    terminalStore.setEditingKeyId(key.id);
   };
 
   const handleResetForm = () => {
     setEditingId(null);
+    terminalStore.setEditingKeyId(null);
     setName("");
     setDescription("");
     setHost("");

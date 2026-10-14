@@ -5,6 +5,7 @@ import {
   FileCheckIcon,
   ChevronDownIcon,
   ChevronUpIcon,
+  FolderTreeIcon,
   SettingsIcon,
   TerminalSquareIcon,
 } from "lucide-react";
@@ -253,6 +254,13 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
     }
   }, [closeMobileSidebar, navigate]);
 
+  const isFileExplorerOpen = terminalState.isFileExplorerOpen;
+
+  const handleFileExplorerClick = useCallback(() => {
+    closeMobileSidebar();
+    terminalStore.toggleFileExplorer();
+  }, [closeMobileSidebar]);
+
   const handleNotesClick = useCallback(() => {
     closeMobileSidebar();
     setIsNotesOpen(!isNotesOpen);
@@ -380,6 +388,31 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
                 </div>
               </button>
             ) : null}
+
+            {/* File Explorer / Manager */}
+            <button
+              type="button"
+              onClick={() => {
+                handleFileExplorerClick();
+                setIsExpanded(false);
+              }}
+              className={cn(
+                "flex items-center gap-2 rounded-lg p-1.5 text-xs font-medium transition-all text-left cursor-pointer",
+                isFileExplorerOpen
+                  ? "bg-sky-500/15 text-sky-300 border border-sky-500/30"
+                  : "hover:bg-sidebar-row-hover text-sidebar-foreground border border-transparent",
+              )}
+            >
+              <div className="size-6 rounded-md bg-sky-500/10 text-sky-400 flex items-center justify-center shrink-0">
+                <FolderTreeIcon className="size-3.5" />
+              </div>
+              <div className="flex flex-col min-w-0">
+                <span className="font-semibold text-[11px] truncate">File Explorer</span>
+                <span className="text-[9px] text-muted-foreground truncate">
+                  {isFileExplorerOpen ? "Open" : "Browse & Edit"}
+                </span>
+              </div>
+            </button>
           </div>
         </div>
       )}
@@ -416,6 +449,12 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
                     <span className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-emerald-400 animate-pulse" />
                   ) : undefined
                 }
+              />
+              <SidebarUtilityItem
+                icon={<FolderTreeIcon className={cn(isFileExplorerOpen && "text-sky-400")} />}
+                label="File Explorer"
+                onClick={handleFileExplorerClick}
+                isActive={isFileExplorerOpen}
               />
               <SidebarUtilityItem
                 icon={<FileCheckIcon className={cn(activeCount > 0 && "text-amber-400")} />}

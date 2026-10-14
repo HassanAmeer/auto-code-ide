@@ -12,14 +12,12 @@ import {
   Terminal,
   Clock,
   Sparkles,
-  Download,
-  FileArchive,
+  Pencil,
 } from "lucide-react";
 import { cn } from "../../../lib/utils";
 import { useTerminalStore, terminalStore } from "./terminalStore";
 import { useProjects } from "../../../state/entities";
 import { SshKeysSheet } from "./SshKeysSheet";
-import { ProjectZipModal } from "~/components/project/ProjectZipModal";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 
 export interface AiTerminalHeaderStripProps {
@@ -37,8 +35,6 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
   const projects = useProjects();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [isZipModalOpen, setIsZipModalOpen] = useState(false);
-  const [zipModalMode, setZipModalMode] = useState<"extract" | "download">("extract");
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown on outside click
@@ -113,7 +109,7 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
     <>
       <div
         className={cn(
-          "w-full bg-card/85 border-b border-border/60 backdrop-blur-md px-2 py-1 select-none flex items-center gap-1.5 transition-all text-2xs z-30",
+          "w-full bg-zinc-950/90 border-b border-zinc-800/80 backdrop-blur-md px-2 py-1 select-none flex items-center gap-1.5 transition-all text-2xs z-30",
           className,
         )}
       >
@@ -122,7 +118,7 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
           type="button"
           onClick={scrollLeft}
           title="Scroll Left"
-          className="shrink-0 p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+          className="shrink-0 p-1 rounded-[5px] text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/60 transition-colors cursor-pointer"
         >
           <ChevronLeft className="size-3.5" />
         </button>
@@ -138,7 +134,7 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
               type="button"
               onClick={() => setIsDropdownOpen(!isDropdownOpen)}
               className={cn(
-                "flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-3xs font-medium border transition-all cursor-pointer shadow-xs",
+                "flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] text-3xs font-medium border transition-all cursor-pointer shadow-xs",
                 isDropdownOpen
                   ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/50 ring-1 ring-emerald-500/30"
                   : "bg-emerald-500/10 hover:bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
@@ -149,7 +145,7 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
               <span className="font-semibold truncate max-w-[140px] sm:max-w-[180px]">
                 {activeChat?.title || "Terminal Chats"}
               </span>
-              <span className="px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 font-mono text-4xs">
+              <span className="px-1.5 py-0.2 rounded-[5px] bg-emerald-500/20 text-emerald-300 font-mono text-4xs">
                 {store.terminalChats.length}
               </span>
               <ChevronDown
@@ -162,9 +158,9 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
 
             {/* Dropdown Menu */}
             {isDropdownOpen && (
-              <div className="absolute top-full left-0 mt-1.5 w-72 sm:w-80 rounded-2xl bg-card border border-border/80 shadow-2xl p-2 z-50 text-foreground animate-in fade-in-50 slide-in-from-top-1 duration-150 backdrop-blur-md">
+              <div className="absolute top-full left-0 mt-1.5 w-72 sm:w-80 rounded-[5px] bg-zinc-950/95 border border-zinc-800/80 shadow-2xl p-2 z-50 text-foreground animate-in fade-in-50 slide-in-from-top-1 duration-150 backdrop-blur-md">
                 {/* Header with New Chat Button */}
-                <div className="flex items-center justify-between px-2 py-1.5 border-b border-border/50 pb-2 mb-1.5">
+                <div className="flex items-center justify-between px-2 py-1.5 border-b border-zinc-800/60 pb-2 mb-1.5">
                   <div className="flex items-center gap-1.5 text-xs font-semibold">
                     <Sparkles className="size-3.5 text-emerald-400" />
                     <span>Terminal / Deploy Chats</span>
@@ -172,7 +168,7 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
                   <button
                     type="button"
                     onClick={handleCreateNewChat}
-                    className="flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white font-medium text-3xs transition-all shadow-xs cursor-pointer"
+                    className="flex items-center gap-1 px-2 py-1 rounded-[5px] bg-emerald-500 hover:bg-emerald-600 text-white font-medium text-3xs transition-all shadow-xs cursor-pointer"
                   >
                     <Plus className="size-3" />
                     <span>New Chat</span>
@@ -193,10 +189,10 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
                           key={chat.id}
                           onClick={() => handleSelectChat(chat.id)}
                           className={cn(
-                            "flex items-center justify-between gap-2 p-2 rounded-xl transition-all cursor-pointer group text-left",
+                            "flex items-center justify-between gap-2 p-2 rounded-[5px] transition-all cursor-pointer group text-left",
                             isCurrent
                               ? "bg-emerald-500/15 border border-emerald-500/30 text-emerald-200 font-medium"
-                              : "hover:bg-muted/60 text-muted-foreground hover:text-foreground border border-transparent",
+                              : "hover:bg-zinc-900/60 text-muted-foreground hover:text-foreground border border-transparent",
                           )}
                         >
                           <div className="min-w-0 flex-1">
@@ -231,7 +227,7 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
                               type="button"
                               onClick={(e) => handleDeleteChat(e, chat.id)}
                               title="Delete chat"
-                              className="p-1 rounded-md text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
+                              className="p-1 rounded-[5px] text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
                             >
                               <Trash2 className="size-3" />
                             </button>
@@ -246,10 +242,10 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
           </div>
 
           {/* Divider */}
-          <div className="w-px h-4 bg-border/60 shrink-0" />
+          <div className="w-px h-4 bg-zinc-800/80 shrink-0" />
 
           {/* 2. Projects List */}
-          <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-400 font-semibold text-3xs shrink-0 border border-emerald-500/20">
+          <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-[5px] bg-emerald-500/10 text-emerald-400 font-semibold text-3xs shrink-0 border border-emerald-500/20">
             <Folder className="size-3" />
             <span>Projects:</span>
           </div>
@@ -276,10 +272,10 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
                   }
                   title={`Project: ${project.title}\nPath: ${project.workspaceRoot}`}
                   className={cn(
-                    "flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-3xs font-medium shrink-0 transition-all cursor-pointer border",
+                    "flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] text-3xs font-medium shrink-0 transition-all cursor-pointer border",
                     isSelected
                       ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-xs ring-1 ring-emerald-500/20 font-semibold"
-                      : "bg-muted/40 hover:bg-muted/70 text-muted-foreground hover:text-foreground border-border/40",
+                      : "bg-zinc-900/60 hover:bg-zinc-800/70 text-zinc-400 hover:text-zinc-200 border-zinc-800/60",
                   )}
                 >
                   <Folder className="size-3 text-emerald-400 shrink-0" />
@@ -290,38 +286,11 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
             })
           )}
 
-          {/* Download & Extract Project ZIP Buttons */}
-          <button
-            type="button"
-            onClick={() => {
-              setZipModalMode("download");
-              setIsZipModalOpen(true);
-            }}
-            title="Download Project as Clean ZIP (excluding dependencies & node_modules)"
-            className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-3xs font-medium shrink-0 cursor-pointer transition-all shadow-xs"
-          >
-            <Download className="size-3 text-emerald-400" />
-            <span>Download ZIP</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setZipModalMode("extract");
-              setIsZipModalOpen(true);
-            }}
-            title="Upload and Extract ZIP Archive into Project"
-            className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-sky-500/10 hover:bg-sky-500/20 text-sky-300 border border-sky-500/30 text-3xs font-medium shrink-0 cursor-pointer transition-all shadow-xs"
-          >
-            <FileArchive className="size-3 text-sky-400" />
-            <span>Extract ZIP</span>
-          </button>
-
           {/* Divider */}
-          <div className="w-px h-4 bg-border/60 shrink-0" />
+          <div className="w-px h-4 bg-zinc-800/80 shrink-0" />
 
           {/* 3. SSH Servers List */}
-          <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-lg bg-sky-500/10 text-sky-400 font-semibold text-3xs shrink-0 border border-sky-500/20">
+          <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-[5px] bg-sky-500/10 text-sky-400 font-semibold text-3xs shrink-0 border border-sky-500/20">
             <Server className="size-3" />
             <span>SSH Servers:</span>
           </div>
@@ -333,41 +302,75 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
                 store.selectedKeyId === key.id ||
                 (!store.selectedKeyId && key.enabled && activeSshKey?.id === key.id);
               return (
-                <button
+                <div
                   key={key.id}
-                  type="button"
-                  onClick={() => terminalStore.setSelectedKey(key.id)}
-                  title={`SSH Server: ${key.name}\nHost: ${key.user || "root"}@${key.host}:${key.port || 22}\nNotes: ${key.notes || "None"}`}
                   className={cn(
-                    "flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-3xs font-medium shrink-0 transition-all cursor-pointer border",
+                    "flex items-center gap-1 px-2 py-0.5 rounded-[5px] text-3xs font-medium shrink-0 transition-all border group",
                     isSelected
-                      ? "bg-sky-500/20 text-sky-300 border-sky-500/50 shadow-xs ring-1 ring-sky-500/20 font-semibold"
-                      : "bg-muted/40 hover:bg-muted/70 text-muted-foreground hover:text-foreground border-border/40",
+                      ? "bg-sky-500/20 text-sky-200 border-sky-500/50 shadow-xs ring-1 ring-sky-500/25 font-semibold"
+                      : "bg-zinc-900/60 hover:bg-zinc-800/70 text-zinc-400 hover:text-zinc-200 border-zinc-800/60",
                   )}
                 >
-                  <Key className="size-3 text-sky-400 shrink-0" />
-                  <span className="truncate max-w-[110px] sm:max-w-[150px] font-medium">
-                    {key.name}
-                  </span>
-                  {key.host && (
-                    <span className="text-4xs opacity-75 font-mono hidden md:inline">
-                      ({key.user || "root"}@{key.host})
-                    </span>
-                  )}
-                  {isSelected && <Check className="size-2.5 text-sky-400 shrink-0" />}
-                </button>
+                  {/* Left Side: Checkmark Toggle Button */}
+                  <button
+                    type="button"
+                    onClick={() => terminalStore.setSelectedKey(key.id)}
+                    title={
+                      isSelected
+                        ? "Selected for AI operations (Click to unselect)"
+                        : "Click to select this server for AI operations"
+                    }
+                    className={cn(
+                      "flex items-center justify-center size-3.5 rounded-[3px] border transition-colors cursor-pointer",
+                      isSelected
+                        ? "bg-sky-500 text-white border-sky-400"
+                        : "border-zinc-600 hover:border-sky-400 bg-zinc-950/60 text-transparent hover:text-zinc-400",
+                    )}
+                  >
+                    <Check className="size-2.5" />
+                  </button>
+
+                  {/* Center: Key Name & Host Info */}
+                  <button
+                    type="button"
+                    onClick={() => terminalStore.setSelectedKey(key.id)}
+                    title={`SSH Server: ${key.name}\nHost: ${key.user || "root"}@${key.host}:${key.port || 22}\nNotes: ${key.notes || "None"}`}
+                    className="flex items-center gap-1 cursor-pointer text-left"
+                  >
+                    <Key className="size-2.5 text-sky-400 shrink-0" />
+                    <span className="truncate max-w-[100px] sm:max-w-[140px]">{key.name}</span>
+                    {key.host && (
+                      <span className="text-4xs opacity-70 font-mono hidden md:inline">
+                        ({key.user || "root"}@{key.host})
+                      </span>
+                    )}
+                  </button>
+
+                  {/* Right Side: Edit Icon Button */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      terminalStore.openSshSheetWithKey(key.id);
+                    }}
+                    title={`Edit credentials & details for ${key.name}`}
+                    className="p-1 rounded-[3px] text-zinc-400 hover:text-sky-300 hover:bg-sky-500/20 transition-all cursor-pointer ml-0.5"
+                  >
+                    <Pencil className="size-2.5" />
+                  </button>
+                </div>
               );
             })}
 
-          {/* Add / Manage SSH Button (Opens 90% Width Sheet) */}
+          {/* Add / Manage SSH Button (Opens Sheet in Add Mode) */}
           <button
             type="button"
-            onClick={() => terminalStore.setSshSheetOpen(true)}
-            title="Open 90% Width SSH Management Sheet"
-            className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-500/40 text-3xs font-medium shrink-0 cursor-pointer transition-all shadow-xs"
+            onClick={() => terminalStore.openSshSheetWithKey(null)}
+            title="Add New Server Credentials / SSH Key"
+            className="flex items-center gap-1 px-2 py-1 rounded-[5px] bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-500/40 text-3xs font-medium shrink-0 cursor-pointer transition-all shadow-xs"
           >
             <Plus className="size-3" />
-            <span>Manage / Add SSH</span>
+            <span>Add Server</span>
           </button>
         </div>
 
@@ -376,7 +379,7 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
           type="button"
           onClick={scrollRight}
           title="Scroll Right"
-          className="shrink-0 p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+          className="shrink-0 p-1 rounded-[5px] text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/60 transition-colors cursor-pointer"
         >
           <ChevronRight className="size-3.5" />
         </button>
@@ -384,14 +387,6 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
 
       {/* 90% Width SSH Keys Management Sheet */}
       <SshKeysSheet />
-
-      {/* Project ZIP Download & Extract Modal */}
-      <ProjectZipModal
-        isOpen={isZipModalOpen}
-        onClose={() => setIsZipModalOpen(false)}
-        activeProject={activeProject}
-        mode={zipModalMode}
-      />
     </>
   );
 });

@@ -22,6 +22,8 @@ interface TerminalState {
   selectedKeyId: string | null;
   isQuickBarOpen: boolean;
   isSshSheetOpen: boolean;
+  editingKeyId: string | null;
+  isFileExplorerOpen: boolean;
   history: string[];
   activeTarget: string; // "local" or sshProfile id or key id
   sshProfiles: SshProfile[];
@@ -120,6 +122,8 @@ let state: TerminalState = {
   selectedKeyId: initialSelectedKey,
   isQuickBarOpen: initialOpen,
   isSshSheetOpen: false,
+  editingKeyId: null,
+  isFileExplorerOpen: false,
   activeTarget: initialSelectedKey ? `key_${initialSelectedKey}` : "local",
   sshProfiles: initialSshProfiles,
   accessKeys: initialAccessKeys,
@@ -311,7 +315,27 @@ export const terminalStore = {
   },
 
   setSshSheetOpen(isOpen: boolean) {
-    state = { ...state, isSshSheetOpen: isOpen };
+    state = { ...state, isSshSheetOpen: isOpen, ...(isOpen ? {} : { editingKeyId: null }) };
+    notify();
+  },
+
+  setEditingKeyId(id: string | null) {
+    state = { ...state, editingKeyId: id };
+    notify();
+  },
+
+  openSshSheetWithKey(keyId?: string | null) {
+    state = { ...state, isSshSheetOpen: true, editingKeyId: keyId ?? null };
+    notify();
+  },
+
+  setFileExplorerOpen(isOpen: boolean) {
+    state = { ...state, isFileExplorerOpen: isOpen };
+    notify();
+  },
+
+  toggleFileExplorer() {
+    state = { ...state, isFileExplorerOpen: !state.isFileExplorerOpen };
     notify();
   },
 

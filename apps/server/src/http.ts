@@ -1551,6 +1551,94 @@ export const layerFsEnsureDirRoute = HttpRouter.add(
   ),
 );
 
+export const layerFsSaveRoute = HttpRouter.add(
+  "POST",
+  "/api/fs/save",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      path?: string;
+      content?: string;
+    };
+    const targetPath = bodyJson?.path?.trim();
+    if (!targetPath) {
+      return HttpServerResponse.jsonUnsafe(
+        { ok: false, error: "Missing file path" },
+        { status: 400 },
+      );
+    }
+    const pathService = yield* Path.Path;
+    const resolved = pathService.resolve(targetPath);
+    const content = bodyJson.content ?? "";
+    const fileSystem = yield* FileSystem.FileSystem;
+    yield* fileSystem.writeFileString(resolved, content);
+    return HttpServerResponse.jsonUnsafe({ ok: true, path: resolved });
+  }).pipe(
+    Effect.catchCause((cause) =>
+      Effect.succeed(HttpServerResponse.jsonUnsafe({ ok: false, error: Cause.pretty(cause) })),
+    ),
+  ),
+);
+
+export const layerFsDeleteRoute = HttpRouter.add(
+  "POST",
+  "/api/fs/delete",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      path?: string;
+    };
+    const targetPath = bodyJson?.path?.trim();
+    if (!targetPath) {
+      return HttpServerResponse.jsonUnsafe({ ok: false, error: "Missing path" }, { status: 400 });
+    }
+    const pathService = yield* Path.Path;
+    const resolved = pathService.resolve(targetPath);
+    const fileSystem = yield* FileSystem.FileSystem;
+    yield* fileSystem.remove(resolved, { recursive: true });
+    return HttpServerResponse.jsonUnsafe({ ok: true, path: resolved });
+  }).pipe(
+    Effect.catchCause((cause) =>
+      Effect.succeed(HttpServerResponse.jsonUnsafe({ ok: false, error: Cause.pretty(cause) })),
+    ),
+  ),
+);
+
+export const layerFsCreateRoute = HttpRouter.add(
+  "POST",
+  "/api/fs/create",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      parentPath?: string;
+      name?: string;
+      type?: "file" | "directory";
+    };
+    const parent = bodyJson?.parentPath?.trim();
+    const name = bodyJson?.name?.trim();
+    const type = bodyJson?.type || "file";
+    if (!parent || !name) {
+      return HttpServerResponse.jsonUnsafe(
+        { ok: false, error: "Missing parentPath or name" },
+        { status: 400 },
+      );
+    }
+    const pathService = yield* Path.Path;
+    const resolved = pathService.join(pathService.resolve(parent), name);
+    const fileSystem = yield* FileSystem.FileSystem;
+    if (type === "directory") {
+      yield* fileSystem.makeDirectory(resolved, { recursive: true });
+    } else {
+      yield* fileSystem.writeFileString(resolved, "");
+    }
+    return HttpServerResponse.jsonUnsafe({ ok: true, path: resolved });
+  }).pipe(
+    Effect.catchCause((cause) =>
+      Effect.succeed(HttpServerResponse.jsonUnsafe({ ok: false, error: Cause.pretty(cause) })),
+    ),
+  ),
+);
+
 const decodeBuildManifest = Schema.decodeUnknownEffect(
   Schema.fromJsonString(
     Schema.Record(

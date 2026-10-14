@@ -13,6 +13,7 @@ import {
 import { cn } from "../../../lib/utils";
 import { useTerminalStore, terminalStore } from "./terminalStore";
 import type { TerminalCommandRun } from "./terminalTypes";
+import { TerminalCommandsMenu } from "./TerminalCommandsMenu";
 
 export interface AiTerminalCommandBarProps {
   projectCwd?: string | undefined;
@@ -30,6 +31,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
   const [latestRun, setLatestRun] = useState<TerminalCommandRun | null>(null);
   const [isOutputCollapsed, setIsOutputCollapsed] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [showCommandsMenu, setShowCommandsMenu] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -195,6 +197,16 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
 
       {/* Sleek Single-Line Command Input Bar */}
       <div className="flex items-center gap-2 rounded-2xl border border-emerald-500/35 bg-card/90 px-3 py-1.5 shadow-sm focus-within:border-emerald-500/70 focus-within:ring-2 focus-within:ring-emerald-500/20 transition-all">
+        {/* Dropdown Icon Button on Left (No text label, saves space!) */}
+        <button
+          type="button"
+          onClick={() => setShowCommandsMenu(true)}
+          title="Common Commands Dropdown (PM2, Git, Docker, System, Ports, Deploy)"
+          className="flex items-center justify-center size-6 rounded-[5px] bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition-all cursor-pointer shrink-0"
+        >
+          <ChevronDown className="size-3.5" />
+        </button>
+
         {/* Terminal Icon & Prompt */}
         <div className="flex items-center gap-1.5 shrink-0 select-none text-emerald-400">
           <Terminal className="size-3.5" />
@@ -247,6 +259,20 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
           </button>
         </div>
       </div>
+
+      {/* Categorized Common Commands Modal */}
+      <TerminalCommandsMenu
+        isOpen={showCommandsMenu}
+        onClose={() => setShowCommandsMenu(false)}
+        onSelectCommand={(cmd, autoRun) => {
+          setCommand(cmd);
+          if (autoRun) {
+            void handleExecute();
+          } else {
+            inputRef.current?.focus();
+          }
+        }}
+      />
     </div>
   );
 });
