@@ -41,6 +41,7 @@ import { ThemeEditorHost } from "../components/settings/ThemeEditorHost";
 import { GlobalProjectImportProgress } from "../components/project/GlobalProjectImportProgress";
 import { CreateNewProjectModal } from "../components/project/CreateNewProjectModal";
 import { RequestLogsFloatingButton } from "../components/logs/RequestLogsFloatingButton";
+import { NotesSheet } from "../components/notes/NotesSheet";
 import { useCopyToClipboard } from "../hooks/useCopyToClipboard";
 import { useDefaultThemeAdoption } from "../hooks/useDefaultTheme";
 import { useEnvironmentThemeSync } from "../hooks/useEnvironmentTheme";
@@ -232,6 +233,7 @@ function RootRouteView() {
           <NightlyMobileBetaNotice />
           {appShell}
           <RequestLogsFloatingButton />
+          <NotesSheet />
           {/* Above the router: a theme draft is judged by walking the app, so the
               editor has to survive navigation away from settings. */}
           <ThemeEditorHost />
