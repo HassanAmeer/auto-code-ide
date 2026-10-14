@@ -1402,18 +1402,33 @@ export const layerFsPeekRoute = HttpRouter.add(
     }
     const pathService = yield* Path.Path;
     const resolved = pathService.resolve(targetPath);
-    const fileSystem = yield* FileSystem.FileSystem;
-    const stat = yield* fileSystem.stat(resolved).pipe(Effect.option);
-    if (Option.isNone(stat) || stat.value.type !== "File") {
+    if (!NodeFs.existsSync(resolved)) {
       return HttpServerResponse.jsonUnsafe({ ok: false, error: "File not found" }, { status: 404 });
     }
-    const fileSize = Number(stat.value.size);
-    const isLarge = fileSize > 64 * 1024;
-    const fileHandle = yield* fileSystem.open(resolved, { flag: "r" });
-    const bytesToRead = isLarge ? 64 * 1024 : fileSize;
-    const bytes = yield* fileHandle.readAlloc(bytesToRead);
-    yield* fileHandle.close;
-    const content = Option.isSome(bytes) ? new TextDecoder().decode(bytes.value) : "";
+    const stat = NodeFs.statSync(resolved);
+    if (!stat.isFile()) {
+      return HttpServerResponse.jsonUnsafe(
+        { ok: false, error: "Path is not a file" },
+        { status: 400 },
+      );
+    }
+    const fileSize = stat.size;
+    const maxBytes = 256 * 1024;
+    const isLarge = fileSize > maxBytes;
+    let content = "";
+    try {
+      if (isLarge) {
+        const fd = NodeFs.openSync(resolved, "r");
+        const buf = Buffer.alloc(maxBytes);
+        const bytesRead = NodeFs.readSync(fd, buf, 0, maxBytes, 0);
+        NodeFs.closeSync(fd);
+        content = buf.subarray(0, bytesRead).toString("utf-8");
+      } else {
+        content = NodeFs.readFileSync(resolved, "utf-8");
+      }
+    } catch (readErr: any) {
+      content = `[Unable to read file: ${readErr?.message || String(readErr)}]`;
+    }
     return HttpServerResponse.jsonUnsafe({
       ok: true,
       path: resolved,
@@ -1570,9 +1585,15 @@ export const layerFsSaveRoute = HttpRouter.add(
     const pathService = yield* Path.Path;
     const resolved = pathService.resolve(targetPath);
     const content = bodyJson.content ?? "";
-    const fileSystem = yield* FileSystem.FileSystem;
-    yield* fileSystem.writeFileString(resolved, content);
-    return HttpServerResponse.jsonUnsafe({ ok: true, path: resolved });
+    try {
+      NodeFs.writeFileSync(resolved, content, "utf-8");
+      return HttpServerResponse.jsonUnsafe({ ok: true, path: resolved });
+    } catch (err: any) {
+      return HttpServerResponse.jsonUnsafe(
+        { ok: false, error: err?.message || String(err) },
+        { status: 500 },
+      );
+    }
   }).pipe(
     Effect.catchCause((cause) =>
       Effect.succeed(HttpServerResponse.jsonUnsafe({ ok: false, error: Cause.pretty(cause) })),
@@ -1594,9 +1615,17 @@ export const layerFsDeleteRoute = HttpRouter.add(
     }
     const pathService = yield* Path.Path;
     const resolved = pathService.resolve(targetPath);
-    const fileSystem = yield* FileSystem.FileSystem;
-    yield* fileSystem.remove(resolved, { recursive: true });
-    return HttpServerResponse.jsonUnsafe({ ok: true, path: resolved });
+    try {
+      if (NodeFs.existsSync(resolved)) {
+        NodeFs.rmSync(resolved, { recursive: true, force: true });
+      }
+      return HttpServerResponse.jsonUnsafe({ ok: true, path: resolved });
+    } catch (err: any) {
+      return HttpServerResponse.jsonUnsafe(
+        { ok: false, error: err?.message || String(err) },
+        { status: 500 },
+      );
+    }
   }).pipe(
     Effect.catchCause((cause) =>
       Effect.succeed(HttpServerResponse.jsonUnsafe({ ok: false, error: Cause.pretty(cause) })),
@@ -1625,13 +1654,19 @@ export const layerFsCreateRoute = HttpRouter.add(
     }
     const pathService = yield* Path.Path;
     const resolved = pathService.join(pathService.resolve(parent), name);
-    const fileSystem = yield* FileSystem.FileSystem;
-    if (type === "directory") {
-      yield* fileSystem.makeDirectory(resolved, { recursive: true });
-    } else {
-      yield* fileSystem.writeFileString(resolved, "");
+    try {
+      if (type === "directory") {
+        NodeFs.mkdirSync(resolved, { recursive: true });
+      } else {
+        NodeFs.writeFileSync(resolved, "");
+      }
+      return HttpServerResponse.jsonUnsafe({ ok: true, path: resolved });
+    } catch (err: any) {
+      return HttpServerResponse.jsonUnsafe(
+        { ok: false, error: err?.message || String(err) },
+        { status: 500 },
+      );
     }
-    return HttpServerResponse.jsonUnsafe({ ok: true, path: resolved });
   }).pipe(
     Effect.catchCause((cause) =>
       Effect.succeed(HttpServerResponse.jsonUnsafe({ ok: false, error: Cause.pretty(cause) })),

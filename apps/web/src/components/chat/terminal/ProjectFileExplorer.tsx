@@ -44,6 +44,15 @@ interface DirNode {
   files: FileEntry[];
 }
 
+async function parseResponseJson(res: Response): Promise<{ ok: boolean; [key: string]: any }> {
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { ok: false, error: text || `HTTP ${res.status}: ${res.statusText}` };
+  }
+}
+
 function getFileIcon(name: string) {
   const ext = name.split(".").pop()?.toLowerCase();
   if (["zip", "tar", "gz", "tgz", "rar", "7z"].includes(ext || "")) {
@@ -148,7 +157,7 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ path: dirPath }),
       });
-      const data = await res.json();
+      const data = await parseResponseJson(res);
       if (data.ok) {
         setNodes((prev) => {
           const next = new Map(prev);
@@ -207,7 +216,7 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ path: filePath }),
       });
-      const data = await res.json();
+      const data = await parseResponseJson(res);
       if (data.ok) {
         setSelectedFile({
           path: filePath,
@@ -248,7 +257,7 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
           content: selectedFile.content,
         }),
       });
-      const data = await res.json();
+      const data = await parseResponseJson(res);
       if (data.ok) {
         setSelectedFile((prev) =>
           prev
@@ -301,7 +310,7 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
           type: createModal.type,
         }),
       });
-      const data = await res.json();
+      const data = await parseResponseJson(res);
       if (data.ok) {
         toastManager.add({
           type: "success",
@@ -337,7 +346,7 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ path: deleteTarget.path }),
       });
-      const data = await res.json();
+      const data = await parseResponseJson(res);
       if (data.ok) {
         toastManager.add({
           type: "success",
