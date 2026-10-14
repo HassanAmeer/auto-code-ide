@@ -1700,6 +1700,51 @@ export const layerFsCreateRoute = HttpRouter.add(
   ),
 );
 
+export const layerFsUploadRoute = HttpRouter.add(
+  "POST",
+  "/api/fs/upload",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      targetDir?: string;
+      fileName?: string;
+      base64?: string;
+    };
+    const targetDir = bodyJson?.targetDir?.trim();
+    const fileName = bodyJson?.fileName?.trim();
+    if (!targetDir || !fileName || bodyJson?.base64 === undefined) {
+      return HttpServerResponse.jsonUnsafe(
+        { ok: false, error: "Missing targetDir, fileName, or base64 data" },
+        { status: 400 },
+      );
+    }
+    const pathService = yield* Path.Path;
+    const resolvedDir = pathService.resolve(targetDir);
+    const resolvedFile = pathService.join(resolvedDir, fileName);
+    try {
+      if (!NodeFs.existsSync(resolvedDir)) {
+        NodeFs.mkdirSync(resolvedDir, { recursive: true });
+      }
+      const buffer = Buffer.from(bodyJson.base64, "base64");
+      NodeFs.writeFileSync(resolvedFile, buffer);
+      return HttpServerResponse.jsonUnsafe({
+        ok: true,
+        path: resolvedFile,
+        size: buffer.length,
+      });
+    } catch (err: any) {
+      return HttpServerResponse.jsonUnsafe(
+        { ok: false, error: err?.message || String(err) },
+        { status: 500 },
+      );
+    }
+  }).pipe(
+    Effect.catchCause((cause) =>
+      Effect.succeed(HttpServerResponse.jsonUnsafe({ ok: false, error: Cause.pretty(cause) })),
+    ),
+  ),
+);
+
 const decodeBuildManifest = Schema.decodeUnknownEffect(
   Schema.fromJsonString(
     Schema.Record(

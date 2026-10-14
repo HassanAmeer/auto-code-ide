@@ -8,12 +8,14 @@ import {
   Copy,
   ChevronDown,
   ChevronUp,
+  Sparkles,
 } from "lucide-react";
 
 import { cn } from "../../../lib/utils";
 import { useTerminalStore, terminalStore } from "./terminalStore";
 import type { TerminalCommandRun } from "./terminalTypes";
 import { TerminalCommandsMenu } from "./TerminalCommandsMenu";
+import { toastManager } from "../../ui/toast";
 
 export interface AiTerminalCommandBarProps {
   projectCwd?: string | undefined;
@@ -34,6 +36,17 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
   const [showCommandsMenu, setShowCommandsMenu] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleAskAiToFix = () => {
+    if (!latestRun) return;
+    const prompt = `I ran the terminal command:\n\`${latestRun.command}\`\n\nIt failed with exit code ${latestRun.exitCode ?? "error"}.\nError / Output:\n\`\`\`\n${latestRun.stderr || latestRun.stdout || "Command failed with no output"}\n\`\`\`\nPlease diagnose the cause of this error and tell me how to fix it or give me the fixed command to run.`;
+    window.dispatchEvent(new CustomEvent("t3:insert-speech-text", { detail: { text: prompt } }));
+    toastManager.add({
+      type: "info",
+      title: "Sent to AI Chat",
+      description: "Terminal error diagnosis prompt inserted into composer.",
+    });
+  };
 
   // Update latestRun when runs change
   useEffect(() => {
@@ -144,6 +157,20 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
             </div>
 
             <div className="flex items-center gap-1 shrink-0">
+              {/* Ask AI to Fix Button if command failed */}
+              {(latestRun.status === "error" ||
+                (latestRun.exitCode !== undefined && latestRun.exitCode !== 0) ||
+                (latestRun.stderr && latestRun.stderr.length > 0)) && (
+                <button
+                  type="button"
+                  onClick={handleAskAiToFix}
+                  title="Ask AI to diagnose and fix this terminal error"
+                  className="flex items-center gap-1 px-2 py-0.5 rounded-[5px] bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 border border-purple-500/40 font-medium text-3xs transition-all cursor-pointer shadow-xs mr-1"
+                >
+                  <Sparkles className="size-3 text-purple-400" />
+                  <span>Fix with AI</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={handleCopyOutput}

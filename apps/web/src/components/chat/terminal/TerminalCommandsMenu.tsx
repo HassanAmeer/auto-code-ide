@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { Sparkles, Search, X, Play, ArrowRight } from "lucide-react";
+import { Sparkles, Search, X, Play, ArrowRight, Plus, Trash2, Bookmark } from "lucide-react";
 import { QUICK_COMMANDS_LIST, QUICK_COMMAND_CATEGORIES } from "./terminalCommandsData";
 
 export interface TerminalCommandsMenuProps {
@@ -8,6 +8,15 @@ export interface TerminalCommandsMenuProps {
   onSelectCommand: (cmd: string, autoRun?: boolean) => void;
 }
 
+interface CustomSnippet {
+  id: string;
+  title: string;
+  cmd: string;
+  subtitle?: string;
+}
+
+const STORAGE_CUSTOM_SNIPPETS = "adc_terminal_custom_snippets";
+
 export function TerminalCommandsMenu({
   isOpen,
   onClose,
@@ -15,6 +24,50 @@ export function TerminalCommandsMenu({
 }: TerminalCommandsMenuProps) {
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [customSnippets, setCustomSnippets] = useState<CustomSnippet[]>([]);
+  const [showAddSnippet, setShowAddSnippet] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newCmd, setNewCmd] = useState("");
+  const [newDesc, setNewDesc] = useState("");
+
+  // Load custom snippets from localStorage
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_CUSTOM_SNIPPETS);
+      if (raw) setCustomSnippets(JSON.parse(raw));
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const saveCustomSnippets = (next: CustomSnippet[]) => {
+    setCustomSnippets(next);
+    try {
+      localStorage.setItem(STORAGE_CUSTOM_SNIPPETS, JSON.stringify(next));
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleAddSnippet = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTitle.trim() || !newCmd.trim()) return;
+    const snippet: CustomSnippet = {
+      id: `snippet_${Date.now()}`,
+      title: newTitle.trim(),
+      cmd: newCmd.trim(),
+      subtitle: newDesc.trim() || "User custom script",
+    };
+    saveCustomSnippets([snippet, ...customSnippets]);
+    setNewTitle("");
+    setNewCmd("");
+    setNewDesc("");
+    setShowAddSnippet(false);
+  };
+
+  const handleDeleteSnippet = (id: string) => {
+    saveCustomSnippets(customSnippets.filter((s) => s.id !== id));
+  };
 
   // Close on Escape
   useEffect(() => {
@@ -27,8 +80,37 @@ export function TerminalCommandsMenu({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, onClose]);
 
+  const categories = useMemo(() => {
+    return [
+      ...QUICK_COMMAND_CATEGORIES,
+      { id: "custom", label: `My Snippets (${customSnippets.length})` },
+    ];
+  }, [customSnippets.length]);
+
   const filteredCommands = useMemo(() => {
-    return QUICK_COMMANDS_LIST.filter((item) => {
+    if (selectedCategory === "custom") {
+      return customSnippets
+        .filter((s) => {
+          if (!searchQuery.trim()) return true;
+          const q = searchQuery.toLowerCase();
+          return (
+            s.title.toLowerCase().includes(q) ||
+            s.cmd.toLowerCase().includes(q) ||
+            (s.subtitle && s.subtitle.toLowerCase().includes(q))
+          );
+        })
+        .map((s) => ({
+          id: s.id,
+          title: s.title,
+          cmd: s.cmd,
+          subtitle: s.subtitle || "",
+          badge: "Custom",
+          category: "custom",
+          isCustom: true,
+        }));
+    }
+
+    const defaultMatches = QUICK_COMMANDS_LIST.filter((item) => {
       const matchesCat = selectedCategory === "all" || item.category === selectedCategory;
       if (!matchesCat) return false;
 
@@ -41,7 +123,32 @@ export function TerminalCommandsMenu({
         (item.badge && item.badge.toLowerCase().includes(q))
       );
     });
-  }, [selectedCategory, searchQuery]);
+
+    if (selectedCategory === "all") {
+      const customMatches = customSnippets
+        .filter((s) => {
+          if (!searchQuery.trim()) return true;
+          const q = searchQuery.toLowerCase();
+          return (
+            s.title.toLowerCase().includes(q) ||
+            s.cmd.toLowerCase().includes(q) ||
+            (s.subtitle && s.subtitle.toLowerCase().includes(q))
+          );
+        })
+        .map((s) => ({
+          id: s.id,
+          title: s.title,
+          cmd: s.cmd,
+          subtitle: s.subtitle || "",
+          badge: "Custom",
+          category: "custom",
+          isCustom: true,
+        }));
+      return [...customMatches, ...defaultMatches];
+    }
+
+    return defaultMatches;
+  }, [selectedCategory, searchQuery, customSnippets]);
 
   if (!isOpen) return null;
 
@@ -114,22 +221,96 @@ export function TerminalCommandsMenu({
           </div>
 
           {/* Category Tabs */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden text-2xs">
-            {QUICK_COMMAND_CATEGORIES.map((cat) => (
-              <button
-                key={cat.id}
-                type="button"
-                onClick={() => setSelectedCategory(cat.id)}
-                className={`px-2.5 py-1 rounded-[5px] shrink-0 font-medium transition-all cursor-pointer ${
-                  selectedCategory === cat.id
-                    ? "bg-purple-600 text-white shadow-xs font-semibold"
-                    : "bg-zinc-800/80 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200"
-                }`}
-              >
-                {cat.label}
-              </button>
-            ))}
+          <div className="flex items-center justify-between gap-1">
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden text-2xs flex-1">
+              {categories.map((cat) => (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => setSelectedCategory(cat.id)}
+                  className={`px-2.5 py-1 rounded-[5px] shrink-0 font-medium transition-all cursor-pointer ${
+                    selectedCategory === cat.id
+                      ? "bg-purple-600 text-white shadow-xs font-semibold"
+                      : "bg-zinc-800/80 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  {cat.label}
+                </button>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setShowAddSnippet(!showAddSnippet);
+                setSelectedCategory("custom");
+              }}
+              title="Add custom command snippet"
+              className="flex items-center gap-1 px-2 py-1 rounded-[5px] bg-purple-600/20 hover:bg-purple-600/40 text-purple-300 border border-purple-500/30 text-3xs font-semibold shrink-0 cursor-pointer transition-colors"
+            >
+              <Plus className="size-3" />
+              <span>Snippet</span>
+            </button>
           </div>
+
+          {/* New Custom Snippet Form */}
+          {showAddSnippet && (
+            <form
+              onSubmit={handleAddSnippet}
+              className="p-3 rounded-lg bg-zinc-900 border border-purple-500/40 space-y-2 animate-in fade-in-50 duration-150"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-3xs font-semibold text-purple-300 flex items-center gap-1">
+                  <Bookmark className="size-3" /> Add Custom Snippet
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowAddSnippet(false)}
+                  className="text-zinc-500 hover:text-zinc-300"
+                >
+                  <X className="size-3" />
+                </button>
+              </div>
+              <input
+                type="text"
+                value={newTitle}
+                onChange={(e) => setNewTitle(e.target.value)}
+                placeholder="Snippet title (e.g. Restart PM2 & Build)..."
+                required
+                className="w-full px-2.5 py-1 text-xs rounded bg-zinc-800 border border-zinc-700 text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-purple-500"
+              />
+              <input
+                type="text"
+                value={newCmd}
+                onChange={(e) => setNewCmd(e.target.value)}
+                placeholder="Command (e.g. pm2 restart all && git status)..."
+                required
+                className="w-full px-2.5 py-1 text-xs font-mono rounded bg-zinc-800 border border-zinc-700 text-emerald-400 placeholder:text-zinc-500 focus:outline-none focus:border-purple-500"
+              />
+              <input
+                type="text"
+                value={newDesc}
+                onChange={(e) => setNewDesc(e.target.value)}
+                placeholder="Optional description / notes..."
+                className="w-full px-2.5 py-1 text-3xs rounded bg-zinc-800 border border-zinc-700 text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-purple-500"
+              />
+              <div className="flex justify-end gap-1.5 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowAddSnippet(false)}
+                  className="px-2.5 py-0.5 rounded text-3xs bg-zinc-800 text-zinc-400 hover:text-zinc-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-3 py-0.5 rounded text-3xs bg-purple-600 hover:bg-purple-500 text-white font-medium shadow-xs"
+                >
+                  Save Snippet
+                </button>
+              </div>
+            </form>
+          )}
         </div>
 
         {/* Commands List */}
@@ -149,11 +330,26 @@ export function TerminalCommandsMenu({
                   <span className="font-semibold text-xs text-zinc-100 group-hover:text-purple-300 transition-colors truncate">
                     {item.title}
                   </span>
-                  {item.badge && (
-                    <span className="px-1.5 py-0.2 rounded-[5px] text-4xs font-mono bg-zinc-800 text-zinc-400 border border-zinc-700/60 shrink-0">
-                      {item.badge}
-                    </span>
-                  )}
+                  <div className="flex items-center gap-1">
+                    {item.badge && (
+                      <span className="px-1.5 py-0.2 rounded-[5px] text-4xs font-mono bg-zinc-800 text-zinc-400 border border-zinc-700/60 shrink-0">
+                        {item.badge}
+                      </span>
+                    )}
+                    {(item as any).isCustom && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteSnippet(item.id);
+                        }}
+                        title="Delete custom snippet"
+                        className="p-1 rounded text-zinc-500 hover:text-rose-400 hover:bg-zinc-800 transition-colors"
+                      >
+                        <Trash2 className="size-3" />
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Subtitle / Explanation */}

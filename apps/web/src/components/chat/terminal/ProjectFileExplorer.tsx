@@ -23,6 +23,8 @@ import {
   Layers,
   ArrowLeft,
   ArrowUp,
+  Upload,
+  Sparkles,
 } from "lucide-react";
 import { resolvePrimaryEnvironmentHttpUrl } from "../../../environments/primary";
 import { useTerminalStore, terminalStore } from "./terminalStore";
@@ -174,6 +176,11 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
   } | null>(null);
 
   const [copied, setCopied] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const lineNumbersRef = useRef<HTMLDivElement>(null);
 
   // Load a directory
   const loadDirectory = useCallback(async (dirPath: string) => {
@@ -534,6 +541,104 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
     setTimeout(() => setCopied(false), 1500);
   };
 
+  const handleEditorScroll = () => {
+    if (textareaRef.current && lineNumbersRef.current) {
+      lineNumbersRef.current.scrollTop = textareaRef.current.scrollTop;
+    }
+  };
+
+  const handleEditorKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Tab") {
+      e.preventDefault();
+      const textarea = e.currentTarget;
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const value = textarea.value;
+      const newValue = value.substring(0, start) + "  " + value.substring(end);
+      setSelectedFile((prev) => (prev ? { ...prev, content: newValue } : null));
+      setTimeout(() => {
+        textarea.selectionStart = textarea.selectionEnd = start + 2;
+      }, 0);
+    } else if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+      e.preventDefault();
+      void handleSaveFile();
+    }
+  };
+
+  const handleAskAiAboutFile = () => {
+    if (!selectedFile) return;
+    const prompt = `Please review and explain this file:\nPath: \`${selectedFile.path}\`\nName: \`${selectedFile.name}\`\n\nCould you analyze this code, explain its logic, and suggest improvements or fixes?`;
+    window.dispatchEvent(new CustomEvent("t3:insert-speech-text", { detail: { text: prompt } }));
+    terminalStore.setFileExplorerOpen(false);
+    toastManager.add({
+      type: "info",
+      title: "Sent to AI Chat",
+      description: `Added "${selectedFile.name}" review prompt to composer.`,
+    });
+  };
+
+  const handleUploadFiles = async (files: FileList | File[], targetDir: string) => {
+    if (!files || files.length === 0) return;
+    setIsUploading(true);
+    let successCount = 0;
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      try {
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const res = reader.result as string;
+            const commaIdx = res.indexOf(",");
+            resolve(commaIdx >= 0 ? res.slice(commaIdx + 1) : res);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+
+        const res = await fetch(resolvePrimaryEnvironmentHttpUrl("/api/fs/upload"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            targetDir,
+            fileName: file.name,
+            base64,
+          }),
+        });
+        const data = await parseResponseJson(res);
+        if (data.ok) successCount++;
+      } catch (err) {
+        console.error("Upload error:", err);
+      }
+    }
+    setIsUploading(false);
+    if (successCount > 0) {
+      toastManager.add({
+        type: "success",
+        title: "Files uploaded",
+        description: `Successfully uploaded ${successCount} file(s).`,
+      });
+      void loadDirectory(targetDir);
+    } else {
+      toastManager.add({
+        type: "error",
+        title: "Upload failed",
+        description: "Could not upload file(s). Check server connection.",
+      });
+    }
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      void handleUploadFiles(e.target.files, rootPath);
+      e.target.value = "";
+    }
+  };
+
+  const editorLines = useMemo(() => {
+    if (!selectedFile || selectedFile.isBinary || selectedFile.isImage) return [];
+    return (selectedFile.content || "").split("\n");
+  }, [selectedFile?.content, selectedFile?.isBinary, selectedFile?.isImage]);
+
   // Recursive tree renderer
   const renderTree = (dirPath: string, depth = 0) => {
     const node = nodes.get(dirPath);
@@ -830,11 +935,28 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
               <div className="flex items-center justify-between text-3xs text-zinc-400 px-1">
                 <span>FILES & FOLDERS</span>
                 <div className="flex items-center gap-1">
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileInputChange}
+                    multiple
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    title="Upload files to project"
+                    disabled={isUploading}
+                    className="flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-sky-900/40 hover:bg-sky-800/60 text-sky-300 border border-sky-700/50 transition-colors cursor-pointer"
+                  >
+                    <Upload className="size-2.5" />
+                    <span>{isUploading ? "Uploading..." : "Upload"}</span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => setCreateModal({ parentPath: rootPath, type: "file" })}
                     title="Add file in project root"
-                    className="flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition-colors"
+                    className="flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition-colors cursor-pointer"
                   >
                     <Plus className="size-2.5" />
                     <span>File</span>
@@ -843,7 +965,7 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                     type="button"
                     onClick={() => setCreateModal({ parentPath: rootPath, type: "directory" })}
                     title="Add folder in project root"
-                    className="flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition-colors"
+                    className="flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition-colors cursor-pointer"
                   >
                     <Plus className="size-2.5" />
                     <span>Folder</span>
@@ -852,9 +974,33 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
               </div>
             </div>
 
-            {/* Tree View Container */}
-            <div className="flex-1 overflow-y-auto p-2 space-y-0.5 font-mono text-xs select-none">
-              {renderTree(rootPath)}
+            {/* Tree View Container with Drag & Drop Upload */}
+            <div
+              onDragOver={(e) => {
+                e.preventDefault();
+                setIsDragOver(true);
+              }}
+              onDragLeave={() => setIsDragOver(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setIsDragOver(false);
+                if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                  void handleUploadFiles(e.dataTransfer.files, rootPath);
+                }
+              }}
+              className={cn(
+                "flex-1 overflow-y-auto p-2 space-y-0.5 font-mono text-xs select-none transition-colors",
+                isDragOver && "bg-sky-500/10 border-2 border-dashed border-sky-400/60 rounded-md",
+              )}
+            >
+              {isDragOver ? (
+                <div className="py-8 text-center text-sky-300 font-sans text-xs flex flex-col items-center gap-2">
+                  <Upload className="size-8 text-sky-400 animate-bounce" />
+                  <span>Drop files here to upload to {rootPath.split("/").pop() || "project"}</span>
+                </div>
+              ) : (
+                renderTree(rootPath)
+              )}
             </div>
           </div>
 
@@ -908,6 +1054,16 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                   </div>
 
                   <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={handleAskAiAboutFile}
+                      title="Send file context to AI Chat"
+                      className="flex items-center gap-1 px-2 py-1 rounded-[5px] bg-purple-600/20 hover:bg-purple-600/40 text-purple-300 border border-purple-500/30 text-3xs font-semibold transition-colors cursor-pointer mr-1"
+                    >
+                      <Sparkles className="size-3 text-purple-400" />
+                      <span>Ask AI</span>
+                    </button>
+
                     {!selectedFile.isBinary && !selectedFile.isImage && (
                       <button
                         type="button"
@@ -1022,23 +1178,59 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                     </div>
                   </div>
                 ) : (
-                  // Textarea Editor with Line Numbers
-                  <div className="flex-1 flex overflow-hidden">
-                    <textarea
-                      value={selectedFile.content}
-                      readOnly={selectedFile.isTruncated}
-                      onChange={(e) =>
-                        setSelectedFile((prev) =>
-                          prev ? { ...prev, content: e.target.value } : null,
-                        )
-                      }
-                      placeholder="Empty file..."
-                      spellCheck={false}
-                      className={cn(
-                        "w-full h-full p-4 bg-transparent text-zinc-100 font-mono text-xs leading-relaxed focus:outline-none resize-none selection:bg-sky-500/30",
-                        selectedFile.isTruncated && "opacity-90 cursor-default select-text",
-                      )}
-                    />
+                  // Enhanced Code Editor with Line Numbers & Status Bar
+                  <div className="flex-1 flex flex-col overflow-hidden bg-[#090d14]">
+                    <div className="flex-1 flex overflow-hidden relative">
+                      {/* Synchronized Line Numbers Gutter */}
+                      <div
+                        ref={lineNumbersRef}
+                        className="w-12 sm:w-14 shrink-0 bg-[#0c1017] border-r border-zinc-800/80 py-3 px-2 text-right font-mono text-xs leading-relaxed text-zinc-600 select-none overflow-hidden"
+                        aria-hidden="true"
+                      >
+                        {editorLines.map((_, idx) => (
+                          <div key={idx}>{idx + 1}</div>
+                        ))}
+                      </div>
+
+                      {/* Code Textarea */}
+                      <textarea
+                        ref={textareaRef}
+                        value={selectedFile.content}
+                        readOnly={selectedFile.isTruncated}
+                        onScroll={handleEditorScroll}
+                        onKeyDown={handleEditorKeyDown}
+                        onChange={(e) =>
+                          setSelectedFile((prev) =>
+                            prev ? { ...prev, content: e.target.value } : null,
+                          )
+                        }
+                        placeholder="Empty file..."
+                        spellCheck={false}
+                        className={cn(
+                          "flex-1 h-full py-3 px-4 bg-transparent text-zinc-100 font-mono text-xs leading-relaxed focus:outline-none resize-none selection:bg-sky-500/30 overflow-auto whitespace-pre",
+                          selectedFile.isTruncated && "opacity-90 cursor-default select-text",
+                        )}
+                      />
+                    </div>
+
+                    {/* Editor Footer Status Bar */}
+                    <div className="flex items-center justify-between px-3 py-1 bg-[#0c1017] border-t border-zinc-800 text-3xs font-mono text-zinc-500 select-none shrink-0">
+                      <div className="flex items-center gap-2">
+                        <span className="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 font-semibold">
+                          {selectedFile.name.split(".").pop()?.toUpperCase() || "TXT"}
+                        </span>
+                        <span>{editorLines.length} lines</span>
+                        <span>•</span>
+                        <span>{selectedFile.content.length} chars</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-zinc-400">
+                        <span className="hidden sm:inline">UTF-8</span>
+                        <span>•</span>
+                        <span className="hidden sm:inline">Tab: 2 spaces</span>
+                        <span>•</span>
+                        <span>Ctrl+S to save</span>
+                      </div>
+                    </div>
                   </div>
                 )}
               </>
