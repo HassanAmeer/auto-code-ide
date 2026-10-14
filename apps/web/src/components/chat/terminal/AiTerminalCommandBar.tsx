@@ -42,8 +42,17 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
     }
   }, [store.runs]);
 
-  // Determine active CWD
-  const effectiveCwd = store.activeCwd || projectCwd || "/";
+  // Determine active CWD:
+  // When a project is selected: use store.activeCwd || projectCwd || "/"
+  // When NO project is selected: strictly root "/"!
+  const effectiveCwd = store.selectedProjectId
+    ? store.activeCwd && store.activeCwd !== "/"
+      ? store.activeCwd
+      : projectCwd || "/"
+    : "/";
+
+  // Label for scope: "root" if unselected, or project title if selected
+  const scopeName = store.selectedProjectId ? store.selectedProjectTitle || "project" : "root";
 
   const handleExecute = useCallback(async () => {
     const trimmed = command.trim();
@@ -197,21 +206,27 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
 
       {/* Sleek Single-Line Command Input Bar */}
       <div className="flex items-center gap-2 rounded-2xl border border-emerald-500/35 bg-card/90 px-3 py-1.5 shadow-sm focus-within:border-emerald-500/70 focus-within:ring-2 focus-within:ring-emerald-500/20 transition-all">
-        {/* Dropdown Icon Button on Left (No text label, saves space!) */}
+        {/* Dropdown Button with Scope Badge (root or Project Name) */}
         <button
           type="button"
           onClick={() => setShowCommandsMenu(true)}
-          title="Common Commands Dropdown (PM2, Git, Docker, System, Ports, Deploy)"
-          className="flex items-center justify-center size-6 rounded-[5px] bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition-all cursor-pointer shrink-0"
+          title={`Common Commands Dropdown (${scopeName})`}
+          className="flex items-center gap-1.5 px-2 h-6 rounded-[5px] bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition-all cursor-pointer shrink-0 shadow-xs"
         >
-          <ChevronDown className="size-3.5" />
+          <span className="font-mono text-3xs font-semibold max-w-[120px] sm:max-w-[150px] truncate">
+            {scopeName}
+          </span>
+          <ChevronDown className="size-3 shrink-0 opacity-80" />
         </button>
 
         {/* Terminal Icon & Prompt */}
         <div className="flex items-center gap-1.5 shrink-0 select-none text-emerald-400">
           <Terminal className="size-3.5" />
-          <span className="font-mono text-3xs font-semibold text-muted-foreground hidden sm:inline">
-            cmd:
+          <span
+            className="font-mono text-3xs font-semibold text-muted-foreground hidden sm:inline"
+            title={`CWD: ${effectiveCwd}`}
+          >
+            {store.selectedProjectId ? `${scopeName}:` : "/:"}
           </span>
         </div>
 
@@ -223,7 +238,11 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
           onChange={(e) => setCommand(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={isRunning}
-          placeholder="Run shell command directly (e.g. ls -la, git status, bun run dev)..."
+          placeholder={
+            store.selectedProjectId
+              ? `Run command in ${scopeName} (${effectiveCwd})...`
+              : "Run command in root (/)..."
+          }
           className="flex-1 min-w-0 bg-transparent text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none font-mono"
         />
 

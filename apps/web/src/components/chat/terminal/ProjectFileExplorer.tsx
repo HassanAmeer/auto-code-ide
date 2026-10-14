@@ -87,10 +87,11 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
   const projects = useProjects();
 
   // Root directory selection
-  const initialRoot =
-    store.activeCwd && store.activeCwd !== "/"
+  const initialRoot = store.selectedProjectId
+    ? store.activeCwd && store.activeCwd !== "/"
       ? store.activeCwd
-      : projects[0]?.workspaceRoot || "/";
+      : projects.find((p) => p.id === store.selectedProjectId)?.workspaceRoot || "/"
+    : "/";
   const [rootPath, setRootPath] = useState<string>(initialRoot);
   const [inputPath, setInputPath] = useState<string>(initialRoot);
 
@@ -206,8 +207,9 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
   useEffect(() => {
     if (isOpen) {
       const activeProj = projects.find((p) => p.id === store.selectedProjectId);
-      const targetRoot =
-        activeProj?.workspaceRoot || (store.activeCwd !== "/" ? store.activeCwd : initialRoot);
+      const targetRoot = store.selectedProjectId
+        ? activeProj?.workspaceRoot || store.activeCwd || "/"
+        : "/";
       if (targetRoot && targetRoot !== rootPath) {
         setRootPath(targetRoot);
         setInputPath(targetRoot);

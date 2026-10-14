@@ -1350,7 +1350,7 @@ export const layerFsBrowseRoute = HttpRouter.add(
     const files: Array<{ name: string; size: number; mtime: number }> = [];
 
     for (const entry of entries) {
-      if (entry.startsWith(".")) continue;
+      if (entry === "." || entry === "..") continue;
       const full = pathService.join(resolved, entry);
       const stat = yield* fileSystem.stat(full).pipe(Effect.option);
       if (Option.isSome(stat)) {

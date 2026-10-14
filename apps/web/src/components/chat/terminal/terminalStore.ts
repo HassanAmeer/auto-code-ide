@@ -42,18 +42,22 @@ const STORAGE_KEY_PROJECT_TITLE = "adc_terminal_selected_project_title";
 const STORAGE_KEY_SELECTED_KEY = "adc_terminal_selected_key_id";
 const STORAGE_KEY_TERMINAL_CHATS = "adc_terminal_chats";
 
-const initialCwd =
-  typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY_CWD) || "/" : "/";
-
-const initialOpen =
-  typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY_OPEN) !== "false" : true;
-
 const initialProjectId =
   typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY_PROJECT_ID) : null;
 const initialProjectTitle =
   typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY_PROJECT_TITLE) : null;
 const initialSelectedKey =
   typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY_SELECTED_KEY) : null;
+
+const initialCwd =
+  typeof window !== "undefined"
+    ? initialProjectId
+      ? window.localStorage.getItem(STORAGE_KEY_CWD) || "/"
+      : "/"
+    : "/";
+
+const initialOpen =
+  typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY_OPEN) !== "false" : true;
 
 let initialSshProfiles: SshProfile[] = [];
 if (typeof window !== "undefined") {
@@ -254,11 +258,12 @@ export const terminalStore = {
     title: string | null,
     workspaceRoot?: string | undefined,
   ) {
+    const nextCwd = projectId && workspaceRoot ? workspaceRoot : "/";
     state = {
       ...state,
       selectedProjectId: projectId,
       selectedProjectTitle: title,
-      ...(workspaceRoot ? { activeCwd: workspaceRoot } : {}),
+      activeCwd: nextCwd,
     };
     if (typeof window !== "undefined") {
       if (projectId) window.localStorage.setItem(STORAGE_KEY_PROJECT_ID, projectId);
@@ -267,7 +272,7 @@ export const terminalStore = {
       if (title) window.localStorage.setItem(STORAGE_KEY_PROJECT_TITLE, title);
       else window.localStorage.removeItem(STORAGE_KEY_PROJECT_TITLE);
 
-      if (workspaceRoot) window.localStorage.setItem(STORAGE_KEY_CWD, workspaceRoot);
+      window.localStorage.setItem(STORAGE_KEY_CWD, nextCwd);
     }
     notify();
   },
@@ -519,7 +524,7 @@ export const terminalStore = {
     }
 
     const currentMode = modeOverride ?? state.inputMode;
-    const cwd = customCwd || state.activeCwd || "/";
+    const cwd = state.selectedProjectId ? customCwd || state.activeCwd || "/" : "/";
     const activeKeys = state.accessKeys.filter((k) => k.enabled);
 
     // Translate if AI mode with knowledge of active keys
