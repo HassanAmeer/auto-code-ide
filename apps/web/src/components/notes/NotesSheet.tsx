@@ -161,37 +161,39 @@ export function NotesSheet() {
         onClick={() => setIsOpen(false)}
       />
 
-      {/* Slide-over Drawer */}
-      <div className="relative z-[121] flex h-full w-full max-w-xl flex-col bg-zinc-950 text-zinc-100 border-l border-zinc-800 shadow-2xl animate-in slide-in-from-right duration-200">
+      {/* Slide-over Drawer (Cupertino iOS Style, 90% Width on Mobile) */}
+      <div className="relative z-[121] flex h-full w-[90vw] max-w-[90vw] sm:w-full sm:max-w-xl md:max-w-2xl flex-col bg-zinc-950 text-zinc-100 border-l border-zinc-800/80 shadow-2xl animate-in slide-in-from-right duration-200 overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-zinc-800/90 px-4 py-3 bg-zinc-900/80">
-          <div className="flex items-center gap-2.5">
-            <CheckSquareIcon className="size-4 text-amber-400" />
-            <h2 className="text-sm font-semibold tracking-wide text-zinc-100 flex items-center gap-2">
-              Notes & Reminders
-              <span className="rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.2 text-xs font-mono font-medium">
+        <div className="flex items-center justify-between border-b border-zinc-800/90 px-3.5 py-2.5 sm:px-4 sm:py-3 bg-zinc-900/90 backdrop-blur-md shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <CheckSquareIcon className="size-4 text-amber-400 shrink-0" />
+            <h2 className="text-sm font-semibold tracking-wide text-zinc-100 flex items-center gap-2 truncate">
+              <span>Notes & Reminders</span>
+              <span className="rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.2 text-xs font-mono font-medium shrink-0">
                 {activeCount} active
               </span>
             </h2>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {!isCreating && (
               <Button
                 size="xs"
                 variant="outline"
                 onClick={handleStartCreate}
-                className="h-7 text-xs gap-1 border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300"
+                className="h-7 text-xs gap-1 border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 rounded-full px-2.5"
               >
                 <PlusIcon className="size-3.5" />
-                New Note
+                <span className="hidden sm:inline">New Note</span>
+                <span className="inline sm:hidden">New</span>
               </Button>
             )}
 
             <button
               type="button"
               onClick={() => setIsOpen(false)}
-              className="rounded-md p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 transition-colors cursor-pointer"
+              className="rounded-full p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 border border-transparent hover:border-zinc-700 transition-all cursor-pointer active:scale-95"
+              title="Close Notes"
             >
               <XIcon className="size-4" />
             </button>
@@ -199,7 +201,7 @@ export function NotesSheet() {
         </div>
 
         {/* Search & Filter Toolbar */}
-        <div className="flex flex-col gap-2 border-b border-zinc-800/80 bg-zinc-900/30 p-3">
+        <div className="flex flex-col gap-2.5 border-b border-zinc-800/80 bg-zinc-900/40 p-3 shrink-0">
           <div className="relative">
             <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-zinc-500" />
             <input
@@ -207,21 +209,22 @@ export function NotesSheet() {
               placeholder="Search notes by title or content..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-md border border-zinc-800 bg-zinc-900/80 pl-8 pr-8 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 focus:border-amber-500 focus:outline-none"
+              className="w-full rounded-full border border-zinc-800 bg-zinc-900/80 pl-8 pr-8 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 focus:border-amber-500/80 focus:outline-none transition-all"
             />
             {searchQuery && (
               <button
                 type="button"
                 onClick={() => setSearchQuery("")}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 cursor-pointer"
               >
                 <XIcon className="size-3" />
               </button>
             )}
           </div>
 
-          <div className="flex items-center justify-between text-xs pt-1">
-            <div className="flex items-center gap-1.5">
+          <div className="flex items-center justify-between text-xs gap-2">
+            {/* Cupertino Segmented Pill Switcher */}
+            <div className="inline-flex items-center bg-zinc-950/90 p-0.5 sm:p-1 rounded-full border border-zinc-800/80">
               {(
                 [
                   { id: "all", label: `All (${notes.length})` },
@@ -233,10 +236,10 @@ export function NotesSheet() {
                   key={tab.id}
                   type="button"
                   onClick={() => setFilter(tab.id)}
-                  className={`rounded-full px-2.5 py-0.5 font-medium transition-colors cursor-pointer ${
+                  className={`rounded-full px-2.5 sm:px-3 py-1 text-2xs sm:text-xs font-semibold transition-all cursor-pointer ${
                     filter === tab.id
-                      ? "bg-amber-500/20 text-amber-300 border border-amber-500/40 font-semibold"
-                      : "bg-zinc-800/70 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+                      ? "bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-xs"
+                      : "text-zinc-400 hover:text-zinc-200"
                   }`}
                 >
                   {tab.label}
@@ -248,7 +251,7 @@ export function NotesSheet() {
               <button
                 type="button"
                 onClick={() => clearCompletedNotes()}
-                className="text-[11px] text-zinc-500 hover:text-rose-400 transition-colors"
+                className="text-[11px] text-zinc-500 hover:text-rose-400 transition-colors cursor-pointer px-2 py-1 rounded-full hover:bg-zinc-900 shrink-0"
                 title="Clear all completed notes"
               >
                 Clear completed
@@ -544,12 +547,26 @@ export function NotesSheet() {
           )}
         </div>
 
-        {/* Footer */}
-        <div className="border-t border-zinc-800 px-4 py-2.5 bg-zinc-900/60 flex items-center justify-between text-[11px] text-zinc-400">
-          <span>
-            {notes.length} total note{notes.length === 1 ? "" : "s"} ({completedCount} completed)
-          </span>
-          <span className="text-zinc-500 text-[10px]">Saved securely in your browser</span>
+        {/* Footer with Cupertino iOS Styling & Bottom-Right Close Button */}
+        <div className="border-t border-zinc-800/90 px-3.5 py-2.5 bg-zinc-900/90 backdrop-blur-md flex items-center justify-between text-[11px] text-zinc-400 gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="truncate">
+              {notes.length} note{notes.length === 1 ? "" : "s"} ({completedCount} done)
+            </span>
+            <span className="hidden sm:inline text-zinc-600">•</span>
+            <span className="hidden sm:inline text-zinc-500 text-[10px]">Saved in browser</span>
+          </div>
+
+          {/* Bottom-Right Cross Icon Button (Cupertino iOS Style) */}
+          <button
+            type="button"
+            onClick={() => setIsOpen(false)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-800/90 hover:bg-zinc-700 active:scale-95 text-zinc-200 text-xs font-semibold border border-zinc-700/80 shadow-xs transition-all cursor-pointer shrink-0"
+            title="Close Notes"
+          >
+            <XIcon className="size-3.5 text-zinc-400" />
+            <span>Close</span>
+          </button>
         </div>
       </div>
     </div>
