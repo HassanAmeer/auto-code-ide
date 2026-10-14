@@ -3,6 +3,7 @@ import {
   isSpeechRecognitionSupported,
   getRecognitionLanguageCode,
   loadSttSettings,
+  isMobileDevice,
 } from "~/lib/speech/stt";
 import { transliterateUrduToRoman } from "~/lib/speech/romanUrduTransliterate";
 import {
@@ -310,7 +311,8 @@ export function useVoiceCallAssistant({
       const recognition = new SpeechRecognitionClass();
       const sttSettings = loadSttSettings();
       recognition.lang = getRecognitionLanguageCode(sttSettings.language);
-      recognition.continuous = true;
+      // On mobile devices (Android/iOS), continuous=true frequently fails or drops audio.
+      recognition.continuous = !isMobileDevice;
       recognition.interimResults = true;
 
       recognition.onstart = () => {
@@ -432,8 +434,30 @@ export function useVoiceCallAssistant({
       };
 
       recognition.onerror = (event: any) => {
+        console.warn("Speech recognition error:", event?.error);
         if (event.error === "not-allowed" || event.error === "service-not-allowed") {
           endCall();
+        } else if (event.error === "audio-capture") {
+          // Hardware mic conflict on mobile: clean any streams and restart
+          if (micStreamRef.current) {
+            micStreamRef.current.getTracks().forEach((track) => track.stop());
+            micStreamRef.current = null;
+          }
+          scheduleRestartRecognition(300);
+        } else if (event.error === "no-speech") {
+          // Standard silence event on mobile Android
+          if (
+            isCallActiveRef.current &&
+            !isTtsActiveRef.current &&
+            callStatusRef.current !== "speaking"
+          ) {
+            scheduleRestartRecognition(80);
+          }
+        } else if (event.error === "language-not-supported" || event.error === "network") {
+          if (recognition.lang !== "en-US") {
+            recognition.lang = navigator.language || "en-US";
+          }
+          scheduleRestartRecognition(200);
         } else {
           // Non-fatal error; schedule restart ONLY if TTS is not speaking
           if (
@@ -442,7 +466,7 @@ export function useVoiceCallAssistant({
             !isCurrentlySpeaking() &&
             Date.now() - lastTtsEndedTimestampRef.current >= ACOUSTIC_ECHO_COOLDOWN_MS
           ) {
-            scheduleRestartRecognition(250);
+            scheduleRestartRecognition(isMobileDevice ? 100 : 250);
           }
         }
       };
@@ -455,7 +479,7 @@ export function useVoiceCallAssistant({
           !isCurrentlySpeaking() &&
           Date.now() - lastTtsEndedTimestampRef.current >= ACOUSTIC_ECHO_COOLDOWN_MS
         ) {
-          scheduleRestartRecognition(100);
+          scheduleRestartRecognition(isMobileDevice ? 60 : 100);
         }
       };
 
@@ -740,63 +764,74 @@ export function useVoiceCallAssistant({
       updateCallStatus("listening");
       setIsCallActive(true);
 
-      // Request microphone access with full acoustic echo cancellation & noise suppression
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: { ideal: true },
-          noiseSuppression: { ideal: true },
-          autoGainControl: { ideal: true },
-        },
-      });
-      micStreamRef.current = stream;
+      // On mobile devices, DO NOT capture a persistent WebRTC mic stream via getUserMedia
+      // because mobile operating systems (Android/iOS) enforce exclusive mic access and
+      // will block SpeechRecognition from recording audio!
+      if (!isMobileDevice && navigator.mediaDevices?.getUserMedia) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              echoCancellation: { ideal: true },
+              noiseSuppression: { ideal: true },
+              autoGainControl: { ideal: true },
+            },
+          });
+          micStreamRef.current = stream;
 
-      // Setup Web Audio AnalyserNode
-      const AudioCtxClass =
-        window.AudioContext ||
-        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      const audioCtx = new AudioCtxClass();
-      if (audioCtx.state === "suspended") {
-        void audioCtx.resume();
+          const AudioCtxClass =
+            window.AudioContext ||
+            (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+          const audioCtx = new AudioCtxClass();
+          if (audioCtx.state === "suspended") {
+            void audioCtx.resume();
+          }
+          audioContextRef.current = audioCtx;
+
+          const source = audioCtx.createMediaStreamSource(stream);
+          const analyser = audioCtx.createAnalyser();
+          analyser.fftSize = 128;
+          analyser.smoothingTimeConstant = 0.8;
+          source.connect(analyser);
+          analyserRef.current = analyser;
+
+          const freqData = new Uint8Array(analyser.frequencyBinCount);
+          levelCheckIntervalRef.current = setInterval(() => {
+            if (!isCallActiveRef.current || !analyserRef.current) return;
+
+            if (
+              isTtsActiveRef.current ||
+              callStatusRef.current === "speaking" ||
+              callStatusRef.current === "thinking" ||
+              isCurrentlySpeaking()
+            ) {
+              return;
+            }
+
+            analyserRef.current.getByteFrequencyData(freqData);
+
+            let sum = 0;
+            for (let i = 0; i < freqData.length; i++) {
+              sum += freqData[i] ?? 0;
+            }
+            const avg = sum / (freqData.length || 1);
+
+            if (callStatusRef.current === "listening" && avg > 18) {
+              updateCallStatus("user-speaking");
+            } else if (callStatusRef.current === "user-speaking" && avg <= 12) {
+              updateCallStatus("listening");
+            }
+          }, 100);
+        } catch (mediaErr) {
+          console.warn("Desktop audio analyser setup optional warning:", mediaErr);
+        }
       }
-      audioContextRef.current = audioCtx;
 
-      const source = audioCtx.createMediaStreamSource(stream);
-      const analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 128;
-      analyser.smoothingTimeConstant = 0.8;
-      source.connect(analyser);
-      analyserRef.current = analyser;
-
-      // Audio volume monitoring for reactive speech state and visualizer waves
-      const freqData = new Uint8Array(analyser.frequencyBinCount);
-      levelCheckIntervalRef.current = setInterval(() => {
-        if (!isCallActiveRef.current || !analyserRef.current) return;
-
-        // If assistant is actively speaking or thinking, completely ignore mic volume
-        if (
-          isTtsActiveRef.current ||
-          callStatusRef.current === "speaking" ||
-          callStatusRef.current === "thinking" ||
-          isCurrentlySpeaking()
-        ) {
-          return;
-        }
-
-        analyserRef.current.getByteFrequencyData(freqData);
-
-        let sum = 0;
-        for (let i = 0; i < freqData.length; i++) {
-          sum += freqData[i] ?? 0;
-        }
-        const avg = sum / (freqData.length || 1);
-
-        // Visual wave reactivity: toggle user-speaking waves when mic detects user speech
-        if (callStatusRef.current === "listening" && avg > 18) {
-          updateCallStatus("user-speaking");
-        } else if (callStatusRef.current === "user-speaking" && avg <= 12) {
-          updateCallStatus("listening");
-        }
-      }, 100);
+      // Resume speech synthesis to ensure audio context is active inside user gesture
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        try {
+          window.speechSynthesis.resume();
+        } catch {}
+      }
 
       // Start fresh speech recognition instance
       startFreshRecognition();

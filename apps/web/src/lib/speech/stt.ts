@@ -69,6 +69,11 @@ export interface SttController {
   isListening: boolean;
 }
 
+export const isMobileDevice =
+  typeof navigator !== "undefined" &&
+  (/Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+    (navigator.maxTouchPoints > 0 && typeof window !== "undefined" && window.innerWidth < 800));
+
 export function createSttSession({
   mode,
   onResult,
@@ -92,7 +97,8 @@ export function createSttSession({
   const settings = loadSttSettings();
   const selectedMode = mode || settings.language;
   recognition.lang = getRecognitionLanguageCode(selectedMode);
-  recognition.continuous = true;
+  // On mobile Android/iOS, continuous=true frequently fails or drops audio.
+  recognition.continuous = !isMobileDevice;
   recognition.interimResults = true;
 
   let listening = false;
@@ -103,12 +109,23 @@ export function createSttSession({
   };
 
   recognition.onend = () => {
+    if (isMobileDevice && listening) {
+      try {
+        recognition.start();
+        return;
+      } catch {
+        // fall through
+      }
+    }
     listening = false;
     onStateChange?.(false);
   };
 
   recognition.onerror = (event: any) => {
     console.warn("Speech recognition error:", event.error);
+    if (isMobileDevice && event.error === "no-speech" && listening) {
+      return;
+    }
     onError?.(event.error);
   };
 
