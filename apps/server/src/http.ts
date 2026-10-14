@@ -1,4 +1,6 @@
-// @effect-diagnostics globalDateInEffect:off globalRandomInEffect:off
+// @effect-diagnostics globalDateInEffect:off globalRandomInEffect:off nodeBuiltinImport:off globalTimers:off
+import * as NodeOs from "node:os";
+import * as NodeFs from "node:fs";
 import {
   runBashCommandOnHost,
   createTerminalEventStream,
@@ -1345,17 +1347,27 @@ export const layerFsBrowseRoute = HttpRouter.add(
 
     const entries = yield* fileSystem.readDirectory(resolved).pipe(Effect.orElseSucceed(() => []));
     const directories: string[] = [];
+    const files: Array<{ name: string; size: number; mtime: number }> = [];
 
     for (const entry of entries) {
       if (entry.startsWith(".")) continue;
       const full = pathService.join(resolved, entry);
       const stat = yield* fileSystem.stat(full).pipe(Effect.option);
-      if (Option.isSome(stat) && stat.value.type === "Directory") {
-        directories.push(entry);
+      if (Option.isSome(stat)) {
+        if (stat.value.type === "Directory") {
+          directories.push(entry);
+        } else if (stat.value.type === "File") {
+          files.push({
+            name: entry,
+            size: Number(stat.value.size),
+            mtime: Option.getOrElse(stat.value.mtime, () => new Date()).getTime(),
+          });
+        }
       }
     }
 
     directories.sort((a, b) => a.localeCompare(b));
+    files.sort((a, b) => a.name.localeCompare(b.name));
 
     return HttpServerResponse.jsonUnsafe({
       ok: true,
@@ -1364,12 +1376,133 @@ export const layerFsBrowseRoute = HttpRouter.add(
       parentPath: pathService.dirname(resolved),
       homePath: homeDir,
       directories,
+      files,
     });
   }).pipe(
     Effect.catchCause((cause) =>
       Effect.succeed(HttpServerResponse.jsonUnsafe({ ok: false, error: Cause.pretty(cause) })),
     ),
   ),
+);
+
+export const layerFsPeekRoute = HttpRouter.add(
+  "POST",
+  "/api/fs/peek",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      path?: string;
+    };
+    const targetPath = bodyJson?.path?.trim();
+    if (!targetPath) {
+      return HttpServerResponse.jsonUnsafe(
+        { ok: false, error: "Missing file path" },
+        { status: 400 },
+      );
+    }
+    const pathService = yield* Path.Path;
+    const resolved = pathService.resolve(targetPath);
+    const fileSystem = yield* FileSystem.FileSystem;
+    const stat = yield* fileSystem.stat(resolved).pipe(Effect.option);
+    if (Option.isNone(stat) || stat.value.type !== "File") {
+      return HttpServerResponse.jsonUnsafe({ ok: false, error: "File not found" }, { status: 404 });
+    }
+    const fileSize = Number(stat.value.size);
+    const isLarge = fileSize > 64 * 1024;
+    const fileHandle = yield* fileSystem.open(resolved, { flag: "r" });
+    const bytesToRead = isLarge ? 64 * 1024 : fileSize;
+    const bytes = yield* fileHandle.readAlloc(bytesToRead);
+    yield* fileHandle.close;
+    const content = Option.isSome(bytes) ? new TextDecoder().decode(bytes.value) : "";
+    return HttpServerResponse.jsonUnsafe({
+      ok: true,
+      path: resolved,
+      filename: pathService.basename(resolved),
+      size: fileSize,
+      truncated: isLarge,
+      content,
+    });
+  }).pipe(
+    Effect.catchCause((cause) =>
+      Effect.succeed(HttpServerResponse.jsonUnsafe({ ok: false, error: Cause.pretty(cause) })),
+    ),
+  ),
+);
+
+export const layerFsDownloadRoute = HttpRouter.add(
+  "GET",
+  "/api/fs/download",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const url = HttpServerRequest.toURL(request);
+    const targetPath = Option.getOrUndefined(url)?.searchParams.get("path")?.trim();
+    if (!targetPath) {
+      return HttpServerResponse.text("Missing file path parameter", { status: 400 });
+    }
+    const pathService = yield* Path.Path;
+    const resolved = pathService.resolve(targetPath);
+    const fileSystem = yield* FileSystem.FileSystem;
+    const stat = yield* fileSystem.stat(resolved).pipe(Effect.option);
+    if (Option.isNone(stat) || stat.value.type !== "File") {
+      return HttpServerResponse.text("File not found or is a directory", { status: 404 });
+    }
+    const filename = pathService.basename(resolved);
+    return yield* HttpServerResponse.file(resolved, {
+      headers: {
+        "Content-Disposition": `attachment; filename="${encodeURIComponent(filename)}"`,
+      },
+    });
+  }).pipe(
+    Effect.catchCause(() =>
+      Effect.succeed(HttpServerResponse.text("Failed to download file", { status: 500 })),
+    ),
+  ),
+);
+
+export const layerTerminalQuickStatsRoute = HttpRouter.add(
+  "GET",
+  "/api/terminal/quick-stats",
+  Effect.gen(function* () {
+    const totalMem = NodeOs.totalmem();
+    const freeMem = NodeOs.freemem();
+    const usedMem = totalMem - freeMem;
+    const memPercent = Math.round((usedMem / totalMem) * 100);
+
+    let diskFreeGb = "0";
+    let diskTotalGb = "0";
+    let diskPercent = 0;
+    try {
+      const stat = NodeFs.statfsSync("/");
+      const totalBytes = stat.blocks * stat.bsize;
+      const freeBytes = stat.bavail * stat.bsize;
+      const usedBytes = totalBytes - freeBytes;
+      diskTotalGb = (totalBytes / (1024 * 1024 * 1024)).toFixed(1);
+      diskFreeGb = (freeBytes / (1024 * 1024 * 1024)).toFixed(1);
+      diskPercent = Math.round((usedBytes / totalBytes) * 100);
+    } catch {
+      // ignore
+    }
+
+    const uptimeSec = NodeOs.uptime();
+    const uptimeDays = Math.floor(uptimeSec / 86400);
+    const uptimeHours = Math.floor((uptimeSec % 86400) / 3600);
+    const uptimeStr = uptimeDays > 0 ? `${uptimeDays}d ${uptimeHours}h` : `${uptimeHours}h`;
+
+    return HttpServerResponse.jsonUnsafe({
+      ok: true,
+      memPercent,
+      memUsedGb: (usedMem / (1024 * 1024 * 1024)).toFixed(1),
+      memTotalGb: (totalMem / (1024 * 1024 * 1024)).toFixed(1),
+      diskFreeGb,
+      diskTotalGb,
+      diskPercent,
+      uptimeStr,
+      cpuCount: NodeOs.cpus().length,
+      loadAvg: NodeOs.loadavg()
+        .map((n) => n.toFixed(2))
+        .join(", "),
+    });
+  }),
 );
 
 class CreateDirectoryError extends Data.TaggedError("CreateDirectoryError")<{

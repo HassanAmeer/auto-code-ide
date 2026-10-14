@@ -24,6 +24,9 @@ import {
 import { useTerminalStore, terminalStore } from "./terminalStore";
 import type { SshProfile, TerminalKeyType, TerminalAccessKey } from "./terminalTypes";
 import { scanCommandSafety, type CommandSafetyScanResult } from "./terminalClient";
+import { TerminalCommandsMenu } from "./TerminalCommandsMenu";
+import { TerminalFileExplorerModal } from "./TerminalFileExplorerModal";
+import { TerminalSystemStatsBar } from "./TerminalSystemStatsBar";
 
 export interface AiTerminalQuickCommandProps {
   projectCwd?: string | undefined;
@@ -55,6 +58,8 @@ export function AiTerminalQuickCommand({
   const [showPresets, setShowPresets] = useState(false);
   const [showTargetMenu, setShowTargetMenu] = useState(false);
   const [showNewSshModal, setShowNewSshModal] = useState(false);
+  const [showCommandsMenu, setShowCommandsMenu] = useState(false);
+  const [showFileExplorer, setShowFileExplorer] = useState(false);
 
   // Access Keys Vault menu & modal state
   const [showKeysMenu, setShowKeysMenu] = useState(false);
@@ -528,7 +533,29 @@ export function AiTerminalQuickCommand({
         </div>
 
         {/* Right side controls */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {/* Commands Library Button */}
+          <button
+            type="button"
+            onClick={() => setShowCommandsMenu(true)}
+            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/30 text-purple-300 font-medium text-2xs transition-all hover:scale-105 active:scale-95"
+            title="Open Commands Library with Urdu/English explanations"
+          >
+            <Sparkles className="size-3 text-purple-400" />
+            <span>⚡ Commands Library</span>
+          </button>
+
+          {/* Browse Files Button */}
+          <button
+            type="button"
+            onClick={() => setShowFileExplorer(true)}
+            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 font-medium text-2xs transition-all hover:scale-105 active:scale-95"
+            title="Browse server files & folders, peek and download"
+          >
+            <Folder className="size-3 text-amber-400" />
+            <span>📁 Browse Files</span>
+          </button>
+
           <button
             type="button"
             onClick={() => setShowPresets(!showPresets)}
@@ -862,6 +889,11 @@ export function AiTerminalQuickCommand({
         </div>
       )}
 
+      {/* Live Server Telemetry Specs Bar (CPU, RAM, ROM/Disk) */}
+      <div className="pt-1.5 px-1">
+        <TerminalSystemStatsBar />
+      </div>
+
       {/* Command Input Row */}
       <div className="flex items-center gap-2 pt-2 px-1">
         <div
@@ -917,6 +949,30 @@ export function AiTerminalQuickCommand({
           <span>{isRunning ? "Running..." : "Run"}</span>
         </button>
       </div>
+
+      {/* Commands Library Modal */}
+      <TerminalCommandsMenu
+        isOpen={showCommandsMenu}
+        onClose={() => setShowCommandsMenu(false)}
+        onSelectCommand={(cmd, autoRun) => {
+          setCommand(cmd);
+          if (autoRun) {
+            void handleRun(cmd, "bash");
+          } else {
+            inputRef.current?.focus();
+          }
+        }}
+      />
+
+      {/* Server File Explorer Modal */}
+      <TerminalFileExplorerModal
+        initialPath={store.activeCwd || "/"}
+        isOpen={showFileExplorer}
+        onClose={() => setShowFileExplorer(false)}
+        onSelectPath={(newPath) => {
+          setCustomCwd(newPath);
+        }}
+      />
     </div>
   );
 }
