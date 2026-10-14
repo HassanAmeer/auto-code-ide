@@ -24,6 +24,7 @@ import {
   ArrowLeft,
   ArrowUp,
   Upload,
+  FolderPlus,
   Sparkles,
 } from "lucide-react";
 import { resolvePrimaryEnvironmentHttpUrl } from "../../../environments/primary";
@@ -177,8 +178,10 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
 
   const [copied, setCopied] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isExtracting, setIsExtracting] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lineNumbersRef = useRef<HTMLDivElement>(null);
 
@@ -577,12 +580,243 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
     });
   };
 
-  const handleUploadFiles = async (files: FileList | File[], targetDir: string) => {
-    if (!files || files.length === 0) return;
+  // 1. Extract existing ZIP archive on server disk into a project folder named after the zip
+  const handleExtractExistingZip = async (zipFilePath: string, zipFileName: string) => {
+    setIsExtracting(true);
+    const folderName = zipFileName.replace(/\.zip$/i, "");
+    toastManager.add({
+      type: "info",
+      title: "Extracting ZIP",
+      description: `Unzipping ${zipFileName} into folder "${folderName}/"...`,
+    });
+    try {
+      const res = await fetch(resolvePrimaryEnvironmentHttpUrl("/api/project/extract-zip"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          zipPath: zipFilePath,
+          extractToSubfolder: true,
+        }),
+      });
+      const data = await parseResponseJson(res);
+      if (data.ok) {
+        toastManager.add({
+          type: "success",
+          title: "ZIP Extracted Successfully",
+          description: `Folder created: ${data.folderName || folderName}`,
+        });
+        void loadDirectory(rootPath);
+      } else {
+        toastManager.add({
+          type: "error",
+          title: "Unzip failed",
+          description: data.error || "Could not extract ZIP archive",
+        });
+      }
+    } catch (err) {
+      toastManager.add({
+        type: "error",
+        title: "Unzip error",
+        description: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setIsExtracting(false);
+    }
+  };
+
+  // 2. Stream large/any ZIP file upload and extract directly into a named project folder
+  const handleUploadZipAndExtract = async (file: File, targetDir: string) => {
+    setIsUploading(true);
+    const folderName = file.name.replace(/\.zip$/i, "");
+    toastManager.add({
+      type: "info",
+      title: "Uploading & Unzipping",
+      description: `Uploading ${file.name} and extracting into "${folderName}/"...`,
+    });
+    try {
+      const res = await fetch(
+        resolvePrimaryEnvironmentHttpUrl(
+          `/api/project/extract-zip?targetCwd=${encodeURIComponent(targetDir)}&zipName=${encodeURIComponent(file.name)}`,
+        ),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/octet-stream" },
+          body: file,
+        },
+      );
+      const data = await parseResponseJson(res);
+      if (data.ok) {
+        toastManager.add({
+          type: "success",
+          title: "ZIP Uploaded & Extracted",
+          description: `Project folder ready: ${folderName}`,
+        });
+        void loadDirectory(targetDir);
+      } else {
+        toastManager.add({
+          type: "error",
+          title: "Extraction failed",
+          description: data.error || "Could not unzip archive",
+        });
+      }
+    } catch (err) {
+      toastManager.add({
+        type: "error",
+        title: "Upload error",
+        description: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  // 3. Upload relative files (for dropped folders or folder picker)
+  const handleUploadRelativeFiles = async (
+    items: { file: File; relativePath: string }[],
+    targetDir: string,
+  ) => {
+    if (items.length === 0) return;
     setIsUploading(true);
     let successCount = 0;
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
+    toastManager.add({
+      type: "info",
+      title: "Uploading Folder",
+      description: `Uploading ${items.length} file(s) with folder structure...`,
+    });
+
+    for (const item of items) {
+      try {
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const res = reader.result as string;
+            const commaIdx = res.indexOf(",");
+            resolve(commaIdx >= 0 ? res.slice(commaIdx + 1) : res);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(item.file);
+        });
+
+        const res = await fetch(resolvePrimaryEnvironmentHttpUrl("/api/fs/upload"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            targetDir,
+            fileName: item.relativePath,
+            base64,
+          }),
+        });
+        const data = await parseResponseJson(res);
+        if (data.ok) successCount++;
+      } catch (err) {
+        console.error("Upload error for file:", item.relativePath, err);
+      }
+    }
+
+    setIsUploading(false);
+    if (successCount > 0) {
+      toastManager.add({
+        type: "success",
+        title: "Folder Uploaded",
+        description: `Successfully uploaded ${successCount} file(s).`,
+      });
+      void loadDirectory(targetDir);
+    }
+  };
+
+  // Recursive entry reader for dropped folders
+  const readEntryFiles = async (
+    entry: any,
+    currentPath = "",
+  ): Promise<{ file: File; relativePath: string }[]> => {
+    if (entry.isFile) {
+      return new Promise((resolve) => {
+        entry.file((file: File) => {
+          resolve([
+            { file, relativePath: currentPath ? `${currentPath}/${file.name}` : file.name },
+          ]);
+        });
+      });
+    } else if (entry.isDirectory) {
+      const dirReader = entry.createReader();
+      const newPath = currentPath ? `${currentPath}/${entry.name}` : entry.name;
+      const entries: any[] = await new Promise((resolve) => {
+        const result: any[] = [];
+        const readBatch = () => {
+          dirReader.readEntries((batch: any[]) => {
+            if (batch.length === 0) {
+              resolve(result);
+            } else {
+              result.push(...batch);
+              readBatch();
+            }
+          });
+        };
+        readBatch();
+      });
+
+      const nested = await Promise.all(entries.map((child) => readEntryFiles(child, newPath)));
+      return nested.flat();
+    }
+    return [];
+  };
+
+  // Drag and drop event handler for files, folders, and zip archives
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+
+    const items = e.dataTransfer.items;
+    if (items && items.length > 0) {
+      const entryPromises: Promise<{ file: File; relativePath: string }[]>[] = [];
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (typeof item.webkitGetAsEntry === "function") {
+          const entry = item.webkitGetAsEntry();
+          if (entry) {
+            entryPromises.push(readEntryFiles(entry));
+          }
+        }
+      }
+
+      if (entryPromises.length > 0) {
+        const allResults = (await Promise.all(entryPromises)).flat();
+        if (allResults.length > 0) {
+          // If a single zip file is dropped, automatically upload and unzip to project folder
+          if (allResults.length === 1 && allResults[0].file.name.toLowerCase().endsWith(".zip")) {
+            await handleUploadZipAndExtract(allResults[0].file, rootPath);
+            return;
+          }
+          await handleUploadRelativeFiles(allResults, rootPath);
+          return;
+        }
+      }
+    }
+
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const files = Array.from(e.dataTransfer.files);
+      if (files.length === 1 && files[0].name.toLowerCase().endsWith(".zip")) {
+        await handleUploadZipAndExtract(files[0], rootPath);
+        return;
+      }
+      await handleUploadFiles(files, rootPath);
+    }
+  };
+
+  const handleUploadFiles = async (files: FileList | File[], targetDir: string) => {
+    if (!files || files.length === 0) return;
+    const fileArray = Array.from(files);
+
+    // If a single zip file is uploaded, stream and extract it directly
+    if (fileArray.length === 1 && fileArray[0].name.toLowerCase().endsWith(".zip")) {
+      await handleUploadZipAndExtract(fileArray[0], targetDir);
+      return;
+    }
+
+    setIsUploading(true);
+    let successCount = 0;
+    for (let i = 0; i < fileArray.length; i++) {
+      const file = fileArray[i];
       try {
         const base64 = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
@@ -630,6 +864,18 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       void handleUploadFiles(e.target.files, rootPath);
+      e.target.value = "";
+    }
+  };
+
+  const handleFolderInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const fileList = Array.from(e.target.files);
+      const relativeItems = fileList.map((f) => ({
+        file: f,
+        relativePath: (f as any).webkitRelativePath || f.name,
+      }));
+      await handleUploadRelativeFiles(relativeItems, rootPath);
       e.target.value = "";
     }
   };
@@ -759,6 +1005,19 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
               </div>
 
               <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                {file.name.toLowerCase().endsWith(".zip") && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void handleExtractExistingZip(filePath, file.name);
+                    }}
+                    title={`Unzip into ${file.name.replace(/\.zip$/i, "")}/ folder`}
+                    className="p-1 rounded-[3px] text-amber-400 hover:text-amber-300 hover:bg-zinc-700/60"
+                  >
+                    <FileArchive className="size-3" />
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={(e) => {
@@ -942,15 +1201,35 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                     multiple
                     className="hidden"
                   />
+                  <input
+                    type="file"
+                    ref={folderInputRef}
+                    onChange={handleFolderInputChange}
+                    // @ts-expect-error webkitdirectory is supported across Chromium, Firefox, and Safari
+                    webkitdirectory=""
+                    directory=""
+                    multiple
+                    className="hidden"
+                  />
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    title="Upload files to project"
+                    title="Upload files or ZIP archive (auto-extracts to project folder)"
                     disabled={isUploading}
                     className="flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-sky-900/40 hover:bg-sky-800/60 text-sky-300 border border-sky-700/50 transition-colors cursor-pointer"
                   >
                     <Upload className="size-2.5" />
-                    <span>{isUploading ? "Uploading..." : "Upload"}</span>
+                    <span>{isUploading ? "Uploading..." : "File / ZIP"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => folderInputRef.current?.click()}
+                    title="Upload entire folder structure"
+                    disabled={isUploading}
+                    className="flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-sky-900/40 hover:bg-sky-800/60 text-sky-300 border border-sky-700/50 transition-colors cursor-pointer"
+                  >
+                    <FolderPlus className="size-2.5" />
+                    <span>Upload Folder</span>
                   </button>
                   <button
                     type="button"
@@ -981,13 +1260,7 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                 setIsDragOver(true);
               }}
               onDragLeave={() => setIsDragOver(false)}
-              onDrop={(e) => {
-                e.preventDefault();
-                setIsDragOver(false);
-                if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-                  void handleUploadFiles(e.dataTransfer.files, rootPath);
-                }
-              }}
+              onDrop={handleDrop}
               className={cn(
                 "flex-1 overflow-y-auto p-2 space-y-0.5 font-mono text-xs select-none transition-colors",
                 isDragOver && "bg-sky-500/10 border-2 border-dashed border-sky-400/60 rounded-md",
@@ -996,7 +1269,10 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
               {isDragOver ? (
                 <div className="py-8 text-center text-sky-300 font-sans text-xs flex flex-col items-center gap-2">
                   <Upload className="size-8 text-sky-400 animate-bounce" />
-                  <span>Drop files here to upload to {rootPath.split("/").pop() || "project"}</span>
+                  <span className="font-semibold">Drop files, folders, or .zip here</span>
+                  <span className="text-3xs text-sky-400/80">
+                    .zip files automatically extract into project folders
+                  </span>
                 </div>
               ) : (
                 renderTree(rootPath)
@@ -1167,14 +1443,42 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                         Binary files cannot be opened in the web text editor to prevent data
                         corruption.
                       </p>
-                      <button
-                        type="button"
-                        onClick={() => handleDownload(selectedFile.path, selectedFile.name)}
-                        className="mt-4 flex items-center gap-1.5 px-3.5 py-1.5 rounded-[5px] bg-sky-600 hover:bg-sky-500 text-white text-xs font-medium cursor-pointer shadow-xs"
-                      >
-                        <Download className="size-3.5" />
-                        <span>Download File</span>
-                      </button>
+                      {selectedFile.name.toLowerCase().endsWith(".zip") ? (
+                        <div className="mt-4 flex flex-col sm:flex-row items-center gap-2 w-full justify-center">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void handleExtractExistingZip(selectedFile.path, selectedFile.name)
+                            }
+                            disabled={isExtracting}
+                            className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2 rounded-[5px] bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold cursor-pointer shadow-md transition-all"
+                          >
+                            <FileArchive className="size-3.5" />
+                            <span>
+                              {isExtracting
+                                ? "Extracting..."
+                                : `Unzip to "${selectedFile.name.replace(/\.zip$/i, "")}/"`}
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDownload(selectedFile.path, selectedFile.name)}
+                            className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-[5px] bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium cursor-pointer"
+                          >
+                            <Download className="size-3.5" />
+                            <span>Download .zip</span>
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleDownload(selectedFile.path, selectedFile.name)}
+                          className="mt-4 flex items-center gap-1.5 px-3.5 py-1.5 rounded-[5px] bg-sky-600 hover:bg-sky-500 text-white text-xs font-medium cursor-pointer shadow-xs"
+                        >
+                          <Download className="size-3.5" />
+                          <span>Download File</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                 ) : (

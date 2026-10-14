@@ -1239,6 +1239,7 @@ export const layerProjectExtractZipRoute = HttpRouter.add(
   Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
     const fileSystem = yield* FileSystem.FileSystem;
+    const pathService = yield* Path.Path;
     const contentType = (request.headers["content-type"] || "").toLowerCase();
     const url = new URL(request.url, "http://127.0.0.1");
 
@@ -1246,11 +1247,16 @@ export const layerProjectExtractZipRoute = HttpRouter.add(
       ? decodeURIComponent(request.headers["x-target-cwd"])
       : undefined;
     const queryTargetCwd = url.searchParams.get("targetCwd") || url.searchParams.get("cwd");
+    const zipName =
+      url.searchParams.get("zipName") ||
+      url.searchParams.get("fileName") ||
+      (request.headers["x-zip-name"]
+        ? decodeURIComponent(request.headers["x-zip-name"])
+        : undefined);
 
     let targetCwd = (headerTargetCwd || queryTargetCwd || "").trim();
-    const tempZipFile = `/tmp/t3_ext_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.zip`;
 
-    // 1. Direct binary stream mode (application/octet-stream, zip, or targetCwd specified outside JSON)
+    // 1. Direct binary stream mode (application/octet-stream, zip, or stream with targetCwd)
     if (
       contentType.includes("octet-stream") ||
       contentType.includes("zip") ||
@@ -1266,33 +1272,107 @@ export const layerProjectExtractZipRoute = HttpRouter.add(
         );
       }
 
+      // If zipName is provided, extract into a project subfolder named after the zip
+      if (zipName) {
+        const folderName = zipName.replace(/\.zip$/i, "").trim();
+        if (folderName && !targetCwd.endsWith(`/${folderName}`)) {
+          targetCwd = pathService.join(targetCwd, folderName);
+        }
+      }
+
+      const tempZipFile = `/tmp/t3_ext_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.zip`;
       yield* fileSystem.makeDirectory(targetCwd, { recursive: true }).pipe(Effect.ignore);
       // Stream directly to temporary zip file on disk with zero in-memory buffer overhead
       yield* Stream.run(request.stream, fileSystem.sink(tempZipFile));
-    } else {
-      // 2. Fallback JSON base64 mode
-      const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
-        targetCwd?: string;
-        zipBase64?: string;
-      };
 
-      targetCwd = targetCwd || bodyJson?.targetCwd?.trim() || "";
-      const zipBase64 = bodyJson?.zipBase64;
-      if (!targetCwd || !zipBase64) {
+      const unzipCmd = `unzip -q -o "${tempZipFile}" -d "${targetCwd}"`;
+      const unzipResult = yield* Effect.promise(() =>
+        runBashCommandOnHost(unzipCmd, targetCwd, 600_000),
+      );
+      yield* fileSystem.remove(tempZipFile).pipe(Effect.ignore);
+
+      if (unzipResult.exitCode !== 0) {
+        return HttpServerResponse.jsonUnsafe({
+          ok: false,
+          error: unzipResult.stderr || "Failed to extract ZIP archive",
+        });
+      }
+
+      return HttpServerResponse.jsonUnsafe({
+        ok: true,
+        targetCwd,
+        message: `Extracted to ${targetCwd}`,
+      });
+    }
+
+    // 2. JSON mode: could be existing zipPath on disk or zipBase64
+    const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      targetCwd?: string;
+      zipBase64?: string;
+      zipPath?: string;
+      extractToSubfolder?: boolean;
+    };
+
+    targetCwd = targetCwd || bodyJson?.targetCwd?.trim() || "";
+
+    // Case A: zipPath on server disk (Instant unzip without re-upload)
+    if (bodyJson?.zipPath) {
+      const resolvedZip = pathService.resolve(bodyJson.zipPath.trim());
+      if (!NodeFs.existsSync(resolvedZip)) {
         return HttpServerResponse.jsonUnsafe(
-          { ok: false, error: "targetCwd and zipBase64 are required" },
-          { status: 400 },
+          { ok: false, error: `File not found: ${resolvedZip}` },
+          { status: 404 },
         );
       }
 
+      const baseName = pathService.basename(resolvedZip);
+      const folderName = baseName.replace(/\.zip$/i, "").trim();
+
+      // If targetCwd is not given, extract to same folder with zip's name
+      if (!targetCwd) {
+        targetCwd = pathService.join(pathService.dirname(resolvedZip), folderName);
+      } else if (bodyJson.extractToSubfolder !== false && !targetCwd.endsWith(`/${folderName}`)) {
+        targetCwd = pathService.join(targetCwd, folderName);
+      }
+
       yield* fileSystem.makeDirectory(targetCwd, { recursive: true }).pipe(Effect.ignore);
-      const zipBuffer = Buffer.from(zipBase64, "base64");
-      yield* fileSystem.writeFile(tempZipFile, zipBuffer).pipe(Effect.ignore);
+      const unzipCmd = `unzip -q -o "${resolvedZip}" -d "${targetCwd}"`;
+      const unzipResult = yield* Effect.promise(() =>
+        runBashCommandOnHost(unzipCmd, targetCwd, 600_000),
+      );
+
+      if (unzipResult.exitCode !== 0) {
+        return HttpServerResponse.jsonUnsafe({
+          ok: false,
+          error: unzipResult.stderr || "Failed to extract ZIP archive",
+        });
+      }
+
+      return HttpServerResponse.jsonUnsafe({
+        ok: true,
+        targetCwd,
+        folderName,
+        message: `ZIP extracted into ${targetCwd}`,
+      });
     }
+
+    // Case B: Base64 payload
+    const zipBase64 = bodyJson?.zipBase64;
+    if (!targetCwd || !zipBase64) {
+      return HttpServerResponse.jsonUnsafe(
+        { ok: false, error: "targetCwd and (zipPath or zipBase64) are required" },
+        { status: 400 },
+      );
+    }
+
+    const tempZipFile = `/tmp/t3_ext_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.zip`;
+    yield* fileSystem.makeDirectory(targetCwd, { recursive: true }).pipe(Effect.ignore);
+    const zipBuffer = Buffer.from(zipBase64, "base64");
+    yield* fileSystem.writeFile(tempZipFile, zipBuffer).pipe(Effect.ignore);
 
     const unzipCmd = `unzip -q -o "${tempZipFile}" -d "${targetCwd}"`;
     const unzipResult = yield* Effect.promise(() =>
-      runBashCommandOnHost(unzipCmd, targetCwd, 300_000),
+      runBashCommandOnHost(unzipCmd, targetCwd, 600_000),
     );
     yield* fileSystem.remove(tempZipFile).pipe(Effect.ignore);
 
@@ -1722,8 +1802,9 @@ export const layerFsUploadRoute = HttpRouter.add(
     const resolvedDir = pathService.resolve(targetDir);
     const resolvedFile = pathService.join(resolvedDir, fileName);
     try {
-      if (!NodeFs.existsSync(resolvedDir)) {
-        NodeFs.mkdirSync(resolvedDir, { recursive: true });
+      const parentDir = pathService.dirname(resolvedFile);
+      if (!NodeFs.existsSync(parentDir)) {
+        NodeFs.mkdirSync(parentDir, { recursive: true });
       }
       const buffer = Buffer.from(bodyJson.base64, "base64");
       NodeFs.writeFileSync(resolvedFile, buffer);
