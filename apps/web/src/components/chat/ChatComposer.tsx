@@ -7031,7 +7031,10 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                 <VoiceCallButton
                   isCallActive={isCallActive}
                   onToggleCall={toggleVoiceCall}
-                  className="absolute top-2 right-2 z-10"
+                  className={cn(
+                    "absolute z-10 transition-all",
+                    isComposerResting ? "top-1/2 -translate-y-1/2 right-2" : "top-2 right-2",
+                  )}
                 />
               )}
 
@@ -7446,7 +7449,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                 className={cn("relative", isComposerResting && "flex min-w-0 items-center gap-1")}
                 style={
                   isComposerResting && restingActionsWidth !== null
-                    ? { paddingRight: `calc(${restingActionsWidth}px + 1rem)` }
+                    ? { paddingRight: `calc(${restingActionsWidth}px + 56px + 0.5rem)` }
                     : undefined
                 }
               >
@@ -7619,7 +7622,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   isComposerFooterCompact ? "gap-1.5" : "gap-2 sm:gap-0",
                   showMobilePendingAnswerActions && "hidden sm:flex",
                   isComposerResting &&
-                    "absolute right-px z-10 h-12 w-auto gap-0 py-0 sm:gap-0 sm:py-0",
+                    "absolute right-[56px] z-10 h-12 w-auto gap-0 py-0 sm:gap-0 sm:py-0",
                   isComposerResting &&
                     (showInlineRestingControls ? "bottom-[calc(2rem+1px)]" : "bottom-px"),
                 )}
