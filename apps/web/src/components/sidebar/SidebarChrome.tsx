@@ -41,7 +41,7 @@ import { SidebarThreadUndoNotice } from "./SidebarThreadUndoNotice";
 import { SidebarProviderUpdatePill } from "./SidebarProviderUpdatePill";
 import { SidebarUpdateArchitectureWarning, SidebarUpdatePill } from "./SidebarUpdatePill";
 import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
-import { useTerminalStore, terminalStore } from "../chat/terminal";
+import { useTerminalStore, terminalStore } from "../chat/terminal/terminalStore";
 
 export const SidebarChromeHeader = memo(function SidebarChromeHeader({
   isElectron,

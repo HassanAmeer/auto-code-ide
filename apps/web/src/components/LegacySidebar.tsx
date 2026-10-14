@@ -2217,6 +2217,29 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     [project.displayName, project.memberProjects],
   );
 
+  const handleDownloadZip = useCallback(
+    (targetMember?: SidebarProjectGroupMember) => {
+      const member = targetMember ?? project.memberProjects[0];
+      const workspaceRoot = member?.workspaceRoot ?? project.workspaceRoot;
+      if (!workspaceRoot) {
+        toastManager.add({
+          type: "error",
+          title: "Download failed",
+          description: "No workspace root found for this project.",
+        });
+        return;
+      }
+      const name = member?.title ?? project.displayName;
+      toastManager.add({
+        type: "info",
+        title: "Downloading Project ZIP...",
+        description: `Preparing ${name}.zip archive for download.`,
+      });
+      downloadProjectZip(workspaceRoot, name);
+    },
+    [project.displayName, project.memberProjects, project.workspaceRoot],
+  );
+
   const handleProjectButtonContextMenu = useCallback(
     (event: React.MouseEvent<HTMLButtonElement>) => {
       event.preventDefault();
@@ -2777,29 +2800,6 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       });
     }
   }, [deleteThread, project.displayName, projectThreads, removeFromSelection]);
-
-  const handleDownloadZip = useCallback(
-    (targetMember?: SidebarProjectGroupMember) => {
-      const member = targetMember ?? project.memberProjects[0];
-      const workspaceRoot = member?.workspaceRoot ?? project.workspaceRoot;
-      if (!workspaceRoot) {
-        toastManager.add({
-          type: "error",
-          title: "Download failed",
-          description: "No workspace root found for this project.",
-        });
-        return;
-      }
-      const name = member?.title ?? project.displayName;
-      toastManager.add({
-        type: "info",
-        title: "Downloading Project ZIP...",
-        description: `Preparing ${name}.zip archive for download.`,
-      });
-      downloadProjectZip(workspaceRoot, name);
-    },
-    [project.displayName, project.memberProjects, project.workspaceRoot],
-  );
 
   const handleDeleteProject = useCallback(async () => {
     const api = readLocalApi();
