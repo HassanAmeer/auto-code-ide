@@ -219,23 +219,24 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
       />
 
       {/* Slide-over panel */}
-      <div className="relative z-[121] flex h-full w-full max-w-4xl flex-col bg-zinc-950 text-zinc-100 border-l border-zinc-800 shadow-2xl animate-in slide-in-from-right duration-200">
-        {/* Top App Header with Primary Tabs */}
-        <div className="flex items-center justify-between border-b border-zinc-800/90 px-4 py-2.5 bg-zinc-900/80">
-          <div className="flex items-center gap-3">
-            {/* Primary Tab Switcher */}
-            <div className="flex items-center bg-zinc-950 p-1 rounded-lg border border-zinc-800/80">
+      <div className="relative z-[121] flex h-full w-full max-w-full sm:max-w-2xl md:max-w-4xl flex-col bg-zinc-950 text-zinc-100 border-l border-zinc-800/80 shadow-2xl animate-in slide-in-from-right duration-200 overflow-hidden">
+        {/* Top App Header with Cupertino iOS Segmented Tabs */}
+        <div className="flex items-center justify-between border-b border-zinc-800/80 px-2.5 py-2 sm:px-4 sm:py-2.5 bg-zinc-900/90 backdrop-blur-md shrink-0 gap-2 min-w-0">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            {/* Cupertino Segmented Tab Switcher */}
+            <div className="inline-flex items-center bg-zinc-950/90 p-0.5 sm:p-1 rounded-full border border-zinc-800/80 shrink-0">
               <button
                 type="button"
                 onClick={() => setMainTab("ai")}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-all cursor-pointer ${
+                className={`flex items-center gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full text-2xs sm:text-xs font-semibold transition-all cursor-pointer ${
                   mainTab === "ai"
-                    ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-xs font-semibold"
+                    ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-xs"
                     : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60"
                 }`}
               >
-                <BotIcon className="size-3.5 text-emerald-400" />
-                Track AI Models Logs
+                <BotIcon className="size-3.5 text-emerald-400 shrink-0" />
+                <span className="hidden sm:inline">Track AI Models Logs</span>
+                <span className="inline sm:hidden">AI Logs</span>
                 <span
                   className={`rounded-full px-1.5 py-0.2 text-[10px] font-mono ${
                     mainTab === "ai"
@@ -250,14 +251,15 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
               <button
                 type="button"
                 onClick={() => setMainTab("network")}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-all cursor-pointer ${
+                className={`flex items-center gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full text-2xs sm:text-xs font-semibold transition-all cursor-pointer ${
                   mainTab === "network"
-                    ? "bg-zinc-800 text-zinc-100 border border-zinc-700 shadow-xs font-semibold"
+                    ? "bg-zinc-800 text-zinc-100 border border-zinc-700 shadow-xs"
                     : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60"
                 }`}
               >
-                <GlobeIcon className="size-3.5 text-cyan-400" />
-                Network / Web Traffic
+                <GlobeIcon className="size-3.5 text-cyan-400 shrink-0" />
+                <span className="hidden sm:inline">Network Traffic</span>
+                <span className="inline sm:hidden">Network</span>
                 <span className="rounded-full bg-zinc-800 px-1.5 py-0.2 text-[10px] font-mono text-zinc-400">
                   {logs.length}
                 </span>
@@ -265,7 +267,7 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
             {mainTab === "ai" ? (
               <>
                 <Button
@@ -273,22 +275,22 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                   variant="outline"
                   onClick={handleRefreshAi}
                   title="Refresh AI logs from server"
-                  className="h-7 text-xs gap-1 border-zinc-800 hover:bg-zinc-900 hover:text-emerald-400 text-zinc-400"
+                  className="h-7 text-xs gap-1 border-zinc-800/80 rounded-full hover:bg-zinc-900 hover:text-emerald-400 text-zinc-400 px-2 sm:px-2.5"
                 >
                   <RefreshCwIcon
                     className={`size-3.5 ${isRefreshingAi ? "animate-spin text-emerald-400" : ""}`}
                   />
-                  Refresh
+                  <span className="hidden sm:inline">Refresh</span>
                 </Button>
                 <Button
                   size="xs"
                   variant="outline"
                   onClick={() => networkLogger.clearAiModelLogs()}
                   title="Clear all recorded AI logs"
-                  className="h-7 text-xs gap-1 border-zinc-800 hover:bg-zinc-900 hover:text-rose-400 text-zinc-400"
+                  className="h-7 text-xs gap-1 border-zinc-800/80 rounded-full hover:bg-zinc-900 hover:text-rose-400 text-zinc-400 px-2 sm:px-2.5"
                 >
                   <Trash2Icon className="size-3.5" />
-                  Clear AI Logs
+                  <span className="hidden sm:inline">Clear AI Logs</span>
                 </Button>
               </>
             ) : (
@@ -297,17 +299,19 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                 variant="outline"
                 onClick={() => networkLogger.clear()}
                 title="Clear all network logs"
-                className="h-7 text-xs gap-1 border-zinc-800 hover:bg-zinc-900 hover:text-rose-400 text-zinc-400"
+                className="h-7 text-xs gap-1 border-zinc-800/80 rounded-full hover:bg-zinc-900 hover:text-rose-400 text-zinc-400 px-2 sm:px-2.5"
               >
                 <Trash2Icon className="size-3.5" />
-                Clear
+                <span className="hidden sm:inline">Clear</span>
               </Button>
             )}
 
+            {/* Prominent Top Close Button */}
             <button
               type="button"
               onClick={onClose}
-              className="rounded-md p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 transition-colors cursor-pointer"
+              title="Close Logs Sheet"
+              className="flex items-center justify-center size-7 sm:size-8 rounded-full bg-zinc-800/90 hover:bg-zinc-700 text-zinc-300 hover:text-white border border-zinc-700/60 transition-all cursor-pointer shrink-0 shadow-xs active:scale-95 ml-1"
             >
               <XIcon className="size-4" />
             </button>
@@ -465,7 +469,7 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                       <button
                         type="button"
                         onClick={() => setSelectedAiLogId(null)}
-                        className="md:hidden text-zinc-400 hover:text-zinc-100 p-1 mr-1"
+                        className="md:hidden flex items-center gap-1 px-2.5 py-1 rounded-full bg-zinc-800/90 text-zinc-300 hover:text-white border border-zinc-700/60 text-xs font-semibold mr-1 cursor-pointer shrink-0 active:scale-95"
                       >
                         ← Back
                       </button>
@@ -1014,7 +1018,7 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                       <button
                         type="button"
                         onClick={() => setSelectedLogId(null)}
-                        className="md:hidden text-zinc-400 hover:text-zinc-100 p-1 mr-1"
+                        className="md:hidden flex items-center gap-1 px-2.5 py-1 rounded-full bg-zinc-800/90 text-zinc-300 hover:text-white border border-zinc-700/60 text-xs font-semibold mr-1 cursor-pointer shrink-0 active:scale-95"
                       >
                         ← Back
                       </button>
@@ -1290,6 +1294,26 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
             </div>
           </div>
         )}
+
+        {/* Bottom Cupertino iOS Toolbar with Bottom-Left Close Button */}
+        <div className="shrink-0 flex items-center justify-between px-3 py-2 sm:px-4 sm:py-2.5 bg-zinc-900/95 border-t border-zinc-800/80 backdrop-blur-md text-xs select-none">
+          {/* Bottom-Left Close Button */}
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-zinc-800/90 hover:bg-zinc-700 text-zinc-200 hover:text-white border border-zinc-700/70 font-medium text-xs transition-all cursor-pointer shadow-xs active:scale-95"
+            title="Close Sheet"
+          >
+            <XIcon className="size-3.5 text-zinc-300" />
+            <span>Close</span>
+          </button>
+
+          <div className="flex items-center gap-2 text-3xs font-mono text-zinc-400">
+            <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="hidden sm:inline">Live Inspector &bull;</span>
+            <span>{aiLogs.length + logs.length} Records</span>
+          </div>
+        </div>
       </div>
     </div>
   );
