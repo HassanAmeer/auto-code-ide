@@ -54,6 +54,45 @@ async function parseResponseJson(res: Response): Promise<{ ok: boolean; [key: st
   }
 }
 
+const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "svg", "webp", "ico", "bmp"]);
+const BINARY_EXTENSIONS = new Set([
+  "zip",
+  "tar",
+  "gz",
+  "tgz",
+  "bz2",
+  "xz",
+  "rar",
+  "7z",
+  "sqlite",
+  "sqlite3",
+  "db",
+  "bin",
+  "exe",
+  "iso",
+  "wasm",
+  "pdf",
+  "woff",
+  "woff2",
+  "ttf",
+  "eot",
+  "mp3",
+  "mp4",
+  "wav",
+  "webm",
+  "ogg",
+]);
+
+function isImageFile(filename: string): boolean {
+  const ext = filename.split(".").pop()?.toLowerCase() || "";
+  return IMAGE_EXTENSIONS.has(ext);
+}
+
+function isBinaryFile(filename: string): boolean {
+  const ext = filename.split(".").pop()?.toLowerCase() || "";
+  return BINARY_EXTENSIONS.has(ext);
+}
+
 function getFileIcon(name: string) {
   const ext = name.split(".").pop()?.toLowerCase();
   if (["zip", "tar", "gz", "tgz", "rar", "7z"].includes(ext || "")) {
@@ -81,6 +120,19 @@ function formatBytes(bytes: number): string {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
 }
 
+interface SelectedFileState {
+  path: string;
+  name: string;
+  content: string;
+  originalContent: string;
+  size: number;
+  isSaving: boolean;
+  isSaved: boolean;
+  isTruncated: boolean;
+  isBinary: boolean;
+  isImage: boolean;
+}
+
 export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
   const store = useTerminalStore();
   const isOpen = store.isFileExplorerOpen;
@@ -105,15 +157,7 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
   }, [rootPath]);
 
   // Active selected file for viewer/editor
-  const [selectedFile, setSelectedFile] = useState<{
-    path: string;
-    name: string;
-    content: string;
-    originalContent: string;
-    size: number;
-    isSaving: boolean;
-    isSaved: boolean;
-  } | null>(null);
+  const [selectedFile, setSelectedFile] = useState<SelectedFileState | null>(null);
 
   // New file/folder inline modal
   const [createModal, setCreateModal] = useState<{
@@ -242,8 +286,43 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
     }
   };
 
-  // Open file for viewing / text editing
+  // Open file for viewing / text editing / previewing
   const openFile = async (filePath: string, fileName: string) => {
+    const isImg = isImageFile(fileName);
+    const isBin = isBinaryFile(fileName);
+
+    if (isImg) {
+      setSelectedFile({
+        path: filePath,
+        name: fileName,
+        content: "",
+        originalContent: "",
+        size: 0,
+        isSaving: false,
+        isSaved: false,
+        isTruncated: false,
+        isBinary: false,
+        isImage: true,
+      });
+      return;
+    }
+
+    if (isBin) {
+      setSelectedFile({
+        path: filePath,
+        name: fileName,
+        content: "",
+        originalContent: "",
+        size: 0,
+        isSaving: false,
+        isSaved: false,
+        isTruncated: false,
+        isBinary: true,
+        isImage: false,
+      });
+      return;
+    }
+
     try {
       const res = await fetch(resolvePrimaryEnvironmentHttpUrl("/api/fs/peek"), {
         method: "POST",
@@ -260,6 +339,9 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
           size: data.size ?? 0,
           isSaving: false,
           isSaved: false,
+          isTruncated: Boolean(data.truncated),
+          isBinary: false,
+          isImage: false,
         });
       } else {
         toastManager.add({
@@ -280,6 +362,26 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
   // Save edited file content
   const handleSaveFile = async () => {
     if (!selectedFile || selectedFile.isSaving) return;
+
+    if (selectedFile.isTruncated) {
+      toastManager.add({
+        type: "error",
+        title: "Save Blocked (Read-Only)",
+        description:
+          "File exceeds 256KB and was opened in read-only mode to prevent data corruption.",
+      });
+      return;
+    }
+
+    if (selectedFile.isBinary) {
+      toastManager.add({
+        type: "error",
+        title: "Cannot save binary file",
+        description: "Binary files cannot be edited in the browser.",
+      });
+      return;
+    }
+
     setSelectedFile((prev) => (prev ? { ...prev, isSaving: true } : null));
 
     try {
@@ -695,8 +797,13 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
 
         {/* Main Content Area: Split Pane (Left: VS Code File Tree, Right: Code Editor/Viewer) */}
         <div className="flex-1 flex overflow-hidden">
-          {/* Left Sidebar: Collapsible File Tree */}
-          <div className="w-72 sm:w-80 border-r border-zinc-800 bg-[#0e141e] flex flex-col shrink-0 overflow-hidden">
+          {/* Left Sidebar: Collapsible File Tree (Hidden on mobile when file is open) */}
+          <div
+            className={cn(
+              "w-full sm:w-80 border-r border-zinc-800 bg-[#0e141e] flex flex-col shrink-0 overflow-hidden",
+              selectedFile ? "hidden sm:flex" : "flex",
+            )}
+          >
             {/* Search & Actions Bar */}
             <div className="p-2 border-b border-zinc-800/80 space-y-2 shrink-0">
               <div className="relative flex items-center">
@@ -751,41 +858,70 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
             </div>
           </div>
 
-          {/* Right Pane: Code Editor / Viewer */}
-          <div className="flex-1 bg-[#090d14] flex flex-col overflow-hidden">
+          {/* Right Pane: Code Editor / Viewer (Hidden on mobile when no file selected) */}
+          <div
+            className={cn(
+              "flex-1 bg-[#090d14] flex flex-col overflow-hidden",
+              selectedFile ? "flex" : "hidden sm:flex",
+            )}
+          >
             {selectedFile ? (
               <>
                 {/* Editor Top Bar */}
-                <div className="flex items-center justify-between px-4 py-2 border-b border-zinc-800 bg-[#121824] shrink-0">
-                  <div className="flex items-center gap-2 min-w-0">
+                <div className="flex items-center justify-between px-3 sm:px-4 py-2 border-b border-zinc-800 bg-[#121824] shrink-0 gap-2">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    {/* Mobile Back to Files button */}
+                    <button
+                      type="button"
+                      onClick={() => setSelectedFile(null)}
+                      title="Back to files list"
+                      className="sm:hidden flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 hover:text-white text-3xs font-medium cursor-pointer shrink-0"
+                    >
+                      <ArrowLeft className="size-3" />
+                      <span>Files</span>
+                    </button>
+
                     {getFileIcon(selectedFile.name)}
                     <span className="font-semibold text-xs text-zinc-200 truncate font-mono">
                       {selectedFile.name}
                     </span>
-                    <span className="text-3xs text-zinc-500 font-mono">
+                    <span className="text-3xs text-zinc-500 font-mono hidden sm:inline">
                       ({formatBytes(selectedFile.size)})
                     </span>
-                    {isDirty && (
+
+                    {/* Truncated File Guard Badge */}
+                    {selectedFile.isTruncated && (
                       <span
-                        className="size-2 rounded-full bg-amber-400 animate-pulse"
+                        className="px-1.5 py-0.5 rounded text-4xs font-mono font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/40 shrink-0"
+                        title="File exceeds 256KB. Read-only to prevent data loss."
+                      >
+                        Read-Only (&gt;256KB)
+                      </span>
+                    )}
+
+                    {isDirty && !selectedFile.isTruncated && !selectedFile.isBinary && (
+                      <span
+                        className="size-2 rounded-full bg-amber-400 animate-pulse shrink-0"
                         title="Unsaved changes"
                       />
                     )}
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={handleCopyCode}
-                      title="Copy code"
-                      className="p-1.5 rounded-[5px] text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
-                    >
-                      {copied ? (
-                        <Check className="size-3.5 text-emerald-400" />
-                      ) : (
-                        <Copy className="size-3.5" />
-                      )}
-                    </button>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {!selectedFile.isBinary && !selectedFile.isImage && (
+                      <button
+                        type="button"
+                        onClick={handleCopyCode}
+                        title="Copy code"
+                        className="p-1.5 rounded-[5px] text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+                      >
+                        {copied ? (
+                          <Check className="size-3.5 text-emerald-400" />
+                        ) : (
+                          <Copy className="size-3.5" />
+                        )}
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => handleDownload(selectedFile.path, selectedFile.name)}
@@ -794,26 +930,38 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                     >
                       <Download className="size-3.5" />
                     </button>
-                    <button
-                      type="button"
-                      onClick={handleSaveFile}
-                      disabled={selectedFile.isSaving || !isDirty}
-                      className={cn(
-                        "flex items-center gap-1.5 px-3 py-1 rounded-[5px] font-medium text-xs transition-all shadow-xs cursor-pointer",
-                        isDirty
-                          ? "bg-emerald-600 hover:bg-emerald-500 text-white"
-                          : "bg-zinc-800 text-zinc-400 opacity-60 cursor-not-allowed",
-                      )}
-                    >
-                      <Save className="size-3.5" />
-                      <span>
-                        {selectedFile.isSaving
-                          ? "Saving..."
-                          : selectedFile.isSaved
-                            ? "Saved!"
-                            : "Save"}
-                      </span>
-                    </button>
+                    {!selectedFile.isBinary && !selectedFile.isImage && (
+                      <button
+                        type="button"
+                        onClick={handleSaveFile}
+                        disabled={
+                          selectedFile.isSaving ||
+                          !isDirty ||
+                          selectedFile.isTruncated ||
+                          selectedFile.isBinary
+                        }
+                        title={
+                          selectedFile.isTruncated
+                            ? "Save disabled: File is in Read-Only mode to protect content"
+                            : "Save changes (Ctrl+S)"
+                        }
+                        className={cn(
+                          "flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-[5px] font-medium text-xs transition-all shadow-xs cursor-pointer",
+                          isDirty && !selectedFile.isTruncated
+                            ? "bg-emerald-600 hover:bg-emerald-500 text-white"
+                            : "bg-zinc-800 text-zinc-400 opacity-60 cursor-not-allowed",
+                        )}
+                      >
+                        <Save className="size-3.5" />
+                        <span>
+                          {selectedFile.isSaving
+                            ? "Saving..."
+                            : selectedFile.isSaved
+                              ? "Saved!"
+                              : "Save"}
+                        </span>
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => setSelectedFile(null)}
@@ -825,20 +973,74 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                   </div>
                 </div>
 
-                {/* Textarea Editor with Line Numbers */}
-                <div className="flex-1 flex overflow-hidden">
-                  <textarea
-                    value={selectedFile.content}
-                    onChange={(e) =>
-                      setSelectedFile((prev) =>
-                        prev ? { ...prev, content: e.target.value } : null,
-                      )
-                    }
-                    placeholder="Empty file..."
-                    spellCheck={false}
-                    className="w-full h-full p-4 bg-transparent text-zinc-100 font-mono text-xs leading-relaxed focus:outline-none resize-none selection:bg-sky-500/30"
-                  />
-                </div>
+                {/* Editor / Viewer Body */}
+                {selectedFile.isImage ? (
+                  // Image Previewer
+                  <div className="flex-1 flex flex-col items-center justify-center p-6 overflow-auto bg-black/40">
+                    <div className="relative max-w-full max-h-[60vh] flex items-center justify-center p-2 rounded-lg bg-zinc-900/60 border border-zinc-800">
+                      <img
+                        src={resolvePrimaryEnvironmentHttpUrl(
+                          `/api/fs/download?path=${encodeURIComponent(selectedFile.path)}`,
+                        )}
+                        alt={selectedFile.name}
+                        className="max-h-[50vh] max-w-full rounded object-contain select-none"
+                      />
+                    </div>
+                    <div className="mt-3 flex items-center gap-2">
+                      <span className="text-3xs text-zinc-400 font-mono">{selectedFile.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleDownload(selectedFile.path, selectedFile.name)}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded bg-sky-600 hover:bg-sky-500 text-white text-xs font-medium cursor-pointer"
+                      >
+                        <Download className="size-3" />
+                        <span>Download Image</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : selectedFile.isBinary ? (
+                  // Binary File Info Card
+                  <div className="flex-1 flex flex-col items-center justify-center p-6 text-center bg-black/30">
+                    <div className="p-6 rounded-2xl bg-zinc-900 border border-zinc-800 flex flex-col items-center max-w-sm shadow-xl">
+                      <FileArchive className="size-12 text-amber-400 mb-2" />
+                      <h4 className="font-semibold text-sm text-zinc-200">{selectedFile.name}</h4>
+                      <span className="text-3xs text-zinc-500 font-mono mt-0.5">
+                        Binary File ({formatBytes(selectedFile.size)})
+                      </span>
+                      <p className="text-xs text-zinc-400 mt-2 leading-relaxed">
+                        Binary files cannot be opened in the web text editor to prevent data
+                        corruption.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => handleDownload(selectedFile.path, selectedFile.name)}
+                        className="mt-4 flex items-center gap-1.5 px-3.5 py-1.5 rounded-[5px] bg-sky-600 hover:bg-sky-500 text-white text-xs font-medium cursor-pointer shadow-xs"
+                      >
+                        <Download className="size-3.5" />
+                        <span>Download File</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  // Textarea Editor with Line Numbers
+                  <div className="flex-1 flex overflow-hidden">
+                    <textarea
+                      value={selectedFile.content}
+                      readOnly={selectedFile.isTruncated}
+                      onChange={(e) =>
+                        setSelectedFile((prev) =>
+                          prev ? { ...prev, content: e.target.value } : null,
+                        )
+                      }
+                      placeholder="Empty file..."
+                      spellCheck={false}
+                      className={cn(
+                        "w-full h-full p-4 bg-transparent text-zinc-100 font-mono text-xs leading-relaxed focus:outline-none resize-none selection:bg-sky-500/30",
+                        selectedFile.isTruncated && "opacity-90 cursor-default select-text",
+                      )}
+                    />
+                  </div>
+                )}
               </>
             ) : (
               /* Empty State */

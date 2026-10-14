@@ -1,6 +1,7 @@
 import { memo, useState, useEffect } from "react";
 import { resolvePrimaryEnvironmentHttpUrl } from "../../environments/primary";
 import { cn } from "../../lib/utils";
+import { useSidebar } from "../ui/sidebar";
 
 interface ResourceStats {
   cpuPercent: number;
@@ -16,11 +17,15 @@ interface ResourceStats {
 export const SidebarResourceStats = memo(function SidebarResourceStats() {
   const [stats, setStats] = useState<ResourceStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const { state } = useSidebar();
 
   useEffect(() => {
     let isMounted = true;
 
     async function fetchStats() {
+      // Optimization: pause polling when browser tab is inactive to save battery and bandwidth
+      if (typeof document !== "undefined" && document.hidden) return;
+
       try {
         const res = await fetch(resolvePrimaryEnvironmentHttpUrl("/api/terminal/quick-stats"));
         if (!res.ok) return;
@@ -53,12 +58,40 @@ export const SidebarResourceStats = memo(function SidebarResourceStats() {
       void fetchStats();
     }, 15000);
 
+    const handleVisibilityChange = () => {
+      if (typeof document !== "undefined" && !document.hidden) {
+        void fetchStats();
+      }
+    };
+
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", handleVisibilityChange);
+    }
+
     return () => {
       isMounted = false;
       clearTimeout(initTimer);
       clearInterval(interval);
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", handleVisibilityChange);
+      }
     };
   }, []);
+
+  // When sidebar is collapsed in icon-only mode, show a sleek mini badge so it doesn't distort or overflow
+  if (state === "collapsed") {
+    if (!stats) return null;
+    return (
+      <div
+        className="w-full flex justify-center py-1 select-none"
+        title={`Server Resources: CPU: ${stats.cpuPercent}% | RAM: ${stats.memUsedGb}/${stats.memTotalGb}GB (${stats.memPercent}%) | ROM: ${stats.diskFreeGb}GB free (${stats.diskPercent}%)`}
+      >
+        <div className="flex items-center justify-center px-1.5 py-0.5 rounded-[5px] text-[9px] font-mono font-bold bg-zinc-900 border border-zinc-800 text-zinc-300 shadow-2xs">
+          ⚡ {stats.cpuPercent}%
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full px-2 py-1 select-none">

@@ -152,6 +152,11 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
         {/* Scrollable Patti Container */}
         <div
           ref={scrollContainerRef}
+          onWheel={(e) => {
+            if (e.deltaY !== 0 && scrollContainerRef.current) {
+              scrollContainerRef.current.scrollLeft += e.deltaY;
+            }
+          }}
           className="flex-1 flex items-center gap-2 overflow-x-auto py-0.5 px-0.5 scroll-smooth [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
         >
           {/* 1. Terminal Chats Dropdown (History in Gray Color as requested) */}

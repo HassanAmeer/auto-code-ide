@@ -544,19 +544,28 @@ export const terminalStore = {
           (k) => (k.type === "ssh" || k.type === "server") && k.enabled && k.host,
         );
 
-    let commandToExecute = actualCommand;
+    // Check for interactive commands that hang without TTY
+    const firstWord = actualCommand.trim().split(/\s+/)[0]?.toLowerCase() || "";
+    let effectiveCommand = actualCommand;
+    if (firstWord === "top" && !actualCommand.includes("-b")) {
+      // Auto-batch mode for top so it returns output instead of hanging
+      effectiveCommand = `${actualCommand} -b -n 1`;
+    }
+
+    let commandToExecute = effectiveCommand;
     let targetLabel = "Local VPS (Root)";
+
+    // Safe single-quote escape for SSH remote execution
+    const safeSshCmd = effectiveCommand.replace(/'/g, "'\\''");
 
     if (activeProfile) {
       targetLabel = `SSH: ${activeProfile.label || activeProfile.host}`;
-      const escapedCmd = actualCommand.replace(/"/g, '\\"');
-      commandToExecute = `ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -p ${activeProfile.port || 22} ${activeProfile.user ? `${activeProfile.user}@` : ""}${activeProfile.host} "${escapedCmd}"`;
+      commandToExecute = `ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -p ${activeProfile.port || 22} ${activeProfile.user ? `${activeProfile.user}@` : ""}${activeProfile.host} '${safeSshCmd}'`;
     } else if (activeKeyTarget && activeKeyTarget.host) {
       targetLabel = `SSH: ${activeKeyTarget.name} (${activeKeyTarget.user || "root"}@${activeKeyTarget.host})`;
-      const escapedCmd = actualCommand.replace(/"/g, '\\"');
       const port = activeKeyTarget.port || 22;
       const userPrefix = activeKeyTarget.user ? `${activeKeyTarget.user}@` : "";
-      commandToExecute = `ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -p ${port} ${userPrefix}${activeKeyTarget.host} "${escapedCmd}"`;
+      commandToExecute = `ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -p ${port} ${userPrefix}${activeKeyTarget.host} '${safeSshCmd}'`;
     }
 
     // Update history

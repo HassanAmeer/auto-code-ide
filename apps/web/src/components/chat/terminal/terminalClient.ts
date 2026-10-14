@@ -73,6 +73,14 @@ export async function executeTerminalCommandStream(
   let stderrAccum = "";
   let finalExitCode = 0;
 
+  // Pre-check for interactive programs that require full TTY
+  const firstWord = command.trim().split(/\s+/)[0]?.toLowerCase() || "";
+  if (["nano", "vi", "vim", "htop", "less", "more", "man"].includes(firstWord)) {
+    const warningMsg = `[Notice: '${firstWord}' is an interactive TTY program. It cannot receive keyboard input here. Use the Kill button (Ctrl+C) to terminate.]\n`;
+    callbacks?.onStderr?.(warningMsg);
+    stderrAccum += warningMsg;
+  }
+
   try {
     const response = await fetch(resolvePrimaryEnvironmentHttpUrl("/api/terminal/stream"), {
       method: "POST",
