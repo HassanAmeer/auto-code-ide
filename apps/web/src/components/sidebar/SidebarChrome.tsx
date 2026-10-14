@@ -175,7 +175,7 @@ function SidebarUtilityItem({
               aria-label={label}
               onClick={onClick}
               size="icon"
-              isActive={isActive}
+              isActive={isActive ?? false}
               className={cn("relative", isActive && "text-primary")}
             >
               {icon}
@@ -244,8 +244,14 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
     ) {
       void navigate({ to: "/" });
     }
-    terminalStore.setQuickBarOpen(!isTerminalOpen);
-  }, [closeMobileSidebar, navigate, isTerminalOpen]);
+    terminalStore.setQuickBarOpen(true);
+    const chat = terminalStore.createTerminalChat();
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("t3-new-terminal-thread", { detail: { chatId: chat.id } }),
+      );
+    }
+  }, [closeMobileSidebar, navigate]);
 
   const handleNotesClick = useCallback(() => {
     closeMobileSidebar();
@@ -483,8 +489,14 @@ export const SidebarAiTerminalItem = memo(function SidebarAiTerminalItem() {
     ) {
       void navigate({ to: "/" });
     }
-    terminalStore.setQuickBarOpen(!isTerminalOpen);
-  }, [isMobile, navigate, setOpenMobile, isTerminalOpen]);
+    terminalStore.setQuickBarOpen(true);
+    const chat = terminalStore.createTerminalChat();
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("t3-new-terminal-thread", { detail: { chatId: chat.id } }),
+      );
+    }
+  }, [isMobile, navigate, setOpenMobile]);
 
   return (
     <SidebarMenu className="mb-1">

@@ -48,3 +48,17 @@ export interface TerminalCommandRun {
   aiPrompt?: string | undefined;
   activeKeys?: TerminalAccessKey[] | undefined;
 }
+
+export interface TerminalChatSession {
+  id: string;
+  threadId?: string | undefined;
+  environmentId?: string | undefined;
+  title: string;
+  createdAt: number;
+  projectId?: string | null | undefined;
+  projectName?: string | null | undefined;
+  projectPath?: string | null | undefined;
+  sshKeyId?: string | null | undefined;
+  sshKeyName?: string | null | undefined;
+  lastPrompt?: string | null | undefined;
+}

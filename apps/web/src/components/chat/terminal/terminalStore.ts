@@ -1,5 +1,10 @@
 import { useSyncExternalStore } from "react";
-import type { TerminalCommandRun, SshProfile, TerminalAccessKey } from "./terminalTypes";
+import type {
+  TerminalCommandRun,
+  SshProfile,
+  TerminalAccessKey,
+  TerminalChatSession,
+} from "./terminalTypes";
 import {
   executeTerminalCommand,
   generateAiExplanation,
@@ -13,10 +18,13 @@ interface TerminalState {
   selectedProjectTitle: string | null;
   selectedKeyId: string | null;
   isQuickBarOpen: boolean;
+  isSshSheetOpen: boolean;
   history: string[];
   activeTarget: string; // "local" or sshProfile id or key id
   sshProfiles: SshProfile[];
   accessKeys: TerminalAccessKey[];
+  terminalChats: TerminalChatSession[];
+  activeChatId: string | null;
   inputMode: "bash" | "ai";
 }
 
@@ -27,12 +35,13 @@ const STORAGE_KEY_KEYS = "adc_terminal_access_keys";
 const STORAGE_KEY_PROJECT_ID = "adc_terminal_selected_project_id";
 const STORAGE_KEY_PROJECT_TITLE = "adc_terminal_selected_project_title";
 const STORAGE_KEY_SELECTED_KEY = "adc_terminal_selected_key_id";
+const STORAGE_KEY_TERMINAL_CHATS = "adc_terminal_chats";
 
 const initialCwd =
   typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY_CWD) || "/" : "/";
 
 const initialOpen =
-  typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY_OPEN) === "true" : false;
+  typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY_OPEN) !== "false" : true;
 
 const initialProjectId =
   typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY_PROJECT_ID) : null;
@@ -81,6 +90,25 @@ if (typeof window !== "undefined") {
   }
 }
 
+let initialTerminalChats: TerminalChatSession[] = [
+  {
+    id: "term_chat_init_1",
+    title: "VPS Production Auto-Deploy",
+    createdAt: Date.now() - 1000 * 60 * 45,
+    projectName: "autojobs",
+    sshKeyName: "Production Server (SSH)",
+    lastPrompt: "Check git status, pull latest changes, and restart service",
+  },
+];
+if (typeof window !== "undefined") {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY_TERMINAL_CHATS);
+    if (raw) initialTerminalChats = JSON.parse(raw);
+  } catch {
+    // ignore
+  }
+}
+
 let state: TerminalState = {
   runs: [],
   activeCwd: initialCwd,
@@ -88,9 +116,12 @@ let state: TerminalState = {
   selectedProjectTitle: initialProjectTitle,
   selectedKeyId: initialSelectedKey,
   isQuickBarOpen: initialOpen,
+  isSshSheetOpen: false,
   activeTarget: initialSelectedKey ? `key_${initialSelectedKey}` : "local",
   sshProfiles: initialSshProfiles,
   accessKeys: initialAccessKeys,
+  terminalChats: initialTerminalChats,
+  activeChatId: initialTerminalChats[0]?.id ?? null,
   inputMode: "bash",
   history: ["ls -la /", "df -h", "free -m", "uname -a"],
 };
@@ -274,6 +305,133 @@ export const terminalStore = {
 
   removeAccessKey(id: string) {
     this.deleteAccessKeys([id]);
+  },
+
+  setSshSheetOpen(isOpen: boolean) {
+    state = { ...state, isSshSheetOpen: isOpen };
+    notify();
+  },
+
+  setActiveChatId(id: string | null) {
+    state = { ...state, activeChatId: id };
+    notify();
+  },
+
+  createTerminalChat(data?: Partial<TerminalChatSession>): TerminalChatSession {
+    const activeKey = state.selectedKeyId
+      ? state.accessKeys.find((k) => k.id === state.selectedKeyId)
+      : state.accessKeys.find((k) => k.enabled && (k.type === "ssh" || k.host));
+
+    const newChat: TerminalChatSession = {
+      id: "term_chat_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
+      title:
+        data?.title ||
+        (state.selectedProjectTitle
+          ? `${state.selectedProjectTitle} Auto-Deploy`
+          : "New Terminal Chat"),
+      createdAt: Date.now(),
+      projectId: data?.projectId ?? state.selectedProjectId,
+      projectName: data?.projectName ?? state.selectedProjectTitle,
+      sshKeyId: data?.sshKeyId ?? activeKey?.id,
+      sshKeyName: data?.sshKeyName ?? activeKey?.name,
+      threadId: data?.threadId,
+      environmentId: data?.environmentId,
+      lastPrompt: data?.lastPrompt,
+    };
+
+    const updated = [newChat, ...state.terminalChats];
+    state = {
+      ...state,
+      terminalChats: updated,
+      activeChatId: newChat.id,
+      isQuickBarOpen: true,
+    };
+
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(STORAGE_KEY_TERMINAL_CHATS, JSON.stringify(updated));
+    }
+    notify();
+    return newChat;
+  },
+
+  deleteTerminalChat(id: string) {
+    const updated = state.terminalChats.filter((c) => c.id !== id);
+    const nextActive = state.activeChatId === id ? (updated[0]?.id ?? null) : state.activeChatId;
+    state = {
+      ...state,
+      terminalChats: updated,
+      activeChatId: nextActive,
+    };
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(STORAGE_KEY_TERMINAL_CHATS, JSON.stringify(updated));
+    }
+    notify();
+  },
+
+  saveCustomAccessKey(params: {
+    id?: string | undefined;
+    name: string;
+    notes?: string | undefined;
+    host?: string | undefined;
+    user?: string | undefined;
+    port?: number | undefined;
+    secret?: string | undefined;
+    type?: "ssh" | "server" | "api" | "custom" | undefined;
+  }): TerminalAccessKey {
+    const existingIndex = params.id ? state.accessKeys.findIndex((k) => k.id === params.id) : -1;
+    let savedKey: TerminalAccessKey;
+
+    if (existingIndex >= 0 && params.id) {
+      savedKey = {
+        ...state.accessKeys[existingIndex]!,
+        name: params.name,
+        notes: params.notes,
+        host: params.host,
+        user: params.user || "root",
+        port: params.port || 22,
+        secret: params.secret,
+        type: params.type || "ssh",
+        enabled: true,
+      };
+      const updated = [...state.accessKeys];
+      updated[existingIndex] = savedKey;
+      state = {
+        ...state,
+        accessKeys: updated,
+        selectedKeyId: savedKey.id,
+        activeTarget: `key_${savedKey.id}`,
+      };
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(STORAGE_KEY_KEYS, JSON.stringify(updated));
+        window.localStorage.setItem(STORAGE_KEY_SELECTED_KEY, savedKey.id);
+      }
+    } else {
+      savedKey = {
+        id: "key_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
+        name: params.name,
+        notes: params.notes,
+        host: params.host,
+        user: params.user || "root",
+        port: params.port || 22,
+        secret: params.secret,
+        type: params.type || "ssh",
+        enabled: true,
+      };
+      const updated = [...state.accessKeys, savedKey];
+      state = {
+        ...state,
+        accessKeys: updated,
+        selectedKeyId: savedKey.id,
+        activeTarget: `key_${savedKey.id}`,
+      };
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(STORAGE_KEY_KEYS, JSON.stringify(updated));
+        window.localStorage.setItem(STORAGE_KEY_SELECTED_KEY, savedKey.id);
+      }
+    }
+
+    notify();
+    return savedKey;
   },
 
   selectAllAccessKeys(enabled: boolean) {

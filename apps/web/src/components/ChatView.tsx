@@ -446,7 +446,7 @@ import { ExpandedImageDialog } from "./chat/ExpandedImageDialog";
 import { PullRequestThreadDialog } from "./PullRequestThreadDialog";
 import type { AssistantCitationRequest } from "./chat/AssistantCitationSource";
 import { MessagesTimeline, type MessagesTimelineHistoryControls } from "./chat/MessagesTimeline";
-import { terminalStore } from "./chat/terminal";
+import { terminalStore, AiTerminalHeaderStrip } from "./chat/terminal";
 import { ProviderSubagentBar } from "./chat/ProviderSubagentBar";
 import { getTriggerDisplayModelName } from "./chat/providerIconUtils";
 import { resolveTimelineIsAtEnd, worktreeSetupAgentStarted } from "./chat/MessagesTimeline.logic";
@@ -2636,6 +2636,14 @@ export default function ChatView(props: ChatViewProps) {
   const handleNewThreadInActiveProject = useCallback(() => {
     startNewThreadForProject(activeProjectRef, handleNewThread);
   }, [activeProjectRef, handleNewThread]);
+
+  useEffect(() => {
+    const handleNewTerminal = () => {
+      handleNewThreadInActiveProject();
+    };
+    window.addEventListener("t3-new-terminal-thread", handleNewTerminal);
+    return () => window.removeEventListener("t3-new-terminal-thread", handleNewTerminal);
+  }, [handleNewThreadInActiveProject]);
   const projectGroupingSettings = selectProjectGroupingSettings(settings);
   const activeDraftLogicalProjectKey =
     !isServerThread && activeProject
@@ -11351,6 +11359,12 @@ export default function ChatView(props: ChatViewProps) {
               : {})}
           />
         </header>
+
+        {/* Top Header Patti for Projects, SSH Keys & Terminal Chats */}
+        <AiTerminalHeaderStrip
+          activeProject={activeProject ?? null}
+          onNewTerminalThread={handleNewThreadInActiveProject}
+        />
 
         {/* Main content area with optional plan sidebar */}
         <div className="relative flex min-h-0 min-w-0 flex-1">

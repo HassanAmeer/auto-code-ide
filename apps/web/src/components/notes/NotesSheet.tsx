@@ -127,7 +127,7 @@ export function NotesSheet() {
     updateNote(editingId, {
       title: editTitle,
       content: editContent,
-      color: editColor,
+      color: editColor || "default",
     });
     setEditingId(null);
   };

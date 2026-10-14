@@ -5,3 +5,5 @@ export * from "./TerminalCommandBox";
 export * from "./AiTerminalQuickCommand";
 export * from "./TerminalFeed";
 export * from "./AiTerminalCommandBar";
+export * from "./AiTerminalHeaderStrip";
+export * from "./SshKeysSheet";
