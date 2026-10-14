@@ -3,11 +3,13 @@ import {
   ArrowLeftIcon,
   ChartNoAxesColumnIcon,
   CheckSquareIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
   SettingsIcon,
   TerminalSquareIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import { memo, useCallback } from "react";
+import { memo, useCallback, useState } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { useNotes, useNotesSheetState } from "../../lib/notesStore";
 
@@ -155,18 +157,29 @@ function SidebarUtilityItem({
   icon,
   label,
   onClick,
+  isActive,
+  badge,
 }: {
   icon: ReactNode;
   label: string;
   onClick: () => void;
+  isActive?: boolean;
+  badge?: ReactNode;
 }) {
   return (
-    <SidebarMenuItem className="shrink-0">
+    <SidebarMenuItem className="shrink-0 relative">
       <Tooltip>
         <TooltipTrigger
           render={
-            <SidebarMenuButton aria-label={label} onClick={onClick} size="icon">
+            <SidebarMenuButton
+              aria-label={label}
+              onClick={onClick}
+              size="icon"
+              isActive={isActive}
+              className={cn("relative", isActive && "text-primary")}
+            >
               {icon}
+              {badge}
             </SidebarMenuButton>
           }
         />
@@ -177,18 +190,27 @@ function SidebarUtilityItem({
 }
 
 export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
+  const [isExpanded, setIsExpanded] = useState(false);
   const navigate = useNavigate();
   const navigateToMainApp = useNavigateToMainApp();
   const { isMobile, setOpenMobile } = useSidebar();
-  const isOnUtilityPage = useLocation({
-    select: (location) => isSidebarUtilityPage(location.pathname),
-  });
+  const location = useLocation();
+  const isOnUtilityPage = isSidebarUtilityPage(location.pathname);
   const pullRequestsSupported = usePullRequestsSupported();
+
+  const terminalState = useTerminalStore();
+  const isTerminalOpen = terminalState.isQuickBarOpen;
+
+  const { activeCount } = useNotes();
+  const [isNotesOpen, setIsNotesOpen] = useNotesSheetState();
+  const isArchiveOpen = location.pathname === "/settings/archived";
+
   const closeMobileSidebar = useCallback(() => {
     if (isMobile) {
       setOpenMobile(false);
     }
   }, [isMobile, setOpenMobile]);
+
   const handlePullRequestsClick = useCallback(() => {
     closeMobileSidebar();
     void navigate({
@@ -196,55 +218,250 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
       search: readPullRequestListPreferences(),
     });
   }, [closeMobileSidebar, navigate]);
+
   const handleSettingsClick = useCallback(() => {
     closeMobileSidebar();
     void navigate({ to: "/settings" });
   }, [closeMobileSidebar, navigate]);
 
   const handleUsageClick = useCallback(() => {
-    if (isMobile) {
-      setOpenMobile(false);
-    }
+    closeMobileSidebar();
     void navigate({ to: "/usage" });
-  }, [isMobile, navigate, setOpenMobile]);
+  }, [closeMobileSidebar, navigate]);
 
   const handleBackClick = useCallback(() => {
     closeMobileSidebar();
     void navigateToMainApp();
   }, [closeMobileSidebar, navigateToMainApp]);
 
+  const handleTerminalClick = useCallback(() => {
+    closeMobileSidebar();
+    if (
+      typeof window !== "undefined" &&
+      (window.location.pathname.startsWith("/settings") ||
+        window.location.pathname === "/usage" ||
+        window.location.pathname === "/pull-requests")
+    ) {
+      void navigate({ to: "/" });
+    }
+    terminalStore.setQuickBarOpen(!isTerminalOpen);
+  }, [closeMobileSidebar, navigate, isTerminalOpen]);
+
+  const handleNotesClick = useCallback(() => {
+    closeMobileSidebar();
+    setIsNotesOpen(!isNotesOpen);
+  }, [closeMobileSidebar, isNotesOpen, setIsNotesOpen]);
+
+  const handleArchiveClick = useCallback(() => {
+    closeMobileSidebar();
+    if (isArchiveOpen) {
+      void navigate({ to: "/" });
+    } else {
+      void navigate({ to: "/settings/archived" });
+    }
+  }, [closeMobileSidebar, isArchiveOpen, navigate]);
+
   return (
-    <SidebarMenu className="flex-row items-center">
-      {isOnUtilityPage ? (
-        <SidebarMenuItem className="min-w-0 flex-1">
-          <SidebarMenuButton onClick={handleBackClick}>
-            <ArrowLeftIcon />
-            <span>Back</span>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-      ) : (
-        <>
-          <SidebarUtilityItem
-            icon={<SettingsIcon />}
-            label="Settings"
-            onClick={handleSettingsClick}
-          />
-          {pullRequestsSupported ? (
-            <SidebarUtilityItem
-              icon={<PullRequestGlyph.pullRequest />}
-              label="Pull Requests"
-              onClick={handlePullRequestsClick}
-            />
-          ) : null}
-          <SidebarUtilityItem
-            icon={<ChartNoAxesColumnIcon />}
-            label="Usage"
-            onClick={handleUsageClick}
-          />
-        </>
+    <div className="flex flex-col w-full">
+      {/* ── EXPANDED UNCOLLAPSED POPUP DRAWER (ABOVE BOTTOM ROW) ── */}
+      {isExpanded && !isOnUtilityPage && (
+        <div className="mb-2 flex flex-col gap-1.5 rounded-xl border border-border/50 bg-sidebar-muted/40 p-2 shadow-xs backdrop-blur-sm animate-in fade-in slide-in-from-bottom-2 duration-150">
+          <div className="flex items-center justify-between px-1 pb-1 border-b border-border/30 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <span>Extra Tools</span>
+            <button
+              type="button"
+              onClick={() => setIsExpanded(false)}
+              className="text-muted-foreground hover:text-foreground text-[10px] flex items-center gap-0.5 cursor-pointer"
+            >
+              <span>Close</span>
+              <ChevronDownIcon className="size-3" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+            {/* Notes & Reminders */}
+            <button
+              type="button"
+              onClick={() => {
+                handleNotesClick();
+                setIsExpanded(false);
+              }}
+              className={cn(
+                "flex items-center gap-2 rounded-lg p-1.5 text-xs font-medium transition-all text-left cursor-pointer",
+                isNotesOpen
+                  ? "bg-amber-500/15 text-amber-300 border border-amber-500/30"
+                  : "hover:bg-sidebar-row-hover text-sidebar-foreground border border-transparent",
+              )}
+            >
+              <div className="size-6 rounded-md bg-amber-500/10 text-amber-400 flex items-center justify-center shrink-0 relative">
+                <CheckSquareIcon className="size-3.5" />
+                {activeCount > 0 && (
+                  <span className="absolute -top-1 -right-1 size-2 rounded-full bg-amber-400" />
+                )}
+              </div>
+              <div className="flex flex-col min-w-0">
+                <span className="font-semibold text-[11px] truncate">Notes</span>
+                <span className="text-[9px] text-muted-foreground truncate">
+                  {activeCount > 0 ? `${activeCount} active` : "Open sheet"}
+                </span>
+              </div>
+            </button>
+
+            {/* Archive */}
+            <button
+              type="button"
+              onClick={() => {
+                handleArchiveClick();
+                setIsExpanded(false);
+              }}
+              className={cn(
+                "flex items-center gap-2 rounded-lg p-1.5 text-xs font-medium transition-all text-left cursor-pointer",
+                isArchiveOpen
+                  ? "bg-sky-500/15 text-sky-300 border border-sky-500/30"
+                  : "hover:bg-sidebar-row-hover text-sidebar-foreground border border-transparent",
+              )}
+            >
+              <div className="size-6 rounded-md bg-sky-500/10 text-sky-400 flex items-center justify-center shrink-0">
+                <ArchiveIcon className="size-3.5" />
+              </div>
+              <div className="flex flex-col min-w-0">
+                <span className="font-semibold text-[11px] truncate">Archive</span>
+                <span className="text-[9px] text-muted-foreground truncate">Threads</span>
+              </div>
+            </button>
+
+            {/* AI Terminal */}
+            <button
+              type="button"
+              onClick={() => {
+                handleTerminalClick();
+                setIsExpanded(false);
+              }}
+              className={cn(
+                "flex items-center gap-2 rounded-lg p-1.5 text-xs font-medium transition-all text-left cursor-pointer",
+                isTerminalOpen
+                  ? "bg-primary/15 text-primary border border-primary/30"
+                  : "hover:bg-sidebar-row-hover text-sidebar-foreground border border-transparent",
+              )}
+            >
+              <div className="size-6 rounded-md bg-emerald-500/10 text-emerald-400 flex items-center justify-center shrink-0">
+                <TerminalSquareIcon className="size-3.5" />
+              </div>
+              <div className="flex flex-col min-w-0">
+                <span className="font-semibold text-[11px] truncate">AI Terminal</span>
+                <span className="text-[9px] text-muted-foreground truncate">
+                  {isTerminalOpen ? "Active" : "Open shell"}
+                </span>
+              </div>
+            </button>
+
+            {/* Pull Requests (if supported) */}
+            {pullRequestsSupported ? (
+              <button
+                type="button"
+                onClick={() => {
+                  handlePullRequestsClick();
+                  setIsExpanded(false);
+                }}
+                className="flex items-center gap-2 rounded-lg p-1.5 text-xs font-medium hover:bg-sidebar-row-hover text-sidebar-foreground transition-all text-left border border-transparent cursor-pointer"
+              >
+                <div className="size-6 rounded-md bg-violet-500/10 text-violet-400 flex items-center justify-center shrink-0">
+                  <PullRequestGlyph.pullRequest className="size-3.5" />
+                </div>
+                <div className="flex flex-col min-w-0">
+                  <span className="font-semibold text-[11px] truncate">Pull Requests</span>
+                  <span className="text-[9px] text-muted-foreground truncate">GitHub PRs</span>
+                </div>
+              </button>
+            ) : null}
+          </div>
+        </div>
       )}
-      <SidebarUpdatePill />
-    </SidebarMenu>
+
+      {/* ── SINGLE BOTTOM ROW (EK HI PATTI) ── */}
+      <SidebarMenu className="flex-row items-center justify-between w-full">
+        {isOnUtilityPage ? (
+          <SidebarMenuItem className="min-w-0 flex-1">
+            <SidebarMenuButton onClick={handleBackClick}>
+              <ArrowLeftIcon />
+              <span>Back</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        ) : (
+          <>
+            <div className="flex items-center gap-0.5">
+              <SidebarUtilityItem
+                icon={<SettingsIcon />}
+                label="Settings"
+                onClick={handleSettingsClick}
+              />
+              <SidebarUtilityItem
+                icon={<ChartNoAxesColumnIcon />}
+                label="Usage"
+                onClick={handleUsageClick}
+              />
+              <SidebarUtilityItem
+                icon={<TerminalSquareIcon className={cn(isTerminalOpen && "text-emerald-400")} />}
+                label="AI Terminal"
+                onClick={handleTerminalClick}
+                isActive={isTerminalOpen}
+                badge={
+                  isTerminalOpen ? (
+                    <span className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  ) : undefined
+                }
+              />
+              <SidebarUtilityItem
+                icon={<CheckSquareIcon className={cn(activeCount > 0 && "text-amber-400")} />}
+                label="Notes & Reminders"
+                onClick={handleNotesClick}
+                isActive={isNotesOpen}
+                badge={
+                  activeCount > 0 ? (
+                    <span className="absolute -top-1 -right-1 text-[9px] font-mono font-bold px-1 rounded-full bg-amber-500 text-black leading-none py-0.5 shadow-xs">
+                      {activeCount}
+                    </span>
+                  ) : undefined
+                }
+              />
+            </div>
+
+            {/* Right side: More+ button with upward arrow */}
+            <div className="flex items-center gap-1">
+              <SidebarUpdatePill />
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <button
+                      type="button"
+                      onClick={() => setIsExpanded((v) => !v)}
+                      className={cn(
+                        "flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold transition-all cursor-pointer",
+                        isExpanded
+                          ? "bg-primary/20 text-primary border border-primary/30"
+                          : "text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground border border-transparent",
+                      )}
+                      aria-label={isExpanded ? "Collapse extra tools" : "More tools"}
+                    >
+                      <span className="text-[11px] font-medium tracking-tight">More+</span>
+                      <ChevronUpIcon
+                        className={cn(
+                          "size-3 transition-transform duration-200",
+                          isExpanded && "rotate-180",
+                        )}
+                      />
+                    </button>
+                  }
+                />
+                <TooltipPopup side="top">
+                  {isExpanded ? "Collapse tools" : "More tools (Archive, PRs, etc.)"}
+                </TooltipPopup>
+              </Tooltip>
+            </div>
+          </>
+        )}
+      </SidebarMenu>
+    </div>
   );
 });
 
@@ -428,13 +645,10 @@ export const SidebarNotesItem = memo(function SidebarNotesItem() {
 
 export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
   return (
-    <SidebarFooter>
+    <SidebarFooter className="p-1.5 pt-0">
       <SidebarThreadUndoNotice />
       <SidebarProviderUpdatePill />
       <SidebarUpdateArchitectureWarning />
-      <SidebarAiTerminalItem />
-      <SidebarArchiveItem />
-      <SidebarNotesItem />
       <SidebarUtilityMenu />
     </SidebarFooter>
   );

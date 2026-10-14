@@ -5000,7 +5000,7 @@ export default function Sidebar() {
         fixedHeader={
           // Lifted above the stage backdrop, whose fade bleeds below the
           // header and would otherwise paint across the search row's outline.
-          <SidebarGroup className="z-[1]">
+          <SidebarGroup className="z-[1] pt-0.5 pb-1">
             <SidebarThreadHeader
               searchFieldRef={headerSearchRef}
               hasProjects={projectGroups.length > 0}
@@ -5155,7 +5155,7 @@ export default function Sidebar() {
               onClearSearch={clearThreadSearch}
             />
             {projectGroups.length > 0 && !isSearchingThreads ? (
-              <div className="flex items-center gap-1 overflow-x-auto pt-1.5 pb-0.5 px-0.5 text-2xs scrollbar-none">
+              <div className="flex items-center gap-1 overflow-x-auto pt-1 pb-0 px-0.5 text-2xs scrollbar-none">
                 <button
                   type="button"
                   onClick={() => setProjectScopeKey(null)}
@@ -5196,7 +5196,7 @@ export default function Sidebar() {
           </SidebarGroup>
         }
       >
-        <SidebarGroup className="flex-1" role="presentation">
+        <SidebarGroup className="flex-1 pt-1" role="presentation">
           {isSearchingThreads ? (
             threadSearchResults.length > 0 ? (
               <TooltipProvider
