@@ -1869,15 +1869,22 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       }
 
       // 2. Check if remote origin exists
+      let remoteName = "origin";
       const remoteCheck = await executeTerminalCommand("git remote get-url origin", cwd);
       if (!remoteCheck.ok || !remoteCheck.stdout.trim()) {
-        toastManager.add({
-          type: "error",
-          title: "GitHub Remote Not Found",
-          description:
-            "No GitHub remote configured. Please add git remote origin or open in Terminal.",
-        });
-        return;
+        const anyRemote = await executeTerminalCommand("git remote", cwd);
+        const remotes = anyRemote.ok ? anyRemote.stdout.trim().split("\n").filter(Boolean) : [];
+        if (remotes.length > 0) {
+          remoteName = remotes[0]!;
+        } else {
+          toastManager.add({
+            type: "error",
+            title: "GitHub Remote Not Found",
+            description:
+              "No remote repository found. Please configure a Git remote (e.g. git remote add origin <url>) or open Terminal.",
+          });
+          return;
+        }
       }
 
       const progressToastId = toastManager.add({
@@ -1921,10 +1928,25 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
             commitMsg = `feat: update ${changedFiles[0]} and ${changedFiles.length - 1} other files`;
           }
 
-          const commitResult = await executeTerminalCommand(
+          let commitResult = await executeTerminalCommand(
             `git commit -m ${JSON.stringify(commitMsg)}`,
             cwd,
           );
+          if (
+            !commitResult.ok &&
+            (commitResult.stderr.includes("Please tell me who you are") ||
+              commitResult.stdout.includes("Please tell me who you are") ||
+              commitResult.stderr.includes("Author identity unknown"))
+          ) {
+            // Auto configure fallback author identity if not set
+            await executeTerminalCommand('git config user.name "AutoCode User"', cwd);
+            await executeTerminalCommand('git config user.email "user@autocode.local"', cwd);
+            commitResult = await executeTerminalCommand(
+              `git commit -m ${JSON.stringify(commitMsg)}`,
+              cwd,
+            );
+          }
+
           if (
             !commitResult.ok &&
             !commitResult.stdout.includes("nothing to commit") &&
@@ -1934,21 +1956,38 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
             toastManager.add({
               type: "error",
               title: "Git Commit Failed",
-              description: commitResult.stderr || "Failed to commit changes.",
+              description:
+                commitResult.stderr || commitResult.stdout || "Failed to commit changes.",
             });
             return;
           }
         }
 
         // 4. Push to remote
-        let pushResult = await executeTerminalCommand("git push", cwd);
+        let pushResult = await executeTerminalCommand(`git push ${remoteName}`, cwd);
         if (!pushResult.ok) {
           if (
             pushResult.stderr.includes("no upstream branch") ||
             pushResult.stderr.includes("set-upstream") ||
             pushResult.stderr.includes("The current branch")
           ) {
-            pushResult = await executeTerminalCommand("git push -u origin HEAD", cwd);
+            pushResult = await executeTerminalCommand(`git push -u ${remoteName} HEAD`, cwd);
+          } else if (
+            pushResult.stderr.includes("fetch first") ||
+            pushResult.stderr.includes("non-fast-forward") ||
+            pushResult.stderr.includes("Updates were rejected")
+          ) {
+            // Try git pull --rebase then push again
+            const rebaseResult = await executeTerminalCommand(
+              `git pull --rebase ${remoteName} HEAD`,
+              cwd,
+            );
+            if (rebaseResult.ok) {
+              pushResult = await executeTerminalCommand(`git push ${remoteName} HEAD`, cwd);
+            } else {
+              // Revert rebase if failed to avoid leaving dirty rebase state
+              await executeTerminalCommand("git rebase --abort", cwd);
+            }
           }
         }
 
@@ -1958,13 +1997,17 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
           toastManager.add({
             type: "success",
             title: "Pushed to GitHub",
-            description: `Successfully pushed "${project.displayName}" to GitHub.`,
+            description: `Successfully pushed "${project.displayName}" to ${remoteName}.`,
           });
         } else {
+          let desc = pushResult.stderr || pushResult.error || "Failed to push to GitHub.";
+          if (desc.includes("Permission denied") || desc.includes("Could not read from remote")) {
+            desc += " Check your SSH key or GitHub credentials.";
+          }
           toastManager.add({
             type: "error",
             title: "Git Push Failed",
-            description: pushResult.stderr || pushResult.error || "Failed to push to GitHub.",
+            description: desc,
           });
         }
       } catch (err) {
@@ -2024,10 +2067,15 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
               pullResult.stdout.trim() || `Pulled latest changes for "${project.displayName}".`,
           });
         } else {
+          let desc = pullResult.stderr || pullResult.error || "Failed to pull changes.";
+          if (desc.includes("overwritten by merge")) {
+            desc =
+              "Local files me uncommitted changes hain jo overwrite ho sakti hain. Pehle 'Push to GitHub' karein ya 'Force Pull' karein.";
+          }
           toastManager.add({
             type: "error",
             title: "Git Pull Failed",
-            description: pullResult.stderr || pullResult.error || "Failed to pull changes.",
+            description: desc,
           });
         }
       } catch (err) {

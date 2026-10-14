@@ -51,6 +51,7 @@ export function runBashCommandOnHost(
         TERM: "xterm-256color",
         PAGER: "cat",
         FORCE_COLOR: "1",
+        GIT_TERMINAL_PROMPT: "0",
       },
     });
 
@@ -154,6 +155,7 @@ export function createTerminalEventStream(
       TERM: "xterm-256color",
       PAGER: "cat",
       FORCE_COLOR: "1",
+      GIT_TERMINAL_PROMPT: "0",
     },
   });
 

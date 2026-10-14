@@ -28,6 +28,22 @@ export const QUICK_COMMANDS_LIST: QuickCommandItem[] = [
     badge: "Git",
   },
   {
+    id: "deploy_git_push",
+    category: "deploy",
+    title: "Git Push (Stage, Commit & Push)",
+    cmd: 'git add . && (git commit -m "chore: update project files" || true) && git push',
+    subtitle: "Local changes ko automatically add, commit aur remote par push karein",
+    badge: "Git",
+  },
+  {
+    id: "deploy_git_fetch",
+    category: "deploy",
+    title: "Git Fetch All Branches",
+    cmd: "git fetch --all --prune",
+    subtitle: "Remote branches aur references ko synchronize karein",
+    badge: "Git",
+  },
+  {
     id: "deploy_git_status",
     category: "deploy",
     title: "Git Repository Status",
