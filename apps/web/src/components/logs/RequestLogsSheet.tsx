@@ -40,7 +40,7 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
   const [aiSearchQuery, setAiSearchQuery] = useState("");
   const [selectedAiLogId, setSelectedAiLogId] = useState<string | null>(null);
   const [aiActiveTab, setAiActiveTab] = useState<
-    "overview" | "prompt" | "response" | "error" | "curl"
+    "overview" | "payload" | "prompt" | "response" | "error" | "curl"
   >("overview");
   const [isRefreshingAi, setIsRefreshingAi] = useState(false);
 
@@ -145,6 +145,39 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
     return logs.find((l) => l.id === selectedLogId) ?? null;
   }, [logs, selectedLogId]);
 
+  const outgoingPayloadJson = useMemo(() => {
+    if (!selectedAiLog) return "";
+    const payload = {
+      model: selectedAiLog.model,
+      stream: true,
+      messages:
+        selectedAiLog.messages && selectedAiLog.messages.length > 0
+          ? selectedAiLog.messages
+          : [{ role: "user", content: selectedAiLog.userPrompt }],
+    };
+    return JSON.stringify(payload, null, 2);
+  }, [selectedAiLog]);
+
+  const detectedModel = useMemo(() => {
+    if (!selectedLog) return null;
+    if (selectedLog.requestBody) {
+      try {
+        const parsed = JSON.parse(selectedLog.requestBody);
+        if (parsed.model) return { model: String(parsed.model), source: 'JSON Body ("model")' };
+        if (parsed.model_id)
+          return { model: String(parsed.model_id), source: 'JSON Body ("model_id")' };
+        if (parsed.modelId)
+          return { model: String(parsed.modelId), source: 'JSON Body ("modelId")' };
+      } catch {
+        const match = selectedLog.requestBody.match(/"model"\s*:\s*"([^"]+)"/);
+        if (match) return { model: match[1], source: 'Body regex ("model")' };
+      }
+    }
+    const urlMatch = selectedLog.url.match(/models\/([^:/?]+)/);
+    if (urlMatch) return { model: urlMatch[1], source: "URL Path (/models/...)" };
+    return null;
+  }, [selectedLog]);
+
   if (!isOpen) return null;
 
   const getMethodBadgeClass = (method: string) => {
@@ -219,7 +252,7 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
       />
 
       {/* Slide-over panel */}
-      <div className="relative z-[121] flex h-full w-full max-w-full sm:max-w-2xl md:max-w-4xl flex-col bg-zinc-950 text-zinc-100 border-l border-zinc-800/80 shadow-2xl animate-in slide-in-from-right duration-200 overflow-hidden">
+      <div className="relative z-[121] flex h-full w-[90vw] max-w-[90vw] sm:w-full sm:max-w-2xl md:max-w-4xl flex-col bg-zinc-950 text-zinc-100 border-l border-zinc-800/80 shadow-2xl animate-in slide-in-from-right duration-200 overflow-hidden">
         {/* Top App Header with Cupertino iOS Segmented Tabs */}
         <div className="flex items-center justify-between border-b border-zinc-800/80 px-2.5 py-2 sm:px-4 sm:py-2.5 bg-zinc-900/90 backdrop-blur-md shrink-0 gap-2 min-w-0">
           <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -416,7 +449,8 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
                               {/* Model Badge */}
-                              <span className="rounded px-2 py-0.5 text-[11px] font-mono font-bold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 truncate max-w-[200px]">
+                              <span className="rounded px-2 py-0.5 text-[11px] font-mono font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 truncate max-w-[210px] flex items-center gap-1">
+                                <CpuIcon className="size-3 text-emerald-400 shrink-0" />
                                 {log.model}
                               </span>
 
@@ -433,8 +467,10 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
 
                           <div className="flex items-center justify-between gap-2 text-[11px]">
                             <span className="text-zinc-400 font-sans truncate">
-                              <span className="text-zinc-500">Provider:</span>{" "}
-                              <span className="text-zinc-200 font-medium">{log.provider}</span>
+                              <span className="text-zinc-500">Payload:</span>{" "}
+                              <code className="text-emerald-400 font-mono text-[10px]">
+                                "model": "{log.model}"
+                              </code>
                             </span>
                             <span className="font-mono text-zinc-500 shrink-0">
                               {log.timeFormatted.split(".")[0]}
@@ -473,13 +509,32 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                       >
                         ← Back
                       </button>
-                      <div className="flex flex-col">
-                        <span className="text-xs font-mono font-bold text-indigo-300 flex items-center gap-1.5">
-                          <CpuIcon className="size-3.5 text-indigo-400" />
-                          {selectedAiLog.model}
-                        </span>
-                        <span className="text-[10px] text-zinc-400">
-                          {selectedAiLog.provider} ({selectedAiLog.providerInstanceId})
+                      <div className="flex flex-col min-w-0">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="text-xs font-mono font-bold text-emerald-300 flex items-center gap-1.5 truncate">
+                            <CpuIcon className="size-3.5 text-emerald-400 shrink-0" />
+                            {selectedAiLog.model}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => copyToClipboard(selectedAiLog.model, "topModelId")}
+                            className="text-zinc-500 hover:text-zinc-200 text-[10px] flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 shrink-0 cursor-pointer"
+                            title="Copy Model ID"
+                          >
+                            {copiedKey === "topModelId" ? (
+                              <CheckIcon className="size-2.5 text-emerald-400" />
+                            ) : (
+                              <CopyIcon className="size-2.5" />
+                            )}
+                            Copy ID
+                          </button>
+                        </div>
+                        <span className="text-[10px] text-zinc-400 truncate">
+                          Wire JSON:{" "}
+                          <code className="text-emerald-400 font-mono">
+                            "model": "{selectedAiLog.model}"
+                          </code>{" "}
+                          • {selectedAiLog.provider}
                         </span>
                       </div>
                     </div>
@@ -511,6 +566,7 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                     {(
                       [
                         { id: "overview", label: "Model & Request" },
+                        { id: "payload", label: "Model ID & Payload" },
                         { id: "prompt", label: "Prompt & Messages" },
                         { id: "response", label: "Response & Output" },
                         {
@@ -540,6 +596,83 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                     {/* 1. OVERVIEW & REQUEST */}
                     {aiActiveTab === "overview" && (
                       <div className="space-y-4 font-sans">
+                        {/* Model ID Wire Payload Summary Card */}
+                        <div className="rounded-lg border border-emerald-500/30 bg-gradient-to-r from-emerald-950/30 via-zinc-900/60 to-zinc-900/40 p-3.5 space-y-2.5">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <CpuIcon className="size-4 text-emerald-400" />
+                              <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
+                                AI Model ID & Wire Payload
+                              </span>
+                            </div>
+                            <Button
+                              size="xs"
+                              variant="outline"
+                              onClick={() =>
+                                copyToClipboard(selectedAiLog.model, "overviewModelId")
+                              }
+                              className="h-6 text-[11px] gap-1 border-zinc-700/80 rounded-full hover:bg-zinc-800 text-zinc-300"
+                            >
+                              {copiedKey === "overviewModelId" ? (
+                                <CheckIcon className="size-3 text-emerald-400" />
+                              ) : (
+                                <CopyIcon className="size-3" />
+                              )}
+                              Copy Model ID
+                            </Button>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                            <div className="bg-zinc-950/80 p-2 rounded border border-zinc-800">
+                              <span className="text-zinc-500 text-[10px] block uppercase font-sans">
+                                Active Model ID
+                              </span>
+                              <span className="text-emerald-300 font-mono font-bold text-xs select-all">
+                                {selectedAiLog.model}
+                              </span>
+                            </div>
+
+                            <div className="bg-zinc-950/80 p-2 rounded border border-zinc-800">
+                              <span className="text-zinc-500 text-[10px] block uppercase font-sans">
+                                JSON Key-Value
+                              </span>
+                              <span className="text-zinc-200 font-mono text-xs select-all">
+                                <span className="text-cyan-400">"model"</span>:{" "}
+                                <span className="text-emerald-300">"{selectedAiLog.model}"</span>
+                              </span>
+                            </div>
+
+                            <div className="bg-zinc-950/80 p-2 rounded border border-zinc-800">
+                              <span className="text-zinc-500 text-[10px] block uppercase font-sans">
+                                Transmission Format
+                              </span>
+                              <span className="text-zinc-300 font-mono text-[11px]">
+                                HTTP POST Body (
+                                <span className="text-amber-300">application/json</span>)
+                              </span>
+                            </div>
+
+                            <div className="bg-zinc-950/80 p-2 rounded border border-zinc-800">
+                              <span className="text-zinc-500 text-[10px] block uppercase font-sans">
+                                Provider Target
+                              </span>
+                              <span className="text-zinc-300 font-mono text-[11px]">
+                                {selectedAiLog.provider} • ID: {selectedAiLog.providerInstanceId}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => setAiActiveTab("payload")}
+                              className="text-xs text-emerald-400 hover:text-emerald-300 hover:underline flex items-center gap-1 font-medium cursor-pointer"
+                            >
+                              Inspect full outgoing JSON payload & format breakdown →
+                            </button>
+                          </div>
+                        </div>
+
                         {/* Main Info Card */}
                         <div className="rounded-lg border border-zinc-800/80 bg-zinc-900/40 p-3.5 space-y-3">
                           <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
@@ -661,7 +794,182 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                       </div>
                     )}
 
-                    {/* 2. PROMPT & MESSAGES */}
+                    {/* 2. PAYLOAD & MODEL ID */}
+                    {aiActiveTab === "payload" && (
+                      <div className="space-y-4 font-sans">
+                        {/* Model ID Highlight Header */}
+                        <div className="rounded-lg border border-emerald-500/40 bg-zinc-900/60 p-3.5 space-y-3">
+                          <div className="flex items-center justify-between flex-wrap gap-2">
+                            <div className="space-y-0.5">
+                              <span className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+                                <CpuIcon className="size-4 text-emerald-400" />
+                                Model ID in Wire Payload
+                              </span>
+                              <p className="text-[11px] text-zinc-400">
+                                This model identifier is transmitted in the outgoing HTTP POST
+                                request payload.
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <Button
+                                size="xs"
+                                variant="outline"
+                                onClick={() =>
+                                  copyToClipboard(selectedAiLog.model, "payloadModelId")
+                                }
+                                className="h-6 text-[11px] gap-1 border-zinc-700/80 rounded-full hover:bg-zinc-800 text-zinc-300"
+                              >
+                                {copiedKey === "payloadModelId" ? (
+                                  <CheckIcon className="size-3 text-emerald-400" />
+                                ) : (
+                                  <CopyIcon className="size-3" />
+                                )}
+                                Copy Model ID
+                              </Button>
+                              <Button
+                                size="xs"
+                                variant="outline"
+                                onClick={() =>
+                                  copyToClipboard(
+                                    JSON.stringify({ model: selectedAiLog.model }, null, 2),
+                                    "payloadModelJson",
+                                  )
+                                }
+                                className="h-6 text-[11px] gap-1 border-zinc-700/80 rounded-full hover:bg-zinc-800 text-zinc-300"
+                              >
+                                {copiedKey === "payloadModelJson" ? (
+                                  <CheckIcon className="size-3 text-emerald-400" />
+                                ) : (
+                                  <CopyIcon className="size-3" />
+                                )}
+                                Copy {"{ model }"}
+                              </Button>
+                            </div>
+                          </div>
+
+                          <div className="rounded-md border border-zinc-800 bg-zinc-950 p-2.5 font-mono text-xs flex items-center justify-between gap-2 overflow-x-auto">
+                            <div className="flex items-center gap-2">
+                              <span className="text-zinc-500 select-none">JSON Field:</span>
+                              <span className="text-cyan-400">"model"</span>:{" "}
+                              <span className="text-emerald-300 font-bold">
+                                "{selectedAiLog.model}"
+                              </span>
+                            </div>
+                            <span className="text-[10px] text-zinc-500 font-sans px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 shrink-0">
+                              string
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Full Outgoing Request Body (Payload JSON) */}
+                        <div className="rounded-lg border border-zinc-800/80 bg-zinc-900/40 p-3.5 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div className="space-y-0.5">
+                              <span className="text-xs font-bold uppercase tracking-wider text-zinc-200">
+                                Full Outgoing Request Payload (JSON Body)
+                              </span>
+                              <div className="text-[11px] text-zinc-500">
+                                Content-Type: application/json • Method: POST
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                copyToClipboard(outgoingPayloadJson, "fullPayloadJson")
+                              }
+                              className="text-zinc-400 hover:text-zinc-200 flex items-center gap-1 text-[11px] px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/60 cursor-pointer"
+                            >
+                              {copiedKey === "fullPayloadJson" ? (
+                                <CheckIcon className="size-3 text-emerald-400" />
+                              ) : (
+                                <CopyIcon className="size-3" />
+                              )}
+                              Copy JSON Payload
+                            </button>
+                          </div>
+
+                          <pre className="rounded-md border border-zinc-800 bg-zinc-950 p-3 font-mono text-[11px] text-zinc-300 whitespace-pre-wrap max-h-96 overflow-y-auto leading-relaxed">
+                            {outgoingPayloadJson}
+                          </pre>
+                        </div>
+
+                        {/* Provider Transmission Formats (How different types send Model ID) */}
+                        <div className="rounded-lg border border-zinc-800/80 bg-zinc-900/40 p-3.5 space-y-3">
+                          <span className="text-xs font-bold uppercase tracking-wider text-zinc-400 block">
+                            How Model ID is Sent in Different API Types & Formats
+                          </span>
+
+                          <div className="space-y-2.5 text-[11px]">
+                            {/* OpenAI / OpenRouter / DeepSeek Standard */}
+                            <div className="p-2.5 rounded-md bg-zinc-950 border border-zinc-800/80 space-y-1.5">
+                              <div className="flex items-center justify-between text-zinc-300 font-semibold font-mono text-xs">
+                                <span className="text-emerald-400">
+                                  1. Standard OpenAI / OpenRouter / DeepSeek
+                                </span>
+                                <span className="text-zinc-500 text-[10px]">JSON POST Body</span>
+                              </div>
+                              <pre className="text-zinc-400 font-mono text-[10.5px] overflow-x-auto bg-zinc-900/50 p-2 rounded border border-zinc-900">
+                                {`{
+  "model": "${selectedAiLog.model}",
+  "messages": [{"role": "user", "content": "..."}],
+  "stream": true
+}`}
+                              </pre>
+                            </div>
+
+                            {/* Anthropic Messages */}
+                            <div className="p-2.5 rounded-md bg-zinc-950 border border-zinc-800/80 space-y-1.5">
+                              <div className="flex items-center justify-between text-zinc-300 font-semibold font-mono text-xs">
+                                <span className="text-violet-400">
+                                  2. Anthropic Claude Messages API
+                                </span>
+                                <span className="text-zinc-500 text-[10px]">JSON POST Body</span>
+                              </div>
+                              <pre className="text-zinc-400 font-mono text-[10.5px] overflow-x-auto bg-zinc-900/50 p-2 rounded border border-zinc-900">
+                                {`{
+  "model": "${selectedAiLog.model}",
+  "max_tokens": 4096,
+  "messages": [{"role": "user", "content": "..."}]
+}`}
+                              </pre>
+                            </div>
+
+                            {/* Google Gemini REST API */}
+                            <div className="p-2.5 rounded-md bg-zinc-950 border border-zinc-800/80 space-y-1.5">
+                              <div className="flex items-center justify-between text-zinc-300 font-semibold font-mono text-xs">
+                                <span className="text-blue-400">
+                                  3. Google Gemini REST (URL Path / Endpoint)
+                                </span>
+                                <span className="text-zinc-500 text-[10px]">
+                                  Endpoint Parameter
+                                </span>
+                              </div>
+                              <pre className="text-zinc-400 font-mono text-[10.5px] overflow-x-auto bg-zinc-900/50 p-2 rounded border border-zinc-900">
+                                {`POST /v1beta/models/${selectedAiLog.model}:streamGenerateContent?key=API_KEY
+Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
+                              </pre>
+                            </div>
+
+                            {/* cURL flag */}
+                            <div className="p-2.5 rounded-md bg-zinc-950 border border-zinc-800/80 space-y-1.5">
+                              <div className="flex items-center justify-between text-zinc-300 font-semibold font-mono text-xs">
+                                <span className="text-amber-400">
+                                  4. Terminal cURL Payload Flag
+                                </span>
+                                <span className="text-zinc-500 text-[10px]">--data flag</span>
+                              </div>
+                              <pre className="text-zinc-400 font-mono text-[10.5px] overflow-x-auto bg-zinc-900/50 p-2 rounded border border-zinc-900">
+                                {`curl -X POST "${selectedAiLog.endpoint}" \\
+  -H "Content-Type: application/json" \\
+  --data '{"model":"${selectedAiLog.model}","stream":true,...}'`}
+                              </pre>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 3. PROMPT & MESSAGES */}
                     {aiActiveTab === "prompt" && (
                       <div className="space-y-4 font-sans">
                         {/* Direct User Prompt */}
@@ -1108,6 +1416,39 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                             </div>
                           </div>
 
+                          {detectedModel && (
+                            <div className="mt-2 rounded-lg border border-emerald-500/40 bg-emerald-950/20 p-2.5 flex items-center justify-between text-xs font-sans">
+                              <div className="flex items-center gap-2">
+                                <CpuIcon className="size-4 shrink-0 text-emerald-400" />
+                                <div>
+                                  <span className="font-semibold text-zinc-300">
+                                    Detected Model ID:
+                                  </span>{" "}
+                                  <span className="font-mono font-bold text-emerald-300 bg-zinc-950 px-1.5 py-0.5 rounded border border-zinc-800">
+                                    {detectedModel.model}
+                                  </span>
+                                  <span className="text-[10px] text-zinc-400 ml-1.5 font-sans">
+                                    ({detectedModel.source})
+                                  </span>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  copyToClipboard(detectedModel.model, "detectedNetModel")
+                                }
+                                className="text-zinc-400 hover:text-zinc-200 text-[11px] flex items-center gap-1 px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 cursor-pointer"
+                              >
+                                {copiedKey === "detectedNetModel" ? (
+                                  <CheckIcon className="size-3 text-emerald-400" />
+                                ) : (
+                                  <CopyIcon className="size-3" />
+                                )}
+                                Copy ID
+                              </button>
+                            </div>
+                          )}
+
                           <div className="grid grid-cols-2 gap-2 pt-2 text-[11px]">
                             <div>
                               <span className="text-zinc-500 block font-sans">Timestamp</span>
@@ -1214,6 +1555,38 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                             </button>
                           )}
                         </div>
+                        {detectedModel && (
+                          <div className="mb-3 rounded-lg border border-emerald-500/40 bg-emerald-950/20 p-2.5 flex items-center justify-between text-xs font-sans">
+                            <div className="flex items-center gap-2">
+                              <CpuIcon className="size-4 shrink-0 text-emerald-400" />
+                              <div>
+                                <span className="font-semibold text-zinc-300">
+                                  Payload Model ID:
+                                </span>{" "}
+                                <span className="font-mono font-bold text-emerald-300 bg-zinc-950 px-1.5 py-0.5 rounded border border-zinc-800">
+                                  {detectedModel.model}
+                                </span>
+                                <span className="text-[10px] text-zinc-400 ml-1.5">
+                                  ({detectedModel.source})
+                                </span>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                copyToClipboard(detectedModel.model, "detectedNetModel2")
+                              }
+                              className="text-zinc-400 hover:text-zinc-200 text-[11px] flex items-center gap-1 px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 cursor-pointer"
+                            >
+                              {copiedKey === "detectedNetModel2" ? (
+                                <CheckIcon className="size-3 text-emerald-400" />
+                              ) : (
+                                <CopyIcon className="size-3" />
+                              )}
+                              Copy ID
+                            </button>
+                          </div>
+                        )}
                         {selectedLog.requestBody ? (
                           <pre className="rounded-md border border-zinc-800 bg-zinc-900/70 p-3 text-[11px] text-zinc-200 whitespace-pre-wrap overflow-x-auto">
                             {selectedLog.requestBody}
