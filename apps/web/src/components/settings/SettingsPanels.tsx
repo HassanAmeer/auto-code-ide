@@ -1,4 +1,5 @@
 import { useAutoRetrySettings } from "~/lib/autoRetrySettings";
+import { useShowLogFloatingButton } from "~/lib/floatingLogButtonSettings";
 import { SettingsGroup } from "./SettingsGroup";
 import { useScopedSettingsWriteAllowed } from "./useScopedSettings";
 import { Spinner } from "~/components/ui/spinner";
@@ -1862,6 +1863,7 @@ function LegacyFeaturesSection() {
 
 export function GeneralSettingsPanel() {
   const [autoRetrySettings, updateAutoRetrySettings] = useAutoRetrySettings();
+  const [showLogFloatingButton, setShowLogFloatingButton] = useShowLogFloatingButton();
   const modifierLabel = isMacPlatform(navigator.platform) ? "⌘" : "Ctrl";
   const sendShortcutOptions = [
     { value: "enter", label: "Enter" },
@@ -2148,6 +2150,18 @@ export function GeneralSettingsPanel() {
 
       <SettingsSection id="behavior" title="Behavior">
         <NotificationSettings />
+        <SettingsRow
+          id="show-log-floating-button"
+          title="Show Log Floating Button"
+          description="Show or hide the floating runtime & AI model request logs button at the bottom-right of the screen."
+          control={
+            <Switch
+              checked={showLogFloatingButton}
+              onCheckedChange={(checked) => setShowLogFloatingButton(Boolean(checked))}
+              aria-label="Show Log Floating Button"
+            />
+          }
+        />
         <SettingsRow
           {...searchableSetting("in-app-notifications")}
           description="Show a toast when another thread finishes, fails, or needs input or approval while this app has focus."

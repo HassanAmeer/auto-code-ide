@@ -2,10 +2,16 @@ import React, { useState } from "react";
 import { ActivityIcon } from "lucide-react";
 import { useNetworkLogs } from "./useNetworkLogs";
 import { RequestLogsSheet } from "./RequestLogsSheet";
+import { useShowLogFloatingButton } from "../../lib/floatingLogButtonSettings";
 
 export function RequestLogsFloatingButton() {
+  const [showButton] = useShowLogFloatingButton();
   const [isOpen, setIsOpen] = useState(false);
   const logs = useNetworkLogs();
+
+  if (!showButton) {
+    return null;
+  }
 
   const hasRecentError =
     logs.length > 0 && (logs[0]?.state === "error" || (logs[0]?.status && logs[0].status >= 400));
