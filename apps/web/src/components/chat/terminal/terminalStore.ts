@@ -9,9 +9,12 @@ import {
 interface TerminalState {
   runs: TerminalCommandRun[];
   activeCwd: string;
+  selectedProjectId: string | null;
+  selectedProjectTitle: string | null;
+  selectedKeyId: string | null;
   isQuickBarOpen: boolean;
   history: string[];
-  activeTarget: string; // "local" or sshProfile id
+  activeTarget: string; // "local" or sshProfile id or key id
   sshProfiles: SshProfile[];
   accessKeys: TerminalAccessKey[];
   inputMode: "bash" | "ai";
@@ -21,12 +24,22 @@ const STORAGE_KEY_CWD = "adc_terminal_active_cwd";
 const STORAGE_KEY_OPEN = "adc_terminal_quickbar_open";
 const STORAGE_KEY_SSH = "adc_terminal_ssh_profiles";
 const STORAGE_KEY_KEYS = "adc_terminal_access_keys";
+const STORAGE_KEY_PROJECT_ID = "adc_terminal_selected_project_id";
+const STORAGE_KEY_PROJECT_TITLE = "adc_terminal_selected_project_title";
+const STORAGE_KEY_SELECTED_KEY = "adc_terminal_selected_key_id";
 
 const initialCwd =
   typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY_CWD) || "/" : "/";
 
 const initialOpen =
   typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY_OPEN) === "true" : false;
+
+const initialProjectId =
+  typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY_PROJECT_ID) : null;
+const initialProjectTitle =
+  typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY_PROJECT_TITLE) : null;
+const initialSelectedKey =
+  typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY_SELECTED_KEY) : null;
 
 let initialSshProfiles: SshProfile[] = [];
 if (typeof window !== "undefined") {
@@ -43,7 +56,7 @@ let initialAccessKeys: TerminalAccessKey[] = [
     id: "key_vps_default",
     name: "Production Server (SSH)",
     type: "ssh",
-    host: "192.168.1.100",
+    host: "201.18.218.29",
     user: "root",
     port: 22,
     secret: "",
@@ -71,8 +84,11 @@ if (typeof window !== "undefined") {
 let state: TerminalState = {
   runs: [],
   activeCwd: initialCwd,
+  selectedProjectId: initialProjectId,
+  selectedProjectTitle: initialProjectTitle,
+  selectedKeyId: initialSelectedKey,
   isQuickBarOpen: initialOpen,
-  activeTarget: "local",
+  activeTarget: initialSelectedKey ? `key_${initialSelectedKey}` : "local",
   sshProfiles: initialSshProfiles,
   accessKeys: initialAccessKeys,
   inputMode: "bash",
@@ -195,13 +211,69 @@ export const terminalStore = {
     notify();
   },
 
-  removeAccessKey(id: string) {
-    const updated = state.accessKeys.filter((k) => k.id !== id);
-    state = { ...state, accessKeys: updated };
+  setSelectedProject(
+    projectId: string | null,
+    title: string | null,
+    workspaceRoot?: string | undefined,
+  ) {
+    state = {
+      ...state,
+      selectedProjectId: projectId,
+      selectedProjectTitle: title,
+      ...(workspaceRoot ? { activeCwd: workspaceRoot } : {}),
+    };
     if (typeof window !== "undefined") {
+      if (projectId) window.localStorage.setItem(STORAGE_KEY_PROJECT_ID, projectId);
+      else window.localStorage.removeItem(STORAGE_KEY_PROJECT_ID);
+
+      if (title) window.localStorage.setItem(STORAGE_KEY_PROJECT_TITLE, title);
+      else window.localStorage.removeItem(STORAGE_KEY_PROJECT_TITLE);
+
+      if (workspaceRoot) window.localStorage.setItem(STORAGE_KEY_CWD, workspaceRoot);
+    }
+    notify();
+  },
+
+  setSelectedKey(keyId: string | null) {
+    const nextKeyId = state.selectedKeyId === keyId ? null : keyId;
+    const updated = state.accessKeys.map((k) => {
+      if (nextKeyId === null) return k;
+      return k.id === nextKeyId ? { ...k, enabled: true } : k;
+    });
+    state = {
+      ...state,
+      selectedKeyId: nextKeyId,
+      accessKeys: updated,
+      activeTarget: nextKeyId ? `key_${nextKeyId}` : "local",
+    };
+    if (typeof window !== "undefined") {
+      if (nextKeyId) window.localStorage.setItem(STORAGE_KEY_SELECTED_KEY, nextKeyId);
+      else window.localStorage.removeItem(STORAGE_KEY_SELECTED_KEY);
       window.localStorage.setItem(STORAGE_KEY_KEYS, JSON.stringify(updated));
     }
     notify();
+  },
+
+  deleteAccessKeys(ids: string[]) {
+    const toDelete = new Set(ids);
+    const updated = state.accessKeys.filter((k) => !toDelete.has(k.id));
+    const nextSelectedKey =
+      state.selectedKeyId && toDelete.has(state.selectedKeyId) ? null : state.selectedKeyId;
+    state = {
+      ...state,
+      accessKeys: updated,
+      selectedKeyId: nextSelectedKey,
+      activeTarget: nextSelectedKey ? `key_${nextSelectedKey}` : "local",
+    };
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(STORAGE_KEY_KEYS, JSON.stringify(updated));
+      if (!nextSelectedKey) window.localStorage.removeItem(STORAGE_KEY_SELECTED_KEY);
+    }
+    notify();
+  },
+
+  removeAccessKey(id: string) {
+    this.deleteAccessKeys([id]);
   },
 
   selectAllAccessKeys(enabled: boolean) {
@@ -235,8 +307,14 @@ export const terminalStore = {
 
     const runId = "term_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
 
-    // Check if target is remote SSH
+    // Check if target is remote SSH profile or selected SSH access key
     const activeProfile = state.sshProfiles.find((p) => p.id === state.activeTarget);
+    const activeKeyTarget = state.selectedKeyId
+      ? state.accessKeys.find((k) => k.id === state.selectedKeyId)
+      : state.accessKeys.find(
+          (k) => (k.type === "ssh" || k.type === "server") && k.enabled && k.host,
+        );
+
     let commandToExecute = actualCommand;
     let targetLabel = "Local VPS (Root)";
 
@@ -244,6 +322,12 @@ export const terminalStore = {
       targetLabel = `SSH: ${activeProfile.label || activeProfile.host}`;
       const escapedCmd = actualCommand.replace(/"/g, '\\"');
       commandToExecute = `ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -p ${activeProfile.port || 22} ${activeProfile.user ? `${activeProfile.user}@` : ""}${activeProfile.host} "${escapedCmd}"`;
+    } else if (activeKeyTarget && activeKeyTarget.host) {
+      targetLabel = `SSH: ${activeKeyTarget.name} (${activeKeyTarget.user || "root"}@${activeKeyTarget.host})`;
+      const escapedCmd = actualCommand.replace(/"/g, '\\"');
+      const port = activeKeyTarget.port || 22;
+      const userPrefix = activeKeyTarget.user ? `${activeKeyTarget.user}@` : "";
+      commandToExecute = `ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -p ${port} ${userPrefix}${activeKeyTarget.host} "${escapedCmd}"`;
     }
 
     // Update history
