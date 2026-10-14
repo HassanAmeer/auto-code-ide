@@ -12,8 +12,13 @@ import {
   FileCode,
 } from "lucide-react";
 import { cn } from "~/lib/utils";
-import { downloadProjectZip, extractZipToProject } from "~/lib/projectZipUtils";
+import {
+  downloadProjectZip,
+  extractZipToProject,
+  type ZipUploadProgress,
+} from "~/lib/projectZipUtils";
 import { useImportLocalProject } from "~/hooks/useImportLocalProject";
+import { useProjectUploadProgress } from "~/state/projectUploadProgress";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 
 export interface ProjectZipModalProps {
@@ -34,12 +39,14 @@ export const ProjectZipModal = memo(function ProjectZipModal({
   const [extractDestination, setExtractDestination] = useState<"current" | "new">("current");
   const [newProjectName, setNewProjectName] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<ZipUploadProgress | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const { importZipFile } = useImportLocalProject();
+  const globalProgress = useProjectUploadProgress();
 
   if (!isOpen) return null;
 
@@ -52,6 +59,7 @@ export const ProjectZipModal = memo(function ProjectZipModal({
       return;
     }
     setErrorMessage(null);
+    setUploadProgress(null);
     setSelectedFile(file);
     const inferred = file.name.replace(/\.zip$/i, "").replace(/[^a-zA-Z0-9_-]/g, "-");
     setNewProjectName(inferred);
@@ -70,12 +78,24 @@ export const ProjectZipModal = memo(function ProjectZipModal({
 
     setIsProcessing(true);
     setErrorMessage(null);
-    setStatusMessage("Extracting ZIP archive on server...");
+    setUploadProgress(null);
 
     try {
       if (extractDestination === "current" && currentProjectCwd) {
-        // Extract directly into active project root
-        const result = await extractZipToProject(selectedFile, currentProjectCwd);
+        setStatusMessage("Starting upload...");
+        setUploadProgress({ loaded: 0, total: selectedFile.size, percent: 0 });
+
+        const result = await extractZipToProject(selectedFile, currentProjectCwd, (p) => {
+          setUploadProgress(p);
+          const loadedMb = (p.loaded / (1024 * 1024)).toFixed(1);
+          const totalMb = (p.total / (1024 * 1024)).toFixed(1);
+          if (p.percent < 100) {
+            setStatusMessage(`Uploading: ${loadedMb} MB / ${totalMb} MB (${p.percent}%)...`);
+          } else {
+            setStatusMessage("Upload complete. Extracting archive on server...");
+          }
+        });
+
         if (!result.ok) {
           throw new Error(result.error || "Failed to extract ZIP into current project.");
         }
@@ -85,9 +105,12 @@ export const ProjectZipModal = memo(function ProjectZipModal({
           onClose();
         }, 1500);
       } else {
-        // Import as a new project
+        // Import as a new project with direct binary streaming
         const name = newProjectName.trim() || selectedFile.name.replace(/\.zip$/i, "");
-        await importZipFile(selectedFile, name);
+        const success = await importZipFile(selectedFile, name);
+        if (!success) {
+          throw new Error("Failed to import ZIP archive as a new project.");
+        }
         setStatusMessage(`Successfully imported new project: ${name}!`);
         setTimeout(() => {
           setIsProcessing(false);
@@ -178,14 +201,57 @@ export const ProjectZipModal = memo(function ProjectZipModal({
           </div>
         )}
 
-        {/* Success message */}
-        {statusMessage && !errorMessage && (
-          <div className="p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-3xs flex items-center gap-2">
-            {isProcessing ? (
-              <Loader2 className="size-4 animate-spin shrink-0" />
-            ) : (
-              <Check className="size-4 shrink-0" />
+        {/* Live Processing / Upload Progress Bar */}
+        {isProcessing && (
+          <div className="space-y-2 p-3.5 rounded-xl bg-sky-500/10 border border-sky-500/25">
+            <div className="flex items-center justify-between text-2xs font-medium">
+              <span className="flex items-center gap-2 text-sky-400">
+                <Loader2 className="size-3.5 animate-spin" />
+                <span className="truncate max-w-[320px]">
+                  {(extractDestination === "current"
+                    ? statusMessage
+                    : globalProgress.isImporting
+                      ? globalProgress.stage
+                      : statusMessage) || "Processing ZIP..."}
+                </span>
+              </span>
+              <span className="font-mono text-sky-300 font-bold">
+                {extractDestination === "current"
+                  ? (uploadProgress?.percent ?? 0)
+                  : globalProgress.isImporting
+                    ? globalProgress.percent
+                    : 0}
+                %
+              </span>
+            </div>
+            <div className="w-full h-2 rounded-full bg-muted/60 overflow-hidden relative">
+              <div
+                className="h-full bg-gradient-to-r from-sky-500 via-sky-400 to-emerald-400 transition-all duration-200 rounded-full"
+                style={{
+                  width: `${Math.max(
+                    4,
+                    extractDestination === "current"
+                      ? (uploadProgress?.percent ?? 0)
+                      : globalProgress.isImporting
+                        ? globalProgress.percent
+                        : 0,
+                  )}%`,
+                }}
+              />
+            </div>
+            {uploadProgress && extractDestination === "current" && (
+              <div className="flex items-center justify-between text-4xs text-muted-foreground font-mono">
+                <span>{(uploadProgress.loaded / (1024 * 1024)).toFixed(1)} MB transferred</span>
+                <span>{(uploadProgress.total / (1024 * 1024)).toFixed(1)} MB total</span>
+              </div>
             )}
+          </div>
+        )}
+
+        {/* Success message */}
+        {statusMessage && !isProcessing && !errorMessage && (
+          <div className="p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-3xs flex items-center gap-2">
+            <Check className="size-4 shrink-0" />
             <span>{statusMessage}</span>
           </div>
         )}

@@ -845,12 +845,68 @@ export const layerDirectProjectImportZipRoute = HttpRouter.add(
   "/api/project/import-zip-direct",
   Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
+    const fileSystem = yield* FileSystem.FileSystem;
+    const managedFolders = yield* ManagedProjectFolders.ManagedProjectFolders;
+    const contentType = (request.headers["content-type"] || "").toLowerCase();
+    const url = new URL(request.url, "http://127.0.0.1");
+
+    const headerName = request.headers["x-project-name"]
+      ? decodeURIComponent(request.headers["x-project-name"])
+      : undefined;
+    const queryName = url.searchParams.get("name") || url.searchParams.get("projectName");
+
+    let name = (headerName || queryName || "").trim();
+
+    // Check if this is a streaming binary upload (application/octet-stream or application/zip)
+    if (
+      contentType.includes("octet-stream") ||
+      contentType.includes("zip") ||
+      (name.length > 0 && !contentType.includes("application/json"))
+    ) {
+      if (!name) {
+        return HttpServerResponse.jsonUnsafe(
+          {
+            ok: false,
+            error: "Project name is required in X-Project-Name header or name query parameter",
+          },
+          { status: 400 },
+        );
+      }
+
+      const tempZipFile = `/tmp/t3_import_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.zip`;
+      yield* Stream.run(request.stream, fileSystem.sink(tempZipFile));
+
+      const result = yield* managedFolders
+        .importZipProject({
+          name,
+          zipFilePath: tempZipFile,
+        })
+        .pipe(
+          Effect.map((res) => ({
+            ok: true as const,
+            projectId: res.projectId,
+            workspaceRoot: res.workspaceRoot,
+            commitError: res.commitError,
+          })),
+          Effect.catchCause((cause) =>
+            Effect.succeed({
+              ok: false as const,
+              error: Cause.pretty(cause),
+            }),
+          ),
+        );
+
+      yield* fileSystem.remove(tempZipFile).pipe(Effect.ignore);
+      return HttpServerResponse.jsonUnsafe(result);
+    }
+
+    // Fallback: JSON body with base64
     const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
       name?: string;
       zipBase64?: string;
     };
 
-    const name = bodyJson?.name?.trim();
+    name = name || bodyJson?.name?.trim() || "";
     const zipBase64 = bodyJson?.zipBase64;
     if (!name || !zipBase64) {
       return HttpServerResponse.jsonUnsafe(
@@ -859,7 +915,6 @@ export const layerDirectProjectImportZipRoute = HttpRouter.add(
       );
     }
 
-    const managedFolders = yield* ManagedProjectFolders.ManagedProjectFolders;
     const result = yield* managedFolders
       .importZipProject({
         name,
@@ -1112,30 +1167,61 @@ export const layerProjectExtractZipRoute = HttpRouter.add(
   "/api/project/extract-zip",
   Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
-    const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
-      targetCwd?: string;
-      zipBase64?: string;
-    };
-
-    const targetCwd = bodyJson?.targetCwd?.trim();
-    const zipBase64 = bodyJson?.zipBase64;
-    if (!targetCwd || !zipBase64) {
-      return HttpServerResponse.jsonUnsafe(
-        { ok: false, error: "targetCwd and zipBase64 are required" },
-        { status: 400 },
-      );
-    }
-
     const fileSystem = yield* FileSystem.FileSystem;
-    yield* fileSystem.makeDirectory(targetCwd, { recursive: true }).pipe(Effect.ignore);
+    const contentType = (request.headers["content-type"] || "").toLowerCase();
+    const url = new URL(request.url, "http://127.0.0.1");
 
+    const headerTargetCwd = request.headers["x-target-cwd"]
+      ? decodeURIComponent(request.headers["x-target-cwd"])
+      : undefined;
+    const queryTargetCwd = url.searchParams.get("targetCwd") || url.searchParams.get("cwd");
+
+    let targetCwd = (headerTargetCwd || queryTargetCwd || "").trim();
     const tempZipFile = `/tmp/t3_ext_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.zip`;
-    const zipBuffer = Buffer.from(zipBase64, "base64");
-    yield* fileSystem.writeFile(tempZipFile, zipBuffer).pipe(Effect.ignore);
+
+    // 1. Direct binary stream mode (application/octet-stream, zip, or targetCwd specified outside JSON)
+    if (
+      contentType.includes("octet-stream") ||
+      contentType.includes("zip") ||
+      (targetCwd.length > 0 && !contentType.includes("application/json"))
+    ) {
+      if (!targetCwd) {
+        return HttpServerResponse.jsonUnsafe(
+          {
+            ok: false,
+            error: "targetCwd is required in X-Target-Cwd header or targetCwd query parameter",
+          },
+          { status: 400 },
+        );
+      }
+
+      yield* fileSystem.makeDirectory(targetCwd, { recursive: true }).pipe(Effect.ignore);
+      // Stream directly to temporary zip file on disk with zero in-memory buffer overhead
+      yield* Stream.run(request.stream, fileSystem.sink(tempZipFile));
+    } else {
+      // 2. Fallback JSON base64 mode
+      const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+        targetCwd?: string;
+        zipBase64?: string;
+      };
+
+      targetCwd = targetCwd || bodyJson?.targetCwd?.trim() || "";
+      const zipBase64 = bodyJson?.zipBase64;
+      if (!targetCwd || !zipBase64) {
+        return HttpServerResponse.jsonUnsafe(
+          { ok: false, error: "targetCwd and zipBase64 are required" },
+          { status: 400 },
+        );
+      }
+
+      yield* fileSystem.makeDirectory(targetCwd, { recursive: true }).pipe(Effect.ignore);
+      const zipBuffer = Buffer.from(zipBase64, "base64");
+      yield* fileSystem.writeFile(tempZipFile, zipBuffer).pipe(Effect.ignore);
+    }
 
     const unzipCmd = `unzip -q -o "${tempZipFile}" -d "${targetCwd}"`;
     const unzipResult = yield* Effect.promise(() =>
-      runBashCommandOnHost(unzipCmd, targetCwd, 120_000),
+      runBashCommandOnHost(unzipCmd, targetCwd, 300_000),
     );
     yield* fileSystem.remove(tempZipFile).pipe(Effect.ignore);
 

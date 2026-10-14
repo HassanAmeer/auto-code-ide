@@ -46,31 +46,103 @@ export function readFileAsBase64(file: File): Promise<string> {
   });
 }
 
+export interface ZipUploadProgress {
+  loaded: number;
+  total: number;
+  percent: number;
+  speedBytesPerSec?: number | undefined;
+}
+
 /**
- * Extracts an uploaded zip file into the specified target directory on the server
+ * Extracts an uploaded zip file into the specified target directory on the server.
+ * Streams the raw binary payload directly to disk with zero base64 memory overhead
+ * and emits real-time progress events.
  */
-export async function extractZipToProject(
+export function extractZipToProject(
   file: File,
   targetCwd: string,
+  onProgress?: (progress: ZipUploadProgress) => void,
 ): Promise<{ ok: boolean; error?: string }> {
-  try {
-    const zipBase64 = await readFileAsBase64(file);
-    const response = await fetch(resolvePrimaryEnvironmentHttpUrl("/api/project/extract-zip"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        targetCwd,
-        zipBase64,
-      }),
-    });
+  return new Promise((resolve) => {
+    try {
+      const xhr = new XMLHttpRequest();
+      const url = resolvePrimaryEnvironmentHttpUrl(
+        `/api/project/extract-zip?targetCwd=${encodeURIComponent(targetCwd)}`,
+      );
 
-    const data = (await response.json()) as { ok?: boolean; error?: string; message?: string };
-    if (!response.ok || !data.ok) {
-      return { ok: false, error: data.error || `Server responded with status ${response.status}` };
+      xhr.open("POST", url, true);
+      xhr.setRequestHeader("Content-Type", "application/octet-stream");
+      xhr.setRequestHeader("X-Target-Cwd", encodeURIComponent(targetCwd));
+
+      let lastTime = Date.now();
+      let lastLoaded = 0;
+
+      if (xhr.upload && onProgress) {
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable && event.total > 0) {
+            const currentTime = Date.now();
+            const timeDiff = (currentTime - lastTime) / 1000;
+            let speedBytesPerSec: number | undefined;
+            if (timeDiff >= 0.5) {
+              speedBytesPerSec = (event.loaded - lastLoaded) / timeDiff;
+              lastTime = currentTime;
+              lastLoaded = event.loaded;
+            }
+            const percent = Math.min(100, Math.round((event.loaded / event.total) * 100));
+            onProgress({
+              loaded: event.loaded,
+              total: event.total,
+              percent,
+              speedBytesPerSec,
+            });
+          }
+        };
+      }
+
+      xhr.onload = () => {
+        try {
+          const data = JSON.parse(xhr.responseText) as {
+            ok?: boolean;
+            error?: string;
+            message?: string;
+          };
+          if (xhr.status >= 200 && xhr.status < 300 && data.ok) {
+            resolve({ ok: true });
+          } else {
+            resolve({
+              ok: false,
+              error: data.error || `Server returned error (${xhr.status})`,
+            });
+          }
+        } catch {
+          resolve({
+            ok: false,
+            error: `Failed to parse response (${xhr.status}): ${xhr.responseText.slice(0, 100)}`,
+          });
+        }
+      };
+
+      xhr.onerror = () => {
+        resolve({
+          ok: false,
+          error: "Network error occurred while uploading ZIP archive.",
+        });
+      };
+
+      xhr.ontimeout = () => {
+        resolve({
+          ok: false,
+          error: "Upload timed out. Please try again with a faster connection.",
+        });
+      };
+
+      // 10 minutes timeout for large files (100MB+)
+      xhr.timeout = 600_000;
+
+      // Send the file directly as binary stream without reading into memory
+      xhr.send(file);
+    } catch (err: any) {
+      resolve({ ok: false, error: err?.message || "Failed to initiate ZIP upload" });
     }
-
-    return { ok: true };
-  } catch (err: any) {
-    return { ok: false, error: err?.message || "Failed to extract ZIP archive" };
-  }
+  });
 }

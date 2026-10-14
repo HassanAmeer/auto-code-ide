@@ -102,10 +102,24 @@ export function useImportLocalProject() {
 
   const importZipFile = useCallback(
     async (
-      targetEnvId: EnvironmentId | undefined,
-      file: File,
-      customProjectName?: string,
+      targetEnvIdOrFile: EnvironmentId | undefined | File,
+      fileOrName?: File | string,
+      maybeCustomProjectName?: string,
     ): Promise<boolean> => {
+      let targetEnvId: EnvironmentId | undefined;
+      let file: File;
+      let customProjectName: string | undefined;
+
+      if (targetEnvIdOrFile instanceof File) {
+        file = targetEnvIdOrFile;
+        customProjectName = typeof fileOrName === "string" ? fileOrName : undefined;
+        targetEnvId = undefined;
+      } else {
+        targetEnvId = targetEnvIdOrFile;
+        file = fileOrName as File;
+        customProjectName = maybeCustomProjectName;
+      }
+
       const environmentId = (targetEnvId ??
         primaryEnvId ??
         environments[0]?.environmentId ??
@@ -121,103 +135,101 @@ export function useImportLocalProject() {
       projectUploadStore.setState({
         isImporting: true,
         projectName,
-        stage: `Reading ZIP file (${(file.size / (1024 * 1024)).toFixed(1)} MB)...`,
+        stage: `Preparing ZIP upload (${(file.size / (1024 * 1024)).toFixed(1)} MB)...`,
         current: 0,
         total: 100,
-        percent: 20,
+        percent: 10,
         error: null,
       });
 
       try {
-        const base64Data = await readFileAsBase64(file);
-
-        projectUploadStore.setState({
-          stage: "Uploading ZIP and auto-extracting on server...",
-          percent: 60,
-        });
-
         let createdZipProject: {
           readonly projectId: any;
           readonly workspaceRoot: string;
           readonly commitError?: string | undefined;
         } | null = null;
 
-        const result = await importZip({
-          environmentId,
-          input: {
-            name: projectName,
-            zipBase64: base64Data,
-          },
+        const uploadResult = await new Promise<{
+          ok?: boolean;
+          projectId?: string;
+          workspaceRoot?: string;
+          commitError?: string;
+          error?: string;
+        }>((resolve) => {
+          const xhr = new XMLHttpRequest();
+          const url = resolvePrimaryEnvironmentHttpUrl(
+            `/api/project/import-zip-direct?name=${encodeURIComponent(projectName)}`,
+          );
+          xhr.open("POST", url, true);
+          xhr.setRequestHeader("Content-Type", "application/octet-stream");
+          xhr.setRequestHeader("X-Project-Name", encodeURIComponent(projectName));
+
+          xhr.upload.onprogress = (event) => {
+            if (event.lengthComputable && event.total > 0) {
+              const uploadPct = Math.round((event.loaded / event.total) * 75);
+              const loadedMb = (event.loaded / (1024 * 1024)).toFixed(1);
+              const totalMb = (event.total / (1024 * 1024)).toFixed(1);
+              const exactPct = Math.round((event.loaded / event.total) * 100);
+              projectUploadStore.setState({
+                stage:
+                  exactPct >= 100
+                    ? "Upload complete! Auto-extracting ZIP archive on server..."
+                    : `Uploading ZIP: ${loadedMb} MB / ${totalMb} MB (${exactPct}%)...`,
+                percent: Math.min(85, 10 + uploadPct),
+              });
+            }
+          };
+
+          xhr.onload = () => {
+            try {
+              const data = JSON.parse(xhr.responseText);
+              resolve(data);
+            } catch {
+              resolve({
+                ok: false,
+                error: `Invalid server response (${xhr.status}): ${xhr.responseText.slice(0, 100)}`,
+              });
+            }
+          };
+
+          xhr.onerror = () =>
+            resolve({ ok: false, error: "Network error occurred while uploading ZIP archive." });
+          xhr.ontimeout = () =>
+            resolve({
+              ok: false,
+              error: "Upload timed out. Please try again with a faster connection.",
+            });
+          xhr.timeout = 600_000;
+
+          xhr.send(file);
         });
 
-        if (result._tag === "Success") {
-          createdZipProject = result.value;
-        } else {
+        if (
+          !uploadResult ||
+          !uploadResult.ok ||
+          !uploadResult.projectId ||
+          !uploadResult.workspaceRoot
+        ) {
+          const errDetail = uploadResult?.error ?? "Server could not import the ZIP archive.";
           projectUploadStore.setState({
-            stage: "Direct HTTP upload fallback...",
-            percent: 75,
+            isImporting: false,
+            error: errDetail,
           });
-          try {
-            const response = await fetch(
-              resolvePrimaryEnvironmentHttpUrl("/api/project/import-zip-direct"),
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  name: projectName,
-                  zipBase64: base64Data,
-                }),
-              },
-            );
-            const data = (await response.json()) as {
-              ok?: boolean;
-              projectId?: string;
-              workspaceRoot?: string;
-              commitError?: string;
-              error?: string;
-            };
-            if (data && data.ok && data.projectId && data.workspaceRoot) {
-              createdZipProject = {
-                projectId: data.projectId,
-                workspaceRoot: data.workspaceRoot,
-                commitError: data.commitError,
-              };
-            } else {
-              const errDetail = data?.error ?? "Server could not import the ZIP. Please try again.";
-              projectUploadStore.setState({
-                isImporting: false,
-                error: errDetail,
-              });
-              if (!isAtomCommandInterrupted(result)) {
-                toastManager.add(
-                  stackedThreadToast({
-                    type: "error",
-                    title: "Could not import ZIP project",
-                    description: errDetail,
-                  }),
-                );
-              }
-              return false;
-            }
-          } catch (httpError) {
-            const errDetail =
-              "Could not reach the server. Please check your connection and try again.";
-            projectUploadStore.setState({
-              isImporting: false,
-              error: errDetail,
-            });
-            if (!isAtomCommandInterrupted(result)) {
-              toastManager.add(
-                stackedThreadToast({
-                  type: "error",
-                  title: "Could not import ZIP project",
-                  description: errDetail,
-                }),
-              );
-            }
-            return false;
-          }
+          toastManager.add(
+            stackedThreadToast({
+              type: "error",
+              title: "Could not import ZIP project",
+              description: errDetail,
+            }),
+          );
+          return false;
         }
+
+        createdZipProject = {
+          projectId: uploadResult.projectId,
+          workspaceRoot: uploadResult.workspaceRoot,
+          commitError: uploadResult.commitError,
+        };
 
         projectUploadStore.setState({
           stage: "Extracted successfully! Initializing Git repository...",

@@ -14,6 +14,7 @@ import {
 } from "~/lib/speech/tts";
 import { thinkingAmbientSound } from "./thinkingAmbientSound";
 import { setVoiceCallActiveState } from "./voiceCallState";
+import { startMobileVoiceKeepAlive, stopMobileVoiceKeepAlive } from "./mobileVoiceKeepAlive";
 import { StreamingTtsPlayer, extractSpeechChunks } from "./streamingTtsPlayer";
 import type { VoiceCallStatus } from "./VoiceVisualizerWaves";
 import type { ChatMessage, SessionPhase } from "~/types";
@@ -243,6 +244,7 @@ export function useVoiceCallAssistant({
     preTurnMessageIdsRef.current.clear();
 
     setVoiceCallActiveState(false, null);
+    stopMobileVoiceKeepAlive();
 
     if (streamingPlayerRef.current) {
       streamingPlayerRef.current.stop();
@@ -453,6 +455,11 @@ export function useVoiceCallAssistant({
           ) {
             scheduleRestartRecognition(80);
           }
+        } else if (event.error === "aborted") {
+          // Triggered by mobile OS when phone screen sleeps or tab goes to background
+          if (typeof document === "undefined" || document.visibilityState === "visible") {
+            scheduleRestartRecognition(120);
+          }
         } else if (event.error === "language-not-supported" || event.error === "network") {
           if (recognition.lang !== "en-US") {
             recognition.lang = navigator.language || "en-US";
@@ -479,7 +486,9 @@ export function useVoiceCallAssistant({
           !isCurrentlySpeaking() &&
           Date.now() - lastTtsEndedTimestampRef.current >= ACOUSTIC_ECHO_COOLDOWN_MS
         ) {
-          scheduleRestartRecognition(isMobileDevice ? 60 : 100);
+          if (typeof document === "undefined" || document.visibilityState === "visible") {
+            scheduleRestartRecognition(isMobileDevice ? 60 : 100);
+          }
         }
       };
 
@@ -832,6 +841,27 @@ export function useVoiceCallAssistant({
           window.speechSynthesis.resume();
         } catch {}
       }
+
+      // Start mobile OS sleep keep-alive (Screen WakeLock, silent audio loop, MediaSession)
+      startMobileVoiceKeepAlive({
+        onResumeNeeded: () => {
+          if (!isCallActiveRef.current) return;
+          if (audioContextRef.current && audioContextRef.current.state === "suspended") {
+            void audioContextRef.current.resume().catch(() => {});
+          }
+          if (
+            !isTtsActiveRef.current &&
+            callStatusRef.current !== "speaking" &&
+            callStatusRef.current !== "thinking" &&
+            !isCurrentlySpeaking()
+          ) {
+            startFreshRecognition();
+          }
+        },
+        onHangup: () => {
+          endCall();
+        },
+      });
 
       // Start fresh speech recognition instance
       startFreshRecognition();

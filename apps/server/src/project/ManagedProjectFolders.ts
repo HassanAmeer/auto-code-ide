@@ -144,7 +144,8 @@ export class ManagedProjectFolders extends Context.Service<
     >;
     readonly importZipProject: (input: {
       readonly name: string;
-      readonly zipBase64: string;
+      readonly zipBase64?: string;
+      readonly zipFilePath?: string;
     }) => Effect.Effect<
       {
         readonly projectId: ProjectId;
@@ -1073,13 +1074,16 @@ header('Content-Type: text/html; charset=utf-8');
     const workspaceRoot = yield* claimNamedFolder(input.name);
     const removeFolder = fileSystem.remove(workspaceRoot, { recursive: true }).pipe(Effect.ignore);
 
-    const tempZipFile = path.join(workspaceRoot, "__temp_upload.zip");
-    const zipBuffer = Buffer.from(input.zipBase64, "base64");
-    yield* fileSystem
-      .writeFile(tempZipFile, zipBuffer)
-      .pipe(
-        Effect.mapError((cause) => new NamedProjectFolderError({ folder: tempZipFile, cause })),
-      );
+    let tempZipFile = input.zipFilePath;
+    if (!tempZipFile) {
+      tempZipFile = path.join(workspaceRoot, "__temp_upload.zip");
+      const zipBuffer = Buffer.from(input.zipBase64 ?? "", "base64");
+      yield* fileSystem
+        .writeFile(tempZipFile, zipBuffer)
+        .pipe(
+          Effect.mapError((cause) => new NamedProjectFolderError({ folder: tempZipFile!, cause })),
+        );
+    }
 
     // Unzip excluding node_modules, .git, and common build artifacts
     yield* Effect.tryPromise({
