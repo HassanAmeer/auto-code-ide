@@ -1,4 +1,9 @@
-import { runBashCommandOnHost } from "./terminalExec.ts";
+// @effect-diagnostics globalDateInEffect:off globalRandomInEffect:off
+import {
+  runBashCommandOnHost,
+  createTerminalEventStream,
+  killTerminalProcess,
+} from "./terminalExec.ts";
 import * as ManagedProjectFolders from "./project/ManagedProjectFolders.ts";
 import * as ProjectService from "./project/ProjectService.ts";
 import * as Mime from "effect/http/Mime";
@@ -527,6 +532,70 @@ export const layerTerminalExecRoute = HttpRouter.add(
 
     const result = yield* Effect.promise(() => runBashCommandOnHost(command, targetCwd, timeout));
     return HttpServerResponse.jsonUnsafe(result);
+  }),
+);
+
+export const layerTerminalStreamRoute = HttpRouter.add(
+  "POST",
+  "/api/terminal/stream",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      command?: string;
+      cwd?: string;
+      timeoutMs?: number;
+      executionId?: string;
+    };
+
+    const command = bodyJson?.command?.trim();
+    if (!command) {
+      return HttpServerResponse.jsonUnsafe(
+        {
+          ok: false,
+          error: "Command is required",
+        },
+        { status: 400 },
+      );
+    }
+
+    const targetCwd =
+      bodyJson?.cwd && bodyJson.cwd.trim().length > 0 ? bodyJson.cwd.trim() : process.cwd();
+    const timeout = bodyJson?.timeoutMs || 300_000;
+    const executionId =
+      bodyJson?.executionId?.trim() ||
+      `exec_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+
+    const eventStream = createTerminalEventStream(executionId, command, targetCwd, timeout);
+    return HttpServerResponse.stream(eventStream, {
+      contentType: "text/event-stream",
+      headers: {
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+        "X-Accel-Buffering": "no",
+      },
+    });
+  }),
+);
+
+export const layerTerminalKillRoute = HttpRouter.add(
+  "POST",
+  "/api/terminal/kill",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      executionId?: string;
+    };
+
+    const executionId = bodyJson?.executionId?.trim();
+    if (!executionId) {
+      return HttpServerResponse.jsonUnsafe(
+        { ok: false, error: "executionId is required" },
+        { status: 400 },
+      );
+    }
+
+    const killed = killTerminalProcess(executionId);
+    return HttpServerResponse.jsonUnsafe({ ok: true, killed });
   }),
 );
 

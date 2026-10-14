@@ -1,6 +1,12 @@
 import type { TerminalExecResult, TerminalAccessKey } from "./terminalTypes";
 import { resolvePrimaryEnvironmentHttpUrl } from "../../../environments/primary";
 
+export interface TerminalStreamCallbacks {
+  onChunk?: (chunk: string, type: "stdout" | "stderr") => void;
+  onExit?: (exitCode: number, durationMs: number) => void;
+  onError?: (error: string) => void;
+}
+
 export async function executeTerminalCommand(
   command: string,
   cwd: string = "/",
@@ -49,6 +55,325 @@ export async function executeTerminalCommand(
       error: message,
     };
   }
+}
+
+/**
+ * Executes a terminal command with live streaming output (Server-Sent Events)
+ * and support for active cancellation/kill.
+ */
+export async function executeTerminalCommandStream(
+  executionId: string,
+  command: string,
+  cwd: string = "/",
+  callbacks?: TerminalStreamCallbacks,
+  timeoutMs: number = 180_000,
+): Promise<TerminalExecResult> {
+  const startTime = Date.now();
+  let stdoutAccum = "";
+  let stderrAccum = "";
+  let finalExitCode = 0;
+
+  try {
+    const response = await fetch(resolvePrimaryEnvironmentHttpUrl("/api/terminal/stream"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        executionId,
+        command,
+        cwd,
+        timeoutMs,
+      }),
+    });
+
+    if (!response.ok || !response.body) {
+      const errorText = await response.text();
+      const failMsg = errorText || `HTTP ${response.status}: ${response.statusText}`;
+      callbacks?.onError?.(failMsg);
+      return {
+        ok: false,
+        command,
+        cwd,
+        stdout: "",
+        stderr: failMsg,
+        exitCode: response.status || 1,
+        durationMs: Date.now() - startTime,
+        error: failMsg,
+      };
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith("data:")) continue;
+        const jsonStr = trimmed.slice(5).trim();
+        if (!jsonStr) continue;
+
+        try {
+          const parsed = JSON.parse(jsonStr) as {
+            type: "stdout" | "stderr" | "exit" | "error";
+            data?: string;
+            exitCode?: number;
+            durationMs?: number;
+          };
+
+          if (parsed.type === "stdout" && parsed.data) {
+            stdoutAccum += parsed.data;
+            callbacks?.onChunk?.(parsed.data, "stdout");
+          } else if (parsed.type === "stderr" && parsed.data) {
+            stderrAccum += parsed.data;
+            callbacks?.onChunk?.(parsed.data, "stderr");
+          } else if (parsed.type === "exit") {
+            finalExitCode = typeof parsed.exitCode === "number" ? parsed.exitCode : 0;
+            callbacks?.onExit?.(finalExitCode, parsed.durationMs ?? Date.now() - startTime);
+          } else if (parsed.type === "error" && parsed.data) {
+            stderrAccum += (stderrAccum ? "\n" : "") + parsed.data;
+            callbacks?.onError?.(parsed.data);
+          }
+        } catch {
+          // ignore malformed SSE line
+        }
+      }
+    }
+
+    const durationMs = Date.now() - startTime;
+    return {
+      ok: finalExitCode === 0,
+      command,
+      cwd,
+      stdout: stdoutAccum,
+      stderr: stderrAccum,
+      exitCode: finalExitCode,
+      durationMs,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    callbacks?.onError?.(message);
+    return {
+      ok: false,
+      command,
+      cwd,
+      stdout: stdoutAccum,
+      stderr: stderrAccum + (stderrAccum ? "\n" : "") + `Stream error: ${message}`,
+      exitCode: 1,
+      durationMs: Date.now() - startTime,
+      error: message,
+    };
+  }
+}
+
+/**
+ * Signals server to terminate an actively running execution by ID (SIGTERM then SIGKILL)
+ */
+export async function killTerminalExecution(executionId: string): Promise<boolean> {
+  try {
+    const response = await fetch(resolvePrimaryEnvironmentHttpUrl("/api/terminal/kill"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ executionId }),
+    });
+    if (!response.ok) return false;
+    const data = (await response.json()) as { ok: boolean };
+    return Boolean(data.ok);
+  } catch {
+    return false;
+  }
+}
+
+export interface CommandSafetyScanResult {
+  isDangerous: boolean;
+  severity: "critical" | "high" | "medium";
+  reason: string;
+  matchedPattern: string;
+}
+
+/**
+ * Safety Guard: Scans commands for catastrophic or destructive patterns
+ */
+export function scanCommandSafety(command: string): CommandSafetyScanResult | null {
+  const cmd = command.trim();
+
+  // 1. Critical: Mass Deletion
+  const rmMatch = cmd.match(/\brm\s+-[a-zA-Z]*r[a-zA-Z]*f\s+(\/|\/\*|~|\.\*)/i);
+  if (rmMatch) {
+    return {
+      isDangerous: true,
+      severity: "critical",
+      reason:
+        "Destructive mass file deletion targeting root, home or parent directories (`rm -rf /`)",
+      matchedPattern: rmMatch[0],
+    };
+  }
+
+  // 2. Critical: Raw disk overwrite / partition format
+  const diskMatch = cmd.match(/\b(mkfs|dd\s+if=.*of=\/dev|fdisk\s+\/dev|parted\s+\/dev)\b/i);
+  if (diskMatch) {
+    return {
+      isDangerous: true,
+      severity: "critical",
+      reason: "Direct disk formatting or block device overwrite (`mkfs` / `dd` to raw disk)",
+      matchedPattern: diskMatch[0],
+    };
+  }
+
+  // 3. High: Mass Permission Overwrite
+  const chmodMatch = cmd.match(/\bchmod\s+(-R\s+)?(777|000)\s+(\/|\/\*)/i);
+  if (chmodMatch) {
+    return {
+      isDangerous: true,
+      severity: "high",
+      reason: "Global root permission modification will corrupt system authentication and SSH keys",
+      matchedPattern: chmodMatch[0],
+    };
+  }
+
+  // 4. High: Host Shutdown / Reboot
+  const rebootMatch = cmd.match(/\b(shutdown\s+-[rh]\s+now|reboot|poweroff|init\s+[06])\b/i);
+  if (rebootMatch) {
+    return {
+      isDangerous: true,
+      severity: "high",
+      reason:
+        "System shutdown or reboot will terminate all running services and disconnect your session",
+      matchedPattern: rebootMatch[0],
+    };
+  }
+
+  // 5. High: Disabling Remote SSH Access
+  const sshDisableMatch = cmd.match(/\bsystemctl\s+(stop|disable)\s+(ssh|sshd)\b/i);
+  if (sshDisableMatch) {
+    return {
+      isDangerous: true,
+      severity: "high",
+      reason: "Stopping the SSH daemon will lock out remote terminal connections",
+      matchedPattern: sshDisableMatch[0],
+    };
+  }
+
+  // 6. Medium: Database destruction
+  const dbMatch = cmd.match(/\b(DROP\s+DATABASE|DROP\s+TABLE|TRUNCATE\s+TABLE)\b/i);
+  if (dbMatch) {
+    return {
+      isDangerous: true,
+      severity: "medium",
+      reason: "Destructive SQL operation detected (DROP / TRUNCATE)",
+      matchedPattern: dbMatch[0],
+    };
+  }
+
+  return null;
+}
+
+export interface FailureDiagnosis {
+  cause: string;
+  explanation: string;
+  suggestedFixCommand?: string | undefined;
+  fixLabel?: string | undefined;
+}
+
+/**
+ * 1-Click "Fix with AI" Auto-Healer:
+ * Inspects non-zero exit code output and recommends an exact actionable fix command.
+ */
+export function diagnoseCommandFailure(
+  command: string,
+  stderr: string,
+  exitCode: number,
+  cwd: string = "/",
+): FailureDiagnosis {
+  const err = (stderr || "").toLowerCase();
+
+  // 1. Port already bound (EADDRINUSE)
+  if (err.includes("eaddrinuse") || err.includes("address already in use")) {
+    const portMatch = stderr.match(/[:\s](\d{3,5})\b/);
+    const port = portMatch ? portMatch[1] : "3000";
+    return {
+      cause: `Port ${port} is already in use by another process.`,
+      explanation: `Another web server or daemon is occupying port ${port}. Free the port to allow your service to bind.`,
+      suggestedFixCommand: `fuser -k ${port}/tcp 2>/dev/null || lsof -ti:${port} | xargs kill -9 2>/dev/null && echo "Port ${port} cleared."`,
+      fixLabel: `Kill process on port ${port}`,
+    };
+  }
+
+  // 2. Command not found (code 127)
+  if (exitCode === 127 || err.includes("command not found") || err.includes("not found")) {
+    const missingCmd = command.trim().split(" ")[0] || "command";
+    return {
+      cause: `Binary or utility '${missingCmd}' is not installed or not in PATH.`,
+      explanation: `The server does not have '${missingCmd}' installed. You can install it via package manager.`,
+      suggestedFixCommand: `apt update && apt install -y ${missingCmd} 2>/dev/null || npm i -g ${missingCmd} 2>/dev/null`,
+      fixLabel: `Install '${missingCmd}'`,
+    };
+  }
+
+  // 3. Permission denied (EACCES)
+  if (err.includes("permission denied") || err.includes("eacces")) {
+    return {
+      cause: `Permission denied while accessing file or socket in '${cwd}'.`,
+      explanation: `The current user does not have executable or write rights. Elevate permissions or run with sudo.`,
+      suggestedFixCommand: `sudo ${command}`,
+      fixLabel: `Re-run with 'sudo'`,
+    };
+  }
+
+  // 4. Git merge conflict or unstaged changes blocking pull
+  if (
+    err.includes("overwritten by merge") ||
+    err.includes("commit your changes or stash them") ||
+    err.includes("divergent branches")
+  ) {
+    return {
+      cause: "Git working tree contains uncommitted changes blocking pull/merge.",
+      explanation:
+        "Local files conflict with incoming remote commits. Safely stash changes and pull cleanly.",
+      suggestedFixCommand: "git stash && git pull --rebase && git stash pop",
+      fixLabel: "Stash changes & Git pull",
+    };
+  }
+
+  // 5. Node module missing
+  const moduleMatch = stderr.match(/cannot find module '([^']+)'/i);
+  if (moduleMatch && moduleMatch[1]) {
+    const mod = moduleMatch[1];
+    return {
+      cause: `Node.js module '${mod}' is missing.`,
+      explanation: `Your application failed to load '${mod}'. Installing the package will resolve the import.`,
+      suggestedFixCommand: `npm install ${mod}`,
+      fixLabel: `npm install ${mod}`,
+    };
+  }
+
+  // 6. Out of disk space (ENOSPC)
+  if (err.includes("no space left on device") || err.includes("enospc")) {
+    return {
+      cause: "Storage partition is 100% full (ENOSPC).",
+      explanation:
+        "Log files, old Docker images, or package caches have exhausted available disk blocks.",
+      suggestedFixCommand:
+        "journalctl --vacuum-time=1d && npm cache clean --force && docker system prune -af 2>/dev/null",
+      fixLabel: "Purge system logs & caches",
+    };
+  }
+
+  // 7. General non-zero exit fallback
+  return {
+    cause: `Process failed with exit code ${exitCode}.`,
+    explanation: `Command did not finish cleanly. Inspect stderr logs above or re-run with verbose flags.`,
+    suggestedFixCommand: `${command} --help || man ${command.trim().split(" ")[0]}`,
+    fixLabel: "View command help",
+  };
 }
 
 /**

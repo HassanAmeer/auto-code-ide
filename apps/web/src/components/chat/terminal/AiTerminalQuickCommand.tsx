@@ -15,12 +15,15 @@ import {
   CheckSquare,
   Square,
   ShieldCheck,
+  ShieldAlert,
+  AlertTriangle,
   Eye,
   EyeOff,
   Lock,
 } from "lucide-react";
 import { useTerminalStore, terminalStore } from "./terminalStore";
 import type { SshProfile, TerminalKeyType, TerminalAccessKey } from "./terminalTypes";
+import { scanCommandSafety, type CommandSafetyScanResult } from "./terminalClient";
 
 export interface AiTerminalQuickCommandProps {
   projectCwd?: string | undefined;
@@ -65,6 +68,13 @@ export function AiTerminalQuickCommand({
   const [newKeyNotes, setNewKeyNotes] = useState("");
   const [showSecretInModal, setShowSecretInModal] = useState(false);
 
+  // High-risk command safety guard modal state
+  const [pendingDangerousCmd, setPendingDangerousCmd] = useState<{
+    cmd: string;
+    scan: CommandSafetyScanResult;
+    modeOverride?: "bash" | "ai" | undefined;
+  } | null>(null);
+
   // New SSH profile form state
   const [newSshLabel, setNewSshLabel] = useState("");
   const [newSshHost, setNewSshHost] = useState("");
@@ -105,9 +115,22 @@ export function AiTerminalQuickCommand({
   };
 
   const handleRun = useCallback(
-    async (cmdToRun?: string, modeOverride?: "bash" | "ai") => {
+    async (cmdToRun?: string, modeOverride?: "bash" | "ai", bypassSafetyCheck = false) => {
       const targetCmd = (cmdToRun || command).trim();
       if (!targetCmd || isRunning) return;
+
+      // 1. Safety Guard Check: catch destructive commands before execution
+      if (!bypassSafetyCheck) {
+        const safetyScan = scanCommandSafety(targetCmd);
+        if (safetyScan && safetyScan.isDangerous) {
+          setPendingDangerousCmd({
+            cmd: targetCmd,
+            scan: safetyScan,
+            modeOverride,
+          });
+          return;
+        }
+      }
 
       setIsRunning(true);
       try {
@@ -749,6 +772,63 @@ export function AiTerminalQuickCommand({
               <Plus className="size-3" />
               <span>Save to Vault</span>
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* High-Risk Destructive Command Safety Guard Confirmation Modal */}
+      {pendingDangerousCmd && (
+        <div className="p-3.5 my-2.5 rounded-xl bg-rose-950/90 border-2 border-rose-500 text-xs space-y-2.5 shadow-2xl animate-in fade-in zoom-in-95">
+          <div className="flex items-center justify-between font-bold text-rose-300 border-b border-rose-800 pb-2">
+            <span className="flex items-center gap-2">
+              <ShieldAlert className="size-4 text-rose-400" />
+              <span>Safety Guard: High-Risk Destructive Command</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => setPendingDangerousCmd(null)}
+              className="text-zinc-400 hover:text-white"
+            >
+              <X className="size-3.5" />
+            </button>
+          </div>
+
+          <div className="text-zinc-200">
+            <p className="text-2xs text-rose-200 font-sans leading-relaxed mb-2">
+              {pendingDangerousCmd.scan.reason}
+            </p>
+            <div className="p-2.5 rounded-lg bg-black/70 font-mono text-xs text-rose-300 border border-rose-800/60 break-all select-all">
+              <span className="text-rose-500 font-bold">$ </span>
+              {pendingDangerousCmd.cmd}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between pt-1">
+            <div className="flex items-center gap-1.5 text-3xs font-mono text-rose-300/90 uppercase tracking-wide">
+              <span className="size-2 rounded-full bg-rose-500 animate-ping" />
+              <span>Severity: {pendingDangerousCmd.scan.severity}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingDangerousCmd(null)}
+                className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium transition-colors"
+              >
+                Cancel Command
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const toRun = pendingDangerousCmd.cmd;
+                  const mode = pendingDangerousCmd.modeOverride;
+                  setPendingDangerousCmd(null);
+                  void handleRun(toRun, mode, true);
+                }}
+                className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold shadow transition-all hover:scale-105 active:scale-95"
+              >
+                Force Execute Anyway
+              </button>
+            </div>
           </div>
         </div>
       )}

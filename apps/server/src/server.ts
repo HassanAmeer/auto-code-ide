@@ -676,6 +676,8 @@ const layerMakeRoutes = Layer.mergeAll(
     ServerHttp.layerAssetRoute,
     ServerHttp.layerAttachmentUploadRoute,
     ServerHttp.layerTerminalExecRoute,
+    ServerHttp.layerTerminalStreamRoute,
+    ServerHttp.layerTerminalKillRoute,
     ServerHttp.layerCustomProviderFetchModelsRoute,
     ServerHttp.layerCustomProviderSaveRoute,
     ServerHttp.layerCustomProviderDeleteRoute,

@@ -33,6 +33,7 @@ export interface TerminalAccessKey {
 
 export interface TerminalCommandRun {
   id: string;
+  executionId?: string | undefined;
   command: string;
   cwd: string;
   status: "running" | "success" | "error";
@@ -43,6 +44,14 @@ export interface TerminalCommandRun {
   timestamp: number;
   explanation?: string | undefined;
   nextSteps?: string[] | undefined;
+  suggestedFix?:
+    | {
+        cause: string;
+        explanation: string;
+        suggestedFixCommand?: string | undefined;
+        fixLabel?: string | undefined;
+      }
+    | undefined;
   targetHost?: string | undefined;
   mode?: "bash" | "ai" | undefined;
   aiPrompt?: string | undefined;

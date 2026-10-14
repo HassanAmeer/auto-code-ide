@@ -7,6 +7,9 @@ import type {
 } from "./terminalTypes";
 import {
   executeTerminalCommand,
+  executeTerminalCommandStream,
+  killTerminalExecution,
+  diagnoseCommandFailure,
   generateAiExplanation,
   translatePromptToBashCommand,
 } from "./terminalClient";
@@ -443,6 +446,44 @@ export const terminalStore = {
     notify();
   },
 
+  appendRunChunk(runId: string, chunk: string, type: "stdout" | "stderr") {
+    state = {
+      ...state,
+      runs: state.runs.map((r) => {
+        if (r.id !== runId) return r;
+        return {
+          ...r,
+          stdout: type === "stdout" ? r.stdout + chunk : r.stdout,
+          stderr: type === "stderr" ? r.stderr + chunk : r.stderr,
+        };
+      }),
+    };
+    notify();
+  },
+
+  async killRunningCommand(runId: string): Promise<boolean> {
+    const target = state.runs.find((r) => r.id === runId);
+    if (!target || !target.executionId) return false;
+    const ok = await killTerminalExecution(target.executionId);
+    if (ok) {
+      state = {
+        ...state,
+        runs: state.runs.map((r) => {
+          if (r.id !== runId) return r;
+          return {
+            ...r,
+            status: "error",
+            exitCode: 130,
+            stderr:
+              r.stderr + (r.stderr ? "\n" : "") + "[Process cancelled by user (Ctrl+C / Kill)]",
+          };
+        }),
+      };
+      notify();
+    }
+    return ok;
+  },
+
   async runCommand(
     commandOrPrompt: string,
     customCwd?: string | undefined,
@@ -464,6 +505,7 @@ export const terminalStore = {
         : trimmedInput;
 
     const runId = "term_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
+    const executionId = "exec_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
 
     // Check if target is remote SSH profile or selected SSH access key
     const activeProfile = state.sshProfiles.find((p) => p.id === state.activeTarget);
@@ -496,6 +538,7 @@ export const terminalStore = {
 
     const initialRun: TerminalCommandRun = {
       id: runId,
+      executionId,
       command: actualCommand,
       cwd,
       status: "running",
@@ -530,12 +573,22 @@ export const terminalStore = {
       }
     }
 
-    // Execute via server
-    const result = await executeTerminalCommand(commandToExecute, cwd);
+    // Execute via server using live streaming & cancellation support
+    const result = await executeTerminalCommandStream(executionId, commandToExecute, cwd, {
+      onChunk: (chunk, type) => {
+        terminalStore.appendRunChunk(runId, chunk, type);
+      },
+    });
+
     const { explanation, nextSteps } = generateAiExplanation(actualCommand, result);
+    const suggestedFix =
+      result.exitCode !== 0
+        ? diagnoseCommandFailure(actualCommand, result.stderr, result.exitCode, cwd)
+        : undefined;
 
     const completedRun: TerminalCommandRun = {
       id: runId,
+      executionId,
       command: actualCommand,
       cwd: result.cwd || cwd,
       status: result.ok ? "success" : "error",
@@ -546,6 +599,7 @@ export const terminalStore = {
       timestamp: Date.now(),
       explanation,
       nextSteps,
+      suggestedFix,
       targetHost: targetLabel,
       mode: currentMode,
       aiPrompt: currentMode === "ai" ? trimmedInput : undefined,
