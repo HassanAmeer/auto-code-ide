@@ -1474,6 +1474,29 @@ export const layerFsDownloadRoute = HttpRouter.add(
   ),
 );
 
+let prevCpuTimes = { idle: 0, total: 0 };
+function getLiveCpuPercent(): number {
+  const cpus = NodeOs.cpus();
+  let idle = 0;
+  let total = 0;
+  for (const cpu of cpus) {
+    for (const type in cpu.times) {
+      total += (cpu.times as any)[type];
+    }
+    idle += cpu.times.idle;
+  }
+  if (prevCpuTimes.total === 0) {
+    prevCpuTimes = { idle, total };
+    const load1m = NodeOs.loadavg()[0] || 0;
+    return Math.min(100, Math.max(1, Math.round((load1m / (cpus.length || 1)) * 100)));
+  }
+  const diffIdle = idle - prevCpuTimes.idle;
+  const diffTotal = total - prevCpuTimes.total;
+  prevCpuTimes = { idle, total };
+  if (diffTotal <= 0) return 0;
+  return Math.min(100, Math.max(0, Math.round(((diffTotal - diffIdle) / diffTotal) * 100)));
+}
+
 export const layerTerminalQuickStatsRoute = HttpRouter.add(
   "GET",
   "/api/terminal/quick-stats",
@@ -1503,14 +1526,17 @@ export const layerTerminalQuickStatsRoute = HttpRouter.add(
     const uptimeHours = Math.floor((uptimeSec % 86400) / 3600);
     const uptimeStr = uptimeDays > 0 ? `${uptimeDays}d ${uptimeHours}h` : `${uptimeHours}h`;
 
+    const cpuPercent = getLiveCpuPercent();
+
     return HttpServerResponse.jsonUnsafe({
       ok: true,
+      cpuPercent,
       memPercent,
       memUsedGb: (usedMem / (1024 * 1024 * 1024)).toFixed(1),
       memTotalGb: (totalMem / (1024 * 1024 * 1024)).toFixed(1),
+      diskPercent,
       diskFreeGb,
       diskTotalGb,
-      diskPercent,
       uptimeStr,
       cpuCount: NodeOs.cpus().length,
       loadAvg: NodeOs.loadavg()

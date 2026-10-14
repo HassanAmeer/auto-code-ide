@@ -39,9 +39,10 @@ import { readPullRequestListPreferences } from "../pullRequest/pullRequestListPr
 import { isSidebarUtilityPage, useNavigateToMainApp } from "./mainAppLocation";
 import { SidebarThreadUndoNotice } from "./SidebarThreadUndoNotice";
 import { SidebarProviderUpdatePill } from "./SidebarProviderUpdatePill";
-import { SidebarUpdateArchitectureWarning, SidebarUpdatePill } from "./SidebarUpdatePill";
+import { SidebarUpdatePill } from "./SidebarUpdatePill";
 import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
 import { useTerminalStore, terminalStore } from "../chat/terminal/terminalStore";
+import { SidebarResourceStats } from "./SidebarResourceStats";
 
 export const SidebarChromeHeader = memo(function SidebarChromeHeader({
   isElectron,
@@ -416,6 +417,9 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
           </div>
         </div>
       )}
+
+      {/* ── LIVE RESOURCE USAGE STRIP (CPU | RAM | ROM) ── */}
+      {!isOnUtilityPage && <SidebarResourceStats />}
 
       {/* ── SINGLE BOTTOM ROW (EK HI PATTI) ── */}
       <SidebarMenu className="flex-row items-center justify-between w-full">
