@@ -687,6 +687,8 @@ const layerMakeRoutes = Layer.mergeAll(
     ServerHttp.layerDirectProjectImportFilesRoute,
     ServerHttp.layerDirectProjectCloneRoute,
     ServerHttp.layerDirectProjectDeleteRoute,
+    ServerHttp.layerProjectDownloadZipRoute,
+    ServerHttp.layerProjectExtractZipRoute,
     ServerHttp.layerFsBrowseRoute,
     ServerHttp.layerFsEnsureDirRoute,
     ServerBrowserStream.routeLayer,

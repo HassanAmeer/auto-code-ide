@@ -12,11 +12,14 @@ import {
   Terminal,
   Clock,
   Sparkles,
+  Download,
+  FileArchive,
 } from "lucide-react";
 import { cn } from "../../../lib/utils";
 import { useTerminalStore, terminalStore } from "./terminalStore";
 import { useProjects } from "../../../state/entities";
 import { SshKeysSheet } from "./SshKeysSheet";
+import { ProjectZipModal } from "~/components/project/ProjectZipModal";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 
 export interface AiTerminalHeaderStripProps {
@@ -34,6 +37,8 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
   const projects = useProjects();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isZipModalOpen, setIsZipModalOpen] = useState(false);
+  const [zipModalMode, setZipModalMode] = useState<"extract" | "download">("extract");
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown on outside click
@@ -285,6 +290,33 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
             })
           )}
 
+          {/* Download & Extract Project ZIP Buttons */}
+          <button
+            type="button"
+            onClick={() => {
+              setZipModalMode("download");
+              setIsZipModalOpen(true);
+            }}
+            title="Download Project as Clean ZIP (excluding dependencies & node_modules)"
+            className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-3xs font-medium shrink-0 cursor-pointer transition-all shadow-xs"
+          >
+            <Download className="size-3 text-emerald-400" />
+            <span>Download ZIP</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setZipModalMode("extract");
+              setIsZipModalOpen(true);
+            }}
+            title="Upload and Extract ZIP Archive into Project"
+            className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-sky-500/10 hover:bg-sky-500/20 text-sky-300 border border-sky-500/30 text-3xs font-medium shrink-0 cursor-pointer transition-all shadow-xs"
+          >
+            <FileArchive className="size-3 text-sky-400" />
+            <span>Extract ZIP</span>
+          </button>
+
           {/* Divider */}
           <div className="w-px h-4 bg-border/60 shrink-0" />
 
@@ -352,6 +384,14 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
 
       {/* 90% Width SSH Keys Management Sheet */}
       <SshKeysSheet />
+
+      {/* Project ZIP Download & Extract Modal */}
+      <ProjectZipModal
+        isOpen={isZipModalOpen}
+        onClose={() => setIsZipModalOpen(false)}
+        activeProject={activeProject}
+        mode={zipModalMode}
+      />
     </>
   );
 });

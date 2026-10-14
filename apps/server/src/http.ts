@@ -1041,6 +1041,123 @@ export const layerDirectProjectDeleteRoute = HttpRouter.add(
   ),
 );
 
+export const layerProjectDownloadZipRoute = HttpRouter.add(
+  "GET",
+  "/api/project/download-zip",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const url = new URL(request.url, "http://127.0.0.1");
+    const workspaceRoot = url.searchParams.get("workspaceRoot") || url.searchParams.get("cwd");
+    const rawName =
+      url.searchParams.get("name") ||
+      (workspaceRoot ? workspaceRoot.split("/").filter(Boolean).pop() : "project");
+
+    if (!workspaceRoot || workspaceRoot.trim().length === 0) {
+      return HttpServerResponse.jsonUnsafe(
+        { ok: false, error: "workspaceRoot parameter is required" },
+        { status: 400 },
+      );
+    }
+
+    const fileSystem = yield* FileSystem.FileSystem;
+    const exists = yield* fileSystem.exists(workspaceRoot).pipe(Effect.orElseSucceed(() => false));
+    if (!exists) {
+      return HttpServerResponse.jsonUnsafe(
+        { ok: false, error: `Directory not found: ${workspaceRoot}` },
+        { status: 404 },
+      );
+    }
+
+    const tempZipFile = `/tmp/t3_dl_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.zip`;
+    // Exclude dependencies and heavy bloat just like GitHub repository download
+    const zipCmd = `zip -r -q "${tempZipFile}" . -x "node_modules/*" "*/node_modules/*" ".git/*" "*/.git/*" "dist/*" "*/dist/*" ".next/*" "*/.next/*" "build/*" "*/build/*" ".cache/*" "*/.cache/*" ".turbo/*" "*/.turbo/*" ".venv/*" "*/.venv/*" "__pycache__/*" "*/__pycache__/*" ".t3/*" "*/.t3/*"`;
+
+    const zipResult = yield* Effect.promise(() =>
+      runBashCommandOnHost(zipCmd, workspaceRoot, 120_000),
+    );
+    if (zipResult.exitCode !== 0) {
+      return HttpServerResponse.jsonUnsafe(
+        { ok: false, error: zipResult.stderr || "Failed to package ZIP archive" },
+        { status: 500 },
+      );
+    }
+
+    const zipBytes = yield* fileSystem.readFile(tempZipFile).pipe(Effect.orElseSucceed(() => null));
+    yield* fileSystem.remove(tempZipFile).pipe(Effect.ignore);
+
+    if (!zipBytes) {
+      return HttpServerResponse.jsonUnsafe(
+        { ok: false, error: "Could not read generated zip file" },
+        { status: 500 },
+      );
+    }
+
+    const safeName = (rawName || "project").replace(/[^a-zA-Z0-9_-]/g, "_");
+    return HttpServerResponse.raw(zipBytes, {
+      contentType: "application/zip",
+      headers: {
+        "Content-Disposition": downloadContentDisposition(`${safeName}.zip`),
+        "Content-Length": String(zipBytes.byteLength),
+      },
+    });
+  }).pipe(
+    Effect.catchCause((cause) =>
+      Effect.succeed(HttpServerResponse.jsonUnsafe({ ok: false, error: Cause.pretty(cause) })),
+    ),
+  ),
+);
+
+export const layerProjectExtractZipRoute = HttpRouter.add(
+  "POST",
+  "/api/project/extract-zip",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      targetCwd?: string;
+      zipBase64?: string;
+    };
+
+    const targetCwd = bodyJson?.targetCwd?.trim();
+    const zipBase64 = bodyJson?.zipBase64;
+    if (!targetCwd || !zipBase64) {
+      return HttpServerResponse.jsonUnsafe(
+        { ok: false, error: "targetCwd and zipBase64 are required" },
+        { status: 400 },
+      );
+    }
+
+    const fileSystem = yield* FileSystem.FileSystem;
+    yield* fileSystem.makeDirectory(targetCwd, { recursive: true }).pipe(Effect.ignore);
+
+    const tempZipFile = `/tmp/t3_ext_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.zip`;
+    const zipBuffer = Buffer.from(zipBase64, "base64");
+    yield* fileSystem.writeFile(tempZipFile, zipBuffer).pipe(Effect.ignore);
+
+    const unzipCmd = `unzip -q -o "${tempZipFile}" -d "${targetCwd}"`;
+    const unzipResult = yield* Effect.promise(() =>
+      runBashCommandOnHost(unzipCmd, targetCwd, 120_000),
+    );
+    yield* fileSystem.remove(tempZipFile).pipe(Effect.ignore);
+
+    if (unzipResult.exitCode !== 0) {
+      return HttpServerResponse.jsonUnsafe({
+        ok: false,
+        error: unzipResult.stderr || "Failed to extract ZIP archive",
+      });
+    }
+
+    return HttpServerResponse.jsonUnsafe({
+      ok: true,
+      targetCwd,
+      message: "ZIP archive extracted successfully",
+    });
+  }).pipe(
+    Effect.catchCause((cause) =>
+      Effect.succeed(HttpServerResponse.jsonUnsafe({ ok: false, error: Cause.pretty(cause) })),
+    ),
+  ),
+);
+
 export const layerFsBrowseRoute = HttpRouter.add(
   "POST",
   "/api/fs/browse",
