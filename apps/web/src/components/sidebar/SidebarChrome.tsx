@@ -2,7 +2,7 @@ import {
   ArchiveIcon,
   ArrowLeftIcon,
   ChartNoAxesColumnIcon,
-  CheckSquareIcon,
+  FileCheckIcon,
   ChevronDownIcon,
   ChevronUpIcon,
   SettingsIcon,
@@ -300,7 +300,7 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
               )}
             >
               <div className="size-6 rounded-md bg-amber-500/10 text-amber-400 flex items-center justify-center shrink-0 relative">
-                <CheckSquareIcon className="size-3.5" />
+                <FileCheckIcon className="size-3.5" />
                 {activeCount > 0 && (
                   <span className="absolute -top-1 -right-1 size-2 rounded-full bg-amber-400" />
                 )}
@@ -418,7 +418,7 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
                 }
               />
               <SidebarUtilityItem
-                icon={<CheckSquareIcon className={cn(activeCount > 0 && "text-amber-400")} />}
+                icon={<FileCheckIcon className={cn(activeCount > 0 && "text-amber-400")} />}
                 label="Notes & Reminders"
                 onClick={handleNotesClick}
                 isActive={isNotesOpen}
@@ -632,7 +632,7 @@ export const SidebarNotesItem = memo(function SidebarNotesItem() {
                   : "bg-amber-500/10 border border-amber-500/25 text-amber-400",
               )}
             >
-              <CheckSquareIcon className="size-3.5" />
+              <FileCheckIcon className="size-3.5" />
             </div>
             <span className="font-semibold tracking-tight">Notes & Reminders</span>
           </div>

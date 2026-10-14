@@ -10,7 +10,7 @@ import {
   SearchIcon,
   CopyIcon,
   StickyNoteIcon,
-  CheckSquareIcon,
+  FileCheckIcon,
   CalendarIcon,
   TagIcon,
   SparklesIcon,
@@ -166,7 +166,7 @@ export function NotesSheet() {
         {/* Header */}
         <div className="flex items-center justify-between border-b border-zinc-800/90 px-3.5 py-2.5 sm:px-4 sm:py-3 bg-zinc-900/90 backdrop-blur-md shrink-0">
           <div className="flex items-center gap-2.5 min-w-0">
-            <CheckSquareIcon className="size-4 text-amber-400 shrink-0" />
+            <FileCheckIcon className="size-4 text-amber-400 shrink-0" />
             <h2 className="text-sm font-semibold tracking-wide text-zinc-100 flex items-center gap-2 truncate">
               <span>Notes & Reminders</span>
               <span className="rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.2 text-xs font-mono font-medium shrink-0">

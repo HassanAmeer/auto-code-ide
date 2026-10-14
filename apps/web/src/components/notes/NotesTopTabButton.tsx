@@ -1,5 +1,5 @@
 import React from "react";
-import { CheckSquareIcon, StickyNoteIcon } from "lucide-react";
+import { FileCheck } from "lucide-react";
 import { useNotes, openNotesSheet, useNotesSheetState } from "../../lib/notesStore";
 
 interface NotesTopTabButtonProps {
@@ -21,7 +21,7 @@ export function NotesTopTabButton({ className = "" }: NotesTopTabButtonProps) {
       } ${className}`}
       title="Open Notes & Tasks (Keep reminders, snippets & checklist)"
     >
-      <CheckSquareIcon
+      <FileCheck
         className={`size-3.5 transition-colors ${
           isOpen ? "text-amber-400" : "text-amber-400/90 group-hover:text-amber-300"
         }`}
