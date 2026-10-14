@@ -30,11 +30,18 @@ export const APPARMOR_PROFILE_PATH = "/etc/apparmor.d/t3-chrome-headless-shell";
 /** Whether an operator or environment allowed Chrome to run without its sandbox. */
 export const sandboxDisabled = (env: Readonly<Record<string, string | undefined>>) => {
   if (
+    process.platform === "linux" &&
+    (typeof process.getuid === "function" ? process.getuid() === 0 : false)
+  ) {
+    return true;
+  }
+  if (
     env.T3CODE_SERVER_BROWSER_SANDBOX === "0" ||
     env.T3CODE_SERVER_BROWSER_SANDBOX === "false" ||
     env.T3CODE_BROWSER_NO_SANDBOX === "1" ||
     env.T3CODE_MODE === "web" ||
-    process.env.T3CODE_BROWSER_NO_SANDBOX === "1"
+    process.env.T3CODE_BROWSER_NO_SANDBOX === "1" ||
+    env.USER === "root"
   ) {
     return true;
   }

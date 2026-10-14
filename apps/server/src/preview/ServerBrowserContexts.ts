@@ -114,19 +114,22 @@ export class ServerBrowserContexts {
     };
   }
 
-  private async launch<A>(options: { readonly executablePath: string }, start: () => Promise<A>) {
+  private async launch<A>(
+    options: Awaited<ReturnType<ServerBrowserContexts["launchOptions"]>>,
+    start: (opts: Awaited<ReturnType<ServerBrowserContexts["launchOptions"]>>) => Promise<A>,
+  ) {
     try {
-      return await start();
+      return await start(options);
     } catch (cause) {
       if (
         /sandboxing failed/i.test(String(cause)) ||
         /No usable sandbox/i.test(String(cause)) ||
-        /SIGTRAP/i.test(String(cause))
+        /SIGTRAP/i.test(String(cause)) ||
+        /Running as root without --no-sandbox is not supported/i.test(String(cause))
       ) {
         try {
-          const { chromium } = loadPlaywright();
           const fallback = await this.launchOptions(true);
-          return (await chromium.launch(fallback)) as A;
+          return await start(fallback);
         } catch {
           // Fall through to diagnose
         }
@@ -139,7 +142,7 @@ export class ServerBrowserContexts {
     if (!this.browser) {
       const launched = this.launchOptions().then(async (options) => {
         const { chromium } = loadPlaywright();
-        const browser = await this.launch(options, () => chromium.launch(options));
+        const browser = await this.launch(options, (opts) => chromium.launch(opts));
         browser.on("disconnected", () => {
           if (this.browser === launched) this.browser = undefined;
         });
@@ -190,8 +193,8 @@ export class ServerBrowserContexts {
     const options = await this.launchOptions();
     const { chromium } = loadPlaywright();
     await NodeFSP.mkdir(directory, { recursive: true });
-    return this.launch(options, () =>
-      chromium.launchPersistentContext(directory, { ...options, ...contextOptions }),
+    return this.launch(options, (opts) =>
+      chromium.launchPersistentContext(directory, { ...opts, ...contextOptions }),
     );
   }
 
