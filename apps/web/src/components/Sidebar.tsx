@@ -87,6 +87,7 @@ import {
 } from "lucide-react";
 import { projectCreateModalStore } from "./project/projectCreateModalStore";
 import { projectUploadStore } from "~/state/projectUploadProgress";
+import { downloadProjectZip } from "~/lib/projectZipUtils";
 import {
   memo,
   useCallback,
@@ -4685,6 +4686,16 @@ export default function Sidebar() {
           case "project-settings":
             if (threadProjectGroup) openProjectSettings(threadProjectGroup);
             return;
+          case "download-project-zip":
+            if (threadWorkspacePath) {
+              downloadProjectZip(threadWorkspacePath, threadProjectGroup?.displayName);
+              toastManager.add({
+                type: "info",
+                title: "Downloading Project ZIP...",
+                description: `Preparing ${threadProjectGroup?.displayName || "project"}.zip archive for download.`,
+              });
+            }
+            return;
           case "new-thread-on-branch": {
             // Explicit branch carry-over: reuse the thread's worktree when it
             // has one, otherwise its branch on the local checkout.
@@ -5114,20 +5125,46 @@ export default function Sidebar() {
                               />
                             ) : null}
                             {project ? (
-                              <Button
-                                size="icon-xs"
-                                variant="ghost-muted"
-                                tabIndex={-1}
-                                aria-hidden="true"
-                                title={`Project settings for ${project.displayName}`}
-                                className="ml-auto"
-                                onPointerDown={(event) => event.stopPropagation()}
-                                onClick={(event) => {
-                                  void handleProjectSettings(event, project);
-                                }}
-                              >
-                                <SettingsIcon className="size-3.5" />
-                              </Button>
+                              <div className="ml-auto flex items-center gap-0.5">
+                                <Button
+                                  size="icon-xs"
+                                  variant="ghost-muted"
+                                  tabIndex={-1}
+                                  aria-hidden="true"
+                                  title={`Download ${project.displayName} as ZIP`}
+                                  className="text-sidebar-muted-foreground hover:text-sky-400"
+                                  onPointerDown={(event) => event.stopPropagation()}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    const wsRoot =
+                                      project.workspaceRoot ||
+                                      project.memberProjects[0]?.workspaceRoot;
+                                    if (wsRoot) {
+                                      downloadProjectZip(wsRoot, project.displayName);
+                                      toastManager.add({
+                                        type: "info",
+                                        title: "Downloading Project ZIP...",
+                                        description: `Preparing ${project.displayName}.zip archive for download.`,
+                                      });
+                                    }
+                                  }}
+                                >
+                                  <FileArchiveIcon className="size-3.5 text-sky-400" />
+                                </Button>
+                                <Button
+                                  size="icon-xs"
+                                  variant="ghost-muted"
+                                  tabIndex={-1}
+                                  aria-hidden="true"
+                                  title={`Project settings for ${project.displayName}`}
+                                  onPointerDown={(event) => event.stopPropagation()}
+                                  onClick={(event) => {
+                                    void handleProjectSettings(event, project);
+                                  }}
+                                >
+                                  <SettingsIcon className="size-3.5" />
+                                </Button>
+                              </div>
                             ) : null}
                           </ComboboxItem>
                         );

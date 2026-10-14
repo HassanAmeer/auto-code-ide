@@ -14,8 +14,9 @@ import { AsyncResult } from "effect/reactivity";
 import { type EnvironmentId, type ProjectIconOverride } from "@t3tools/contracts";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import * as Cause from "effect/Cause";
-import { InfoIcon, Trash2Icon } from "lucide-react";
+import { FileArchiveIcon, InfoIcon, Trash2Icon } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { downloadProjectZip } from "~/lib/projectZipUtils";
 
 import { useComposerDraftStore } from "../../composerDraftStore";
 import { releaseProjectDraftUploads } from "../../lib/composerDraftUploads";
@@ -533,6 +534,31 @@ function ProjectDetail({
                   Choose file
                 </Button>
               </div>
+            }
+          />
+          <SettingsRow
+            title="Download ZIP"
+            description="Download all project files as a compressed .zip archive (excluding git history and dependencies)."
+            control={
+              <Button
+                size="sm"
+                variant="outline"
+                type="button"
+                aria-label="Download project as ZIP"
+                onClick={() => {
+                  if (representative?.workspaceRoot) {
+                    downloadProjectZip(representative.workspaceRoot, group.displayName);
+                    toastManager.add({
+                      type: "info",
+                      title: "Downloading Project ZIP...",
+                      description: `Preparing ${group.displayName}.zip archive for download.`,
+                    });
+                  }
+                }}
+              >
+                <FileArchiveIcon className="size-4 text-sky-400" />
+                Download ZIP
+              </Button>
             }
           />
         </SettingsSection>

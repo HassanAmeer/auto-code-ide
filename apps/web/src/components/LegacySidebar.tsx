@@ -8,6 +8,7 @@ import {
   ChevronRightIcon,
   DownloadCloudIcon,
   EraserIcon,
+  FileArchiveIcon,
   FolderPlusIcon,
   Globe2Icon,
   MoreVerticalIcon,
@@ -21,6 +22,7 @@ import {
   TriangleAlertIcon,
   UploadCloudIcon,
 } from "lucide-react";
+import { downloadProjectZip } from "~/lib/projectZipUtils";
 import {
   ChangeRequestStatusIcon,
   prStatusIndicator,
@@ -2201,6 +2203,9 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
               case "open-terminal":
                 void handleOpenInTerminal(member);
                 return;
+              case "download-zip":
+                handleDownloadZip(member);
+                return;
               case "push-github":
                 void handlePushToGithub(member);
                 return;
@@ -2233,6 +2238,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
           action:
             | "rename"
             | "open-terminal"
+            | "download-zip"
             | "push-github"
             | "git-pull"
             | "git-fetch"
@@ -2294,6 +2300,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
                 !readEnvironmentScope(member.environmentId, AuthOrchestrationOperateScope),
             }),
             buildTargetedItem("open-terminal", "Open in Terminal", { icon: "terminal" }),
+            buildTargetedItem("download-zip", "Download ZIP", { icon: "archive" }),
             buildTargetedItem("push-github", "Push to GitHub", { icon: "upload" }),
             buildTargetedItem("git-pull", "Git Pull", { icon: "download" }),
             buildTargetedItem("git-fetch", "Git Fetch", { icon: "refresh-cw" }),
@@ -2324,6 +2331,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     },
     [
       copyPathToClipboard,
+      handleDownloadZip,
       handleForcePull,
       handleGitFetch,
       handleGitPull,
@@ -2721,6 +2729,29 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       });
     }
   }, [deleteThread, project.displayName, projectThreads, removeFromSelection]);
+
+  const handleDownloadZip = useCallback(
+    (targetMember?: SidebarProjectGroupMember) => {
+      const member = targetMember ?? project.memberProjects[0];
+      const workspaceRoot = member?.workspaceRoot ?? project.workspaceRoot;
+      if (!workspaceRoot) {
+        toastManager.add({
+          type: "error",
+          title: "Download failed",
+          description: "No workspace root found for this project.",
+        });
+        return;
+      }
+      const name = member?.title ?? project.displayName;
+      toastManager.add({
+        type: "info",
+        title: "Downloading Project ZIP...",
+        description: `Preparing ${name}.zip archive for download.`,
+      });
+      downloadProjectZip(workspaceRoot, name);
+    },
+    [project.displayName, project.memberProjects, project.workspaceRoot],
+  );
 
   const handleDeleteProject = useCallback(async () => {
     const api = readLocalApi();
@@ -3156,6 +3187,14 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
                 >
                   <TerminalIcon className="size-4" />
                   <MenuItemLabel>Open in Terminal</MenuItemLabel>
+                </MenuItem>
+                <MenuItem
+                  onClick={() => {
+                    handleDownloadZip();
+                  }}
+                >
+                  <FileArchiveIcon className="size-4 text-sky-400" />
+                  <MenuItemLabel>Download ZIP</MenuItemLabel>
                 </MenuItem>
                 <MenuItem
                   onClick={() => {

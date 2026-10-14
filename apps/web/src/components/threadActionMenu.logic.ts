@@ -27,6 +27,8 @@ export type ThreadActionMenuId =
   | "copy-path"
   | "copy-branch"
   | "copy-thread-id"
+  | "project-settings"
+  | "download-project-zip"
   | "archive"
   | "delete";
 
@@ -106,6 +108,7 @@ export function threadActionRequiresOperate(action: ThreadActionMenuId): boolean
   return ![
     "new-thread-on-branch",
     "project-settings",
+    "download-project-zip",
     "mark-unread",
     "copy",
     "copy-path",
@@ -230,6 +233,7 @@ export function buildThreadActionMenuItems(
       ],
     },
     { id: "project-settings", label: "Project settings", icon: "settings" },
+    { id: "download-project-zip", label: "Download project ZIP", icon: "archive" },
     // Archive removes the thread from the sidebar while keeping its
     // conversation under Settings > Archived threads — distinct from Settle
     // (stays visible in the Settled shelf) and Delete (clears history for

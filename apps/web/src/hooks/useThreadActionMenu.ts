@@ -22,6 +22,7 @@ import {
   type ThreadActionMenuId,
 } from "../components/threadActionMenu.logic";
 import { stackedThreadToast, toastManager } from "../components/ui/toast";
+import { downloadProjectZip } from "../lib/projectZipUtils";
 import { threadEnvironment } from "../state/threads";
 import { useOrchestrationCommand } from "../state/use-orchestration-command";
 import { readEnvironmentScope } from "../state/session";
@@ -210,6 +211,24 @@ export function useThreadActionMenu(input: {
               to: "/projects/$projectKey",
               params: { projectKey },
             });
+            return;
+          }
+          case "download-project-zip": {
+            const project = projects.find(
+              (candidate) =>
+                candidate.environmentId === thread.environmentId &&
+                candidate.id === thread.projectId,
+            );
+            const workspacePath = thread.worktreePath ?? project?.workspaceRoot ?? projectCwd;
+            if (workspacePath) {
+              const projectName = project?.title || "project";
+              downloadProjectZip(workspacePath, projectName);
+              toastManager.add({
+                type: "info",
+                title: "Downloading Project ZIP...",
+                description: `Preparing ${projectName}.zip archive for download.`,
+              });
+            }
             return;
           }
           case "new-thread-on-branch": {
