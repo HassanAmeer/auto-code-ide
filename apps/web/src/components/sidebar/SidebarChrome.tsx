@@ -1,12 +1,15 @@
 import {
+  ArchiveIcon,
   ArrowLeftIcon,
   ChartNoAxesColumnIcon,
+  CheckSquareIcon,
   SettingsIcon,
   TerminalSquareIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { memo, useCallback } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
+import { useNotes, useNotesSheetState } from "../../lib/notesStore";
 
 import { useEnvironmentIdentificationMode } from "../../hooks/useSettings";
 import { cn } from "../../lib/utils";
@@ -310,6 +313,119 @@ export const SidebarAiTerminalItem = memo(function SidebarAiTerminalItem() {
   );
 });
 
+export const SidebarArchiveItem = memo(function SidebarArchiveItem() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { isMobile, setOpenMobile } = useSidebar();
+  const isArchiveOpen = location.pathname === "/settings/archived";
+
+  const handleClick = useCallback(() => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+    if (isArchiveOpen) {
+      void navigate({ to: "/" });
+    } else {
+      void navigate({ to: "/settings/archived" });
+    }
+  }, [isMobile, setOpenMobile, isArchiveOpen, navigate]);
+
+  return (
+    <SidebarMenu className="mb-1">
+      <SidebarMenuItem>
+        <SidebarMenuButton
+          isActive={isArchiveOpen}
+          onClick={handleClick}
+          size="default"
+          className={cn(
+            "w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs transition-all group font-medium cursor-pointer",
+            isArchiveOpen
+              ? "bg-primary/15 text-primary border border-primary/30 shadow-sm"
+              : "text-sidebar-foreground/80 hover:bg-sidebar-row-hover hover:text-sidebar-foreground border border-transparent",
+          )}
+        >
+          <div className="flex items-center gap-2">
+            <div
+              className={cn(
+                "size-5 rounded-md flex items-center justify-center transition-transform group-hover:scale-105",
+                isArchiveOpen
+                  ? "bg-primary/20 text-primary"
+                  : "bg-sky-500/10 border border-sky-500/25 text-sky-400",
+              )}
+            >
+              <ArchiveIcon className="size-3.5" />
+            </div>
+            <span className="font-semibold tracking-tight">Archive</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-3xs font-mono px-1.5 py-0.5 rounded-full bg-sidebar-muted/30 text-sidebar-muted-foreground border border-border/30 group-hover:border-sky-500/30 group-hover:text-sky-400 transition-colors">
+              Threads
+            </span>
+          </div>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    </SidebarMenu>
+  );
+});
+
+export const SidebarNotesItem = memo(function SidebarNotesItem() {
+  const { activeCount, notes } = useNotes();
+  const [isOpen, setIsOpen] = useNotesSheetState();
+  const { isMobile, setOpenMobile } = useSidebar();
+
+  const handleClick = useCallback(() => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+    setIsOpen(!isOpen);
+  }, [isMobile, setOpenMobile, isOpen, setIsOpen]);
+
+  return (
+    <SidebarMenu className="mb-1">
+      <SidebarMenuItem>
+        <SidebarMenuButton
+          isActive={isOpen}
+          onClick={handleClick}
+          size="default"
+          className={cn(
+            "w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs transition-all group font-medium cursor-pointer",
+            isOpen
+              ? "bg-amber-500/15 text-amber-300 border border-amber-500/30 shadow-sm"
+              : "text-sidebar-foreground/80 hover:bg-sidebar-row-hover hover:text-sidebar-foreground border border-transparent",
+          )}
+        >
+          <div className="flex items-center gap-2">
+            <div
+              className={cn(
+                "size-5 rounded-md flex items-center justify-center transition-transform group-hover:scale-105",
+                isOpen
+                  ? "bg-amber-500/20 text-amber-300"
+                  : "bg-amber-500/10 border border-amber-500/25 text-amber-400",
+              )}
+            >
+              <CheckSquareIcon className="size-3.5" />
+            </div>
+            <span className="font-semibold tracking-tight">Notes & Reminders</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            {activeCount > 0 ? (
+              <span className="text-3xs font-mono font-bold px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                {activeCount} active
+              </span>
+            ) : notes.length > 0 ? (
+              <span className="text-3xs font-mono px-1.5 py-0.5 rounded-full bg-sidebar-muted/30 text-sidebar-muted-foreground border border-border/30">
+                {notes.length}
+              </span>
+            ) : (
+              <span className="text-3xs text-sidebar-muted-foreground">0</span>
+            )}
+          </div>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    </SidebarMenu>
+  );
+});
+
 export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
   return (
     <SidebarFooter>
@@ -317,6 +433,8 @@ export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
       <SidebarProviderUpdatePill />
       <SidebarUpdateArchitectureWarning />
       <SidebarAiTerminalItem />
+      <SidebarArchiveItem />
+      <SidebarNotesItem />
       <SidebarUtilityMenu />
     </SidebarFooter>
   );

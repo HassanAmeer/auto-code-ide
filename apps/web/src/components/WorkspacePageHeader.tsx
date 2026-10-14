@@ -2,7 +2,6 @@ import type { ComponentPropsWithoutRef } from "react";
 
 import { cn } from "../lib/utils";
 import { COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS } from "../workspaceTitlebar";
-import { NotesTopTabButton } from "./notes/NotesTopTabButton";
 
 /**
  * Shared workspace top-bar geometry. The height is `!important` so callers cannot
@@ -30,7 +29,6 @@ export function WorkspacePageHeader({
       {...props}
     >
       <div className="flex items-center min-w-0 flex-1">{children}</div>
-      <NotesTopTabButton />
     </header>
   );
 }
