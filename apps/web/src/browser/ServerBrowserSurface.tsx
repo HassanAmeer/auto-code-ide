@@ -41,6 +41,7 @@ import { Input } from "~/components/ui/input";
 import { toastManager } from "~/components/ui/toast";
 import { cn } from "~/lib/utils";
 import { refreshPreviewStreamAccess, usePreviewStreamAccess } from "~/state/previewStream";
+import { browserLogsStore } from "~/browser/browserLogsStore";
 
 /** Chrome-row controls for a server tab; commands require current ownership. */
 export interface ServerBrowserHandle {
@@ -403,6 +404,12 @@ export function ServerBrowserSurface(props: {
         onDownload: offerDownload,
         onPopup: popupOpened,
         onFileChooser: setFileChooser,
+        onConsole: (entry) => {
+          browserLogsStore.addConsoleEntry(tabId, entry);
+        },
+        onNetwork: (entry) => {
+          browserLogsStore.addNetworkEntry(tabId, entry);
+        },
         onViewport: (viewport) => {
           viewportRef.current = viewport;
           viewportChanged(viewport);

@@ -43,6 +43,8 @@ import { SidebarUpdateArchitectureWarning, SidebarUpdatePill } from "./SidebarUp
 import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
 import { useTerminalStore, terminalStore } from "../chat/terminal/terminalStore";
 import { SidebarResourceStats } from "./SidebarResourceStats";
+import { useBackgroundModeStore } from "../../lib/backgroundModeStore";
+import { BackgroundModeDialog } from "../background/BackgroundModeDialog";
 
 export const SidebarChromeHeader = memo(function SidebarChromeHeader({
   isElectron,
@@ -269,6 +271,13 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
     setIsNotesOpen(!isNotesOpen);
   }, [closeMobileSidebar, isNotesOpen, setIsNotesOpen]);
 
+  const { isBgEnabled, setModalOpen: setBgModalOpen } = useBackgroundModeStore();
+
+  const handleBgClick = useCallback(() => {
+    closeMobileSidebar();
+    setBgModalOpen(true);
+  }, [closeMobileSidebar, setBgModalOpen]);
+
   const handleArchiveClick = useCallback(() => {
     closeMobileSidebar();
     if (isArchiveOpen) {
@@ -416,6 +425,38 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
                 </span>
               </div>
             </button>
+
+            {/* Background 24/7 VPS Mode */}
+            <button
+              type="button"
+              onClick={() => {
+                handleBgClick();
+                setIsExpanded(false);
+              }}
+              className={cn(
+                "flex items-center gap-2 rounded-lg p-1.5 text-xs font-medium transition-all text-left cursor-pointer",
+                isBgEnabled
+                  ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
+                  : "hover:bg-sidebar-row-hover text-sidebar-foreground border border-transparent",
+              )}
+            >
+              <div
+                className={cn(
+                  "size-6 rounded-md flex items-center justify-center shrink-0 font-mono font-bold text-[11px]",
+                  isBgEnabled
+                    ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                    : "bg-muted text-muted-foreground",
+                )}
+              >
+                BG
+              </div>
+              <div className="flex flex-col min-w-0">
+                <span className="font-semibold text-[11px] truncate">VPS Background</span>
+                <span className="text-[9px] text-muted-foreground truncate">
+                  {isBgEnabled ? "24/7 VPS (ON)" : "Paused (OFF)"}
+                </span>
+              </div>
+            </button>
           </div>
         </div>
       )}
@@ -454,6 +495,28 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
                   isTerminalOpen ? (
                     <span className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-emerald-400 animate-pulse" />
                   ) : undefined
+                }
+              />
+              <SidebarUtilityItem
+                icon={
+                  <div className="flex items-center justify-center font-mono font-black text-[10px] tracking-tight">
+                    <span
+                      className={cn(isBgEnabled ? "text-emerald-400" : "text-muted-foreground/60")}
+                    >
+                      BG
+                    </span>
+                  </div>
+                }
+                label={isBgEnabled ? "Background: ON (24/7 VPS)" : "Background: OFF"}
+                onClick={handleBgClick}
+                isActive={isBgEnabled}
+                badge={
+                  <span
+                    className={cn(
+                      "absolute top-1 right-1 size-1.5 rounded-full",
+                      isBgEnabled ? "bg-emerald-400 animate-pulse" : "bg-muted-foreground/30",
+                    )}
+                  />
                 }
               />
               <SidebarUtilityItem
@@ -512,6 +575,7 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
           </>
         )}
       </SidebarMenu>
+      <BackgroundModeDialog />
     </div>
   );
 });

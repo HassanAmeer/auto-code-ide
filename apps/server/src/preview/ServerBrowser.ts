@@ -203,6 +203,8 @@ export type ServerBrowserViewerOutput =
       readonly fileName: string;
       readonly sizeBytes: number;
     }
+  | { readonly _tag: "console"; readonly entry: PreviewAutomationConsoleEntry }
+  | { readonly _tag: "network"; readonly entry: PreviewAutomationNetworkEntry }
   | { readonly _tag: "gone" }
   /** The page is still open, but this connection to it ended; the viewer reconnects. */
   | { readonly _tag: "reconnect" };
@@ -546,6 +548,18 @@ const make = Effect.gen(function* () {
       });
   };
 
+  const broadcastConsole = (tab: ServerTab, entry: PreviewAutomationConsoleEntry) => {
+    for (const viewer of tab.viewers) {
+      viewer.push({ _tag: "console", entry });
+    }
+  };
+
+  const broadcastNetwork = (tab: ServerTab, entry: PreviewAutomationNetworkEntry) => {
+    for (const viewer of tab.viewers) {
+      viewer.push({ _tag: "network", entry });
+    }
+  };
+
   const resolveDialog = async (tab: ServerTab, input: PreviewAutomationDialogInput) => {
     const dialog = tab.dialog;
     if (!dialog) throw new Error("No dialog is pending.");
@@ -831,14 +845,16 @@ const make = Effect.gen(function* () {
     });
     page.on("requestfailed", (request) => {
       const errorText = request.failure()?.errorText ?? "";
-      pushBounded(tab.networkEntries, {
+      const entry: PreviewAutomationNetworkEntry = {
         url: request.url(),
         method: request.method(),
         status: null,
         failed: true,
         errorText,
         timestamp: new Date().toISOString(),
-      });
+      };
+      pushBounded(tab.networkEntries, entry);
+      broadcastNetwork(tab, entry);
       if (!isMainNavigation(request)) return;
       // A navigation a newer one replaced leaves the status to the newer one. A
       // popup's first request can predate the listener, so it is untracked and
@@ -872,20 +888,34 @@ const make = Effect.gen(function* () {
       });
     });
     page.on("response", (response) => {
-      pushBounded(tab.networkEntries, {
+      const entry: PreviewAutomationNetworkEntry = {
         url: response.url(),
         method: response.request().method(),
         status: response.status(),
         failed: false,
         timestamp: new Date().toISOString(),
-      });
+      };
+      pushBounded(tab.networkEntries, entry);
+      broadcastNetwork(tab, entry);
     });
     page.on("console", (message) => {
-      pushBounded(tab.consoleEntries, {
+      const entry: PreviewAutomationConsoleEntry = {
         level: message.type(),
         text: message.text().slice(0, 2_000),
         timestamp: new Date().toISOString(),
-      });
+      };
+      pushBounded(tab.consoleEntries, entry);
+      broadcastConsole(tab, entry);
+    });
+    page.on("pageerror", (error) => {
+      const entry: PreviewAutomationConsoleEntry = {
+        level: "error",
+        text: (error.stack || error.message || String(error)).slice(0, 2_000),
+        timestamp: new Date().toISOString(),
+        source: "pageerror",
+      };
+      pushBounded(tab.consoleEntries, entry);
+      broadcastConsole(tab, entry);
     });
     page.on("dialog", (dialog) => {
       tab.dialog = dialog;
@@ -2252,6 +2282,12 @@ const make = Effect.gen(function* () {
       }
       broadcastControl(tab);
       pushFileChooser(tab);
+      for (const entry of tab.consoleEntries) {
+        viewer.push({ _tag: "console", entry });
+      }
+      for (const entry of tab.networkEntries) {
+        viewer.push({ _tag: "network", entry });
+      }
       // Full scale: a scaled capture would flash in every other viewer.
       const pushStill = async () => {
         const data = await withCaptureLock(tab, () =>

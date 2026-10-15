@@ -2,6 +2,8 @@
 import { type PreviewStreamAccess, withPreviewStreamQuery } from "../state/previewStreamAccess.ts";
 import {
   PREVIEW_STREAM_HOST_SETUP_CLOSE_CODE,
+  type PreviewAutomationConsoleEntry,
+  type PreviewAutomationNetworkEntry,
   type PreviewStreamHostSetup,
   type PreviewViewportSetting,
 } from "@t3tools/contracts";
@@ -211,6 +213,10 @@ export interface PreviewStreamEvents {
   readonly onConnectedChange: (connected: boolean) => void;
   /** The upgrade was refused; refresh access and start a new client. */
   readonly onUnauthorized: () => void;
+  /** Text or errors printed to the browser console. */
+  readonly onConsole?: (entry: PreviewAutomationConsoleEntry) => void;
+  /** Network requests made by the page. */
+  readonly onNetwork?: (entry: PreviewAutomationNetworkEntry) => void;
   /** The tab was closed on the server. The client has stopped. */
   readonly onGone?: () => void;
   /** The server's browser cannot start until its host is set up. The client has stopped. */
@@ -344,6 +350,20 @@ export function createPreviewStreamClient(
         typeof editable === "boolean"
       ) {
         events.onProbe?.({ x, y, editable });
+      } else if (
+        type === "console" &&
+        typeof message === "object" &&
+        message !== null &&
+        "entry" in message
+      ) {
+        events.onConsole?.((message as { entry: PreviewAutomationConsoleEntry }).entry);
+      } else if (
+        type === "network" &&
+        typeof message === "object" &&
+        message !== null &&
+        "entry" in message
+      ) {
+        events.onNetwork?.((message as { entry: PreviewAutomationNetworkEntry }).entry);
       } else if (
         type === "control" &&
         typeof canOperate === "boolean" &&

@@ -6,6 +6,7 @@ import {
   ExternalLink,
   MousePointerClick,
   PictureInPicture2,
+  Terminal,
 } from "lucide-react";
 import {
   type FormEvent,
@@ -42,6 +43,9 @@ interface Props {
   onPictureInPicture?: (() => void) | undefined;
   pictureInPicture?: boolean | undefined;
   pictureInPictureDisabled?: boolean | undefined;
+  onToggleLogs?: (() => void) | undefined;
+  logsOpen?: boolean | undefined;
+  logsErrorCount?: number | undefined;
   /**
    * When provided, renders an annotation-mode toggle button to the right of
    * the URL input. Pressed while annotation mode is active (button shows in `pressed`
@@ -85,6 +89,9 @@ export function PreviewChromeRow({
   onPictureInPicture,
   pictureInPicture,
   pictureInPictureDisabled,
+  onToggleLogs,
+  logsOpen,
+  logsErrorCount = 0,
   onPickElement,
   pickActive,
   pickDisabled,
@@ -304,6 +311,36 @@ export function PreviewChromeRow({
             </TooltipTrigger>
             <TooltipPopup>
               {pictureInPicture ? "Close floating preview" : "Float preview over chat"}
+            </TooltipPopup>
+          </Tooltip>
+        ) : null}
+        {onToggleLogs ? (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant={logsOpen ? "secondary" : "ghost"}
+                  size="icon-xs"
+                  onClick={onToggleLogs}
+                  aria-label={logsOpen ? "Close browser logs" : "Open browser logs"}
+                  aria-pressed={logsOpen ? "true" : "false"}
+                  type="button"
+                  className="relative"
+                />
+              }
+            >
+              <Terminal className={cn("size-3.5", logsOpen && "text-primary")} />
+              {logsErrorCount > 0 ? (
+                <span className="absolute -right-0.5 -top-0.5 flex h-3 min-w-3 items-center justify-center rounded-full bg-destructive px-0.5 text-[8px] font-bold leading-none text-destructive-foreground">
+                  {logsErrorCount > 99 ? "99+" : logsErrorCount}
+                </span>
+              ) : null}
+            </TooltipTrigger>
+            <TooltipPopup>
+              {logsOpen ? "Close browser logs" : "Browser logs & network"}
+              {logsErrorCount > 0
+                ? ` (${logsErrorCount} error${logsErrorCount === 1 ? "" : "s"})`
+                : ""}
             </TooltipPopup>
           </Tooltip>
         ) : null}

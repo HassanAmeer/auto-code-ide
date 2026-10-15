@@ -42,16 +42,24 @@ export const ThreadErrorBanner = memo(function ThreadErrorBanner({
   errorClass,
   chatGptUsageLimit = false,
   autoRetryCountdown,
+  autoRetryAttempt,
+  autoRetryMaxRetries,
   onRetryNow,
   onCancelAutoRetry,
+  onSwitchModelNow,
+  nextFallbackModelName,
 }: {
   error: string | null;
-  errorClass?: OrchestrationV2ProviderFailureClass | null;
-  onDismiss?: () => void;
-  chatGptUsageLimit?: boolean;
-  autoRetryCountdown?: number | null;
-  onRetryNow?: () => void;
-  onCancelAutoRetry?: () => void;
+  errorClass?: OrchestrationV2ProviderFailureClass | null | undefined;
+  onDismiss?: (() => void) | undefined;
+  chatGptUsageLimit?: boolean | undefined;
+  autoRetryCountdown?: number | null | undefined;
+  autoRetryAttempt?: number | undefined;
+  autoRetryMaxRetries?: number | undefined;
+  onRetryNow?: (() => void) | undefined;
+  onCancelAutoRetry?: (() => void) | undefined;
+  onSwitchModelNow?: (() => void) | undefined;
+  nextFallbackModelName?: string | null | undefined;
 }) {
   if (!error) return null;
   const variant = errorClass === "usage_limit" ? "warning" : "error";
@@ -77,12 +85,20 @@ export const ThreadErrorBanner = memo(function ThreadErrorBanner({
                   {error}
                 </TooltipPopup>
               </Tooltip>
-              {autoRetryCountdown !== null && autoRetryCountdown !== undefined ? (
+              {onRetryNow ||
+              (onSwitchModelNow && nextFallbackModelName) ||
+              (autoRetryCountdown !== null && autoRetryCountdown !== undefined) ? (
                 <div className="mt-2 flex flex-wrap items-center gap-2 font-sans">
-                  <span className="text-xs font-medium text-amber-500 dark:text-amber-400 flex items-center gap-1.5">
-                    <span className="inline-block size-2 rounded-full bg-amber-500 animate-pulse" />
-                    Auto-retrying in {autoRetryCountdown}s...
-                  </span>
+                  {autoRetryCountdown !== null && autoRetryCountdown !== undefined ? (
+                    <span className="text-xs font-medium text-amber-500 dark:text-amber-400 flex items-center gap-1.5">
+                      <span className="inline-block size-2 rounded-full bg-amber-500 animate-pulse" />
+                      Auto-retrying in {autoRetryCountdown}s
+                      {autoRetryAttempt !== undefined && autoRetryMaxRetries !== undefined
+                        ? ` (Attempt ${autoRetryAttempt + 1} of ${autoRetryMaxRetries})`
+                        : ""}
+                      ...
+                    </span>
+                  ) : null}
                   {onRetryNow ? (
                     <Button
                       type="button"
@@ -94,7 +110,21 @@ export const ThreadErrorBanner = memo(function ThreadErrorBanner({
                       Retry now
                     </Button>
                   ) : null}
-                  {onCancelAutoRetry ? (
+                  {onSwitchModelNow && nextFallbackModelName ? (
+                    <Button
+                      type="button"
+                      size="xs"
+                      variant="outline"
+                      onClick={onSwitchModelNow}
+                      className="h-5 text-2xs px-2 border-primary/40 text-primary hover:bg-primary/10"
+                      title={`Switch to ${nextFallbackModelName} and retry`}
+                    >
+                      Next Model ({nextFallbackModelName})
+                    </Button>
+                  ) : null}
+                  {autoRetryCountdown !== null &&
+                  autoRetryCountdown !== undefined &&
+                  onCancelAutoRetry ? (
                     <Button
                       type="button"
                       size="xs"

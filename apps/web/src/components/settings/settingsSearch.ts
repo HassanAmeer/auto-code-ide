@@ -184,6 +184,15 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["model workspace environments projects inheritance checkout"],
   },
   {
+    id: "auto-retry",
+    title: "Auto-retry & model failover",
+    to: "/settings/general",
+    targetId: "auto-retry",
+    searchTerms: [
+      "retry model failover rate limit 429 quota delay seconds error recovery switch model next model reset",
+    ],
+  },
+  {
     id: "project-overview",
     title: "Project overview",
     to: "/settings/projects",
@@ -864,6 +873,8 @@ const SETTINGS_CATEGORY_SCOPES: Readonly<Record<SettingsPath, SettingsSearchScop
   "/settings/source-control": "environment-defaults",
   "/settings/storage": "project-defaults",
   "/settings/connections": "connections",
+  "/settings/notifications": null,
+  "/settings/sound": null,
   "/settings/scheduled-tasks": null,
   "/settings/archived": "project-defaults",
 };

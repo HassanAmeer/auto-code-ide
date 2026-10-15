@@ -91,6 +91,8 @@ import {
 } from "~/browser/browserRecording";
 import { stackedThreadToast, toastManager } from "~/components/ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
+import { useBrowserLogsStore } from "~/browser/browserLogsStore";
+import { BrowserLogsSection } from "./BrowserLogsSection";
 
 interface Props {
   threadRef: ScopedThreadRef;
@@ -202,6 +204,13 @@ export function PreviewView({
         : findActiveBrowserRecordingRuntimeTabId(threadRef, tabId)
       : null;
   const snapshot = tabId ? (previewState.sessions[tabId] ?? null) : null;
+  const isLogsOpen = useBrowserLogsStore((state) => state.isLogsOpen);
+  const toggleLogsOpen = useBrowserLogsStore((state) => state.toggleLogsOpen);
+  const setLogsOpen = useBrowserLogsStore((state) => state.setLogsOpen);
+  const activeLogsTabId = snapshot?.tabId ?? tabId ?? "";
+  const logsErrorCount = useBrowserLogsStore((state) =>
+    activeLogsTabId ? state.getErrorCount(activeLogsTabId) : 0,
+  );
   // Server tabs run in the environment's browser and stream to any client, except the
   // desktop app's own server's tabs, which render here natively while the server drives them.
   const nativeServerTab = useRendersServerTabNatively(threadRef.environmentId, snapshot);
@@ -992,6 +1001,9 @@ export function PreviewView({
         pictureInPictureDisabled={
           isUnreachable || (!isServerTab && !desktopOverlay?.hasWebContents)
         }
+        onToggleLogs={activeLogsTabId ? toggleLogsOpen : undefined}
+        logsOpen={isLogsOpen}
+        logsErrorCount={logsErrorCount}
         onPickElement={previewBridge && tabId && !isServerTab ? handlePickElement : undefined}
         pickActive={pickActive}
         // Disable when there's no tab (nothing to pick on) OR the page
@@ -1150,6 +1162,9 @@ export function PreviewView({
           </div>
         ) : null}
       </div>
+      {activeLogsTabId && isLogsOpen ? (
+        <BrowserLogsSection tabId={activeLogsTabId} onClose={() => setLogsOpen(false)} />
+      ) : null}
     </div>
   );
 }

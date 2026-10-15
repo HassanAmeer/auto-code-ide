@@ -496,7 +496,7 @@ import {
   shouldShowThreadErrorBanner,
   ThreadErrorBanner,
 } from "./chat/ThreadErrorBanner";
-import { useAutoRetrySettings } from "~/lib/autoRetrySettings";
+import { useAutoRetrySettings, findNextFallbackModel } from "~/lib/autoRetrySettings";
 import {
   QueuedRunsControl,
   type QueuedRunsControlHandle,
@@ -2213,6 +2213,7 @@ export default function ChatView(props: ChatViewProps) {
   const [, setThreadErrorBannerDismissTick] = useState(0);
   const [autoRetrySettings] = useAutoRetrySettings();
   const [autoRetryCountdown, setAutoRetryCountdown] = useState<number | null>(null);
+  const [autoRetryAttempt, setAutoRetryAttempt] = useState<number>(0);
   const [autoRetryCancelledBannerKey, setAutoRetryCancelledBannerKey] = useState<string | null>(
     null,
   );
@@ -10795,6 +10796,12 @@ export default function ChatView(props: ChatViewProps) {
       settings,
     ],
   );
+
+  const nextFallbackCandidate = useMemo(() => {
+    if (!activeThread?.modelSelection) return null;
+    return findNextFallbackModel(activeThread.modelSelection, providerInstanceEntries);
+  }, [activeThread?.modelSelection, providerInstanceEntries]);
+
   const onEnvModeChange = useCallback(
     (mode: DraftThreadEnvMode) => {
       if (multipleModelSelections !== null) return;
@@ -10929,107 +10936,165 @@ export default function ChatView(props: ChatViewProps) {
     void onRevertToTurnCountRef.current(targetTurnCount, messageId);
   }, []);
 
-  const handleAutoRetryNow = useCallback(async () => {
-    setAutoRetryCountdown(null);
-    if (!activeThread || isWorking || isSendBusy || isResuming || sendInFlightRef.current) {
-      return;
-    }
-
-    if (resumableRunId !== null || hasHeldQueuedRuns) {
-      await onResume();
-      return;
-    }
-
-    if (promptRef.current && promptRef.current.trim().length > 0) {
-      await onSend();
-      return;
-    }
-
-    const threadId = activeThread.id;
-    sendInFlightRef.current = true;
-    setResumingThreadKeys((current) => new Set(current).add(routeThreadKey));
-    setThreadError(threadId, null);
-    if (threadErrorBannerKey) {
-      dismissThreadErrorBannerForSession(threadErrorBannerKey);
-      setThreadErrorBannerDismissTick((tick) => tick + 1);
-    }
-
-    try {
-      const createdAt = new Date().toISOString();
-      const settingsResult = await persistThreadSettingsForNextTurn({
-        threadId,
-        createdAt,
-        ...(localCheckoutBranchMismatch
-          ? { branch: localCheckoutBranchMismatch.currentBranch }
-          : {}),
-        runtimeMode,
-        interactionMode,
-      });
-      if (settingsResult._tag === "Failure") {
-        const error = squashAtomCommandFailure(settingsResult);
-        setThreadError(threadId, error instanceof Error ? error.message : "Retry failed.");
+  const handleAutoRetryNow = useCallback(
+    async (options?: { overrideModel?: ModelSelection }) => {
+      setAutoRetryCountdown(null);
+      if (!activeThread || isWorking || isSendBusy || isResuming || sendInFlightRef.current) {
         return;
       }
 
-      const turnResult = await startThreadTurn({
-        environmentId,
-        input: {
+      if (resumableRunId !== null || hasHeldQueuedRuns) {
+        await onResume();
+        return;
+      }
+
+      if (promptRef.current && promptRef.current.trim().length > 0) {
+        await onSend();
+        return;
+      }
+
+      const threadId = activeThread.id;
+      sendInFlightRef.current = true;
+      setResumingThreadKeys((current) => new Set(current).add(routeThreadKey));
+      setThreadError(threadId, null);
+      if (threadErrorBannerKey) {
+        dismissThreadErrorBannerForSession(threadErrorBannerKey);
+        setThreadErrorBannerDismissTick((tick) => tick + 1);
+      }
+
+      setAutoRetryAttempt((prev) => prev + 1);
+
+      try {
+        const sendCtx = composerRef.current?.getSendContext();
+        let retryModelSelection: ModelSelection | undefined =
+          options?.overrideModel ?? sendCtx?.selectedModelSelection;
+        if (!options?.overrideModel && autoRetrySettings.autoSwitchModel && nextFallbackCandidate) {
+          retryModelSelection = {
+            instanceId: nextFallbackCandidate.instanceId,
+            model: nextFallbackCandidate.model,
+          };
+          onProviderModelSelect(nextFallbackCandidate.instanceId, nextFallbackCandidate.model, {
+            focusComposer: false,
+          });
+          toastManager.add({
+            type: "info",
+            title: "Switched to Fallback Model",
+            description: `Auto-switched to ${nextFallbackCandidate.displayName} for retry.`,
+          });
+        }
+
+        const createdAt = new Date().toISOString();
+        const settingsResult = await persistThreadSettingsForNextTurn({
           threadId,
-          message: {
-            messageId: newMessageId(),
-            role: "user",
-            text: "Please retry the previous response.",
-            attachments: [],
-          },
+          createdAt,
+          ...(localCheckoutBranchMismatch
+            ? { branch: localCheckoutBranchMismatch.currentBranch }
+            : {}),
           runtimeMode,
           interactionMode,
-          dispatchMode: "start",
-        },
-      });
+        });
+        if (settingsResult._tag === "Failure") {
+          const error = squashAtomCommandFailure(settingsResult);
+          setThreadError(threadId, error instanceof Error ? error.message : "Retry failed.");
+          return;
+        }
 
-      if (turnResult._tag === "Failure" && !isAtomCommandInterrupted(turnResult)) {
-        const error = squashAtomCommandFailure(turnResult);
-        setThreadError(
-          threadId,
-          error instanceof Error ? error.message : "Could not retry thread.",
-        );
+        const turnResult = await startThreadTurn({
+          environmentId,
+          input: {
+            threadId,
+            message: {
+              messageId: newMessageId(),
+              role: "user",
+              text: "Please retry the previous response.",
+              attachments: [],
+            },
+            ...(retryModelSelection ? { modelSelection: retryModelSelection } : {}),
+            runtimeMode,
+            interactionMode,
+            dispatchMode: "start",
+          },
+        });
+
+        if (turnResult._tag === "Failure" && !isAtomCommandInterrupted(turnResult)) {
+          const error = squashAtomCommandFailure(turnResult);
+          setThreadError(
+            threadId,
+            error instanceof Error ? error.message : "Could not retry thread.",
+          );
+        }
+      } finally {
+        sendInFlightRef.current = false;
+        setResumingThreadKeys((current) => {
+          const next = new Set(current);
+          next.delete(routeThreadKey);
+          return next;
+        });
       }
-    } finally {
-      sendInFlightRef.current = false;
-      setResumingThreadKeys((current) => {
-        const next = new Set(current);
-        next.delete(routeThreadKey);
-        return next;
-      });
-    }
-  }, [
-    activeThread,
-    environmentId,
-    hasHeldQueuedRuns,
-    interactionMode,
-    isResuming,
-    isSendBusy,
-    isWorking,
-    localCheckoutBranchMismatch,
-    onResume,
-    onSend,
-    persistThreadSettingsForNextTurn,
-    resumableRunId,
-    routeThreadKey,
-    runtimeMode,
-    setThreadError,
-    startThreadTurn,
-    threadErrorBannerKey,
-  ]);
+    },
+    [
+      activeThread,
+      autoRetrySettings.autoSwitchModel,
+      environmentId,
+      hasHeldQueuedRuns,
+      interactionMode,
+      isResuming,
+      isSendBusy,
+      isWorking,
+      localCheckoutBranchMismatch,
+      nextFallbackCandidate,
+      onProviderModelSelect,
+      onResume,
+      onSend,
+      persistThreadSettingsForNextTurn,
+      resumableRunId,
+      routeThreadKey,
+      runtimeMode,
+      setThreadError,
+      startThreadTurn,
+      threadErrorBannerKey,
+    ],
+  );
 
   const handleAutoRetryNowRef = useRef(handleAutoRetryNow);
   handleAutoRetryNowRef.current = handleAutoRetryNow;
+
+  const handleSwitchToNextModel = useCallback(() => {
+    if (!nextFallbackCandidate) return;
+    toastManager.add({
+      type: "info",
+      title: "Model Switched",
+      description: `Switched to ${nextFallbackCandidate.displayName} and retrying.`,
+    });
+    onProviderModelSelect(nextFallbackCandidate.instanceId, nextFallbackCandidate.model, {
+      focusComposer: false,
+    });
+    setAutoRetryAttempt(0);
+    setAutoRetryCountdown(null);
+    void handleAutoRetryNow({
+      overrideModel: {
+        instanceId: nextFallbackCandidate.instanceId,
+        model: nextFallbackCandidate.model,
+      },
+    });
+  }, [handleAutoRetryNow, nextFallbackCandidate, onProviderModelSelect]);
+
+  useEffect(() => {
+    if (!visibleThreadError) {
+      setAutoRetryAttempt(0);
+    }
+  }, [visibleThreadError, activeThread?.id]);
 
   useEffect(() => {
     const hasError = Boolean(
       visibleThreadError || (isServerThread && serverRuntime?.status === "failed"),
     );
     if (!autoRetrySettings.enabled || !hasError || isWorking || !activeThread) {
+      setAutoRetryCountdown(null);
+      return;
+    }
+
+    if (autoRetryAttempt >= autoRetrySettings.maxRetries) {
       setAutoRetryCountdown(null);
       return;
     }
@@ -11057,10 +11122,12 @@ export default function ChatView(props: ChatViewProps) {
     return () => clearTimeout(timer);
   }, [
     activeThread,
+    autoRetryAttempt,
     autoRetryCancelledBannerKey,
     autoRetryCountdown,
     autoRetrySettings.delaySeconds,
     autoRetrySettings.enabled,
+    autoRetrySettings.maxRetries,
     isServerThread,
     isWorking,
     serverRuntime?.status,
@@ -11487,6 +11554,10 @@ export default function ChatView(props: ChatViewProps) {
                     : null
                 }
                 autoRetryCountdown={autoRetryCountdown}
+                autoRetryAttempt={autoRetryAttempt}
+                autoRetryMaxRetries={autoRetrySettings.maxRetries}
+                nextFallbackModelName={nextFallbackCandidate?.displayName ?? null}
+                onSwitchModelNow={nextFallbackCandidate ? handleSwitchToNextModel : undefined}
                 onRetryNow={handleAutoRetryNow}
                 onCancelAutoRetry={() => {
                   if (threadErrorBannerKey) {

@@ -1729,12 +1729,18 @@ function AutoSettleDaysInput({
   );
 }
 
-function AutoRetryDelayInput({
+function AutoRetryNumberInput({
   value,
+  min = 1,
+  max = 86400,
   onCommit,
+  ariaLabel,
 }: {
   value: number;
-  onCommit: (seconds: number) => void;
+  min?: number;
+  max?: number;
+  onCommit: (val: number) => void;
+  ariaLabel?: string;
 }) {
   const [draft, setDraft] = useState(String(value));
   useEffect(() => {
@@ -1745,26 +1751,26 @@ function AutoRetryDelayInput({
     <Input
       size="sm"
       type="number"
-      min={1}
-      max={86400}
+      min={min}
+      max={max}
       className="w-full sm:w-28 text-right font-mono"
       value={draft}
       onChange={(event) => {
         setDraft(event.target.value);
         const parsed = Number(event.target.value);
-        if (Number.isInteger(parsed) && parsed >= 1 && parsed <= 86400) {
+        if (Number.isInteger(parsed) && parsed >= min && parsed <= max) {
           onCommit(parsed);
         }
       }}
       onBlur={() => {
         const parsed = Number(draft);
-        if (Number.isInteger(parsed) && parsed >= 1 && parsed <= 86400) {
+        if (Number.isInteger(parsed) && parsed >= min && parsed <= max) {
           onCommit(parsed);
         } else {
           setDraft(String(value));
         }
       }}
-      aria-label="Auto retry delay in seconds"
+      aria-label={ariaLabel ?? "Auto retry number input"}
     />
   );
 }
@@ -1933,11 +1939,11 @@ export function GeneralSettingsPanel() {
 
   return (
     <SettingsPageContainer>
-      <SettingsSection id="auto-retry" title="Auto Retry">
+      <SettingsSection id="auto-retry" title="Auto Retry & Model Failover">
         <SettingsRow
           id="auto-retry-enabled"
           title="Auto-retry on error"
-          description="Automatically retry the turn after an error (such as a model failure or disconnection)."
+          description="Automatically retry the turn after an error (such as a model failure, rate limit, or disconnection)."
           control={
             <Switch
               checked={autoRetrySettings.enabled}
@@ -1947,20 +1953,90 @@ export function GeneralSettingsPanel() {
           }
         />
         {autoRetrySettings.enabled ? (
-          <SettingsRow
-            id="auto-retry-delay"
-            title="Retry delay"
-            description="Number of seconds to wait before automatically retrying."
-            control={
-              <div className="flex items-center gap-2">
-                <AutoRetryDelayInput
-                  value={autoRetrySettings.delaySeconds}
-                  onCommit={(seconds) => updateAutoRetrySettings({ delaySeconds: seconds })}
+          <>
+            <SettingsRow
+              id="auto-retry-delay"
+              title="Retry delay (seconds)"
+              description="Number of seconds to wait before automatically retrying the current model (Default: 10s)."
+              control={
+                <div className="flex items-center gap-2">
+                  <AutoRetryNumberInput
+                    value={autoRetrySettings.delaySeconds}
+                    min={1}
+                    max={3600}
+                    onCommit={(seconds) => updateAutoRetrySettings({ delaySeconds: seconds })}
+                    ariaLabel="Retry delay in seconds"
+                  />
+                  <span className="text-xs text-muted-foreground">seconds</span>
+                </div>
+              }
+            />
+            <SettingsRow
+              id="auto-retry-max-retries"
+              title="Max retries per model"
+              description="Number of retry attempts before switching to another model or stopping (Default: 3 attempts)."
+              control={
+                <div className="flex items-center gap-2">
+                  <AutoRetryNumberInput
+                    value={autoRetrySettings.maxRetries}
+                    min={1}
+                    max={20}
+                    onCommit={(attempts) => updateAutoRetrySettings({ maxRetries: attempts })}
+                    ariaLabel="Max retries per model"
+                  />
+                  <span className="text-xs text-muted-foreground">times</span>
+                </div>
+              }
+            />
+            <SettingsRow
+              id="auto-retry-switch-model"
+              title="Auto-switch to another model on failure"
+              description="When the current model reaches max retries, automatically shift to the next available AI model and continue work."
+              control={
+                <Switch
+                  checked={autoRetrySettings.autoSwitchModel}
+                  onCheckedChange={(checked) =>
+                    updateAutoRetrySettings({ autoSwitchModel: Boolean(checked) })
+                  }
+                  aria-label="Auto-switch to another model on failure"
                 />
-                <span className="text-xs text-muted-foreground">seconds</span>
+              }
+            />
+            <SettingsRow
+              id="auto-retry-rate-limit"
+              title="Auto-retry on rate limits (429)"
+              description="Automatically retry when provider limits, 429 rate limits, or usage quotas are exceeded."
+              control={
+                <Switch
+                  checked={autoRetrySettings.retryOnRateLimit}
+                  onCheckedChange={(checked) =>
+                    updateAutoRetrySettings({ retryOnRateLimit: Boolean(checked) })
+                  }
+                  aria-label="Auto-retry on rate limits (429)"
+                />
+              }
+            />
+            <div className="rounded-lg border border-border/60 bg-muted/30 p-3.5 text-xs text-muted-foreground">
+              <div className="flex items-center gap-2 font-medium text-foreground mb-1">
+                <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+                Active Failover Workflow
               </div>
-            }
-          />
+              <p>
+                Run model ➜ wait{" "}
+                <span className="font-semibold text-foreground">
+                  {autoRetrySettings.delaySeconds}s
+                </span>{" "}
+                ➜ retry up to{" "}
+                <span className="font-semibold text-foreground">
+                  {autoRetrySettings.maxRetries} times
+                </span>{" "}
+                {autoRetrySettings.autoSwitchModel
+                  ? "➜ auto-shift to next available provider model and retry"
+                  : "➜ stop on failure"}
+                .
+              </p>
+            </div>
+          </>
         ) : null}
       </SettingsSection>
       <ProjectDefaultsSettings category="general" />
