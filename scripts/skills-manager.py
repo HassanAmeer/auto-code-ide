@@ -11,18 +11,145 @@ SKILLS_DIR = os.path.join(ROOT_DIR, ".agents", "skills")
 ACTIVE_FILE = os.path.join(SKILLS_DIR, "active.json")
 
 BUILTIN_NAMES = {
-    "code-reviewer",
+    "agent-browser-testing",
+    "web-ui-design",
     "web-designer",
+    "code-reviewer",
     "git-workflow",
     "contribution-triage",
     "test-t3-app",
+}
+
+BUILTIN_TEMPLATES = {
+    "agent-browser-testing": """---
+name: agent-browser-testing
+description: Autonomous browser testing, DOM inspection, mouse click simulation, and console error fixing using T3 Code's native collaborative browser.
+---
+
+# Agent Browser Testing & Automation Skill
+
+Automate browser testing, play and verify games, inspect DOM layouts, and catch/fix console errors in real time.
+
+## Core Capabilities
+
+1. **Autonomous Browser Control**:
+   - Call `preview_status` to inspect active tabs.
+   - Call `preview_open` to open or attach to a preview tab.
+   - Navigate to targets using `preview_navigate` (e.g. `http://localhost:<port>` or relative paths).
+
+2. **Interactive UI & Gameplay Verification**:
+   - `preview_click`: Simulate realistic mouse clicks on buttons, canvas coordinates, or DOM locators.
+   - `preview_type`: Populate input fields, textareas, and search boxes.
+   - `preview_press`: Trigger keyboard controls (e.g., Space, Enter, Arrow keys) for games and shortcuts.
+   - `preview_hover`: Test dropdown menus, tooltips, and hover states.
+
+3. **DevTools Diagnostics & Error Tracking**:
+   - Call `preview_snapshot` to capture DOM structure, accessibility tree, and screenshots (`save: true`).
+   - Examine `consoleEntries` for JavaScript errors, unhandled exceptions, and warnings.
+   - Examine `networkEntries` for failed HTTP calls (404, 500, CORS).
+
+4. **Self-Healing / Bug Fixing Loop**:
+   - When a console error or broken UI element is detected:
+     1. Locate the responsible file and line from the stack trace.
+     2. Edit the code to fix the root cause.
+     3. Re-navigate or reload with `preview_navigate`.
+     4. Take another `preview_snapshot` to confirm the fix works.
+""",
+    "web-ui-design": """---
+name: web-ui-design
+description: Premium frontend UI/UX design, modern dark mode aesthetics, glassmorphism, responsive typography, and micro-animations.
+---
+
+# Web UI Design & Aesthetics Skill
+
+Create stunning, state-of-the-art web interfaces that immediately captivate users with high visual polish, fluid responsiveness, and modern interactive aesthetics.
+
+## Design Principles
+
+1. **Rich & Modern Aesthetics**:
+   - Curated, harmonious color palettes (HSL tailored, sleek dark themes, refined accent contrasts).
+   - Glassmorphism, subtle backdrops (`backdrop-blur`), and fine border highlights (`border-white/10`).
+   - Clean typography using Google Fonts (Inter, Roboto, Outfit, JetBrains Mono) instead of browser defaults.
+
+2. **Responsive Layouts**:
+   - Fluid multi-device compatibility (mobile, tablet, desktop viewports).
+   - Flexbox and CSS Grid structures that dynamically adapt to screen constraints.
+
+3. **Micro-Interactions & Polish**:
+   - Smooth hover states, active transitions, and focus rings.
+   - Elegant skeleton loaders, spinners, and informative empty states.
+   - Avoid generic, plain HTML buttons or unstyled forms.
+""",
+    "web-designer": """---
+name: web-designer
+description: Expert frontend UI/UX designer for modern layouts, responsive design, dark mode aesthetics, and micro-interactions.
+---
+
+# Web Designer Skill
+
+Design and refine modern web interfaces that feel premium, interactive, and responsive across devices.
+
+## Design Guidelines
+
+1. **Visual Excellence**: Use cohesive color palettes, subtle borders, polished dark modes, and modern typography.
+2. **Responsiveness**: Ensure interfaces look pristine on both mobile viewports and large desktop screens.
+3. **Interactive Polish**: Add smooth hover states, micro-animations, loading indicators, and informative tooltips.
+4. **Accessibility & Contrast**: Maintain legible text contrast and clear focus indicators for keyboard navigation.
+""",
+    "code-reviewer": """---
+name: code-reviewer
+description: Performs rigorous code reviews focusing on code quality, performance, security, and project architecture patterns.
+---
+
+# Code Reviewer Skill
+
+Review code systematically before submitting or committing changes.
+
+## Review Principles
+
+1. **Performance & Memory**: Look for unnecessary re-renders, un-memoized heavy calculations, resource leaks, or large loops.
+2. **Type Safety**: Strictly avoid `any` and unhandled error cases. Ensure strict TypeScript types.
+3. **Simplicity & Cleanliness**: Follow minimal and obvious design patterns. Avoid over-engineering or premature abstraction.
+4. **Security**: Validate inputs, sanitize data, avoid arbitrary evaluation, and never expose sensitive keys or credentials.
+""",
+    "git-workflow": """---
+name: git-workflow
+description: Enforces clean git commit conventions, conventional commit messages, branch isolation, and safe diff inspections.
+---
+
+# Git Workflow Skill
+
+Standard git management practices for pair programming and agent development.
+
+## Commit Conventions
+
+- Use conventional commit formats:
+  - `feat(...)`: New features
+  - `fix(...)`: Bug fixes
+  - `refactor(...)`: Code adjustments without feature changes
+  - `perf(...)`: Performance enhancements
+  - `test(...)`: Unit tests and fixtures
+- Keep commits focused and atomic.
+- Inspect `git diff` and `git status` thoroughly before staging or committing.
+""",
+    "test-t3-app": """---
+name: test-t3-app
+description: Test T3 Code's web and desktop UI through its built-in Browser panel against isolated development state. Use for browser verification, browser pairing recovery, and test fixtures. Use test-t3-mobile for native mobile verification.
+---
+
+# Test T3 web and desktop
+
+Use T3's built-in Browser panel for verification. If its tools are absent or
+the panel reports unavailable, explain the blocker and stop verification.
+Do not install or switch to another automation system.
+"""
 }
 
 def ensure_skills_dir():
     os.makedirs(SKILLS_DIR, exist_ok=True)
     if not os.path.exists(ACTIVE_FILE):
         with open(ACTIVE_FILE, "w", encoding="utf-8") as f:
-            json.dump(["code-reviewer", "web-designer", "git-workflow"], f, indent=2)
+            json.dump(["agent-browser-testing", "web-ui-design", "code-reviewer", "web-designer", "git-workflow"], f, indent=2)
 
 def get_active_list():
     ensure_skills_dir()
@@ -105,12 +232,25 @@ def save_skill(dir_name, content_b64):
     with open(skill_file, "w", encoding="utf-8") as f:
         f.write(raw_content)
     
-    # Auto-activate newly created skill
     active_set = get_active_list()
     active_set.add(dir_name)
     save_active_list(active_set)
 
     print(json.dumps({"ok": True, "message": f"Skill {dir_name} saved successfully."}))
+
+def reset_skill(dir_name):
+    ensure_skills_dir()
+    if dir_name not in BUILTIN_TEMPLATES:
+        print(json.dumps({"ok": False, "error": f"No default template for skill: {dir_name}"}))
+        sys.exit(1)
+    
+    target_dir = os.path.join(SKILLS_DIR, dir_name)
+    os.makedirs(target_dir, exist_ok=True)
+    skill_file = os.path.join(target_dir, "SKILL.md")
+    with open(skill_file, "w", encoding="utf-8") as f:
+        f.write(BUILTIN_TEMPLATES[dir_name])
+    
+    print(json.dumps({"ok": True, "message": f"Skill {dir_name} reset to default."}))
 
 def delete_skill(dir_name):
     if dir_name in BUILTIN_NAMES:
@@ -151,6 +291,8 @@ def main():
         get_skill(sys.argv[2])
     elif action == "save" and len(sys.argv) >= 4:
         save_skill(sys.argv[2], sys.argv[3])
+    elif action == "reset" and len(sys.argv) >= 3:
+        reset_skill(sys.argv[2])
     elif action == "delete" and len(sys.argv) >= 3:
         delete_skill(sys.argv[2])
     elif action == "toggle" and len(sys.argv) >= 4:

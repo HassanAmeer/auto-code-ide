@@ -49,6 +49,8 @@ export interface SkillItem {
 }
 
 const DEFAULT_BUILTIN_NAMES = new Set([
+  "agent-browser-testing",
+  "web-ui-design",
   "code-reviewer",
   "web-designer",
   "git-workflow",
@@ -292,6 +294,31 @@ ${editorBody.trim()}
       });
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  // Reset a built-in skill to its default template
+  const handleResetSkill = async (skill: SkillItem) => {
+    try {
+      const res = await fetch("/api/terminal/exec", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          command: `python3 scripts/skills-manager.py reset ${JSON.stringify(skill.dirName)}`,
+          timeoutMs: 10_000,
+        }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      toastManager.add({
+        title: "Skill Restored",
+        description: `Reset .agents/skills/${skill.dirName}/SKILL.md to default template.`,
+      });
+      await loadSkills();
+    } catch (err) {
+      toastManager.add({
+        title: "Failed to reset skill",
+        description: err instanceof Error ? err.message : String(err),
+      });
     }
   };
 
@@ -732,6 +759,29 @@ ${raw}
                     <DownloadIcon className="size-3 mr-1" />
                     Export
                   </Button>
+
+                  {/* Reset button for Builtin skills */}
+                  {skill.isBuiltin && (
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2 text-xs text-amber-500 hover:bg-amber-500/10 hover:text-amber-500"
+                            onClick={() => handleResetSkill(skill)}
+                            title="Reset to default"
+                          >
+                            <RefreshCwIcon className="size-3 mr-1" />
+                            Reset
+                          </Button>
+                        }
+                      />
+                      <TooltipPopup side="top">
+                        Restore this skill's original default template.
+                      </TooltipPopup>
+                    </Tooltip>
+                  )}
 
                   {/* Delete Button: Disabled / Protected for Builtin */}
                   {skill.isBuiltin ? (

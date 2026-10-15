@@ -24,6 +24,7 @@ export const ComposerMicButton = memo(function ComposerMicButton({
     if (listening) {
       sessionRef.current?.stop();
       setListening(false);
+      window.dispatchEvent(new CustomEvent("t3:speech-interim", { detail: { text: "" } }));
     } else {
       const session = createSttSession({
         onResult: (text, isFinal) => {
@@ -38,12 +39,19 @@ export const ComposerMicButton = memo(function ComposerMicButton({
             }
           }
         },
+        onInterim: (interim) => {
+          window.dispatchEvent(new CustomEvent("t3:speech-interim", { detail: { text: interim } }));
+        },
         onStateChange: (active) => {
           setListening(active);
+          if (!active) {
+            window.dispatchEvent(new CustomEvent("t3:speech-interim", { detail: { text: "" } }));
+          }
         },
         onError: (err) => {
           console.warn("STT error:", err);
           setListening(false);
+          window.dispatchEvent(new CustomEvent("t3:speech-interim", { detail: { text: "" } }));
         },
       });
 

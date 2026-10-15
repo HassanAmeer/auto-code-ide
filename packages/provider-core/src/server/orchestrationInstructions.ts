@@ -98,20 +98,33 @@ export function t3AcpPromptWithInstructions(input: {
  * context in the first prompt. Keep the wrapper explicit so it cannot be
  * mistaken for text authored by the user.
  */
-function prependT3OrchestrationInstructions(prompt: string): string {
-  return `<t3_code_orchestration_instructions>${T3_CODE_ORCHESTRATION_INSTRUCTIONS.trim()}</t3_code_orchestration_instructions>\n\n<user_request>\n${prompt}\n</user_request>`;
+function prependT3OrchestrationInstructions(prompt: string, includeBrowser = true): string {
+  const instructions = [
+    ...(includeBrowser ? [T3_CODE_BROWSER_TOOL_INSTRUCTIONS.trim()] : []),
+    T3_CODE_ORCHESTRATION_INSTRUCTIONS.trim(),
+  ].join("\n\n");
+  return `<t3_code_orchestration_instructions>${instructions}</t3_code_orchestration_instructions>\n\n<user_request>\n${prompt}\n</user_request>`;
 }
 
 export function t3OrchestrationPromptForFirstRun(input: {
   readonly prompt: string;
   readonly runOrdinal: number;
   readonly hasT3Mcp: boolean;
+  readonly hasBrowserTools?: boolean;
 }): string {
   return input.runOrdinal === 1 && input.hasT3Mcp
-    ? prependT3OrchestrationInstructions(input.prompt)
+    ? prependT3OrchestrationInstructions(input.prompt, input.hasBrowserTools ?? true)
     : input.prompt;
 }
 
-export function t3OrchestrationSystemPrompt(hasT3Mcp: boolean): string | undefined {
-  return hasT3Mcp ? T3_CODE_ORCHESTRATION_INSTRUCTIONS : undefined;
+export function t3OrchestrationSystemPrompt(
+  hasT3Mcp: boolean,
+  includeBrowser = false,
+): string | undefined {
+  if (!hasT3Mcp) return undefined;
+  return includeBrowser
+    ? [T3_CODE_BROWSER_TOOL_INSTRUCTIONS.trim(), T3_CODE_ORCHESTRATION_INSTRUCTIONS.trim()].join(
+        "\n\n",
+      )
+    : T3_CODE_ORCHESTRATION_INSTRUCTIONS;
 }

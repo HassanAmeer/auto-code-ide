@@ -454,6 +454,7 @@ import {
   stopWaitingWaveSound,
 } from "~/lib/sound/soundManager";
 import { AiTerminalHeaderStrip } from "./chat/terminal/AiTerminalHeaderStrip";
+import { useTerminalStore } from "./chat/terminal/terminalStore";
 import { ProjectFileExplorer } from "./chat/terminal/ProjectFileExplorer";
 import { ProviderSubagentBar } from "./chat/ProviderSubagentBar";
 import { getTriggerDisplayModelName } from "./chat/providerIconUtils";
@@ -2495,6 +2496,8 @@ export default function ChatView(props: ChatViewProps) {
   }, [activeActivityRun, activePlan, activeRuntime]);
   const activeComposerTaskSteps =
     activeComposerTasksProgress && activePlan ? activePlan.steps : null;
+  const terminalStoreState = useTerminalStore();
+  const isTerminalQuickBarOpen = terminalStoreState.isQuickBarOpen;
   const allProjects = useProjects();
   const directActiveProjectRef = useMemo(
     () =>
@@ -11421,11 +11424,13 @@ export default function ChatView(props: ChatViewProps) {
           />
         </header>
 
-        {/* Top Header Patti for Projects, SSH Keys & Terminal Chats */}
-        <AiTerminalHeaderStrip
-          activeProject={activeProject ?? null}
-          onNewTerminalThread={handleNewThreadInActiveProject}
-        />
+        {/* Top Header Patti for Projects, SSH Keys & Terminal Chats - ONLY when AI Terminal is active */}
+        {isTerminalQuickBarOpen && (
+          <AiTerminalHeaderStrip
+            activeProject={activeProject ?? null}
+            onNewTerminalThread={handleNewThreadInActiveProject}
+          />
+        )}
 
         {/* Project File Explorer & Editor */}
         <ProjectFileExplorer />

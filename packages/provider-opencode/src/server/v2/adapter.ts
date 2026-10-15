@@ -3294,7 +3294,7 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
       }
       const instructions = [
         buildRuntimeInstructions({ harness: "OpenCode", model: turnInput.modelSelection.model }),
-        t3OrchestrationSystemPrompt(state.mcp !== undefined),
+        t3OrchestrationSystemPrompt(state.mcp !== undefined, true),
       ]
         .filter((part) => part !== undefined && part.length > 0)
         .join("\n\n");

@@ -298,6 +298,20 @@ const URDU_TO_ROMAN_DICT: Record<string, string> = {
   پرووائیڈر: "provider",
   "اے پی آئی": "api",
   "اے پی آئی کی": "api key",
+  مائیک: "mic",
+  مائک: "mic",
+  بند: "band",
+  آن: "on",
+  آف: "off",
+  بولتے: "bolte",
+  بولتا: "bolta",
+  بولتی: "bolti",
+  لسن: "listen",
+  ٹرانسکرائب: "transcribe",
+  ٹرانسکرپشن: "transcription",
+  ڈبل: "double",
+  لوکل: "local",
+  پرفارمنس: "performance",
 };
 
 // Digraph / aspirate letter clusters

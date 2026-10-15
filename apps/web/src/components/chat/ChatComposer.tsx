@@ -6255,16 +6255,26 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     return setContextInsertionHandler(composerDraftTarget, insertContextReferencesAtCaret);
   }, [composerDraftTarget, insertContextReferencesAtCaret, setContextInsertionHandler]);
 
+  const [speechInterimText, setSpeechInterimText] = useState("");
+
   useEffect(() => {
     const handleSpeechText = (e: Event) => {
       const customEvent = e as CustomEvent<{ text: string }>;
       if (customEvent.detail?.text) {
-        insertComposerTextAtEnd(` ${customEvent.detail.text} `);
+        insertComposerTextAtEnd(customEvent.detail.text.trim(), {
+          ensureLeadingBoundary: true,
+        });
       }
     };
+    const handleSpeechInterim = (e: Event) => {
+      const customEvent = e as CustomEvent<{ text: string }>;
+      setSpeechInterimText(customEvent.detail?.text || "");
+    };
     window.addEventListener("t3:insert-speech-text", handleSpeechText);
+    window.addEventListener("t3:speech-interim", handleSpeechInterim);
     return () => {
       window.removeEventListener("t3:insert-speech-text", handleSpeechText);
+      window.removeEventListener("t3:speech-interim", handleSpeechInterim);
     };
   }, [insertComposerTextAtEnd]);
 
@@ -7491,6 +7501,20 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   </Dialog>
                 ) : null}
                 <ComposerContextActionsContext value={composerContextActions}>
+                  {speechInterimText ? (
+                    <div className="flex items-center gap-2 px-2.5 py-1 mb-1.5 rounded-md bg-red-500/10 border border-red-500/25 text-xs text-red-200 animate-in fade-in duration-150 select-none">
+                      <span className="flex h-2 w-2 relative shrink-0">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
+                      </span>
+                      <span className="text-3xs font-semibold uppercase tracking-wider text-red-400 shrink-0">
+                        Listening:
+                      </span>
+                      <span className="italic text-zinc-300 font-sans truncate">
+                        {speechInterimText}
+                      </span>
+                    </div>
+                  ) : null}
                   <ComposerPromptEditor
                     ariaLabel="Message"
                     suggestionListId={composerSuggestionListId}

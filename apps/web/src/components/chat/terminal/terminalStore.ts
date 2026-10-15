@@ -22,6 +22,7 @@ interface TerminalState {
   selectedKeyId: string | null;
   isQuickBarOpen: boolean;
   isSshSheetOpen: boolean;
+  isChatsSheetOpen: boolean;
   editingKeyId: string | null;
   isFileExplorerOpen: boolean;
   history: string[];
@@ -126,6 +127,7 @@ let state: TerminalState = {
   selectedKeyId: initialSelectedKey,
   isQuickBarOpen: initialOpen,
   isSshSheetOpen: false,
+  isChatsSheetOpen: false,
   editingKeyId: null,
   isFileExplorerOpen: false,
   activeTarget: initialSelectedKey ? `key_${initialSelectedKey}` : "local",
@@ -321,6 +323,16 @@ export const terminalStore = {
 
   setSshSheetOpen(isOpen: boolean) {
     state = { ...state, isSshSheetOpen: isOpen, ...(isOpen ? {} : { editingKeyId: null }) };
+    notify();
+  },
+
+  setChatsSheetOpen(isOpen: boolean) {
+    state = { ...state, isChatsSheetOpen: isOpen };
+    notify();
+  },
+
+  toggleChatsSheet() {
+    state = { ...state, isChatsSheetOpen: !state.isChatsSheetOpen };
     notify();
   },
 

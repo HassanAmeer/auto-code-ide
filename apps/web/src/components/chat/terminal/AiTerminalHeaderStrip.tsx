@@ -18,6 +18,7 @@ import { cn } from "../../../lib/utils";
 import { useTerminalStore, terminalStore } from "./terminalStore";
 import { useProjects } from "../../../state/entities";
 import { SshKeysSheet } from "./SshKeysSheet";
+import { TerminalChatsSheet } from "./TerminalChatsSheet";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 
 export interface AiTerminalHeaderStripProps {
@@ -34,23 +35,6 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
   const store = useTerminalStore();
   const projects = useProjects();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  // Close dropdown on outside click
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsDropdownOpen(false);
-      }
-    }
-    if (isDropdownOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [isDropdownOpen]);
 
   // Deduplicate projects by root path or title or id so no duplicates (e.g. t3 t3, te te) appear
   const uniqueProjects = useMemo(() => {
@@ -159,118 +143,26 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
           }}
           className="flex-1 flex items-center gap-2 overflow-x-auto py-0.5 px-0.5 scroll-smooth [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
         >
-          {/* 1. Terminal Chats Dropdown (History in Gray Color as requested) */}
-          <div className="relative shrink-0" ref={dropdownRef}>
-            <button
-              type="button"
-              onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-              className={cn(
-                "flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] text-3xs font-medium border transition-all cursor-pointer shadow-xs",
-                isDropdownOpen
-                  ? "bg-zinc-800 text-zinc-100 border-zinc-700 ring-1 ring-zinc-700/50"
-                  : "bg-zinc-900/80 hover:bg-zinc-800/80 text-zinc-300 border-zinc-800/80",
-              )}
-              title="Terminal chat sessions & history"
-            >
-              <Terminal className="size-3 text-zinc-400 shrink-0" />
-              <span className="font-semibold truncate max-w-[130px] sm:max-w-[170px]">
-                {activeChat?.title || "Terminal Chats"}
-              </span>
-              <span className="px-1.5 py-0.2 rounded-[5px] bg-zinc-800 text-zinc-400 font-mono text-4xs border border-zinc-700/60">
-                {store.terminalChats.length}
-              </span>
-              <ChevronDown
-                className={cn(
-                  "size-3 text-zinc-400 transition-transform duration-200",
-                  isDropdownOpen && "rotate-180",
-                )}
-              />
-            </button>
-
-            {/* Dropdown Menu */}
-            {isDropdownOpen && (
-              <div className="absolute top-full left-0 mt-1.5 w-72 sm:w-80 rounded-[5px] bg-[#1c1c1e] border border-zinc-800 shadow-2xl p-2 z-50 text-foreground animate-in fade-in-50 slide-in-from-top-1 duration-150 backdrop-blur-md">
-                {/* Header with New Chat Button */}
-                <div className="flex items-center justify-between px-2 py-1.5 border-b border-zinc-800 pb-2 mb-1.5">
-                  <div className="flex items-center gap-1.5 text-xs font-semibold text-zinc-200">
-                    <Sparkles className="size-3.5 text-zinc-400" />
-                    <span>Terminal History</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleCreateNewChat}
-                    className="flex items-center gap-1 px-2 py-1 rounded-[5px] bg-zinc-700 hover:bg-zinc-600 text-zinc-100 font-medium text-3xs transition-all shadow-xs cursor-pointer"
-                  >
-                    <Plus className="size-3" />
-                    <span>New Chat</span>
-                  </button>
-                </div>
-
-                {/* List of Chats */}
-                <div className="max-h-60 overflow-y-auto space-y-1 p-0.5">
-                  {store.terminalChats.length === 0 ? (
-                    <div className="py-4 text-center text-3xs text-zinc-500 italic">
-                      No terminal history yet. Click &quot;New Chat&quot; to begin.
-                    </div>
-                  ) : (
-                    store.terminalChats.map((chat) => {
-                      const isCurrent = store.activeChatId === chat.id;
-                      return (
-                        <div
-                          key={chat.id}
-                          onClick={() => handleSelectChat(chat.id)}
-                          className={cn(
-                            "flex items-center justify-between gap-2 p-2 rounded-[5px] transition-all cursor-pointer group text-left",
-                            isCurrent
-                              ? "bg-zinc-800/90 border border-zinc-700 text-zinc-100 font-medium"
-                              : "hover:bg-zinc-800/40 text-zinc-400 hover:text-zinc-200 border border-transparent",
-                          )}
-                        >
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-1.5">
-                              <Terminal className="size-3 shrink-0 text-zinc-400" />
-                              <span className="truncate text-3xs font-medium text-zinc-200">
-                                {chat.title}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2 mt-0.5 text-4xs text-zinc-500">
-                              {chat.projectName && (
-                                <span className="truncate max-w-[90px]">{chat.projectName}</span>
-                              )}
-                              {chat.sshKeyName && (
-                                <span className="truncate max-w-[90px] text-sky-400">
-                                  {chat.sshKeyName}
-                                </span>
-                              )}
-                              <span className="shrink-0 flex items-center gap-0.5 opacity-70">
-                                <Clock className="size-2.5" />
-                                {new Date(chat.createdAt).toLocaleTimeString([], {
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })}
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-1 shrink-0">
-                            {isCurrent && <Check className="size-3 text-zinc-300" />}
-                            <button
-                              type="button"
-                              onClick={(e) => handleDeleteChat(e, chat.id)}
-                              title="Delete chat"
-                              className="p-1 rounded-[5px] text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10 opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
-                            >
-                              <Trash2 className="size-3" />
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
+          {/* 1. Terminal Chats History Icon Button (Opens 90% Width Right-Side Sheet) */}
+          <button
+            type="button"
+            onClick={() => terminalStore.toggleChatsSheet()}
+            className={cn(
+              "flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] text-3xs font-medium border transition-all cursor-pointer shadow-xs shrink-0",
+              store.isChatsSheetOpen
+                ? "bg-zinc-800 text-zinc-100 border-zinc-700 ring-1 ring-zinc-700/50"
+                : "bg-zinc-900/80 hover:bg-zinc-800/80 text-zinc-300 border-zinc-800/80",
             )}
-          </div>
+            title="Open Terminal History & Sessions Sheet"
+          >
+            <Terminal className="size-3 text-emerald-400 shrink-0" />
+            <span className="font-semibold truncate max-w-[130px] sm:max-w-[170px]">
+              {activeChat?.title || "Terminal Chats"}
+            </span>
+            <span className="px-1.5 py-0.2 rounded-[5px] bg-zinc-800 text-zinc-400 font-mono text-4xs border border-zinc-700/60">
+              {store.terminalChats.length}
+            </span>
+          </button>
 
           {/* Divider */}
           <div className="w-px h-4 bg-zinc-800/80 shrink-0" />
@@ -412,6 +304,9 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
 
       {/* 90% Width SSH Keys Management Sheet */}
       <SshKeysSheet />
+
+      {/* 90% Width Terminal Chat History Sheet */}
+      <TerminalChatsSheet activeProject={activeProject} onNewTerminalThread={onNewTerminalThread} />
     </>
   );
 });

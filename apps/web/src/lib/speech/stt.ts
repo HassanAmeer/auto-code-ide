@@ -67,6 +67,7 @@ export interface SttController {
   start: () => void;
   stop: () => void;
   isListening: boolean;
+  getInterimTranscript?: () => string;
 }
 
 export const isMobileDevice =
@@ -77,101 +78,212 @@ export const isMobileDevice =
 export function createSttSession({
   mode,
   onResult,
+  onInterim,
   onError,
   onStateChange,
 }: {
   mode?: SttLanguageMode;
-  onResult: (transcript: string, isFinal: boolean) => void;
+  onResult: (transcript: string, isFinal: boolean, cumulativeTranscript?: string) => void;
+  onInterim?: (interim: string) => void;
   onError?: (error: string) => void;
   onStateChange?: (isListening: boolean) => void;
 }): SttController {
   if (!isSpeechRecognitionSupported()) {
     onError?.("Speech Recognition is not supported in this browser. Please use Google Chrome.");
-    return { start: () => {}, stop: () => {}, isListening: false };
+    return {
+      start: () => {},
+      stop: () => {},
+      isListening: false,
+      getInterimTranscript: () => "",
+    };
   }
 
   const SpeechRecognitionClass =
     (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-  const recognition = new SpeechRecognitionClass();
 
   const settings = loadSttSettings();
   const selectedMode = mode || settings.language;
-  recognition.lang = getRecognitionLanguageCode(selectedMode);
-  // On mobile Android/iOS, continuous=true frequently fails or drops audio.
-  recognition.continuous = !isMobileDevice;
-  recognition.interimResults = true;
+  const langCode = getRecognitionLanguageCode(selectedMode);
 
-  let listening = false;
+  let isRunning = false;
+  let recognition: any = null;
+  let restartTimer: ReturnType<typeof setTimeout> | null = null;
+  let lastProcessedFinalIndex = 0;
+  let currentInterimText = "";
+  let accumulatedSessionText = "";
 
-  recognition.onstart = () => {
-    listening = true;
-    onStateChange?.(true);
+  const processTranscript = (raw: string) => {
+    if (!raw) return "";
+    if (selectedMode === "roman-urdu" || selectedMode === "auto") {
+      return transliterateUrduToRoman(raw);
+    }
+    return raw;
   };
 
-  recognition.onend = () => {
-    if (isMobileDevice && listening) {
+  const cleanupInstance = () => {
+    if (recognition) {
       try {
-        recognition.start();
-        return;
-      } catch {
-        // fall through
-      }
+        recognition.onstart = null;
+        recognition.onresult = null;
+        recognition.onerror = null;
+        recognition.onend = null;
+        recognition.abort();
+      } catch {}
+      recognition = null;
     }
-    listening = false;
-    onStateChange?.(false);
   };
 
-  recognition.onerror = (event: any) => {
-    console.warn("Speech recognition error:", event.error);
-    if (isMobileDevice && event.error === "no-speech" && listening) {
-      return;
-    }
-    onError?.(event.error);
-  };
+  const startInstance = () => {
+    if (!isRunning) return;
 
-  recognition.onresult = (event: any) => {
-    let accumulatedFinal = "";
-    let currentInterim = "";
-
-    for (let i = 0; i < event.results.length; ++i) {
-      const item = event.results[i];
-      if (item.isFinal) {
-        accumulatedFinal += (accumulatedFinal ? " " : "") + item[0].transcript.trim();
-      } else {
-        currentInterim += (currentInterim ? " " : "") + item[0].transcript.trim();
-      }
+    if (restartTimer) {
+      clearTimeout(restartTimer);
+      restartTimer = null;
     }
 
-    const processTranscript = (raw: string) => {
-      if (selectedMode === "roman-urdu" || selectedMode === "auto") {
-        return transliterateUrduToRoman(raw);
-      }
-      return raw;
-    };
+    cleanupInstance();
 
-    const fullRaw = (accumulatedFinal + (currentInterim ? " " + currentInterim : "")).trim();
-    if (fullRaw) {
-      onResult(processTranscript(fullRaw), !currentInterim);
+    try {
+      recognition = new SpeechRecognitionClass();
+      recognition.lang = langCode;
+      recognition.continuous = true;
+      recognition.interimResults = true;
+
+      lastProcessedFinalIndex = 0;
+
+      recognition.onstart = () => {
+        if (!isRunning) return;
+        onStateChange?.(true);
+      };
+
+      recognition.onresult = (event: any) => {
+        if (!isRunning) return;
+
+        let newlyFinalized = "";
+        let interim = "";
+
+        for (let i = 0; i < event.results.length; ++i) {
+          const item = event.results[i];
+          if (!item || !item[0]) continue;
+          if (item.isFinal) {
+            if (i >= lastProcessedFinalIndex) {
+              const phrase = item[0].transcript.trim();
+              if (phrase) {
+                newlyFinalized += (newlyFinalized ? " " : "") + phrase;
+              }
+              lastProcessedFinalIndex = i + 1;
+            }
+          } else {
+            const interimPhrase = item[0].transcript.trim();
+            if (interimPhrase) {
+              interim += (interim ? " " : "") + interimPhrase;
+            }
+          }
+        }
+
+        currentInterimText = interim;
+
+        if (newlyFinalized) {
+          const processedFinal = processTranscript(newlyFinalized).trim();
+          if (processedFinal) {
+            accumulatedSessionText += (accumulatedSessionText ? " " : "") + processedFinal;
+            onResult(processedFinal, true, accumulatedSessionText);
+          }
+        }
+
+        if (interim) {
+          const processedInterim = processTranscript(interim).trim();
+          const cumulativeWithInterim = accumulatedSessionText
+            ? `${accumulatedSessionText} ${processedInterim}`
+            : processedInterim;
+          onInterim?.(processedInterim);
+          onResult(processedInterim, false, cumulativeWithInterim);
+        } else {
+          onInterim?.("");
+        }
+      };
+
+      recognition.onerror = (event: any) => {
+        const error = event.error;
+        console.warn("Speech recognition error:", error);
+
+        // Standard silence or pause events: keep listening continuously!
+        if (error === "no-speech" || error === "aborted") {
+          return;
+        }
+
+        // Fatal permission error:
+        if (error === "not-allowed" || error === "service-not-allowed") {
+          isRunning = false;
+          cleanupInstance();
+          onStateChange?.(false);
+          onError?.(error);
+          return;
+        }
+
+        // Other transient errors (network, audio-capture): onend will restart cleanly
+      };
+
+      recognition.onend = () => {
+        if (isRunning) {
+          // Browser closed the audio stream on pause or timeout:
+          // Immediately schedule a fresh seamless restart!
+          restartTimer = setTimeout(() => {
+            if (isRunning) {
+              startInstance();
+            }
+          }, 60);
+          return;
+        }
+
+        onStateChange?.(false);
+        onInterim?.("");
+      };
+
+      recognition.start();
+    } catch (err: any) {
+      console.warn("Failed to instantiate speech recognition:", err);
+      if (isRunning) {
+        restartTimer = setTimeout(() => {
+          if (isRunning) {
+            startInstance();
+          }
+        }, 200);
+      }
     }
   };
 
   return {
     start: () => {
-      try {
-        recognition.start();
-      } catch (e) {
-        console.warn("Recognition start failed or already active", e);
-      }
+      isRunning = true;
+      currentInterimText = "";
+      accumulatedSessionText = "";
+      startInstance();
     },
     stop: () => {
-      try {
-        recognition.stop();
-      } catch (e) {
-        // ignore
+      isRunning = false;
+      if (restartTimer) {
+        clearTimeout(restartTimer);
+        restartTimer = null;
       }
+
+      // If user stops while there's uncommitted interim text, flush it as final before stopping!
+      if (currentInterimText.trim()) {
+        const flushed = processTranscript(currentInterimText.trim()).trim();
+        if (flushed) {
+          accumulatedSessionText += (accumulatedSessionText ? " " : "") + flushed;
+          onResult(flushed, true, accumulatedSessionText);
+        }
+        currentInterimText = "";
+      }
+
+      cleanupInstance();
+      onStateChange?.(false);
+      onInterim?.("");
     },
     get isListening() {
-      return listening;
+      return isRunning;
     },
+    getInterimTranscript: () => currentInterimText,
   };
 }

@@ -44,8 +44,8 @@ export function SttSettingsPanel() {
       setLiveTranscript("");
       const session = createSttSession({
         mode: settings.language,
-        onResult: (text, isFinal) => {
-          setLiveTranscript(text);
+        onResult: (text, _isFinal, cumulative) => {
+          setLiveTranscript(cumulative || text);
         },
         onStateChange: (active) => {
           setIsListening(active);

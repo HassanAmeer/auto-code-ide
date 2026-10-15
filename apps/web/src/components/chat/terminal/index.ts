@@ -6,4 +6,5 @@ export * from "./TerminalFeed";
 export * from "./AiTerminalCommandBar";
 export * from "./AiTerminalHeaderStrip";
 export * from "./SshKeysSheet";
+export * from "./TerminalChatsSheet";
 export * from "./ProjectFileExplorer";
