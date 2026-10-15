@@ -59,11 +59,15 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
   useEffect(() => {
     if (!isOpen) return;
     networkLogger.fetchAiModelLogs();
-    const interval = setInterval(() => {
-      networkLogger.fetchAiModelLogs();
-    }, 2500);
+    const hasStreaming = aiLogs.some((l) => l.state === "streaming");
+    const interval = setInterval(
+      () => {
+        networkLogger.fetchAiModelLogs();
+      },
+      hasStreaming ? 900 : 2500,
+    );
     return () => clearInterval(interval);
-  }, [isOpen]);
+  }, [isOpen, aiLogs]);
 
   const handleRefreshAi = async () => {
     setIsRefreshingAi(true);
@@ -306,9 +310,27 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                 <Button
                   size="xs"
                   variant="outline"
+                  onClick={() =>
+                    copyToClipboard(JSON.stringify(filteredAiLogs, null, 2), "copyAllAiLogs")
+                  }
+                  title="Copy all currently filtered AI logs as JSON"
+                  className="h-7 text-xs gap-1 border-zinc-800/80 hover:bg-zinc-900 hover:text-cyan-400 text-zinc-400 px-2 sm:px-2.5"
+                  style={{ borderRadius: "12px" }}
+                >
+                  {copiedKey === "copyAllAiLogs" ? (
+                    <CheckIcon className="size-3.5 text-emerald-400" />
+                  ) : (
+                    <CopyIcon className="size-3.5" />
+                  )}
+                  <span className="hidden sm:inline">Copy All</span>
+                </Button>
+                <Button
+                  size="xs"
+                  variant="outline"
                   onClick={handleRefreshAi}
                   title="Refresh AI logs from server"
-                  className="h-7 text-xs gap-1 border-zinc-800/80 rounded-full hover:bg-zinc-900 hover:text-emerald-400 text-zinc-400 px-2 sm:px-2.5"
+                  className="h-7 text-xs gap-1 border-zinc-800/80 hover:bg-zinc-900 hover:text-emerald-400 text-zinc-400 px-2 sm:px-2.5"
+                  style={{ borderRadius: "12px" }}
                 >
                   <RefreshCwIcon
                     className={`size-3.5 ${isRefreshingAi ? "animate-spin text-emerald-400" : ""}`}
@@ -320,7 +342,8 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                   variant="outline"
                   onClick={() => networkLogger.clearAiModelLogs()}
                   title="Clear all recorded AI logs"
-                  className="h-7 text-xs gap-1 border-zinc-800/80 rounded-full hover:bg-zinc-900 hover:text-rose-400 text-zinc-400 px-2 sm:px-2.5"
+                  className="h-7 text-xs gap-1 border-zinc-800/80 hover:bg-zinc-900 hover:text-rose-400 text-zinc-400 px-2 sm:px-2.5"
+                  style={{ borderRadius: "12px" }}
                 >
                   <Trash2Icon className="size-3.5" />
                   <span className="hidden sm:inline">Clear AI Logs</span>
@@ -332,7 +355,8 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                 variant="outline"
                 onClick={() => networkLogger.clear()}
                 title="Clear all network logs"
-                className="h-7 text-xs gap-1 border-zinc-800/80 rounded-full hover:bg-zinc-900 hover:text-rose-400 text-zinc-400 px-2 sm:px-2.5"
+                className="h-7 text-xs gap-1 border-zinc-800/80 hover:bg-zinc-900 hover:text-rose-400 text-zinc-400 px-2 sm:px-2.5"
+                style={{ borderRadius: "12px" }}
               >
                 <Trash2Icon className="size-3.5" />
                 <span className="hidden sm:inline">Clear</span>
@@ -394,11 +418,12 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                       key={tab.id}
                       type="button"
                       onClick={() => setAiFilter(tab.id)}
-                      className={`rounded-full px-2.5 py-0.5 font-medium transition-colors cursor-pointer capitalize ${
+                      className={`px-3 py-1 font-medium transition-colors cursor-pointer capitalize text-xs ${
                         aiFilter === tab.id
-                          ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-semibold"
-                          : "bg-zinc-800/80 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+                          ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-semibold shadow-xs"
+                          : "bg-zinc-800/80 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 border border-transparent"
                       }`}
+                      style={{ borderRadius: "12px" }}
                     >
                       {tab.label}
                     </button>
@@ -458,11 +483,33 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                               {getAiStatusBadge(log)}
                             </div>
 
-                            <span className="text-[11px] font-mono text-zinc-400 shrink-0">
-                              {log.durationMs !== undefined && log.durationMs > 0
-                                ? `${log.durationMs}ms`
-                                : ""}
-                            </span>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className="text-[11px] font-mono text-zinc-400">
+                                {log.durationMs !== undefined && log.durationMs > 0
+                                  ? `${log.durationMs}ms`
+                                  : ""}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const textToCopy =
+                                    log.responseBody ||
+                                    (log.error ? `Error: ${log.error}` : log.userPrompt);
+                                  copyToClipboard(textToCopy, `listCopy_${log.id}`);
+                                }}
+                                className="p-1 rounded hover:bg-zinc-800 text-zinc-500 hover:text-zinc-200 transition-colors cursor-pointer"
+                                title={
+                                  log.responseBody ? "Copy output / stream" : "Copy prompt/log"
+                                }
+                              >
+                                {copiedKey === `listCopy_${log.id}` ? (
+                                  <CheckIcon className="size-3 text-emerald-400" />
+                                ) : (
+                                  <CopyIcon className="size-3" />
+                                )}
+                              </button>
+                            </div>
                           </div>
 
                           <div className="flex items-center justify-between gap-2 text-[11px]">
@@ -539,8 +586,53 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       {getAiStatusBadge(selectedAiLog)}
+
+                      {/* Copy Stream / Response Button */}
+                      <Button
+                        size="xs"
+                        variant="outline"
+                        onClick={() =>
+                          copyToClipboard(selectedAiLog.responseBody || "", "aiStreamTop")
+                        }
+                        disabled={!selectedAiLog.responseBody}
+                        className="h-6 text-[11px] gap-1 bg-cyan-950/40 border-cyan-800/70 text-cyan-300 hover:bg-cyan-900/60 hover:text-cyan-100 disabled:opacity-40"
+                        style={{ borderRadius: "10px" }}
+                        title={
+                          selectedAiLog.state === "streaming"
+                            ? "Copy live streamed output chunks"
+                            : "Copy model response output"
+                        }
+                      >
+                        {copiedKey === "aiStreamTop" ? (
+                          <CheckIcon className="size-3 text-emerald-400" />
+                        ) : (
+                          <CopyIcon className="size-3" />
+                        )}
+                        {selectedAiLog.state === "streaming"
+                          ? `Copy Stream (${selectedAiLog.responseBody?.length || 0})`
+                          : "Copy Response"}
+                      </Button>
+
+                      {/* Copy Entire Log Record (JSON) */}
+                      <Button
+                        size="xs"
+                        variant="ghost"
+                        onClick={() =>
+                          copyToClipboard(JSON.stringify(selectedAiLog, null, 2), "aiFullLogTop")
+                        }
+                        className="h-6 text-[11px] gap-1 text-zinc-400 hover:text-zinc-200 border border-zinc-800"
+                        style={{ borderRadius: "10px" }}
+                        title="Copy complete log record as JSON"
+                      >
+                        {copiedKey === "aiFullLogTop" ? (
+                          <CheckIcon className="size-3 text-emerald-400" />
+                        ) : (
+                          <CopyIcon className="size-3" />
+                        )}
+                        Copy Full Log
+                      </Button>
 
                       <Button
                         size="xs"
@@ -549,6 +641,7 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                           copyToClipboard(formatAiCurlCommand(selectedAiLog), "aiCurlTop")
                         }
                         className="h-6 text-[11px] gap-1 text-zinc-400 hover:text-emerald-300 border border-zinc-800"
+                        style={{ borderRadius: "10px" }}
                         title="Copy curl command to test this model in terminal"
                       >
                         {copiedKey === "aiCurlTop" ? (
@@ -1038,36 +1131,66 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                               Model Output & Streamed Response
                             </span>
                             {selectedAiLog.state === "streaming" && (
-                              <span className="text-[10px] text-cyan-400 font-mono animate-pulse">
-                                ● receiving chunks...
+                              <span className="text-[10px] text-cyan-400 font-mono animate-pulse flex items-center gap-1">
+                                <span className="size-1.5 rounded-full bg-cyan-400 animate-ping" />●
+                                receiving stream chunks ({selectedAiLog.responseBody?.length ?? 0}{" "}
+                                chars)...
                               </span>
                             )}
                           </div>
-                          {selectedAiLog.responseBody && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                copyToClipboard(selectedAiLog.responseBody || "", "responseBody")
-                              }
-                              className="text-zinc-400 hover:text-zinc-200 flex items-center gap-1 text-[11px]"
-                            >
-                              {copiedKey === "responseBody" ? (
-                                <CheckIcon className="size-3 text-emerald-400" />
-                              ) : (
-                                <CopyIcon className="size-3" />
-                              )}
-                              Copy Output
-                            </button>
-                          )}
+
+                          <Button
+                            size="xs"
+                            variant="outline"
+                            onClick={() =>
+                              copyToClipboard(selectedAiLog.responseBody || "", "responseBody")
+                            }
+                            disabled={!selectedAiLog.responseBody}
+                            className="h-6 text-[11px] gap-1 bg-cyan-950/40 border-cyan-800/70 text-cyan-300 hover:bg-cyan-900/60 hover:text-cyan-100 disabled:opacity-40"
+                            style={{ borderRadius: "10px" }}
+                            title="Copy streamed content to clipboard"
+                          >
+                            {copiedKey === "responseBody" ? (
+                              <CheckIcon className="size-3 text-emerald-400" />
+                            ) : (
+                              <CopyIcon className="size-3" />
+                            )}
+                            {selectedAiLog.state === "streaming"
+                              ? `Copy Stream (${selectedAiLog.responseBody?.length || 0} chars)`
+                              : "Copy Output"}
+                          </Button>
                         </div>
 
                         {selectedAiLog.responseBody ? (
-                          <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-4 font-mono text-[11px] text-zinc-200 whitespace-pre-wrap leading-relaxed max-h-[500px] overflow-y-auto">
-                            {selectedAiLog.responseBody}
+                          <div className="relative group">
+                            <div className="absolute top-2.5 right-2.5 z-10">
+                              <Button
+                                size="xs"
+                                variant="ghost"
+                                onClick={() =>
+                                  copyToClipboard(selectedAiLog.responseBody || "", "floatCopy")
+                                }
+                                className="h-6 px-2 text-[11px] gap-1 bg-zinc-900/90 border border-zinc-700/80 hover:bg-zinc-800 text-zinc-300 hover:text-white shadow-sm cursor-pointer"
+                                style={{ borderRadius: "8px" }}
+                                title="Copy stream content"
+                              >
+                                {copiedKey === "floatCopy" ? (
+                                  <CheckIcon className="size-3 text-emerald-400" />
+                                ) : (
+                                  <CopyIcon className="size-3" />
+                                )}
+                                Copy
+                              </Button>
+                            </div>
+                            <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-4 font-mono text-[11px] text-zinc-200 whitespace-pre-wrap leading-relaxed max-h-[500px] overflow-y-auto pr-20">
+                              {selectedAiLog.responseBody}
+                            </div>
                           </div>
                         ) : (
                           <div className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-8 text-center text-zinc-500 text-xs">
-                            No response body returned yet.
+                            {selectedAiLog.state === "streaming"
+                              ? "Stream connection established. Waiting for incoming chunks..."
+                              : "No response body returned yet."}
                           </div>
                         )}
                       </div>
@@ -1221,11 +1344,12 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                     key={type}
                     type="button"
                     onClick={() => setFilterType(type)}
-                    className={`rounded-full px-2.5 py-0.5 font-medium transition-colors cursor-pointer capitalize ${
+                    className={`px-3 py-1 font-medium transition-colors cursor-pointer capitalize text-xs ${
                       filterType === type
                         ? "bg-zinc-100 text-zinc-950 font-semibold"
                         : "bg-zinc-800/80 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
                     }`}
+                    style={{ borderRadius: "12px" }}
                   >
                     {type === "all"
                       ? "All Requests"
