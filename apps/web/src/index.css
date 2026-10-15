@@ -629,6 +629,26 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   }
 }
 
+@keyframes web-icon-shimmer {
+  0% {
+    filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.45)) brightness(1);
+    opacity: 0.85;
+  }
+  50% {
+    filter: drop-shadow(0 0 7px rgba(255, 255, 255, 1))
+      drop-shadow(0 0 12px rgba(255, 255, 255, 0.6)) brightness(1.35);
+    opacity: 1;
+  }
+  100% {
+    filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.45)) brightness(1);
+    opacity: 0.85;
+  }
+}
+
+@utility web-search-shimmer {
+  animation: web-icon-shimmer 2.2s ease-in-out infinite;
+}
+
 @utility live-activity-focus-aligned {
   width: calc(100% - var(--live-activity-focus-width) - var(--live-activity-focus-width));
   margin-left: var(--live-activity-focus-width);

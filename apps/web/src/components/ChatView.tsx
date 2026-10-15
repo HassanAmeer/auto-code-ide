@@ -497,6 +497,7 @@ import {
   ThreadErrorBanner,
 } from "./chat/ThreadErrorBanner";
 import { useAutoRetrySettings, findNextFallbackModel } from "~/lib/autoRetrySettings";
+import { isComposerWebSearchEnabled, performLiveWebSearchOrFetch } from "~/lib/webSearchService";
 import {
   QueuedRunsControl,
   type QueuedRunsControlHandle,
@@ -9249,7 +9250,7 @@ export default function ChatView(props: ChatViewProps) {
     const composerReviewCommentsSnapshot: ReviewCommentContext[] = [...composerReviewComments];
     const composerThreadContextsSnapshot = [...composerThreadContexts];
     // Expired terminal excerpts are not sent; their chips leave the text with them.
-    const messageTextForSend = composerTerminalContexts
+    let messageTextForSend = composerTerminalContexts
       .filter((context) => !composerTerminalContextsSnapshot.includes(context))
       .reduce(
         (text, context) =>
@@ -9257,6 +9258,17 @@ export default function ChatView(props: ChatViewProps) {
         promptForSend,
       )
       .trim();
+
+    if (isComposerWebSearchEnabled() && messageTextForSend && !messageTextForSend.startsWith("/")) {
+      try {
+        const liveSearchContext = await performLiveWebSearchOrFetch(messageTextForSend);
+        if (liveSearchContext) {
+          messageTextForSend = `${messageTextForSend}\n\n---\n${liveSearchContext}`;
+        }
+      } catch (err) {
+        console.warn("Live web search pre-fetch failed:", err);
+      }
+    }
     // Records bind attachments by the id each side knows: the local id for the optimistic
     // row, the upload id (or local id on the data-URL path) on the wire; the server
     // rebinds them to the persisted id.

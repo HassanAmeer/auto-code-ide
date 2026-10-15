@@ -15,6 +15,7 @@ import {
   PlayIcon,
   Mic,
   MicOff,
+  Globe,
   X,
 } from "lucide-react";
 import { CornerUpRight, ListPlus } from "lucide";
@@ -23,6 +24,7 @@ import { useEnvironmentIdentificationMode } from "~/hooks/useSettings";
 import { formatContextWindowTokens } from "~/lib/contextWindow";
 import { cn } from "~/lib/utils";
 import { createSttSession, type SttController, loadSttSettings } from "~/lib/speech/stt";
+import { isComposerWebSearchEnabled, setComposerWebSearchEnabled } from "~/lib/webSearchService";
 import { useShortcutModifierState } from "../../shortcutModifierState";
 import { StageBackdropButtonArt, useSidebarStageBackdropVariant } from "../SidebarStageBackdrop";
 import { Button } from "../ui/button";
@@ -423,6 +425,53 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
     </button>
   );
 
+  const [isWebSearchActive, setIsWebSearchActive] = useState<boolean>(() =>
+    isComposerWebSearchEnabled(),
+  );
+
+  const handleToggleWebSearch = () => {
+    setIsWebSearchActive((prev) => {
+      const next = !prev;
+      setComposerWebSearchEnabled(next);
+      return next;
+    });
+  };
+
+  const webSearchButton = (
+    <Tooltip key="web-search-toggle">
+      <TooltipTrigger
+        render={
+          <button
+            type="button"
+            className="p-0 m-0 border-0 bg-transparent flex items-center justify-center cursor-pointer outline-none transition-all duration-200"
+            {...pointerFocusProps}
+            onClick={handleToggleWebSearch}
+            aria-label={
+              isWebSearchActive
+                ? "Web search active (Live internet research enabled)"
+                : "Web search paused (Click to enable live search)"
+            }
+          >
+            <Globe
+              className={cn(
+                "size-4 sm:size-4.5 transition-all duration-200",
+                isWebSearchActive
+                  ? "text-white web-search-shimmer drop-shadow-[0_0_8px_rgba(255,255,255,0.85)]"
+                  : "text-zinc-500 hover:text-zinc-300",
+              )}
+              aria-hidden="true"
+            />
+          </button>
+        }
+      />
+      <TooltipPopup>
+        {isWebSearchActive
+          ? "Web Search: ON (Live internet search & URL extraction active)"
+          : "Web Search: OFF (Click to turn on live search)"}
+      </TooltipPopup>
+    </Tooltip>
+  );
+
   const sttSettings = loadSttSettings();
   const currentLang = sttSettings.language.replace("-", " ");
 
@@ -468,7 +517,8 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
   );
 
   const actions = (
-    <div className="flex items-center gap-1.5">
+    <div className="flex items-center gap-2">
+      {webSearchButton}
       {micButton}
       {sendButtonElement}
     </div>

@@ -10,6 +10,14 @@ describe("buildRuntimeInstructions", () => {
     expect(instructions).toContain("call list_thread_pull_requests and link any PR");
   });
 
+  it("includes file editing safety instructions to protect large files", () => {
+    const instructions = buildRuntimeInstructions({ harness: "OpenCode" });
+    expect(instructions).toContain("<file_editing_safety>");
+    expect(instructions).toContain("NEVER truncate, wipe, or overwrite an existing file");
+    expect(instructions).toContain("Always use targeted search-and-replace, edit, or patch tools");
+    expect(instructions).toContain("</file_editing_safety>");
+  });
+
   it("keeps known model and effort metadata on one line", () => {
     expect(
       buildRuntimeInstructions({

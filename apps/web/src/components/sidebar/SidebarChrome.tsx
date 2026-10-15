@@ -538,39 +538,24 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
                   ) : undefined
                 }
               />
+              <SidebarUtilityItem
+                icon={
+                  <ChevronUpIcon
+                    className={cn(
+                      "size-4 transition-transform duration-200",
+                      isExpanded && "rotate-180",
+                    )}
+                  />
+                }
+                label={isExpanded ? "Collapse tools" : "More tools"}
+                onClick={() => setIsExpanded((v) => !v)}
+                isActive={isExpanded}
+              />
             </div>
 
-            {/* Right side: More+ button with upward arrow */}
+            {/* Right side */}
             <div className="flex items-center gap-1">
               <SidebarUpdatePill />
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <button
-                      type="button"
-                      onClick={() => setIsExpanded((v) => !v)}
-                      className={cn(
-                        "flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold transition-all cursor-pointer",
-                        isExpanded
-                          ? "bg-primary/20 text-primary border border-primary/30"
-                          : "text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground border border-transparent",
-                      )}
-                      aria-label={isExpanded ? "Collapse extra tools" : "More tools"}
-                    >
-                      <span className="text-[11px] font-medium tracking-tight">More+</span>
-                      <ChevronUpIcon
-                        className={cn(
-                          "size-3 transition-transform duration-200",
-                          isExpanded && "rotate-180",
-                        )}
-                      />
-                    </button>
-                  }
-                />
-                <TooltipPopup side="top">
-                  {isExpanded ? "Collapse tools" : "More tools (Archive, PRs, etc.)"}
-                </TooltipPopup>
-              </Tooltip>
             </div>
           </>
         )}
