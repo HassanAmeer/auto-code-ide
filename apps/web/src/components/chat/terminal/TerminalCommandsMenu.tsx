@@ -161,14 +161,14 @@ export function TerminalCommandsMenu({
         aria-hidden="true"
       />
 
-      {/* Cupertino iOS Right-Side Sheet (Mobile: 90% width, Desktop: compact ~420px) */}
+      {/* Cupertino iOS Right-Side Sheet (Mobile: 92% width, Desktop: compact ~420px) */}
       <div
         role="dialog"
         aria-label="Commands Library & Shortcuts"
-        className="relative z-50 h-full w-[90vw] max-w-[90vw] sm:w-[420px] bg-[#161618] border-l border-zinc-800 shadow-2xl flex flex-col text-zinc-100 overflow-hidden font-sans"
+        className="relative z-50 h-[100dvh] max-h-[100dvh] w-[92vw] sm:w-[420px] bg-[#161618] border-l border-zinc-800 shadow-2xl flex flex-col text-zinc-100 overflow-hidden font-sans"
       >
-        {/* Header in Cupertino iOS Style */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800/80 bg-[#1c1c1e] shrink-0">
+        {/* Header in Cupertino iOS Style (safe-area top padding on mobile) */}
+        <div className="flex items-center justify-between px-4 pt-8 pb-3 sm:py-3 border-b border-zinc-800/80 bg-[#1c1c1e] shrink-0">
           <div className="flex items-center gap-2">
             <div className="p-1.5 rounded-[5px] bg-purple-500/15 text-purple-400 border border-purple-500/30">
               <Sparkles className="size-4" />
@@ -189,7 +189,7 @@ export function TerminalCommandsMenu({
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded-[5px] text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
+            className="p-1.5 rounded-[5px] text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
             title="Close Sheet"
           >
             <X className="size-4" />
@@ -314,7 +314,7 @@ export function TerminalCommandsMenu({
         </div>
 
         {/* Commands List */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-2 pb-16 [scrollbar-width:thin]">
+        <div className="flex-1 overflow-y-auto p-3 space-y-2 pb-32 sm:pb-16 [scrollbar-width:thin]">
           {filteredCommands.length > 0 ? (
             filteredCommands.map((item) => (
               <div
@@ -403,11 +403,11 @@ export function TerminalCommandsMenu({
         </div>
 
         {/* Close Icon Button on Right Bottom Side in Cupertino iOS Style */}
-        <div className="absolute bottom-3 right-3 z-50">
+        <div className="absolute bottom-8 right-4 sm:bottom-3 sm:right-3 z-50">
           <button
             type="button"
             onClick={onClose}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-[5px] bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white font-medium text-xs shadow-lg border border-zinc-700 transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-2 sm:py-1.5 rounded-[6px] bg-zinc-800 hover:bg-zinc-700 text-zinc-100 font-medium text-xs shadow-2xl border border-zinc-700 transition-all cursor-pointer"
             title="Close Sheet"
           >
             <X className="size-3.5" />
