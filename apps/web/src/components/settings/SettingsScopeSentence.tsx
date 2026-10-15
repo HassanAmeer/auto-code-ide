@@ -33,6 +33,8 @@ import {
 export const SETTINGS_DEVICE_ONLY_PATHS: ReadonlySet<string> = new Set([
   "/settings/appearance",
   "/settings/connections",
+  "/settings/sound",
+  "/settings/notifications",
   "/settings/stt-tts",
   "/settings/stt",
   "/settings/tts",

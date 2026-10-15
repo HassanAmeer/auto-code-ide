@@ -24,6 +24,9 @@ import {
 import { resolveSidebarThreadStatus } from "./Sidebar.logic";
 import { toastManager } from "./ui/toast";
 import { isVoiceCallActive } from "./chat/voiceCall";
+import { loadNotificationSettings } from "../lib/notifications/notificationSettings";
+import { loadSoundSettings } from "../lib/sound/soundSettings";
+import { playErrorSound } from "../lib/sound/soundManager";
 
 export function ThreadNotificationCoordinator() {
   const environmentIds = useEnvironmentIds();
@@ -148,6 +151,11 @@ function EnvironmentNotifications({
           : (prior?.completion ?? null);
       next.set(thread.id, { raw: rawThread, attention, completion });
       if (!prior || thread.archivedAt !== null) continue;
+      const notifSettings = loadNotificationSettings();
+      const soundSettings = loadSoundSettings();
+
+      if (!notifSettings.masterEnabled) continue;
+
       const kind =
         attention && attention !== prior.attention
           ? "input"
@@ -155,6 +163,11 @@ function EnvironmentNotifications({
             ? "completion"
             : null;
       if (!kind) continue;
+
+      if (kind === "completion" && !notifSettings.onCompletion) continue;
+      if (status === "failed" && !notifSettings.onError) continue;
+      if ((status === "input" || status === "approval") && !notifSettings.onInputNeeded) continue;
+
       const title =
         kind === "completion"
           ? "Thread completed"
@@ -165,13 +178,23 @@ function EnvironmentNotifications({
               : status === "failed"
                 ? "Thread failed"
                 : "Input needed";
-      if (hasNotificationSound(mode) && !isVoiceCallActive(thread.id)) {
-        void playNotificationSound(kind, () =>
-          hasNotificationSound(getClientSettings().notificationMode),
-        );
+      if (
+        hasNotificationSound(mode) &&
+        soundSettings.masterSoundEnabled &&
+        notifSettings.soundEnabled &&
+        !isVoiceCallActive(thread.id)
+      ) {
+        if (status === "failed" && soundSettings.errorSound) {
+          playErrorSound();
+        } else {
+          void playNotificationSound(kind, () =>
+            hasNotificationSound(getClientSettings().notificationMode),
+          );
+        }
       }
       if (
         inAppNotificationsEnabled &&
+        notifSettings.inAppEnabled &&
         !isVoiceCallActive(thread.id) &&
         document.visibilityState === "visible" &&
         document.hasFocus() &&

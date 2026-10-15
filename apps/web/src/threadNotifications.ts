@@ -1,4 +1,6 @@
 import type { ClientSettings } from "@t3tools/contracts/settings";
+import { loadSoundSettings } from "./lib/sound/soundSettings";
+import { playResponseDoneSound } from "./lib/sound/soundManager";
 
 import completionUrl from "./assets/notification-completion.mp3";
 import inputUrl from "./assets/notification-input.mp3";
@@ -77,6 +79,17 @@ export async function playNotificationSound(
   kind: "completion" | "input",
   shouldPlay: () => boolean,
 ) {
+  const soundSettings = loadSoundSettings();
+  if (!soundSettings.masterSoundEnabled) return;
+  if (kind === "completion" && !soundSettings.responseDoneSound && !soundSettings.notificationSound)
+    return;
+  if (kind === "input" && !soundSettings.notificationSound) return;
+
+  if (kind === "completion" && soundSettings.responseDoneSound) {
+    playResponseDoneSound();
+    return;
+  }
+
   if (!audioContext || audioContext.state !== "running") return;
   const context = audioContext;
   const url = kind === "completion" ? completionUrl : inputUrl;

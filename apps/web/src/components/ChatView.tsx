@@ -447,6 +447,12 @@ import { PullRequestThreadDialog } from "./PullRequestThreadDialog";
 import type { AssistantCitationRequest } from "./chat/AssistantCitationSource";
 import { MessagesTimeline, type MessagesTimelineHistoryControls } from "./chat/MessagesTimeline";
 import { terminalStore } from "./chat/terminal/terminalStore";
+import {
+  playResponseDoneSound,
+  playErrorSound,
+  startWaitingWaveSound,
+  stopWaitingWaveSound,
+} from "~/lib/sound/soundManager";
 import { AiTerminalHeaderStrip } from "./chat/terminal/AiTerminalHeaderStrip";
 import { ProjectFileExplorer } from "./chat/terminal/ProjectFileExplorer";
 import { ProviderSubagentBar } from "./chat/ProviderSubagentBar";
@@ -2643,6 +2649,54 @@ export default function ChatView(props: ChatViewProps) {
   useEffect(() => {
     terminalStore.setQuickBarOpen(false);
   }, [activeThreadId]);
+
+  const prevRunStatusRef = useRef<{
+    runId: string | null;
+    status: string | null;
+    settled: boolean;
+  }>({
+    runId: null,
+    status: null,
+    settled: true,
+  });
+
+  useEffect(() => {
+    const currentRunId = (activeLatestRun?.runId as string | undefined) ?? null;
+    const currentStatus = (activeLatestRun?.status as string | undefined) ?? null;
+    const isSettled = latestRunSettled;
+
+    const wasRunning =
+      prevRunStatusRef.current.runId === currentRunId &&
+      !prevRunStatusRef.current.settled &&
+      (prevRunStatusRef.current.status === "running" ||
+        prevRunStatusRef.current.status === "waiting" ||
+        prevRunStatusRef.current.status === "starting");
+
+    if (wasRunning && isSettled) {
+      stopWaitingWaveSound();
+      if (currentStatus === "completed") {
+        playResponseDoneSound();
+      } else if (currentStatus === "failed") {
+        playErrorSound();
+      }
+    } else if (!isSettled && (currentStatus === "running" || currentStatus === "waiting")) {
+      startWaitingWaveSound();
+    } else if (isSettled) {
+      stopWaitingWaveSound();
+    }
+
+    prevRunStatusRef.current = {
+      runId: currentRunId,
+      status: currentStatus,
+      settled: isSettled,
+    };
+  }, [activeLatestRun?.runId, activeLatestRun?.status, latestRunSettled]);
+
+  useEffect(() => {
+    return () => {
+      stopWaitingWaveSound();
+    };
+  }, []);
 
   useEffect(() => {
     const handleNewTerminal = () => {
