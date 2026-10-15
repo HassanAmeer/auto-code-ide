@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Sparkles, Search, X, Play, ArrowRight, Plus, Trash2, Bookmark } from "lucide-react";
 import { QUICK_COMMANDS_LIST, QUICK_COMMAND_CATEGORIES } from "./terminalCommandsData";
 
@@ -150,10 +151,10 @@ export function TerminalCommandsMenu({
     return defaultMatches;
   }, [selectedCategory, searchQuery, customSnippets]);
 
-  if (!isOpen) return null;
+  if (!isOpen || typeof document === "undefined") return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex justify-end animate-in fade-in duration-200">
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex justify-end animate-in fade-in duration-200">
       {/* Backdrop */}
       <div
         onClick={onClose}
@@ -415,6 +416,7 @@ export function TerminalCommandsMenu({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

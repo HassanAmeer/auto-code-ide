@@ -1,4 +1,5 @@
 import { memo, useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import {
   Folder,
   FolderOpen,
@@ -161,6 +162,8 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
 
   // Active selected file for viewer/editor
   const [selectedFile, setSelectedFile] = useState<SelectedFileState | null>(null);
+  // Mobile active tab: "files" tree vs "editor" / preview
+  const [mobileTab, setMobileTab] = useState<"files" | "editor">("files");
 
   // New file/folder inline modal
   const [createModal, setCreateModal] = useState<{
@@ -314,6 +317,7 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
         isBinary: false,
         isImage: true,
       });
+      setMobileTab("editor");
       return;
     }
 
@@ -330,6 +334,7 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
         isBinary: true,
         isImage: false,
       });
+      setMobileTab("editor");
       return;
     }
 
@@ -353,6 +358,7 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
           isBinary: false,
           isImage: false,
         });
+        setMobileTab("editor");
       } else {
         toastManager.add({
           type: "error",
@@ -1048,52 +1054,76 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
     );
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || typeof document === "undefined") return null;
 
   const isDirty = selectedFile && selectedFile.content !== selectedFile.originalContent;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-5 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
-      <div className="relative w-full max-w-6xl h-[88vh] flex flex-col rounded-[8px] bg-[#0c1017] border border-zinc-800 shadow-2xl text-zinc-100 overflow-hidden font-sans">
-        {/* Top Header & Windows-style Address/Path Bar */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between border-b border-zinc-800/80 bg-[#161b22] px-3 py-2 select-none gap-2 shrink-0">
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex justify-end sm:items-center sm:justify-center p-0 sm:p-5 animate-in fade-in duration-150">
+      {/* Backdrop */}
+      <div
+        onClick={() => terminalStore.setFileExplorerOpen(false)}
+        className="fixed inset-0 bg-black/70 backdrop-blur-xs transition-opacity cursor-pointer"
+        aria-hidden="true"
+      />
+
+      {/* Sheet Container: Right-side 90% sheet on mobile, centered modal on desktop */}
+      <div
+        role="dialog"
+        aria-label="File Manager"
+        className="relative z-50 h-[100dvh] max-h-[100dvh] w-[90vw] max-w-[90vw] sm:w-full sm:max-w-6xl sm:h-[88vh] flex flex-col bg-[#0c1017] border-l sm:border border-zinc-800 shadow-2xl text-zinc-100 overflow-hidden font-sans rounded-none sm:rounded-[8px]"
+      >
+        {/* Top Header & Windows-style Address/Path Bar (Safe area top padding on mobile) */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between border-b border-zinc-800/80 bg-[#161b22] px-3 pt-7 pb-2 sm:py-2 select-none gap-2 shrink-0">
           {/* Left section: Mac dots, Title & Navigation Controls */}
-          <div className="flex items-center gap-2 shrink-0">
-            <div className="flex items-center gap-1.5 mr-1">
-              <span className="size-3 rounded-full bg-[#ff5f56]" />
-              <span className="size-3 rounded-full bg-[#ffbd2e]" />
-              <span className="size-3 rounded-full bg-[#27c93f]" />
+          <div className="flex items-center justify-between sm:justify-start gap-2 shrink-0">
+            <div className="flex items-center gap-2">
+              <div className="hidden sm:flex items-center gap-1.5 mr-1">
+                <span className="size-3 rounded-full bg-[#ff5f56]" />
+                <span className="size-3 rounded-full bg-[#ffbd2e]" />
+                <span className="size-3 rounded-full bg-[#27c93f]" />
+              </div>
+
+              <div className="flex items-center gap-1.5 text-zinc-200">
+                <Layers className="size-4 text-emerald-400" />
+                <span className="font-semibold text-xs">File Manager</span>
+              </div>
+
+              {/* Back / Up to parent folder button */}
+              <button
+                type="button"
+                onClick={handleNavigateUp}
+                disabled={rootPath === "/"}
+                title="Up to parent folder"
+                className={cn(
+                  "p-1.5 rounded-[5px] border transition-colors cursor-pointer",
+                  rootPath === "/"
+                    ? "border-zinc-800 text-zinc-600 cursor-not-allowed"
+                    : "border-zinc-700/80 text-zinc-300 hover:text-white hover:bg-zinc-800 bg-zinc-900",
+                )}
+              >
+                <ArrowUp className="size-3.5" />
+              </button>
+
+              {/* Refresh button */}
+              <button
+                type="button"
+                onClick={() => void loadDirectory(rootPath)}
+                title="Refresh Tree"
+                className="p-1.5 rounded-[5px] border border-zinc-700/80 text-zinc-300 hover:text-white hover:bg-zinc-800 bg-zinc-900 transition-colors cursor-pointer"
+              >
+                <RotateCw className="size-3.5" />
+              </button>
             </div>
 
-            <div className="flex items-center gap-1.5 text-zinc-200">
-              <Layers className="size-4 text-emerald-400" />
-              <span className="font-semibold text-xs hidden md:inline">File Manager</span>
-            </div>
-
-            {/* Back / Up to parent folder button */}
+            {/* Mobile-only Header Close button */}
             <button
               type="button"
-              onClick={handleNavigateUp}
-              disabled={rootPath === "/"}
-              title="Up to parent folder"
-              className={cn(
-                "p-1.5 rounded-[5px] border transition-colors cursor-pointer",
-                rootPath === "/"
-                  ? "border-zinc-800 text-zinc-600 cursor-not-allowed"
-                  : "border-zinc-700/80 text-zinc-300 hover:text-white hover:bg-zinc-800 bg-zinc-900",
-              )}
+              onClick={() => terminalStore.setFileExplorerOpen(false)}
+              className="sm:hidden p-1.5 rounded-[5px] text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
+              title="Close File Manager"
             >
-              <ArrowUp className="size-3.5" />
-            </button>
-
-            {/* Refresh button */}
-            <button
-              type="button"
-              onClick={() => void loadDirectory(rootPath)}
-              title="Refresh Tree"
-              className="p-1.5 rounded-[5px] border border-zinc-700/80 text-zinc-300 hover:text-white hover:bg-zinc-800 bg-zinc-900 transition-colors cursor-pointer"
-            >
-              <RotateCw className="size-3.5" />
+              <X className="size-4" />
             </button>
           </div>
 
@@ -1124,10 +1154,10 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
             </div>
           </form>
 
-          {/* Right section: Search bar & Close Button */}
+          {/* Right section: Search bar & Desktop Close Button */}
           <div className="flex items-center gap-1.5 shrink-0">
             {/* Search field */}
-            <div className="relative flex items-center w-36 sm:w-44">
+            <div className="relative flex items-center w-full sm:w-44">
               <Search className="size-3 text-zinc-500 absolute left-2 pointer-events-none" />
               <input
                 type="text"
@@ -1147,11 +1177,11 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
               )}
             </div>
 
-            {/* Close Modal Button */}
+            {/* Desktop Close Modal Button */}
             <button
               type="button"
               onClick={() => terminalStore.setFileExplorerOpen(false)}
-              className="p-1.5 rounded-[5px] text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
+              className="hidden sm:inline-flex p-1.5 rounded-[5px] text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
               title="Close File Manager"
             >
               <X className="size-4" />
@@ -1159,13 +1189,48 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
           </div>
         </div>
 
+        {/* Mobile Tabs: Files Tree vs Editor/Preview */}
+        <div className="flex sm:hidden items-center justify-between px-3 py-1.5 bg-[#12161f] border-b border-zinc-800 shrink-0">
+          <div className="flex w-full rounded-[6px] bg-zinc-900/90 p-0.5 border border-zinc-800">
+            <button
+              type="button"
+              onClick={() => setMobileTab("files")}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-[5px] text-xs font-medium transition-all cursor-pointer",
+                mobileTab === "files"
+                  ? "bg-zinc-800 text-white shadow-xs font-semibold"
+                  : "text-zinc-400 hover:text-zinc-200",
+              )}
+            >
+              <Folder className="size-3.5 text-amber-400" />
+              <span>Files Tree</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setMobileTab("editor")}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-[5px] text-xs font-medium transition-all cursor-pointer",
+                mobileTab === "editor"
+                  ? "bg-zinc-800 text-white shadow-xs font-semibold"
+                  : "text-zinc-400 hover:text-zinc-200",
+              )}
+            >
+              <FileCode className="size-3.5 text-sky-400" />
+              <span>
+                {selectedFile ? (selectedFile.isImage ? "Preview" : "Code Editor") : "Editor"}
+              </span>
+              {selectedFile && <span className="size-1.5 rounded-full bg-emerald-400 shrink-0" />}
+            </button>
+          </div>
+        </div>
+
         {/* Main Content Area: Split Pane (Left: VS Code File Tree, Right: Code Editor/Viewer) */}
-        <div className="flex-1 flex overflow-hidden">
-          {/* Left Sidebar: Collapsible File Tree (Hidden on mobile when file is open) */}
+        <div className="flex-1 flex overflow-hidden relative">
+          {/* Left Sidebar: Collapsible File Tree */}
           <div
             className={cn(
               "w-full sm:w-80 border-r border-zinc-800 bg-[#0e141e] flex flex-col shrink-0 overflow-hidden",
-              selectedFile ? "hidden sm:flex" : "flex",
+              mobileTab === "files" ? "flex" : "hidden sm:flex",
             )}
           >
             {/* Search & Actions Bar */}
@@ -1262,7 +1327,7 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
               onDragLeave={() => setIsDragOver(false)}
               onDrop={handleDrop}
               className={cn(
-                "flex-1 overflow-y-auto p-2 space-y-0.5 font-mono text-xs select-none transition-colors",
+                "flex-1 overflow-y-auto p-2 pb-28 sm:pb-2 space-y-0.5 font-mono text-xs select-none transition-colors",
                 isDragOver && "bg-sky-500/10 border-2 border-dashed border-sky-400/60 rounded-md",
               )}
             >
@@ -1280,11 +1345,11 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
             </div>
           </div>
 
-          {/* Right Pane: Code Editor / Viewer (Hidden on mobile when no file selected) */}
+          {/* Right Pane: Code Editor / Viewer */}
           <div
             className={cn(
-              "flex-1 bg-[#090d14] flex flex-col overflow-hidden",
-              selectedFile ? "flex" : "hidden sm:flex",
+              "flex-1 bg-[#090d14] flex flex-col overflow-hidden pb-24 sm:pb-0",
+              mobileTab === "editor" ? "flex" : "hidden sm:flex",
             )}
           >
             {selectedFile ? (
@@ -1295,9 +1360,9 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                     {/* Mobile Back to Files button */}
                     <button
                       type="button"
-                      onClick={() => setSelectedFile(null)}
+                      onClick={() => setMobileTab("files")}
                       title="Back to files list"
-                      className="sm:hidden flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 hover:text-white text-3xs font-medium cursor-pointer shrink-0"
+                      className="sm:hidden flex items-center gap-1 px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 hover:text-white text-3xs font-medium cursor-pointer shrink-0"
                     >
                       <ArrowLeft className="size-3" />
                       <span>Files</span>
@@ -1549,6 +1614,14 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                   Browse the project files from the tree on the left. Click on any file to inspect
                   code or make direct text modifications.
                 </p>
+                <button
+                  type="button"
+                  onClick={() => setMobileTab("files")}
+                  className="sm:hidden mt-3.5 flex items-center gap-1.5 px-3.5 py-1.5 rounded-[5px] bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium border border-zinc-700 cursor-pointer transition-all shadow-xs"
+                >
+                  <Folder className="size-3.5 text-amber-400" />
+                  <span>Go to Files Tree</span>
+                </button>
               </div>
             )}
           </div>
@@ -1636,7 +1709,21 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
             </div>
           </div>
         )}
+
+        {/* Floating Close Button on Mobile (Bottom-Right, safe above mobile gesture bar) */}
+        <div className="sm:hidden absolute bottom-8 right-4 z-50">
+          <button
+            type="button"
+            onClick={() => terminalStore.setFileExplorerOpen(false)}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-[6px] bg-zinc-800 hover:bg-zinc-700 text-zinc-100 font-medium text-xs shadow-2xl border border-zinc-700 transition-all cursor-pointer"
+            title="Close File Manager"
+          >
+            <X className="size-3.5" />
+            <span>Close</span>
+          </button>
+        </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 });

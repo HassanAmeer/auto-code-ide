@@ -74,7 +74,7 @@ export function MobileProjectThreadTabs({
   return (
     <div
       aria-label="Project chats"
-      className="pointer-events-auto relative z-10 w-full overflow-hidden pt-1 md:hidden"
+      className="pointer-events-auto relative z-0 w-full overflow-hidden pt-1 md:hidden"
     >
       <div
         className="flex items-center gap-1.5 overflow-x-auto px-1 py-1 scroll-smooth"

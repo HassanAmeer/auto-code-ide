@@ -135,7 +135,7 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
     <>
       <div
         className={cn(
-          "w-full bg-[#121214] border-b border-zinc-800/80 backdrop-blur-md px-2 py-1 select-none flex items-center gap-1.5 transition-all text-2xs z-30 font-sans",
+          "w-full bg-[#121214] border-b border-zinc-800/80 backdrop-blur-md px-2 py-1 select-none flex items-center gap-1.5 transition-all text-2xs z-20 font-sans",
           className,
         )}
       >
