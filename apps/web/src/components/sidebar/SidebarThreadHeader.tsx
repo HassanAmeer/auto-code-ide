@@ -1,3 +1,4 @@
+import { terminalStore } from "../chat/terminal/terminalStore";
 /**
  * The sidebar header: one row holding search, project scope and new thread.
  *
@@ -155,7 +156,10 @@ export function SidebarThreadHeader({
             )
           }
           disabled={newThreadDisabled}
-          onClick={onNewThread}
+          onClick={(event) => {
+            terminalStore.setQuickBarOpen(false);
+            onNewThread(event);
+          }}
         >
           <SquarePenIcon />
         </SidebarHeaderIconButton>

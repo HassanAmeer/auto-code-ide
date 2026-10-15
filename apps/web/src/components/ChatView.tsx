@@ -2636,8 +2636,13 @@ export default function ChatView(props: ChatViewProps) {
   ]);
   const activeProjectDefaultModelSelection = activeProjectSettings.settings.defaultModelSelection;
   const handleNewThreadInActiveProject = useCallback(() => {
+    terminalStore.setQuickBarOpen(false);
     startNewThreadForProject(activeProjectRef, handleNewThread);
   }, [activeProjectRef, handleNewThread]);
+
+  useEffect(() => {
+    terminalStore.setQuickBarOpen(false);
+  }, [activeThreadId]);
 
   useEffect(() => {
     const handleNewTerminal = () => {

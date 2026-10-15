@@ -1,3 +1,4 @@
+import { terminalStore } from "./terminal/terminalStore";
 import type { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
 import { PlusIcon } from "lucide-react";
@@ -90,6 +91,7 @@ export function MobileProjectThreadTabs({
               ref={isActive ? activeTabRef : null}
               type="button"
               onClick={() => {
+                terminalStore.setQuickBarOpen(false);
                 void navigate({
                   to: "/$environmentId/$threadId",
                   params: {
@@ -122,7 +124,10 @@ export function MobileProjectThreadTabs({
         {onNewThread ? (
           <button
             type="button"
-            onClick={onNewThread}
+            onClick={() => {
+              terminalStore.setQuickBarOpen(false);
+              onNewThread();
+            }}
             className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-zinc-700/70 bg-zinc-900/80 text-zinc-400 transition-colors hover:border-zinc-500 hover:text-white"
             title="Start new chat in this project"
             aria-label="Start new chat in this project"

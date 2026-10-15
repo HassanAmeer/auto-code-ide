@@ -1,3 +1,4 @@
+import { terminalStore } from "./chat/terminal/terminalStore";
 import { type EnvironmentId } from "@t3tools/contracts";
 import { ThreadHoverCard, ThreadHoverCardPopup } from "./ThreadHoverCard";
 import { CollapsibleSectionHeader } from "./ui/collapsible-section-header";
@@ -3161,6 +3162,7 @@ export default function Sidebar() {
   // starting a session un-settles server-side.
   const navigateToThread = useCallback(
     (threadRef: ScopedThreadRef) => {
+      terminalStore.setQuickBarOpen(false);
       if (useThreadSelectionStore.getState().selectedThreadKeys.size > 0) {
         clearSelection();
       }
@@ -4971,6 +4973,7 @@ export default function Sidebar() {
   // for multi-project setups.
   const handleNewThreadClick = useCallback(
     (event?: ReactMouseEvent) => {
+      terminalStore.setQuickBarOpen(false);
       // One project: nothing to pick, create immediately. Shift+click creates
       // directly in the current project even with several projects, skipping
       // the palette picker.
@@ -5212,6 +5215,7 @@ export default function Sidebar() {
                       key={group.projectKey}
                       type="button"
                       onClick={() => {
+                        terminalStore.setQuickBarOpen(false);
                         setProjectScopeKey(group.projectKey);
                         handleNewThreadClick();
                       }}

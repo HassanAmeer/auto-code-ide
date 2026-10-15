@@ -246,12 +246,14 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
     ) {
       void navigate({ to: "/" });
     }
-    terminalStore.setQuickBarOpen(true);
-    const chat = terminalStore.createTerminalChat();
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(
-        new CustomEvent("t3-new-terminal-thread", { detail: { chatId: chat.id } }),
-      );
+    const isOpen = terminalStore.getState().isQuickBarOpen;
+    if (isOpen) {
+      terminalStore.setQuickBarOpen(false);
+    } else {
+      if (terminalStore.getState().terminalChats.length === 0) {
+        terminalStore.createTerminalChat();
+      }
+      terminalStore.setQuickBarOpen(true);
     }
   }, [closeMobileSidebar, navigate]);
 
@@ -532,12 +534,14 @@ export const SidebarAiTerminalItem = memo(function SidebarAiTerminalItem() {
     ) {
       void navigate({ to: "/" });
     }
-    terminalStore.setQuickBarOpen(true);
-    const chat = terminalStore.createTerminalChat();
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(
-        new CustomEvent("t3-new-terminal-thread", { detail: { chatId: chat.id } }),
-      );
+    const isOpen = terminalStore.getState().isQuickBarOpen;
+    if (isOpen) {
+      terminalStore.setQuickBarOpen(false);
+    } else {
+      if (terminalStore.getState().terminalChats.length === 0) {
+        terminalStore.createTerminalChat();
+      }
+      terminalStore.setQuickBarOpen(true);
     }
   }, [isMobile, navigate, setOpenMobile]);
 

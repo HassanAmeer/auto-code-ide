@@ -231,6 +231,7 @@ import {
 } from "./Sidebar.logic";
 import { sortThreads } from "../lib/threadSort";
 import { SidebarChromeFooter, SidebarChromeHeader } from "./sidebar/SidebarChrome";
+import { terminalStore } from "./chat/terminal";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { useIsMobile } from "~/hooks/useMediaQuery";
 import { CommandDialogTrigger } from "./ui/command";
@@ -2642,6 +2643,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
 
   const createThreadForProjectMember = useCallback(
     (member: SidebarProjectGroupMember) => {
+      terminalStore.setQuickBarOpen(false);
       if (isMobile) {
         setOpenMobile(false);
       }
@@ -2728,6 +2730,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
   );
 
   const handleNewChat = useCallback(() => {
+    terminalStore.setQuickBarOpen(false);
     setProjectExpanded(projectPreferenceKeys, true);
     if (project.memberProjects.length === 1) {
       createThreadForProjectMember(project.memberProjects[0]!);
@@ -4176,6 +4179,7 @@ export default function LegacySidebar() {
 
   const navigateToThread = useCallback(
     (threadRef: ScopedThreadRef) => {
+      terminalStore.setQuickBarOpen(false);
       if (useThreadSelectionStore.getState().selectedThreadKeys.size > 0) {
         clearSelection();
       }
