@@ -32,7 +32,10 @@ const TOP_LEVEL_HEADING_PATTERN = /^#{1,6}(?:[ \t]|$)/;
  * A section title holds the boundary until a content line follows it, so a
  * title never lands alone and waits above a block that is still streaming.
  */
-export function splitBufferedAssistantText(text: string): { ready: string; rest: string } {
+export function splitBufferedAssistantText(
+  text: string,
+  streamCodeBlocks = false,
+): { ready: string; rest: string } {
   let openFence: { marker: string; indent: number } | null = null;
   let boundary = -1;
   let lineStart = 0;
@@ -60,6 +63,9 @@ export function splitBufferedAssistantText(text: string): { ready: string; rest:
       if (openFence === null) {
         openFence = { marker, indent };
         titleAwaitingContent = false;
+        if (streamCodeBlocks) {
+          boundary = newline + 1;
+        }
       } else if (
         marker[0] === openFence.marker[0] &&
         marker.length >= openFence.marker.length &&
@@ -68,6 +74,10 @@ export function splitBufferedAssistantText(text: string): { ready: string; rest:
       ) {
         // CommonMark: a closing fence carries no info string.
         openFence = null;
+        boundary = newline + 1;
+      }
+    } else if (openFence !== null) {
+      if (streamCodeBlocks) {
         boundary = newline + 1;
       }
     } else if (openFence === null && BLANK_LINE_PATTERN.test(line) && lineStart > 0) {
@@ -114,7 +124,7 @@ export function makeAssistantStreamingFilter(mode: ResponseStreamingMode) {
     if (mode === "turn") return null;
     const previous = delivered.get(key);
     if (previous && now - previous.at < 400) return null;
-    const { ready } = splitBufferedAssistantText(message.text);
+    const { ready } = splitBufferedAssistantText(message.text, true);
     if (!ready || ready === previous?.text) return null;
     delivered.set(key, { text: ready, at: now });
     if (event.type === "message.updated")

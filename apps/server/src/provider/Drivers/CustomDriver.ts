@@ -425,13 +425,19 @@ export function makeCustomAdapterV2(
               const turnStartedAt = yield* DateTime.now;
               const providerTurnId = ProviderTurnId.make(`turn_${turnInput.runId}`);
               const assistantTurnItemId = TurnItemId.make(`item_assist_${turnInput.runId}`);
+              const reasoningTurnItemId = TurnItemId.make(`item_reason_${turnInput.runId}`);
               const assistantMessageId = MessageId.make(`msg_assist_${turnInput.runId}`);
               const turnOrdinal = PositiveInt.make(
                 Math.max(1, turnInput.providerTurnOrdinal ?? turnInput.runOrdinal ?? 1),
               );
+              const reasoningOrdinal = NonNegativeInt.make(turnOrdinal * 100);
               const itemOrdinal = NonNegativeInt.make(turnOrdinal * 100 + 1);
 
               let accumulatedText = "";
+              let accumulatedReasoning = "";
+              let reasoningActive = false;
+              let reasoningCompleted = false;
+              let inThinkTag = false;
               let selectedModel =
                 turnInput.modelSelection?.model && turnInput.modelSelection.model !== "default"
                   ? turnInput.modelSelection.model
@@ -794,48 +800,162 @@ Provide full, complete, production-ready code with no placeholders.`;
                               : String(parsed.error);
                           return yield* Effect.fail(new Error(errorMsg));
                         }
-                        const delta =
+                        const rawDeltaReasoning =
+                          parsed.choices?.[0]?.delta?.reasoning_content ??
+                          parsed.choices?.[0]?.delta?.reasoning ??
+                          parsed.choices?.[0]?.delta?.thought ??
+                          "";
+
+                        const rawDeltaContent =
                           parsed.choices?.[0]?.delta?.content ??
                           parsed.choices?.[0]?.message?.content ??
                           parsed.choices?.[0]?.text ??
                           parsed.response ??
                           parsed.message?.content ??
                           "";
-                        if (delta) {
-                          accumulatedText += delta;
+
+                        let hadDelta = false;
+                        if (rawDeltaReasoning) {
+                          accumulatedReasoning += rawDeltaReasoning;
+                          reasoningActive = true;
+                          hadDelta = true;
+                        }
+
+                        let textPiece = rawDeltaContent;
+                        if (textPiece) {
+                          if (inThinkTag) {
+                            const closeIdx = textPiece.indexOf("</think>");
+                            if (closeIdx !== -1) {
+                              accumulatedReasoning += textPiece.slice(0, closeIdx);
+                              inThinkTag = false;
+                              reasoningCompleted = true;
+                              reasoningActive = true;
+                              hadDelta = true;
+                              textPiece = textPiece.slice(closeIdx + 8);
+                            } else {
+                              accumulatedReasoning += textPiece;
+                              reasoningActive = true;
+                              hadDelta = true;
+                              textPiece = "";
+                            }
+                          } else {
+                            const openIdx = textPiece.indexOf("<think>");
+                            if (openIdx !== -1) {
+                              const before = textPiece.slice(0, openIdx);
+                              if (before) accumulatedText += before;
+                              const afterOpen = textPiece.slice(openIdx + 7);
+                              const closeIdx = afterOpen.indexOf("</think>");
+                              if (closeIdx !== -1) {
+                                accumulatedReasoning += afterOpen.slice(0, closeIdx);
+                                reasoningActive = true;
+                                reasoningCompleted = true;
+                                hadDelta = true;
+                                textPiece = afterOpen.slice(closeIdx + 8);
+                              } else {
+                                accumulatedReasoning += afterOpen;
+                                inThinkTag = true;
+                                reasoningActive = true;
+                                hadDelta = true;
+                                textPiece = "";
+                              }
+                            }
+                          }
+
+                          if (textPiece) {
+                            if (reasoningActive && !reasoningCompleted) {
+                              reasoningCompleted = true;
+                            }
+                            accumulatedText += textPiece;
+                            hadDelta = true;
+                          }
+                        }
+
+                        if (hadDelta) {
                           const nowMs = yield* Clock.currentTimeMillis;
                           if (nowMs - lastEmitted > 40) {
                             lastEmitted = nowMs;
                             if (currentAiLogId) {
                               updateAiModelLog(currentAiLogId, {
                                 state: "streaming",
-                                responseBody: accumulatedText,
+                                responseBody: accumulatedReasoning
+                                  ? `[Thinking]\n${accumulatedReasoning}\n\n[Response]\n${accumulatedText}`
+                                  : accumulatedText,
                               });
                             }
-                            yield* Queue.offer(eventsQueue, {
-                              type: "turn_item.updated",
-                              driver: DRIVER,
-                              turnItem: {
-                                id: assistantTurnItemId,
-                                threadId: turnInput.threadId,
-                                runId: turnInput.runId,
-                                nodeId: turnInput.rootNodeId,
-                                providerThreadId: turnInput.providerThread.id,
-                                providerTurnId,
-                                nativeItemRef: null,
-                                parentItemId: null,
-                                ordinal: itemOrdinal,
-                                status: "running",
-                                title: null,
-                                startedAt: turnStartedAt,
-                                completedAt: null,
-                                updatedAt: DateTime.makeUnsafe(nowMs),
-                                type: "assistant_message",
-                                messageId: assistantMessageId,
-                                text: accumulatedText,
-                                streaming: true,
-                              },
-                            });
+
+                            if (reasoningActive) {
+                              yield* Queue.offer(eventsQueue, {
+                                type: "turn_item.updated",
+                                driver: DRIVER,
+                                turnItem: {
+                                  id: reasoningTurnItemId,
+                                  threadId: turnInput.threadId,
+                                  runId: turnInput.runId,
+                                  nodeId: turnInput.rootNodeId,
+                                  providerThreadId: turnInput.providerThread.id,
+                                  providerTurnId,
+                                  nativeItemRef: null,
+                                  parentItemId: null,
+                                  ordinal: reasoningOrdinal,
+                                  status: reasoningCompleted ? "completed" : "running",
+                                  title: "Thinking",
+                                  startedAt: turnStartedAt,
+                                  completedAt: reasoningCompleted
+                                    ? DateTime.makeUnsafe(nowMs)
+                                    : null,
+                                  updatedAt: DateTime.makeUnsafe(nowMs),
+                                  type: "reasoning",
+                                  text: accumulatedReasoning,
+                                  streaming: !reasoningCompleted,
+                                },
+                              });
+                            }
+
+                            if (accumulatedText) {
+                              yield* Queue.offer(eventsQueue, {
+                                type: "turn_item.updated",
+                                driver: DRIVER,
+                                turnItem: {
+                                  id: assistantTurnItemId,
+                                  threadId: turnInput.threadId,
+                                  runId: turnInput.runId,
+                                  nodeId: turnInput.rootNodeId,
+                                  providerThreadId: turnInput.providerThread.id,
+                                  providerTurnId,
+                                  nativeItemRef: null,
+                                  parentItemId: null,
+                                  ordinal: itemOrdinal,
+                                  status: "running",
+                                  title: null,
+                                  startedAt: turnStartedAt,
+                                  completedAt: null,
+                                  updatedAt: DateTime.makeUnsafe(nowMs),
+                                  type: "assistant_message",
+                                  messageId: assistantMessageId,
+                                  text: accumulatedText,
+                                  streaming: true,
+                                },
+                              });
+
+                              yield* Queue.offer(eventsQueue, {
+                                type: "message.updated",
+                                driver: DRIVER,
+                                message: {
+                                  id: assistantMessageId,
+                                  threadId: turnInput.threadId,
+                                  runId: turnInput.runId,
+                                  nodeId: turnInput.rootNodeId,
+                                  role: "assistant",
+                                  text: accumulatedText,
+                                  attachments: [],
+                                  streaming: true,
+                                  createdBy: "agent",
+                                  creationSource: "provider",
+                                  createdAt: turnStartedAt,
+                                  updatedAt: DateTime.makeUnsafe(nowMs),
+                                },
+                              });
+                            }
                           }
                         }
                       }
@@ -853,7 +973,7 @@ Provide full, complete, production-ready code with no placeholders.`;
                   }),
                 );
 
-                if (!accumulatedText.trim()) {
+                if (!accumulatedText.trim() && !accumulatedReasoning.trim()) {
                   return yield* Effect.fail(
                     new Error(
                       `Model "${selectedModel}" returned an empty response. The model may be offline, rate-limited, or overloaded on ${cleanBase}.`,
@@ -889,6 +1009,32 @@ Provide full, complete, production-ready code with no placeholders.`;
                   finalText +=
                     `\n\n---\n📁 **Saved ${savedFiles.length} file${savedFiles.length > 1 ? "s" : ""} to project (\`${NodePath.basename(projectCwd)}\`):**\n` +
                     savedFiles.map((f) => `- \`${f}\``).join("\n");
+                }
+
+                if (reasoningActive && accumulatedReasoning) {
+                  yield* Queue.offer(eventsQueue, {
+                    type: "turn_item.updated",
+                    driver: DRIVER,
+                    turnItem: {
+                      id: reasoningTurnItemId,
+                      threadId: turnInput.threadId,
+                      runId: turnInput.runId,
+                      nodeId: turnInput.rootNodeId,
+                      providerThreadId: turnInput.providerThread.id,
+                      providerTurnId,
+                      nativeItemRef: null,
+                      parentItemId: null,
+                      ordinal: reasoningOrdinal,
+                      status: "completed",
+                      title: "Thinking",
+                      startedAt: turnStartedAt,
+                      completedAt: finishedTime,
+                      updatedAt: finishedTime,
+                      type: "reasoning",
+                      text: accumulatedReasoning,
+                      streaming: false,
+                    },
+                  });
                 }
 
                 yield* Queue.offer(eventsQueue, {

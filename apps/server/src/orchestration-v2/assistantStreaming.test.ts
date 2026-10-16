@@ -73,6 +73,16 @@ describe("V2 assistant streaming", () => {
       rest: "rest",
     });
   });
+  it("streams code fence lines incrementally when streamCodeBlocks is enabled", () => {
+    expect(splitBufferedAssistantText("Intro\n\n```ts\nx()\n", true)).toEqual({
+      ready: "Intro\n\n```ts\nx()\n",
+      rest: "",
+    });
+    expect(splitBufferedAssistantText("Intro\n\n```ts\nx()", true)).toEqual({
+      ready: "Intro\n\n```ts\n",
+      rest: "x()",
+    });
+  });
   it("holds streaming text until the full response completes", () => {
     const running = message("partial");
     const final = message("complete", false);

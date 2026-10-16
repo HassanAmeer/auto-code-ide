@@ -5,10 +5,11 @@ import { Spinner } from "~/components/ui/spinner";
 import {
   ArchiveIcon,
   ArrowUpDownIcon,
-  ChevronRightIcon,
   DownloadCloudIcon,
   EraserIcon,
   FileArchiveIcon,
+  FolderIcon,
+  FolderOpenIcon,
   FolderPlusIcon,
   Globe2Icon,
   MoreVerticalIcon,
@@ -3176,8 +3177,13 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
           onKeyDown={handleProjectButtonKeyDown}
           onContextMenu={handleProjectButtonContextMenu}
         >
-          {/* Left Side: Project title only - no icons */}
+          {/* Left Side: Folder icon & Project title */}
           <span className="flex min-w-0 flex-1 items-center gap-2">
+            {projectExpanded ? (
+              <FolderOpenIcon className="size-4 shrink-0 text-muted-foreground group-hover/project-header:text-foreground transition-colors" />
+            ) : (
+              <FolderIcon className="size-4 shrink-0 text-muted-foreground group-hover/project-header:text-foreground transition-colors" />
+            )}
             <span className="truncate text-[13px] font-semibold tracking-[-0.015em] text-sidebar-foreground">
               {project.displayName}
             </span>
@@ -3188,7 +3194,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
             ) : null}
           </span>
 
-          {/* Right Side: Options Menu & Collapse Arrow */}
+          {/* Right Side: Options Menu & New Chat Button */}
           <div
             className="flex items-center gap-1 shrink-0 ml-auto"
             onClick={(e) => e.stopPropagation()}
@@ -3305,24 +3311,16 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
 
             <button
               type="button"
-              aria-label={
-                projectExpanded
-                  ? `Collapse ${project.displayName}`
-                  : `Expand ${project.displayName}`
-              }
-              data-testid="project-collapse-button"
+              title={`New chat in ${project.displayName}`}
+              aria-label={`New chat in ${project.displayName}`}
+              data-testid="project-new-chat-button"
               onClick={(e) => {
                 e.stopPropagation();
-                setProjectExpanded(projectPreferenceKeys, !projectExpanded);
+                handleNewChat();
               }}
               className="inline-flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-black/10 dark:hover:bg-white/10 active:scale-95 transition-all duration-150 cursor-pointer"
             >
-              <ChevronRightIcon
-                className={cn(
-                  "size-4 shrink-0 text-muted-foreground transition-transform duration-200 ease-out",
-                  projectExpanded ? "rotate-90 text-foreground" : "rotate-0",
-                )}
-              />
+              <PlusIcon className="size-4 shrink-0" />
             </button>
           </div>
         </SidebarMenuButton>
