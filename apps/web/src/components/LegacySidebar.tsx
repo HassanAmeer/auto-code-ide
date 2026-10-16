@@ -2254,6 +2254,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
           action:
             | "rename"
             | "open-terminal"
+            | "download-zip"
             | "push-github"
             | "git-pull"
             | "git-fetch"

@@ -268,7 +268,7 @@ async function makeFixture(
   const apply = (change: { startLine: number } | undefined, passStartLine = true) => {
     if (change === undefined) throw new Error("Expected a document change");
     file.contents = document.getText();
-    instance.applyDocumentChange(
+    (instance as any).applyDocumentChange(
       document,
       undefined,
       false,

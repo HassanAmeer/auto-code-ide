@@ -3,6 +3,7 @@ import { resolvePrimaryEnvironmentHttpUrl } from "../../../environments/primary"
 
 export interface TerminalStreamCallbacks {
   onChunk?: (chunk: string, type: "stdout" | "stderr") => void;
+  onStderr?: (stderr: string) => void;
   onExit?: (exitCode: number, durationMs: number) => void;
   onError?: (error: string) => void;
 }

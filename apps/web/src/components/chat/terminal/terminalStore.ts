@@ -610,25 +610,38 @@ export const terminalStore = {
     };
     notify();
 
-    // Auto-update CWD on `cd <path>` if local
-    if (!activeProfile) {
-      const cdMatch = actualCommand.match(/^cd\s+(.+)$/);
-      if (cdMatch && cdMatch[1]) {
-        const targetPath = cdMatch[1].trim();
-        let newCwd = targetPath;
-        if (!targetPath.startsWith("/")) {
-          newCwd = (cwd.endsWith("/") ? cwd : cwd + "/") + targetPath;
-        }
-        terminalStore.setActiveCwd(newCwd);
-      }
-    }
-
     // Execute via server using live streaming & cancellation support
     const result = await executeTerminalCommandStream(executionId, commandToExecute, cwd, {
       onChunk: (chunk, type) => {
         terminalStore.appendRunChunk(runId, chunk, type);
       },
     });
+
+    // Auto-update CWD on successful `cd <path>` if local
+    if (!activeProfile && result.ok) {
+      const cdMatch = actualCommand.match(/(?:^|[;&&|])\s*cd\s+([^;&|]+)/);
+      if (cdMatch && cdMatch[1]) {
+        let rawTarget = cdMatch[1].replace(/["']/g, "").trim();
+        if (rawTarget) {
+          let resolvedSegments: string[] = [];
+          if (rawTarget.startsWith("/")) {
+            resolvedSegments = rawTarget.split("/").filter(Boolean);
+          } else {
+            resolvedSegments = cwd
+              .split("/")
+              .filter(Boolean)
+              .concat(rawTarget.split("/").filter(Boolean));
+          }
+          const cleanParts: string[] = [];
+          for (const segment of resolvedSegments) {
+            if (segment === "..") cleanParts.pop();
+            else if (segment !== ".") cleanParts.push(segment);
+          }
+          const normalizedCwd = "/" + cleanParts.join("/");
+          terminalStore.setActiveCwd(normalizedCwd);
+        }
+      }
+    }
 
     const { explanation, nextSteps } = generateAiExplanation(actualCommand, result);
     const suggestedFix =

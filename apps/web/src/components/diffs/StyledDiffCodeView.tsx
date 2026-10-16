@@ -1,4 +1,4 @@
-/* oxlint-disable eslint/no-restricted-imports -- This is the single styled adapter around Pierre's raw viewer. */
+import type { CodeViewItem } from "@pierre/diffs";
 import {
   CodeView,
   type CodeViewHandle,
@@ -276,6 +276,7 @@ type StyledDiffCodeViewProps<LAnnotation> = (
    * to restyle chrome the viewer owns — such as replacing its per-file line counts.
    */
   readonly unsafeCSSExtra?: string;
+  readonly onRevealSearchMatch?: (item: CodeViewItem<LAnnotation>) => void;
 };
 
 /** The shared web CodeView surface: app styling and virtualized geometry stay paired here. */

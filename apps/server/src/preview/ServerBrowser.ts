@@ -148,9 +148,104 @@ const INSPECT_HOVER_SCRIPT = `(x, y) => {
       selector += '.' + classes.slice(0, 3).map(c => CSS.escape(c)).join('.');
     }
   }
+  let componentName = null;
+  let source = null;
+  const key = Object.keys(element).find(k => k.startsWith('__reactFiber') || k.startsWith('__reactInternalInstance'));
+  if (key) {
+    let fiber = element[key];
+    while (fiber) {
+      if (!source && (fiber._debugSource || fiber._source)) {
+        const s = fiber._debugSource || fiber._source;
+        source = {
+          fileName: s.fileName || null,
+          lineNumber: s.lineNumber || null,
+          columnNumber: s.columnNumber || null,
+        };
+      }
+      if (!source && fiber._debugOwner && (fiber._debugOwner._debugSource || fiber._debugOwner._source)) {
+        const s = fiber._debugOwner._debugSource || fiber._debugOwner._source;
+        source = {
+          fileName: s.fileName || null,
+          lineNumber: s.lineNumber || null,
+          columnNumber: s.columnNumber || null,
+        };
+      }
+      if (!source && fiber._debugStack) {
+        try {
+          const stackStr = typeof fiber._debugStack === 'string' ? fiber._debugStack : (fiber._debugStack.stack || '');
+          const match = stackStr.match(/(?:at\\s+)?(?:.*?\\s+\\()?([^\\(\\)\\s]+?):(\\d+):(\\d+)\\)?/);
+          if (match && match[1]) {
+            source = {
+              fileName: match[1],
+              lineNumber: parseInt(match[2], 10),
+              columnNumber: parseInt(match[3], 10),
+            };
+          }
+        } catch (_) {}
+      }
+      if (!source && Array.isArray(fiber._debugInfo)) {
+        for (const info of fiber._debugInfo) {
+          if (info && info.name && !componentName) componentName = info.name;
+          if (info && (info.fileName || info.source?.fileName)) {
+            source = {
+              fileName: info.fileName || info.source?.fileName || null,
+              lineNumber: info.lineNumber || info.source?.lineNumber || 1,
+              columnNumber: 1,
+            };
+            break;
+          }
+        }
+      }
+      if (!componentName) {
+        if (typeof fiber.type === 'function' && (fiber.type.displayName || fiber.type.name)) {
+          componentName = fiber.type.displayName || fiber.type.name;
+        } else if (fiber.type && typeof fiber.type === 'object') {
+          if (fiber.type.displayName) componentName = fiber.type.displayName;
+          else if (fiber.type.render && (fiber.type.render.displayName || fiber.type.render.name)) {
+            componentName = fiber.type.render.displayName || fiber.type.render.name;
+          }
+        }
+      }
+      fiber = fiber.return;
+    }
+  }
+  if (!source && element.closest) {
+    const elWithSource = element.closest('[data-source-file], [data-file], [data-locator], [data-v-inspect], [data-react-source]');
+    if (elWithSource) {
+      const file = elWithSource.getAttribute('data-source-file') ||
+                   elWithSource.getAttribute('data-file') ||
+                   elWithSource.getAttribute('data-locator') ||
+                   elWithSource.getAttribute('data-v-inspect') ||
+                   elWithSource.getAttribute('data-react-source');
+      const line = elWithSource.getAttribute('data-source-line') || elWithSource.getAttribute('data-line');
+      if (file) {
+        let cleanFile = file;
+        let lineNum = line ? parseInt(line, 10) : 1;
+        if (file.includes(':')) {
+          const parts = file.split(':');
+          cleanFile = parts[0];
+          if (parts[1] && !isNaN(parseInt(parts[1], 10))) lineNum = parseInt(parts[1], 10);
+        }
+        source = {
+          fileName: cleanFile,
+          lineNumber: lineNum,
+          columnNumber: 1,
+        };
+      }
+    }
+  }
+  if (!componentName && element.closest) {
+    const elWithComp = element.closest('[data-component], [data-react-component]');
+    if (elWithComp) {
+      componentName = elWithComp.getAttribute('data-component') || elWithComp.getAttribute('data-react-component');
+    }
+  }
   return {
     tag,
     selector,
+    componentName,
+    source,
+    htmlPreview: element.outerHTML ? element.outerHTML.slice(0, 1000) : null,
     rect: {
       x: Math.round(rect.left),
       y: Math.round(rect.top),
@@ -180,15 +275,95 @@ const PICK_ELEMENT_SCRIPT = `(x, y) => {
   }
 
   let componentName = null;
+  let source = null;
   const key = Object.keys(element).find(k => k.startsWith('__reactFiber') || k.startsWith('__reactInternalInstance'));
   if (key) {
     let fiber = element[key];
     while (fiber) {
-      if (typeof fiber.type === 'function' && fiber.type.name) {
-        componentName = fiber.type.name;
-        break;
+      if (!source && (fiber._debugSource || fiber._source)) {
+        const s = fiber._debugSource || fiber._source;
+        source = {
+          fileName: s.fileName || null,
+          lineNumber: s.lineNumber || null,
+          columnNumber: s.columnNumber || null,
+        };
+      }
+      if (!source && fiber._debugOwner && (fiber._debugOwner._debugSource || fiber._debugOwner._source)) {
+        const s = fiber._debugOwner._debugSource || fiber._debugOwner._source;
+        source = {
+          fileName: s.fileName || null,
+          lineNumber: s.lineNumber || null,
+          columnNumber: s.columnNumber || null,
+        };
+      }
+      if (!source && fiber._debugStack) {
+        try {
+          const stackStr = typeof fiber._debugStack === 'string' ? fiber._debugStack : (fiber._debugStack.stack || '');
+          const match = stackStr.match(/(?:at\\s+)?(?:.*?\\s+\\()?([^\\(\\)\\s]+?):(\\d+):(\\d+)\\)?/);
+          if (match && match[1]) {
+            source = {
+              fileName: match[1],
+              lineNumber: parseInt(match[2], 10),
+              columnNumber: parseInt(match[3], 10),
+            };
+          }
+        } catch (_) {}
+      }
+      if (!source && Array.isArray(fiber._debugInfo)) {
+        for (const info of fiber._debugInfo) {
+          if (info && info.name && !componentName) componentName = info.name;
+          if (info && (info.fileName || info.source?.fileName)) {
+            source = {
+              fileName: info.fileName || info.source?.fileName || null,
+              lineNumber: info.lineNumber || info.source?.lineNumber || 1,
+              columnNumber: 1,
+            };
+            break;
+          }
+        }
+      }
+      if (!componentName) {
+        if (typeof fiber.type === 'function' && (fiber.type.displayName || fiber.type.name)) {
+          componentName = fiber.type.displayName || fiber.type.name;
+        } else if (fiber.type && typeof fiber.type === 'object') {
+          if (fiber.type.displayName) componentName = fiber.type.displayName;
+          else if (fiber.type.render && (fiber.type.render.displayName || fiber.type.render.name)) {
+            componentName = fiber.type.render.displayName || fiber.type.render.name;
+          }
+        }
       }
       fiber = fiber.return;
+    }
+  }
+  if (!source && element.closest) {
+    const elWithSource = element.closest('[data-source-file], [data-file], [data-locator], [data-v-inspect], [data-react-source]');
+    if (elWithSource) {
+      const file = elWithSource.getAttribute('data-source-file') ||
+                   elWithSource.getAttribute('data-file') ||
+                   elWithSource.getAttribute('data-locator') ||
+                   elWithSource.getAttribute('data-v-inspect') ||
+                   elWithSource.getAttribute('data-react-source');
+      const line = elWithSource.getAttribute('data-source-line') || elWithSource.getAttribute('data-line');
+      if (file) {
+        let cleanFile = file;
+        let lineNum = line ? parseInt(line, 10) : 1;
+        if (file.includes(':')) {
+          const parts = file.split(':');
+          cleanFile = parts[0];
+          if (parts[1] && !isNaN(parseInt(parts[1], 10))) lineNum = parseInt(parts[1], 10);
+        }
+        source = {
+          fileName: cleanFile,
+          lineNumber: lineNum,
+          columnNumber: 1,
+        };
+      }
+    }
+  }
+  if (!componentName && element.closest) {
+    const elWithComp = element.closest('[data-component], [data-react-component]');
+    if (elWithComp) {
+      componentName = elWithComp.getAttribute('data-component') || elWithComp.getAttribute('data-react-component');
     }
   }
 
@@ -213,10 +388,17 @@ const PICK_ELEMENT_SCRIPT = `(x, y) => {
     selector,
     htmlPreview: element.outerHTML.slice(0, 4000),
     componentName,
+    source,
     styles: stylesArr.join('\\n'),
     rect: {
       x: Math.round(rect.left),
       y: Math.round(rect.top),
+      width: Math.round(rect.width),
+      height: Math.round(rect.height),
+    },
+    pageRect: {
+      x: Math.round(rect.left + (window.pageXOffset || document.documentElement.scrollLeft || 0)),
+      y: Math.round(rect.top + (window.pageYOffset || document.documentElement.scrollTop || 0)),
       width: Math.round(rect.width),
       height: Math.round(rect.height),
     },
@@ -2392,17 +2574,18 @@ const make = Effect.gen(function* () {
           .catch(() => null);
         const data = evalRes?.result?.value;
         if (!data || !data.tagName) return;
-
         let screenshot: PreviewAnnotationScreenshot | null = null;
         const rx = num(data.rect?.x);
         const ry = num(data.rect?.y);
         const rw = num(data.rect?.width);
         const rh = num(data.rect?.height);
+        const px = num(data.pageRect?.x ?? data.rect?.x);
+        const py = num(data.pageRect?.y ?? data.rect?.y);
         if (rw > 0 && rh > 0) {
           try {
             const clip = {
-              x: Math.max(0, rx),
-              y: Math.max(0, ry),
+              x: Math.max(0, px),
+              y: Math.max(0, py),
               width: Math.max(1, rw),
               height: Math.max(1, rh),
               scale: 1,
@@ -2410,18 +2593,41 @@ const make = Effect.gen(function* () {
             const captureResult = await session.send("Page.captureScreenshot", {
               format: "png",
               clip,
-              captureBeyondViewport: false,
+              captureBeyondViewport: true,
             });
             if (captureResult.data) {
               screenshot = {
                 dataUrl: `data:image/png;base64,${captureResult.data}`,
                 width: clip.width,
                 height: clip.height,
-                cropRect: { x: clip.x, y: clip.y, width: clip.width, height: clip.height },
+                cropRect: { x: rx, y: ry, width: rw, height: rh },
               };
             }
           } catch {
-            // Screenshot crop is optional
+            try {
+              const clip = {
+                x: Math.max(0, rx),
+                y: Math.max(0, ry),
+                width: Math.max(1, rw),
+                height: Math.max(1, rh),
+                scale: 1,
+              };
+              const captureResult = await session.send("Page.captureScreenshot", {
+                format: "png",
+                clip,
+                captureBeyondViewport: false,
+              });
+              if (captureResult.data) {
+                screenshot = {
+                  dataUrl: `data:image/png;base64,${captureResult.data}`,
+                  width: clip.width,
+                  height: clip.height,
+                  cropRect: { x: rx, y: ry, width: rw, height: rh },
+                };
+              }
+            } catch {
+              // Screenshot crop is optional
+            }
           }
         }
 
@@ -2442,7 +2648,16 @@ const make = Effect.gen(function* () {
                 selector: data.selector,
                 htmlPreview: data.htmlPreview,
                 componentName: data.componentName,
-                source: null,
+                source: data.source
+                  ? {
+                      fileName: data.source.fileName ?? null,
+                      lineNumber: data.source.lineNumber ? Number(data.source.lineNumber) : null,
+                      columnNumber: data.source.columnNumber
+                        ? Number(data.source.columnNumber)
+                        : null,
+                      functionName: data.componentName ?? null,
+                    }
+                  : null,
                 stack: [],
                 styles: data.styles,
                 pickedAt: now,

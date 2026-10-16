@@ -1,4 +1,4 @@
-import { memo, useRef, useState, useEffect } from "react";
+import { memo, useRef, useState, useEffect, useMemo } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -85,7 +85,6 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
 
   // Create new terminal chat
   const handleCreateNewChat = () => {
-    setIsDropdownOpen(false);
     const projName = activeProject?.title || store.selectedProjectTitle || "Auto Deploy";
     const keyName = activeSshKey?.name || "Server";
     const newChat = terminalStore.createTerminalChat({
@@ -106,7 +105,6 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
   // Switch chat
   const handleSelectChat = (chatId: string) => {
     terminalStore.setActiveChatId(chatId);
-    setIsDropdownOpen(false);
   };
 
   // Delete chat
@@ -179,7 +177,7 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
           {uniqueProjects.length === 0 ? (
             <span className="text-3xs text-zinc-500 italic shrink-0 px-1">(No projects yet)</span>
           ) : (
-            uniqueProjects.map((project) => {
+            uniqueProjects.map((project: EnvironmentProject) => {
               const isSelected = store.selectedProjectId === project.id;
               return (
                 <button
@@ -306,7 +304,10 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
       <SshKeysSheet />
 
       {/* 90% Width Terminal Chat History Sheet */}
-      <TerminalChatsSheet activeProject={activeProject} onNewTerminalThread={onNewTerminalThread} />
+      <TerminalChatsSheet
+        activeProject={activeProject ?? null}
+        {...(onNewTerminalThread ? { onNewTerminalThread } : {})}
+      />
     </>
   );
 });

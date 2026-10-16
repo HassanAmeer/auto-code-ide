@@ -272,9 +272,11 @@ export function NotificationSettingsPanel() {
           control={
             <Select
               value={notificationSettings.presentationStyle}
-              onValueChange={(val: "toast" | "card") =>
-                updateNotificationSettings({ presentationStyle: val })
-              }
+              onValueChange={(val) => {
+                if (val === "toast" || val === "card") {
+                  updateNotificationSettings({ presentationStyle: val });
+                }
+              }}
               disabled={!notificationSettings.masterEnabled}
             >
               <SelectTrigger

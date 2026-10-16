@@ -19,6 +19,8 @@ import {
 } from "@t3tools/contracts";
 import { normalizePreviewUrl, resolveAddressBarInput } from "@t3tools/shared/preview";
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { PreviewStreamElementHighlight } from "@t3tools/client-runtime/preview/server-browser-stream";
+import { PreviewSplitCodeEditor, type SplitCodeEditorTarget } from "./PreviewSplitCodeEditor";
 
 import {
   BROWSER_HISTORY_MAX_ENTRIES_PER_PROJECT,
@@ -36,7 +38,7 @@ import {
   useThreadPreviewState,
 } from "~/previewStateStore";
 import { resolveDiscoveredServerUrl } from "~/browser/browserTargetResolver";
-import { useEnvironmentSupportsServerBrowser } from "~/state/entities";
+import { useEnvironmentSupportsServerBrowser, useProject, useThreadShell } from "~/state/entities";
 import {
   useEnvironment,
   useEnvironmentHttpBaseUrl,
@@ -236,6 +238,17 @@ export function PreviewView({
   const [serverControlledTabId, setServerControlledTabId] = useState<string | null>(null);
   const serverInputDisabled = isServerTab && serverControlledTabId !== runtimeTabId;
   const [serverFrameTabId, setServerFrameTabId] = useState<string | null>(null);
+  const threadShell = useThreadShell(threadRef);
+  const project = useProject(
+    threadShell?.projectId
+      ? {
+          environmentId: threadRef.environmentId,
+          projectId: threadShell.projectId,
+        }
+      : null,
+  );
+  const workspaceCwd = threadShell?.worktreePath ?? project?.workspaceRoot ?? "";
+  const [splitCodeTarget, setSplitCodeTarget] = useState<SplitCodeEditorTarget | null>(null);
   const desktopOverlay = tabId ? (previewState.desktopByTabId[tabId] ?? null) : null;
   const navStatus = snapshot?.navStatus ?? { _tag: "Idle" as const };
   const url = navStatus._tag === "Idle" ? "" : navStatus.url;
@@ -956,6 +969,58 @@ export function PreviewView({
     [addImage, addPreviewAnnotation, threadRef],
   );
 
+  const handleOpenCode = useCallback(
+    (target: { highlight: PreviewStreamElementHighlight; point: { x: number; y: number } }) => {
+      setPickActive(false);
+      const rawFileName = target.highlight.source?.fileName || null;
+      const lineNumber = target.highlight.source?.lineNumber
+        ? Number(target.highlight.source.lineNumber)
+        : 1;
+
+      let relativePath = rawFileName;
+      if (relativePath) {
+        if (relativePath.startsWith("http://") || relativePath.startsWith("https://")) {
+          try {
+            relativePath = new URL(relativePath).pathname;
+          } catch {
+            // ignore
+          }
+        }
+        const stripped = (relativePath.split("?")[0] ?? "").replace(/:\d+(:\d+)?$/, "");
+        relativePath = stripped.replace(/^file:\/\//, "").replace(/^\/@fs/, "");
+
+        if (workspaceCwd && relativePath.startsWith(workspaceCwd)) {
+          relativePath = relativePath.slice(workspaceCwd.length).replace(/^[\\/]+/, "");
+        } else if (relativePath.startsWith("/")) {
+          if (relativePath.includes("/src/")) {
+            relativePath = relativePath.slice(relativePath.indexOf("src/"));
+          } else if (relativePath.includes("/app/")) {
+            relativePath = relativePath.slice(relativePath.indexOf("app/"));
+          } else {
+            relativePath = relativePath.replace(/^[\\/]+/, "");
+          }
+        }
+      }
+
+      if (!relativePath) {
+        if (target.highlight.componentName) {
+          relativePath = `src/${target.highlight.componentName}.tsx`;
+        } else {
+          relativePath = "src/App.tsx";
+        }
+      }
+
+      setSplitCodeTarget({
+        relativePath,
+        lineNumber,
+        componentName: target.highlight.componentName ?? null,
+        selector: target.highlight.selector,
+        htmlPreview: target.highlight.htmlPreview ?? null,
+      });
+    },
+    [workspaceCwd],
+  );
+
   useEffect(() => {
     if (!pickActive) return;
     const onKeyDown = (e: KeyboardEvent) => {
@@ -1116,11 +1181,11 @@ export function PreviewView({
         {pickActive ? (
           <div className="absolute inset-x-0 top-0 z-30 flex items-center justify-between border-b border-primary/30 bg-primary/10 px-3 py-1.5 backdrop-blur-sm">
             <div className="flex items-center gap-2 text-xs font-medium text-foreground">
-              <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75"></span>
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-primary"></span>
+              <span className="size-2 rounded-full bg-primary shadow-[0_0_8px_rgba(59,130,246,0.8)]" />
+              <span>
+                Element Inspector: Click any element to select, then Attach to chat or Edit Code
+                directly
               </span>
-              <span>Element Inspector Active: Hover and click any element to attach to chat</span>
             </div>
             <button
               type="button"
@@ -1157,6 +1222,7 @@ export function PreviewView({
                 visible={visible}
                 pickActive={pickActive}
                 onElementPicked={handleServerElementPicked}
+                onOpenCode={handleOpenCode}
                 onFirstFrame={() => setServerFrameTabId(runtimeTabId)}
                 onControl={(control) =>
                   setServerControlledTabId(control?.controller === "you" ? runtimeTabId : null)
@@ -1233,6 +1299,17 @@ export function PreviewView({
           </div>
         ) : null}
       </div>
+      {splitCodeTarget ? (
+        <PreviewSplitCodeEditor
+          target={splitCodeTarget}
+          environmentId={threadRef.environmentId}
+          cwd={workspaceCwd}
+          onClose={() => setSplitCodeTarget(null)}
+          onOpenInFullPanel={(relativePath, line) => {
+            useRightPanelStore.getState().openFile(threadRef, relativePath, line);
+          }}
+        />
+      ) : null}
       {activeLogsTabId && isLogsOpen ? (
         <BrowserLogsSection tabId={activeLogsTabId} onClose={() => setLogsOpen(false)} />
       ) : null}

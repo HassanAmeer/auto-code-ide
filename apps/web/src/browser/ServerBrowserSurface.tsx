@@ -36,6 +36,7 @@ import {
   useState,
 } from "react";
 
+import { Code2, Paperclip, X } from "lucide-react";
 import { AgentCursorMark } from "~/components/preview/AgentBrowserCursor";
 import { CommandBlock } from "~/components/CommandBlock";
 import { Button } from "~/components/ui/button";
@@ -161,6 +162,10 @@ export function ServerBrowserSurface(props: {
   readonly className?: string;
   readonly pickActive?: boolean;
   readonly onElementPicked?: (annotation: PreviewAnnotationPayload) => void;
+  readonly onOpenCode?: (target: {
+    highlight: PreviewStreamElementHighlight;
+    point: { x: number; y: number };
+  }) => void;
   readonly ref?: Ref<ServerBrowserHandle>;
 }) {
   const {
@@ -177,11 +182,16 @@ export function ServerBrowserSurface(props: {
     className,
     pickActive = false,
     onElementPicked,
+    onOpenCode,
     ref,
   } = props;
   const onElementPickedRef = useRef(onElementPicked);
   onElementPickedRef.current = onElementPicked;
   const [hoveredElement, setHoveredElement] = useState<PreviewStreamElementHighlight | null>(null);
+  const [selectedTarget, setSelectedTarget] = useState<{
+    highlight: PreviewStreamElementHighlight;
+    point: { x: number; y: number };
+  } | null>(null);
   const lastInspectHoverRef = useRef(0);
   const access = usePreviewStreamAccess(environmentId);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -238,7 +248,10 @@ export function ServerBrowserSurface(props: {
   const [cap, setCap] = useState<{ width: number; height: number } | null>(null);
 
   useEffect(() => {
-    if (!pickActive) setHoveredElement(null);
+    if (!pickActive) {
+      setHoveredElement(null);
+      setSelectedTarget(null);
+    }
   }, [pickActive]);
 
   const send = useCallback((input: PreviewStreamInput) => {
@@ -321,8 +334,8 @@ export function ServerBrowserSurface(props: {
     [pickActive],
   );
 
-  const getHighlightStyle = useCallback(() => {
-    if (!hoveredElement || !canvasRef.current || !viewportRef.current) return null;
+  const getHighlightStyleFor = useCallback((target: PreviewStreamElementHighlight | null) => {
+    if (!target || !canvasRef.current || !viewportRef.current) return null;
     const canvas = canvasRef.current;
     const viewport = viewportRef.current;
     const rect = canvas.getBoundingClientRect();
@@ -335,18 +348,55 @@ export function ServerBrowserSurface(props: {
     const offsetX = (rect.width - width) / 2;
     const offsetY = (rect.height - height) / 2;
 
-    const left = offsetX + hoveredElement.rect.x * scaleX;
-    const top = offsetY + hoveredElement.rect.y * scaleY;
-    const w = hoveredElement.rect.width * scaleX;
-    const h = hoveredElement.rect.height * scaleY;
+    const left = offsetX + target.rect.x * scaleX;
+    const top = offsetY + target.rect.y * scaleY;
+    const w = target.rect.width * scaleX;
+    const h = target.rect.height * scaleY;
 
     return {
       left: `${left}px`,
       top: `${top}px`,
       width: `${w}px`,
       height: `${h}px`,
+      rawLeft: left,
+      rawTop: top,
+      rawWidth: w,
+      rawHeight: h,
     };
-  }, [hoveredElement]);
+  }, []);
+
+  const handleConfirmAttach = useCallback(() => {
+    if (!selectedTarget) return;
+    send({ type: "pickElement", x: selectedTarget.point.x, y: selectedTarget.point.y });
+    setSelectedTarget(null);
+  }, [selectedTarget, send]);
+
+  const handleOpenCode = useCallback(() => {
+    if (!selectedTarget) return;
+    onOpenCode?.(selectedTarget);
+    setSelectedTarget(null);
+  }, [onOpenCode, selectedTarget]);
+
+  useEffect(() => {
+    if (!pickActive || !selectedTarget) return;
+    const onKeyDown = (e: globalThis.KeyboardEvent) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        e.stopPropagation();
+        handleConfirmAttach();
+      } else if (e.key === "c" || e.key === "C" || e.key === "e" || e.key === "E") {
+        e.preventDefault();
+        e.stopPropagation();
+        handleOpenCode();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        setSelectedTarget(null);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [handleConfirmAttach, handleOpenCode, pickActive, selectedTarget]);
 
   const countClick = (button: PreviewStreamMouseButton, x: number, y: number, time: number) => {
     const last = lastClickRef.current;
@@ -458,9 +508,21 @@ export function ServerBrowserSurface(props: {
         },
         onElementHovered: (target) => {
           setHoveredElement(target);
+          setSelectedTarget((prev) => {
+            if (
+              prev &&
+              prev.highlight.tag === "element" &&
+              prev.highlight.selector === "element" &&
+              target
+            ) {
+              return { highlight: target, point: prev.point };
+            }
+            return prev;
+          });
         },
         onElementPicked: (annotation) => {
           setHoveredElement(null);
+          setSelectedTarget(null);
           onElementPickedRef.current?.(annotation);
         },
         onViewport: (viewport) => {
@@ -585,7 +647,19 @@ export function ServerBrowserSurface(props: {
         if (type === "pointerup") {
           const point = pagePoint(clientX, clientY, false);
           if (point) {
-            send({ type: "pickElement", x: point.x, y: point.y });
+            if (hoveredElement) {
+              setSelectedTarget({ highlight: hoveredElement, point });
+            } else {
+              send({ type: "inspectHover", x: point.x, y: point.y });
+              setSelectedTarget({
+                highlight: {
+                  tag: "element",
+                  selector: "element",
+                  rect: { x: point.x - 10, y: point.y - 10, width: 20, height: 20 },
+                },
+                point,
+              });
+            }
           }
         }
       }
@@ -846,9 +920,105 @@ export function ServerBrowserSurface(props: {
           onMouseDown={(event) => event.preventDefault()}
           onContextMenu={(event) => event.preventDefault()}
         />
-        {pickActive && hoveredElement ? (
+        {pickActive && selectedTarget ? (
+          (() => {
+            const style = getHighlightStyleFor(selectedTarget.highlight);
+            if (!style) return null;
+            const canvasBox = canvasRef.current?.getBoundingClientRect();
+            const canvasH = canvasBox?.height ?? 600;
+            const canvasW = canvasBox?.width ?? 600;
+            const cardWidth = Math.min(350, Math.max(260, canvasW - 16));
+            const cardLeft = Math.max(
+              8,
+              Math.min(style.rawLeft, Math.max(8, canvasW - cardWidth - 8)),
+            );
+            const isNearBottom = style.rawTop + style.rawHeight + 50 > canvasH;
+            return (
+              <>
+                <div
+                  style={{
+                    left: style.left,
+                    top: style.top,
+                    width: style.width,
+                    height: style.height,
+                  }}
+                  className="pointer-events-none absolute z-30 rounded-sm border-2 border-primary bg-primary/20 shadow-[0_0_16px_rgba(59,130,246,0.6)]"
+                />
+                <div
+                  style={{
+                    left: `${cardLeft}px`,
+                    top: isNearBottom
+                      ? `${Math.max(8, style.rawTop - 46)}px`
+                      : `${style.rawTop + style.rawHeight + 8}px`,
+                    maxWidth: `${cardWidth}px`,
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onPointerUp={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => e.stopPropagation()}
+                  className="absolute z-40 flex items-center gap-2 rounded-lg border border-border/80 bg-background/95 px-2.5 py-1.5 shadow-xl backdrop-blur-md animate-in fade-in zoom-in-95 duration-100"
+                >
+                  <div
+                    className="flex items-center gap-1.5 max-w-[140px] truncate"
+                    title={selectedTarget.highlight.selector}
+                  >
+                    <span className="size-2 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.9)] shrink-0" />
+                    <span className="font-mono text-xs font-semibold text-foreground truncate">
+                      &lt;
+                      {selectedTarget.highlight.componentName ||
+                        selectedTarget.highlight.selector ||
+                        selectedTarget.highlight.tag}
+                      &gt;
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleConfirmAttach();
+                    }}
+                    className="flex items-center gap-1.5 rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground shadow hover:bg-primary/90 transition-colors cursor-pointer"
+                    title="Attach element screenshot and metadata to chat input"
+                  >
+                    <Paperclip className="size-3.5" />
+                    <span>Attach to Chat</span>
+                    <kbd className="hidden sm:inline-block rounded bg-primary-foreground/20 px-1 text-[10px] font-sans">
+                      ↵
+                    </kbd>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenCode();
+                    }}
+                    className="flex items-center gap-1.5 rounded-md bg-secondary text-secondary-foreground hover:bg-secondary/80 border border-border/60 px-2.5 py-1 text-xs font-medium shadow-sm transition-colors cursor-pointer"
+                    title="Open live code editor for this element (or press C)"
+                  >
+                    <Code2 className="size-3.5 text-primary" />
+                    <span>Code</span>
+                    <kbd className="hidden sm:inline-block rounded bg-muted-foreground/20 px-1 text-[10px] font-sans">
+                      C
+                    </kbd>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedTarget(null);
+                    }}
+                    className="rounded p-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
+                    title="Cancel selection (Esc)"
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                </div>
+              </>
+            );
+          })()
+        ) : pickActive && hoveredElement ? (
           <div
-            style={getHighlightStyle() ?? undefined}
+            style={getHighlightStyleFor(hoveredElement) ?? undefined}
             className="pointer-events-none absolute z-30 rounded-sm border-2 border-primary bg-primary/15 shadow-[0_0_12px_rgba(59,130,246,0.5)] transition-[top,left,width,height] duration-75 ease-out"
           >
             <div className="absolute -top-6 left-0 flex items-center gap-1.5 whitespace-nowrap rounded bg-primary px-1.5 py-0.5 text-[10px] font-mono font-medium text-primary-foreground shadow-sm">

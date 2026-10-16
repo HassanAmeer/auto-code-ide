@@ -1,5 +1,4 @@
-import type { CodeViewItem } from "@pierre/diffs";
-import { parsePatchFiles } from "@pierre/diffs/utils/parsePatchFiles";
+import { parsePatchFiles, type CodeViewItem } from "@pierre/diffs";
 import { describe, expect, it } from "vite-plus/test";
 
 // Find-in-diff lives in our @pierre/diffs patch and is not a package export.
@@ -43,7 +42,12 @@ index 3333333..4444444 100644
 `;
 
 const items: CodeViewItem<undefined>[] = parsePatchFiles(PATCH)[0]!.files.map(
-  (fileDiff, index) => ({ id: `file-${index}`, type: "diff", fileDiff, collapsed: index === 1 }),
+  (fileDiff: any, index: number) => ({
+    id: `file-${index}`,
+    type: "diff",
+    fileDiff,
+    collapsed: index === 1,
+  }),
 );
 
 function find(

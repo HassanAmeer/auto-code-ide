@@ -777,7 +777,7 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
       const entryPromises: Promise<{ file: File; relativePath: string }[]>[] = [];
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
-        if (typeof item.webkitGetAsEntry === "function") {
+        if (item && typeof item.webkitGetAsEntry === "function") {
           const entry = item.webkitGetAsEntry();
           if (entry) {
             entryPromises.push(readEntryFiles(entry));
@@ -789,8 +789,13 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
         const allResults = (await Promise.all(entryPromises)).flat();
         if (allResults.length > 0) {
           // If a single zip file is dropped, automatically upload and unzip to project folder
-          if (allResults.length === 1 && allResults[0].file.name.toLowerCase().endsWith(".zip")) {
-            await handleUploadZipAndExtract(allResults[0].file, rootPath);
+          const firstResult = allResults[0];
+          if (
+            allResults.length === 1 &&
+            firstResult &&
+            firstResult.file.name.toLowerCase().endsWith(".zip")
+          ) {
+            await handleUploadZipAndExtract(firstResult.file, rootPath);
             return;
           }
           await handleUploadRelativeFiles(allResults, rootPath);
@@ -801,8 +806,9 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
 
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const files = Array.from(e.dataTransfer.files);
-      if (files.length === 1 && files[0].name.toLowerCase().endsWith(".zip")) {
-        await handleUploadZipAndExtract(files[0], rootPath);
+      const firstFile = files[0];
+      if (files.length === 1 && firstFile && firstFile.name.toLowerCase().endsWith(".zip")) {
+        await handleUploadZipAndExtract(firstFile, rootPath);
         return;
       }
       await handleUploadFiles(files, rootPath);
@@ -814,8 +820,9 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
     const fileArray = Array.from(files);
 
     // If a single zip file is uploaded, stream and extract it directly
-    if (fileArray.length === 1 && fileArray[0].name.toLowerCase().endsWith(".zip")) {
-      await handleUploadZipAndExtract(fileArray[0], targetDir);
+    const singleFile = fileArray[0];
+    if (fileArray.length === 1 && singleFile && singleFile.name.toLowerCase().endsWith(".zip")) {
+      await handleUploadZipAndExtract(singleFile, targetDir);
       return;
     }
 
@@ -823,6 +830,7 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
     let successCount = 0;
     for (let i = 0; i < fileArray.length; i++) {
       const file = fileArray[i];
+      if (!file) continue;
       try {
         const base64 = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();

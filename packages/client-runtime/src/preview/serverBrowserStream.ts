@@ -102,6 +102,13 @@ export type PreviewStreamInput =
 export interface PreviewStreamElementHighlight {
   readonly tag: string;
   readonly selector: string;
+  readonly componentName?: string | null;
+  readonly source?: {
+    readonly fileName?: string | null;
+    readonly lineNumber?: number | null;
+    readonly columnNumber?: number | null;
+  } | null;
+  readonly htmlPreview?: string | null;
   readonly rect: {
     readonly x: number;
     readonly y: number;

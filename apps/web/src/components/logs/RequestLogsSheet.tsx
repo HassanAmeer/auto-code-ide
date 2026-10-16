@@ -1559,7 +1559,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                               <button
                                 type="button"
                                 onClick={() =>
-                                  copyToClipboard(detectedModel.model, "detectedNetModel")
+                                  copyToClipboard(detectedModel.model ?? "", "detectedNetModel")
                                 }
                                 className="text-zinc-400 hover:text-zinc-200 text-[11px] flex items-center gap-1 px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 cursor-pointer"
                               >
@@ -1698,7 +1698,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                             <button
                               type="button"
                               onClick={() =>
-                                copyToClipboard(detectedModel.model, "detectedNetModel2")
+                                copyToClipboard(detectedModel.model ?? "", "detectedNetModel2")
                               }
                               className="text-zinc-400 hover:text-zinc-200 text-[11px] flex items-center gap-1 px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 cursor-pointer"
                             >

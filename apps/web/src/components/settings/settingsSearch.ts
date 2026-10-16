@@ -541,6 +541,45 @@ export const SETTINGS_SEARCH_ITEMS = [
   },
   ...KEYBINDING_SEARCH_ITEMS,
   {
+    id: "snap-shot-enabled",
+    title: "SnapShots",
+    searchTerms: ["window capture screenshot"],
+    to: "/settings/browser",
+  },
+  {
+    id: "snap-shot-accessibility",
+    title: "Include app text",
+    to: "/settings/browser",
+    targetId: "snap-shot-enabled",
+    searchTerms: [
+      "capture accessibility data text UI structure elements privacy omit agent context",
+    ],
+  },
+  {
+    id: "snap-shot-shortcut",
+    title: "Capture shortcut",
+    to: "/settings/browser",
+    targetId: "snap-shot-enabled",
+  },
+  {
+    id: "snap-shot-sound",
+    title: "Capture sound",
+    to: "/settings/browser",
+    targetId: "snap-shot-enabled",
+  },
+  {
+    id: "snap-shot-flash",
+    title: "Capture flash",
+    to: "/settings/browser",
+    targetId: "snap-shot-enabled",
+  },
+  {
+    id: "snap-shot-animations",
+    title: "Capture animations",
+    to: "/settings/browser",
+    targetId: "snap-shot-enabled",
+  },
+  {
     id: "providers",
     title: "Providers",
     to: "/settings/providers",

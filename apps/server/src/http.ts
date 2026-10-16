@@ -1492,6 +1492,17 @@ export const layerFsPeekRoute = HttpRouter.add(
     }
     const pathService = yield* Path.Path;
     const resolved = pathService.resolve(targetPath);
+    const lower = resolved.toLowerCase();
+    if (
+      lower.startsWith("/etc/shadow") ||
+      lower.startsWith("/etc/sudoers") ||
+      lower.includes("/.ssh/id_")
+    ) {
+      return HttpServerResponse.jsonUnsafe(
+        { ok: false, error: "Access denied: Protected file" },
+        { status: 403 },
+      );
+    }
     if (!NodeFs.existsSync(resolved)) {
       return HttpServerResponse.jsonUnsafe({ ok: false, error: "File not found" }, { status: 404 });
     }
@@ -1546,6 +1557,14 @@ export const layerFsDownloadRoute = HttpRouter.add(
     }
     const pathService = yield* Path.Path;
     const resolved = pathService.resolve(targetPath);
+    const dlLower = resolved.toLowerCase();
+    if (
+      dlLower.startsWith("/etc/shadow") ||
+      dlLower.startsWith("/etc/sudoers") ||
+      dlLower.includes("/.ssh/id_")
+    ) {
+      return HttpServerResponse.text("Access denied: Protected file", { status: 403 });
+    }
     const fileSystem = yield* FileSystem.FileSystem;
     const stat = yield* fileSystem.stat(resolved).pipe(Effect.option);
     if (Option.isNone(stat) || stat.value.type !== "File") {
@@ -1700,6 +1719,14 @@ export const layerFsSaveRoute = HttpRouter.add(
     }
     const pathService = yield* Path.Path;
     const resolved = pathService.resolve(targetPath);
+    const rootPath = pathService.resolve("/");
+    const forbiddenPrefixes = ["/etc", "/proc", "/sys", "/boot", "/dev", "/bin", "/sbin"];
+    if (resolved === rootPath || forbiddenPrefixes.some((p) => resolved.startsWith(p))) {
+      return HttpServerResponse.jsonUnsafe(
+        { ok: false, error: "Access denied: Cannot write to system directory" },
+        { status: 403 },
+      );
+    }
     const content = bodyJson.content ?? "";
     try {
       NodeFs.writeFileSync(resolved, content, "utf-8");
@@ -1731,6 +1758,28 @@ export const layerFsDeleteRoute = HttpRouter.add(
     }
     const pathService = yield* Path.Path;
     const resolved = pathService.resolve(targetPath);
+    const rootPath = pathService.resolve("/");
+    const forbiddenDirs = new Set([
+      rootPath,
+      "/home",
+      "/etc",
+      "/usr",
+      "/var",
+      "/bin",
+      "/sbin",
+      "/boot",
+      "/sys",
+      "/proc",
+      "/dev",
+      "/lib",
+      "/lib64",
+    ]);
+    if (forbiddenDirs.has(resolved) || resolved === rootPath || resolved.length <= 1) {
+      return HttpServerResponse.jsonUnsafe(
+        { ok: false, error: "Access denied: Cannot delete root or critical system directory" },
+        { status: 403 },
+      );
+    }
     try {
       if (NodeFs.existsSync(resolved)) {
         NodeFs.rmSync(resolved, { recursive: true, force: true });
@@ -1810,7 +1859,13 @@ export const layerFsUploadRoute = HttpRouter.add(
     }
     const pathService = yield* Path.Path;
     const resolvedDir = pathService.resolve(targetDir);
-    const resolvedFile = pathService.join(resolvedDir, fileName);
+    const resolvedFile = pathService.resolve(resolvedDir, fileName);
+    if (!resolvedFile.startsWith(resolvedDir)) {
+      return HttpServerResponse.jsonUnsafe(
+        { ok: false, error: "Access denied: Path traversal detected" },
+        { status: 403 },
+      );
+    }
     try {
       const parentDir = pathService.dirname(resolvedFile);
       if (!NodeFs.existsSync(parentDir)) {
