@@ -529,7 +529,7 @@ export const layerTerminalExecRoute = HttpRouter.add(
   "/api/terminal/exec",
   Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
-    const bodyJson = (yield* request.json) as {
+    const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
       command?: string;
       cwd?: string;
       timeoutMs?: number;

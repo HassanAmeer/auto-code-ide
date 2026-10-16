@@ -143,7 +143,7 @@ export function createTerminalEventStream(
   command: string,
   cwd: string = process.cwd(),
   timeoutMs: number = 300_000,
-): Stream.Stream<Uint8Array> {
+): Stream.Stream<Uint8Array, any> {
   const passThrough = new NodeStreamPromises.PassThrough();
   const startTime = Date.now();
   let finished = false;

@@ -234,7 +234,7 @@ export interface ExtractedProjectFile {
 export function extractFilesFromMarkdown(markdown: string): Array<ExtractedProjectFile> {
   const files: Array<ExtractedProjectFile> = [];
   const seenPaths = new Set<string>();
-  const codeBlockRegex = /```([^\n]*)\n([\s\S]*?)```/g;
+  const codeBlockRegex = /```([^\n]*)\n([\s\S]*?)(?:```|$)/g;
   let match: RegExpExecArray | null;
 
   let htmlCount = 0;
@@ -774,18 +774,19 @@ Provide full, complete, production-ready code with no placeholders.`;
                   Effect.gen(function* () {
                     const trimmed = line.trim();
                     if (!trimmed || trimmed.startsWith(":") || trimmed.startsWith("event:")) return;
+                    let jsonPayload: string | null = null;
                     if (trimmed.startsWith("data:")) {
                       const dataStr = trimmed.slice(5).trim();
                       if (dataStr === "[DONE]") return;
-                      const maybeJson = decodeJson(dataStr);
+                      jsonPayload = dataStr;
+                    } else if (trimmed.startsWith("{")) {
+                      jsonPayload = trimmed;
+                    }
+
+                    if (jsonPayload) {
+                      const maybeJson = decodeJson(jsonPayload);
                       if (Option.isSome(maybeJson)) {
-                        const parsed = maybeJson.value as {
-                          error?: { message?: string } | string;
-                          choices?: Array<{
-                            delta?: { content?: string };
-                            text?: string;
-                          }>;
-                        };
+                        const parsed = maybeJson.value as any;
                         if (parsed.error) {
                           const errorMsg =
                             typeof parsed.error === "object" && parsed.error !== null
@@ -794,7 +795,12 @@ Provide full, complete, production-ready code with no placeholders.`;
                           return yield* Effect.fail(new Error(errorMsg));
                         }
                         const delta =
-                          parsed.choices?.[0]?.delta?.content ?? parsed.choices?.[0]?.text ?? "";
+                          parsed.choices?.[0]?.delta?.content ??
+                          parsed.choices?.[0]?.message?.content ??
+                          parsed.choices?.[0]?.text ??
+                          parsed.response ??
+                          parsed.message?.content ??
+                          "";
                         if (delta) {
                           accumulatedText += delta;
                           const nowMs = yield* Clock.currentTimeMillis;
@@ -864,7 +870,8 @@ Provide full, complete, production-ready code with no placeholders.`;
                 for (const file of extractedFiles) {
                   try {
                     const fullPath = NodePath.resolve(projectCwd, file.path);
-                    if (fullPath.startsWith(projectCwd)) {
+                    const rel = NodePath.relative(projectCwd, fullPath);
+                    if (!rel.startsWith("..") && !NodePath.isAbsolute(rel)) {
                       const dir = NodePath.dirname(fullPath);
                       if (!NodeFS.existsSync(dir)) {
                         NodeFS.mkdirSync(dir, { recursive: true });
