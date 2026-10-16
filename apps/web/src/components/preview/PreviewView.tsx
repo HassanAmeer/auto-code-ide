@@ -336,7 +336,7 @@ export function PreviewView({
   );
 
   const handleRefresh = useCallback(() => {
-    if (isServerTab) serverSurfaceRef.current?.reload();
+    if (isServerTab) serverSurfaceRef.current?.reload({ ignoreCache: true });
     else if (previewBridge && runtimeTabId) void previewBridge.refresh(runtimeTabId);
   }, [isServerTab, runtimeTabId]);
 
@@ -1004,6 +1004,12 @@ export function PreviewView({
         onToggleLogs={activeLogsTabId ? toggleLogsOpen : undefined}
         logsOpen={isLogsOpen}
         logsErrorCount={logsErrorCount}
+        onToggleDeviceToolbar={handleToggleDeviceToolbar}
+        deviceToolbarVisible={viewport._tag !== "fill"}
+        zoomFactor={serverOwnsRendering ? serverZoomFactor : (desktopOverlay?.zoomFactor ?? 1)}
+        onZoomIn={handleZoomIn}
+        onZoomOut={handleZoomOut}
+        onResetZoom={handleResetZoom}
         onPickElement={previewBridge && tabId && !isServerTab ? handlePickElement : undefined}
         pickActive={pickActive}
         // Disable when there's no tab (nothing to pick on) OR the page

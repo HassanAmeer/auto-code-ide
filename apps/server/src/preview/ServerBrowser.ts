@@ -476,6 +476,77 @@ const CLIPBOARD_SCRIPT = `(() => {
   };
 })();`;
 
+const PREVIEW_AUTOFIT_SCRIPT = `(() => {
+  if (globalThis.__t3_preview_autofit_initialized) return;
+  globalThis.__t3_preview_autofit_initialized = true;
+
+  const style = document.createElement("style");
+  style.setAttribute("data-t3-preview-autofit", "true");
+  style.textContent = \`
+    html, body {
+      max-width: 100vw !important;
+      overflow-x: hidden !important;
+      box-sizing: border-box !important;
+    }
+    canvas {
+      max-width: 100vw !important;
+      max-height: 100vh !important;
+      height: auto !important;
+      object-fit: contain !important;
+    }
+    #gameContainer, .game-container, #container, .container, main, [id*="game"], [class*="game"] {
+      max-width: 100vw !important;
+      max-height: 100vh !important;
+      box-sizing: border-box !important;
+    }
+  \`;
+
+  const insert = () => {
+    const target = document.head || document.documentElement;
+    if (target && !document.querySelector("style[data-t3-preview-autofit]")) {
+      target.appendChild(style);
+    }
+  };
+
+  const autoScale = () => {
+    try {
+      const canvases = document.querySelectorAll("canvas");
+      const winW = window.innerWidth;
+      const winH = window.innerHeight;
+      if (!winW || !winH) return;
+      for (const canvas of canvases) {
+        const container = canvas.parentElement;
+        const target = (container && container !== document.body && container !== document.documentElement) ? container : canvas;
+        const rect = target.getBoundingClientRect();
+        if (rect.width > winW || rect.height > winH) {
+          const scaleX = (winW - 12) / rect.width;
+          const scaleY = (winH - 12) / rect.height;
+          const scale = Math.min(1, Math.min(scaleX, scaleY));
+          if (scale < 0.98) {
+            target.style.transformOrigin = "top center";
+            target.style.transform = "scale(" + scale.toFixed(3) + ")";
+          }
+        }
+      }
+    } catch (_) {}
+  };
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => {
+      insert();
+      autoScale();
+    }, { once: true });
+  } else {
+    insert();
+    autoScale();
+  }
+
+  window.addEventListener("resize", autoScale);
+  window.addEventListener("load", autoScale);
+  setTimeout(autoScale, 200);
+  setTimeout(autoScale, 800);
+})();`;
+
 const make = Effect.gen(function* () {
   const config = yield* ServerConfig.ServerConfig;
   const host = { platform: yield* HostProcessPlatform, arch: yield* HostProcessArchitecture };
@@ -645,6 +716,7 @@ const make = Effect.gen(function* () {
     if (!size) return;
     if (tab.zoomFactor === 1) {
       // Playwright's own override carries the plain viewport.
+      await tab.cdp.send("Emulation.clearDeviceMetricsOverride").catch(constVoid);
       await tab.page.setViewportSize(size);
       return;
     }
@@ -1149,6 +1221,7 @@ const make = Effect.gen(function* () {
       controller.push({ _tag: "clipboard", text: text.slice(0, CLIPBOARD_TEXT_LIMIT) });
     });
     await context.addInitScript(CLIPBOARD_SCRIPT);
+    await context.addInitScript(PREVIEW_AUTOFIT_SCRIPT);
   };
 
   const adoptPopup = async (opener: ServerTab, popup: Page) => {
@@ -2143,6 +2216,7 @@ const make = Effect.gen(function* () {
         const current = tab.page.viewportSize();
         if (current?.width === width && current.height === height) return;
         await tab.page.setViewportSize({ width, height });
+        await applyZoom(tab);
         broadcastViewport(tab);
         return;
       }

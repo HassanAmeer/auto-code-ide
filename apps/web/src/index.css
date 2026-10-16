@@ -629,24 +629,34 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   }
 }
 
-@keyframes web-icon-shimmer {
+@keyframes web-bw-shimmer-sweep {
   0% {
-    filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.45)) brightness(1);
-    opacity: 0.85;
-  }
-  50% {
-    filter: drop-shadow(0 0 7px rgba(255, 255, 255, 1))
-      drop-shadow(0 0 12px rgba(255, 255, 255, 0.6)) brightness(1.35);
-    opacity: 1;
+    -webkit-mask-position: 150% 0;
+    mask-position: 150% 0;
   }
   100% {
-    filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.45)) brightness(1);
-    opacity: 0.85;
+    -webkit-mask-position: -50% 0;
+    mask-position: -50% 0;
   }
 }
 
 @utility web-search-shimmer {
-  animation: web-icon-shimmer 2.2s ease-in-out infinite;
+  color: #ffffff;
+  -webkit-mask-image: linear-gradient(
+    110deg,
+    rgba(255, 255, 255, 0.28) 0%,
+    rgba(255, 255, 255, 1) 50%,
+    rgba(255, 255, 255, 0.28) 100%
+  );
+  mask-image: linear-gradient(
+    110deg,
+    rgba(255, 255, 255, 0.28) 0%,
+    rgba(255, 255, 255, 1) 50%,
+    rgba(255, 255, 255, 0.28) 100%
+  );
+  -webkit-mask-size: 200% 100%;
+  mask-size: 200% 100%;
+  animation: web-bw-shimmer-sweep 1.8s linear infinite;
 }
 
 @utility live-activity-focus-aligned {

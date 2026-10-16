@@ -430,6 +430,13 @@ export function makeCustomAdapterV2(
               );
               const itemOrdinal = NonNegativeInt.make(turnOrdinal * 100 + 1);
 
+              let accumulatedText = "";
+              let selectedModel =
+                turnInput.modelSelection?.model && turnInput.modelSelection.model !== "default"
+                  ? turnInput.modelSelection.model
+                  : (config.models?.[0]?.id ?? "default");
+              let chatUrl = "";
+
               const runTurn = Effect.gen(function* () {
                 yield* Queue.offer(eventsQueue, {
                   type: "provider_turn.updated",
@@ -484,7 +491,6 @@ export function makeCustomAdapterV2(
                   cleanBase = "https://openrouter.ai/api/v1";
                 }
 
-                let chatUrl: string;
                 if (cleanBase.endsWith("/chat/completions")) {
                   chatUrl = cleanBase;
                 } else if (cleanBase.endsWith("/v1")) {
@@ -585,7 +591,7 @@ Provide full, complete, production-ready code with no placeholders.`;
                   conversationMessages.unshift({ role: "user", content: "Hello" });
                 }
 
-                let selectedModel =
+                selectedModel =
                   turnInput.modelSelection?.model && turnInput.modelSelection.model !== "default"
                     ? turnInput.modelSelection.model
                     : (config.models?.[0]?.id ?? "default");
@@ -706,7 +712,17 @@ Provide full, complete, production-ready code with no placeholders.`;
                 });
 
                 const client = yield* HttpClient.HttpClient;
-                const rawResponse = yield* client.execute(request);
+                const rawResponse = yield* client.execute(request).pipe(
+                  Effect.timeoutOrElse({
+                    duration: "35 seconds",
+                    orElse: () =>
+                      Effect.fail(
+                        new Error(
+                          `Connection timed out after 35 seconds while waiting for response from model "${selectedModel}". The upstream model server (${cleanBase}) is unresponsive or taking too long.`,
+                        ),
+                      ),
+                  }),
+                );
 
                 if (rawResponse.status < 200 || rawResponse.status >= 300) {
                   const errorBody = yield* rawResponse.text.pipe(Effect.orElseSucceed(() => ""));
@@ -745,7 +761,7 @@ Provide full, complete, production-ready code with no placeholders.`;
 
                 const response = rawResponse;
 
-                let accumulatedText = "";
+                accumulatedText = "";
                 let lastEmitted = yield* Clock.currentTimeMillis;
 
                 const linesStream = response.stream.pipe(Stream.decodeText(), Stream.splitLines);
@@ -815,7 +831,25 @@ Provide full, complete, production-ready code with no placeholders.`;
                       }
                     }
                   }),
+                ).pipe(
+                  Effect.timeoutOrElse({
+                    duration: "75 seconds",
+                    orElse: () =>
+                      Effect.fail(
+                        new Error(
+                          `Model "${selectedModel}" streaming timed out after 75 seconds. The connection stalled or upstream provider stopped sending tokens.`,
+                        ),
+                      ),
+                  }),
                 );
+
+                if (!accumulatedText.trim()) {
+                  return yield* Effect.fail(
+                    new Error(
+                      `Model "${selectedModel}" returned an empty response. The model may be offline, rate-limited, or overloaded on ${cleanBase}.`,
+                    ),
+                  );
+                }
 
                 const finishedTime = yield* DateTime.now;
 
@@ -966,6 +1000,10 @@ Provide full, complete, production-ready code with no placeholders.`;
                       });
                     }
 
+                    const errorText = accumulatedText.trim()
+                      ? `${accumulatedText.trim()}\n\n---\n⚠️ **Model Stream Interrupted:**\n\n\`\`\`\n${message}\n\`\`\`\n\n*Model:* \`${selectedModel}\`\n*Endpoint:* \`${chatUrl || cleanBase}\``
+                      : `⚠️ **Model Execution Failed [${selectedModel}]:**\n\n\`\`\`\n${message}\n\`\`\`\n\n**Details:**\n- **Model:** \`${selectedModel}\`\n- **Endpoint:** \`${chatUrl || cleanBase}\`\n- **Reason:** The upstream model server failed, timed out, or rejected the request. Please verify that this model is currently available and active, check your API key/router balance, or switch to another model.`;
+
                     yield* Queue.offer(eventsQueue, {
                       type: "message.updated",
                       driver: DRIVER,
@@ -975,7 +1013,7 @@ Provide full, complete, production-ready code with no placeholders.`;
                         runId: turnInput.runId,
                         nodeId: turnInput.rootNodeId,
                         role: "assistant",
-                        text: `⚠️ **Error connecting to custom provider:**\n\n\`\`\`\n${message}\n\`\`\``,
+                        text: errorText,
                         attachments: [],
                         streaming: false,
                         createdBy: "agent",
@@ -1005,7 +1043,7 @@ Provide full, complete, production-ready code with no placeholders.`;
                         updatedAt: failTime,
                         type: "assistant_message",
                         messageId: assistantMessageId,
-                        text: `⚠️ **Error connecting to custom provider:**\n\n\`\`\`\n${message}\n\`\`\``,
+                        text: errorText,
                         streaming: false,
                       },
                     });

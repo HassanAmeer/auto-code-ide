@@ -327,7 +327,7 @@ import {
   getComposerSubmissionValidationMessage,
   submitComposerDraft,
 } from "./composerSubmission";
-import { useVoiceCallAssistant, VoiceCallButton, VoiceVisualizerWaves } from "./voiceCall";
+import { useVoiceCallAssistant, VoiceCallButton } from "./voiceCall";
 import { AiTerminalCommandBar, useTerminalStore } from "./terminal";
 import { ComposerPromptLengthValidation } from "./ComposerPromptLengthValidation";
 import { PierreEntryIcon } from "./PierreEntryIcon";
@@ -7040,6 +7040,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
               {!isComposerCollapsedMobile && (
                 <VoiceCallButton
                   isCallActive={isCallActive}
+                  callStatus={callStatus}
+                  analyserNode={analyserNode}
+                  onInterrupt={interruptSpeaking}
                   onToggleCall={toggleVoiceCall}
                   className={cn(
                     "absolute z-10 transition-all",
@@ -7624,19 +7627,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
             />
 
             {/* Bottom toolbar */}
-            {isComposerCollapsedMobile || isComposerApprovalState ? null : isCallActive ? (
-              <div
-                data-chat-composer-footer="true"
-                className="flex min-w-0 w-full items-center justify-center px-3 pb-3 sm:px-4 sm:pb-4"
-              >
-                <VoiceVisualizerWaves
-                  callStatus={callStatus}
-                  analyserNode={analyserNode}
-                  className="w-full"
-                  onInterrupt={interruptSpeaking}
-                />
-              </div>
-            ) : (
+            {isComposerCollapsedMobile || isComposerApprovalState ? null : (
               <div
                 data-chat-composer-footer="true"
                 data-chat-composer-footer-compact={isComposerFooterCompact ? "true" : "false"}

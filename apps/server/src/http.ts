@@ -117,12 +117,16 @@ export function assetResponseHeaders(
     readonly download?: boolean;
     readonly fileName?: string;
     readonly mimeType?: string;
+    readonly mutable?: boolean;
   },
 ): Record<string, string> {
   const lowerPath = filePath.toLowerCase();
   const inlineMimeType = options?.mimeType?.split(";", 1)[0]?.trim();
   return {
-    "Cache-Control": "private, max-age=3600",
+    "Cache-Control": options?.mutable
+      ? "no-cache, no-store, must-revalidate"
+      : "private, max-age=3600",
+    ...(options?.mutable ? { Pragma: "no-cache", Expires: "0" } : {}),
     "X-Content-Type-Options": "nosniff",
     ...(options?.download
       ? {
@@ -187,12 +191,18 @@ export const assetFileResponse = Effect.fn("assetFileResponse")(function* (
     readonly fileName?: string;
     readonly mimeType?: string;
     readonly file?: OpenMediaFile;
+    readonly mutable?: boolean;
   },
   rangeHeader?: string,
   ifRangeHeader?: string,
   method: "GET" | "HEAD" = "GET",
 ) {
   const headers = assetResponseHeaders(asset.path, asset);
+  if (asset.mutable) {
+    headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
+    headers.Pragma = "no-cache";
+    headers.Expires = "0";
+  }
   const mediaFile = asset.file;
   const mediaInfo = mediaFile ? yield* statMediaFile(asset.path, mediaFile) : undefined;
   const isMedia = /^(?:audio|video)\//i.test(headers["Content-Type"] ?? "");

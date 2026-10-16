@@ -139,6 +139,9 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
   const environmentIdentificationMode = useEnvironmentIdentificationMode();
   const shortcutModifiers = useShortcutModifierState();
   const [isDictating, setIsDictating] = useState(false);
+  const [isWebSearchActive, setIsWebSearchActive] = useState<boolean>(() =>
+    isComposerWebSearchEnabled(),
+  );
   const sttSessionRef = useRef<SttController | null>(null);
 
   useEffect(() => {
@@ -425,10 +428,6 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
     </button>
   );
 
-  const [isWebSearchActive, setIsWebSearchActive] = useState<boolean>(() =>
-    isComposerWebSearchEnabled(),
-  );
-
   const handleToggleWebSearch = () => {
     setIsWebSearchActive((prev) => {
       const next = !prev;
@@ -454,10 +453,8 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
           >
             <Globe
               className={cn(
-                "size-4 sm:size-4.5 transition-all duration-200",
-                isWebSearchActive
-                  ? "text-white web-search-shimmer drop-shadow-[0_0_8px_rgba(255,255,255,0.85)]"
-                  : "text-zinc-500 hover:text-zinc-300",
+                "size-4 sm:size-4.5 transition-colors duration-150",
+                isWebSearchActive ? "web-search-shimmer" : "text-zinc-500 hover:text-zinc-300",
               )}
               aria-hidden="true"
             />

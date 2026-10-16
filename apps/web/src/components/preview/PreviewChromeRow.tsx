@@ -4,8 +4,11 @@ import {
   ArrowRight,
   Camera,
   ExternalLink,
+  Minus,
   MousePointerClick,
   PictureInPicture2,
+  Plus,
+  Smartphone,
   Terminal,
 } from "lucide-react";
 import {
@@ -56,6 +59,12 @@ interface Props {
   pickDisabled?: boolean | undefined;
   /** Optional reason string surfaced in the disabled tooltip. */
   pickDisabledReason?: string | undefined;
+  onToggleDeviceToolbar?: (() => void) | undefined;
+  deviceToolbarVisible?: boolean | undefined;
+  zoomFactor?: number | undefined;
+  onZoomIn?: (() => void) | undefined;
+  onZoomOut?: (() => void) | undefined;
+  onResetZoom?: (() => void) | undefined;
   /**
    * Trailing slot rendered after the URL input. Used by the preview view
    * to mount the three-dot menu (hard reload, devtools, zoom, clear data).
@@ -96,6 +105,12 @@ export function PreviewChromeRow({
   pickActive,
   pickDisabled,
   pickDisabledReason,
+  onToggleDeviceToolbar,
+  deviceToolbarVisible,
+  zoomFactor,
+  onZoomIn,
+  onZoomOut,
+  onResetZoom,
   trailingActions,
   leadingActions,
 }: Props) {
@@ -343,6 +358,81 @@ export function PreviewChromeRow({
                 : ""}
             </TooltipPopup>
           </Tooltip>
+        ) : null}
+        {onToggleDeviceToolbar ? (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant={deviceToolbarVisible ? "secondary" : "ghost"}
+                  size="icon-xs"
+                  onClick={onToggleDeviceToolbar}
+                  aria-label={
+                    deviceToolbarVisible ? "Hide responsive toolbar" : "Show responsive toolbar"
+                  }
+                  aria-pressed={deviceToolbarVisible ? "true" : "false"}
+                  type="button"
+                />
+              }
+            >
+              <Smartphone className={cn("size-3.5", deviceToolbarVisible && "text-primary")} />
+            </TooltipTrigger>
+            <TooltipPopup>
+              {deviceToolbarVisible ? "Hide responsive toolbar" : "Responsive device toolbar"}
+            </TooltipPopup>
+          </Tooltip>
+        ) : null}
+        {onZoomIn && onZoomOut ? (
+          <div className="flex items-center gap-0.5 rounded-md border border-border/50 bg-muted/40 px-1 py-0.5">
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    onClick={onZoomOut}
+                    aria-label="Zoom out"
+                    type="button"
+                    className="size-5 h-5 w-5 p-0"
+                  />
+                }
+              >
+                <Minus className="size-3" />
+              </TooltipTrigger>
+              <TooltipPopup>Zoom out</TooltipPopup>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    onClick={onResetZoom}
+                    className="min-w-7 px-0.5 text-center text-[10px] font-semibold tabular-nums text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {Math.round((zoomFactor ?? 1) * 100)}%
+                  </button>
+                }
+              />
+              <TooltipPopup>Reset zoom to 100%</TooltipPopup>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    onClick={onZoomIn}
+                    aria-label="Zoom in"
+                    type="button"
+                    className="size-5 h-5 w-5 p-0"
+                  />
+                }
+              >
+                <Plus className="size-3" />
+              </TooltipTrigger>
+              <TooltipPopup>Zoom in</TooltipPopup>
+            </Tooltip>
+          </div>
         ) : null}
         {trailingActions}
       </form>
