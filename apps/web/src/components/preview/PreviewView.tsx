@@ -812,6 +812,10 @@ export function PreviewView({
   );
 
   const handlePickElement = useCallback(() => {
+    if (isServerTab) {
+      setPickActive((prev) => !prev);
+      return;
+    }
     if (!previewBridge || !runtimeTabId) return;
     if (pickActiveRef.current) {
       pickActiveRef.current.cancelled = true;
@@ -920,7 +924,48 @@ export function PreviewView({
         }
       }
     })();
-  }, [addImage, addPreviewAnnotation, onSendAnnotation, runtimeTabId, threadRef]);
+  }, [addImage, addPreviewAnnotation, isServerTab, onSendAnnotation, runtimeTabId, threadRef]);
+
+  const handleServerElementPicked = useCallback(
+    (annotation: PreviewAnnotationPayload) => {
+      setPickActive(false);
+      addPreviewAnnotation(threadRef, annotation);
+      const capture = capturePreviewAnnotationScreenshot(annotation);
+      const screenshotFile = capture.status === "captured" ? capture.file : null;
+      const image =
+        screenshotFile && annotation.screenshot
+          ? ({
+              type: "image",
+              id: annotation.id,
+              name: screenshotFile.name,
+              mimeType: screenshotFile.type,
+              sizeBytes: screenshotFile.size,
+              previewUrl: annotation.screenshot.dataUrl,
+              file: screenshotFile,
+            } satisfies ComposerImageAttachment)
+          : null;
+      if (image) {
+        addImage(threadRef, image);
+      }
+      toastManager.add({
+        type: "success",
+        title: "Element attached to chat",
+        description: `<${annotation.elements[0]?.element.tagName || "element"}> attached for AI inspection.`,
+      });
+    },
+    [addImage, addPreviewAnnotation, threadRef],
+  );
+
+  useEffect(() => {
+    if (!pickActive) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setPickActive(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [pickActive]);
 
   useEffect(() => {
     if (!pickActive || !previewBridge || !runtimeTabId) return;
@@ -1010,7 +1055,7 @@ export function PreviewView({
         onZoomIn={handleZoomIn}
         onZoomOut={handleZoomOut}
         onResetZoom={handleResetZoom}
-        onPickElement={previewBridge && tabId && !isServerTab ? handlePickElement : undefined}
+        onPickElement={tabId ? handlePickElement : undefined}
         pickActive={pickActive}
         // Disable when there's no tab (nothing to pick on) OR the page
         // failed to load (a React overlay covers the webview, so the
@@ -1068,6 +1113,24 @@ export function PreviewView({
       />
 
       <div ref={serverBodyRef} className="relative min-h-0 flex-1 overflow-hidden">
+        {pickActive ? (
+          <div className="absolute inset-x-0 top-0 z-30 flex items-center justify-between border-b border-primary/30 bg-primary/10 px-3 py-1.5 backdrop-blur-sm">
+            <div className="flex items-center gap-2 text-xs font-medium text-foreground">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75"></span>
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-primary"></span>
+              </span>
+              <span>Element Inspector Active: Hover and click any element to attach to chat</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setPickActive(false)}
+              className="rounded px-2 py-0.5 text-xs font-medium text-muted-foreground hover:bg-background/80 hover:text-foreground"
+            >
+              Cancel (Esc)
+            </button>
+          </div>
+        ) : null}
         {runtimeTabId && snapshot && isServerTab ? (
           <>
             {viewport._tag !== "fill" && !showEmptyState && !isUnreachable ? (
@@ -1092,6 +1155,8 @@ export function PreviewView({
                 threadId={threadRef.threadId}
                 tabId={snapshot.tabId}
                 visible={visible}
+                pickActive={pickActive}
+                onElementPicked={handleServerElementPicked}
                 onFirstFrame={() => setServerFrameTabId(runtimeTabId)}
                 onControl={(control) =>
                   setServerControlledTabId(control?.controller === "you" ? runtimeTabId : null)

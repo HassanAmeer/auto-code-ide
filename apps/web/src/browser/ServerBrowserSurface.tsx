@@ -14,10 +14,12 @@ import {
   type PreviewStreamMouseButton,
   type PreviewStreamPointer,
   type PreviewStreamViewport,
+  type PreviewStreamElementHighlight,
   previewStreamHostSetupMessage,
 } from "@t3tools/client-runtime/preview/server-browser-stream";
 import type {
   EnvironmentId,
+  PreviewAnnotationPayload,
   PreviewStreamHostSetup,
   PreviewViewportSetting,
 } from "@t3tools/contracts";
@@ -157,6 +159,8 @@ export function ServerBrowserSurface(props: {
   /** The page opened a new tab from this viewer's click; the viewer should switch to it. */
   readonly onPopup?: (tabId: string) => void;
   readonly className?: string;
+  readonly pickActive?: boolean;
+  readonly onElementPicked?: (annotation: PreviewAnnotationPayload) => void;
   readonly ref?: Ref<ServerBrowserHandle>;
 }) {
   const {
@@ -171,8 +175,14 @@ export function ServerBrowserSurface(props: {
     onControl,
     onPopup,
     className,
+    pickActive = false,
+    onElementPicked,
     ref,
   } = props;
+  const onElementPickedRef = useRef(onElementPicked);
+  onElementPickedRef.current = onElementPicked;
+  const [hoveredElement, setHoveredElement] = useState<PreviewStreamElementHighlight | null>(null);
+  const lastInspectHoverRef = useRef(0);
   const access = usePreviewStreamAccess(environmentId);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -227,6 +237,10 @@ export function ServerBrowserSurface(props: {
   // never shrinks, so only outgrowing it reconnects.
   const [cap, setCap] = useState<{ width: number; height: number } | null>(null);
 
+  useEffect(() => {
+    if (!pickActive) setHoveredElement(null);
+  }, [pickActive]);
+
   const send = useCallback((input: PreviewStreamInput) => {
     clientRef.current?.send(input);
   }, []);
@@ -280,7 +294,12 @@ export function ServerBrowserSurface(props: {
     (clientX: number, clientY: number, clamp: boolean): PagePoint | null => {
       const canvas = canvasRef.current;
       const viewport = viewportRef.current;
-      if (!canvas || !viewport || !hasFrameRef.current || controlRef.current?.controller !== "you")
+      if (
+        !canvas ||
+        !viewport ||
+        !hasFrameRef.current ||
+        (controlRef.current?.controller !== "you" && !pickActive)
+      )
         return null;
       const rect = canvas.getBoundingClientRect();
       // `object-contain` letterboxes the frame inside the canvas box.
@@ -299,8 +318,35 @@ export function ServerBrowserSurface(props: {
         scale,
       };
     },
-    [],
+    [pickActive],
   );
+
+  const getHighlightStyle = useCallback(() => {
+    if (!hoveredElement || !canvasRef.current || !viewportRef.current) return null;
+    const canvas = canvasRef.current;
+    const viewport = viewportRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const fit = Math.min(rect.width / canvas.width, rect.height / canvas.height);
+    const width = canvas.width * fit;
+    const height = canvas.height * fit;
+    if (!(width > 0 && height > 0 && viewport.width > 0 && viewport.height > 0)) return null;
+    const scaleX = width / viewport.width;
+    const scaleY = height / viewport.height;
+    const offsetX = (rect.width - width) / 2;
+    const offsetY = (rect.height - height) / 2;
+
+    const left = offsetX + hoveredElement.rect.x * scaleX;
+    const top = offsetY + hoveredElement.rect.y * scaleY;
+    const w = hoveredElement.rect.width * scaleX;
+    const h = hoveredElement.rect.height * scaleY;
+
+    return {
+      left: `${left}px`,
+      top: `${top}px`,
+      width: `${w}px`,
+      height: `${h}px`,
+    };
+  }, [hoveredElement]);
 
   const countClick = (button: PreviewStreamMouseButton, x: number, y: number, time: number) => {
     const last = lastClickRef.current;
@@ -410,6 +456,13 @@ export function ServerBrowserSurface(props: {
         onNetwork: (entry) => {
           browserLogsStore.addNetworkEntry(tabId, entry);
         },
+        onElementHovered: (target) => {
+          setHoveredElement(target);
+        },
+        onElementPicked: (annotation) => {
+          setHoveredElement(null);
+          onElementPickedRef.current?.(annotation);
+        },
         onViewport: (viewport) => {
           viewportRef.current = viewport;
           viewportChanged(viewport);
@@ -514,8 +567,30 @@ export function ServerBrowserSurface(props: {
   );
 
   const handlePointer = (event: PointerEvent<HTMLCanvasElement>) => {
-    if (controlRef.current?.controller !== "you") return;
+    if (controlRef.current?.controller !== "you" && !pickActive) return;
     const { type, pointerId, clientX, clientY } = event;
+    if (pickActive) {
+      if (type === "pointermove") {
+        const now = performance.now();
+        if (now - lastInspectHoverRef.current >= 40) {
+          lastInspectHoverRef.current = now;
+          const point = pagePoint(clientX, clientY, false);
+          if (point) {
+            send({ type: "inspectHover", x: point.x, y: point.y });
+          }
+        }
+      } else if (type === "pointerdown" || type === "pointerup") {
+        event.preventDefault();
+        event.stopPropagation();
+        if (type === "pointerup") {
+          const point = pagePoint(clientX, clientY, false);
+          if (point) {
+            send({ type: "pickElement", x: point.x, y: point.y });
+          }
+        }
+      }
+      return;
+    }
     const cancelled = type === "pointercancel";
     const touch = touchRef.current;
     if (cancelled && touch?.pointerId === pointerId) {
@@ -759,7 +834,10 @@ export function ServerBrowserSurface(props: {
       <div className="relative min-h-0 flex-1">
         <canvas
           ref={canvasRef}
-          className="block size-full touch-none object-contain"
+          className={cn(
+            "block size-full touch-none object-contain",
+            pickActive && "cursor-crosshair",
+          )}
           onPointerDown={handlePointer}
           onPointerMove={handlePointer}
           onPointerUp={handlePointer}
@@ -768,6 +846,19 @@ export function ServerBrowserSurface(props: {
           onMouseDown={(event) => event.preventDefault()}
           onContextMenu={(event) => event.preventDefault()}
         />
+        {pickActive && hoveredElement ? (
+          <div
+            style={getHighlightStyle() ?? undefined}
+            className="pointer-events-none absolute z-30 rounded-sm border-2 border-primary bg-primary/15 shadow-[0_0_12px_rgba(59,130,246,0.5)] transition-[top,left,width,height] duration-75 ease-out"
+          >
+            <div className="absolute -top-6 left-0 flex items-center gap-1.5 whitespace-nowrap rounded bg-primary px-1.5 py-0.5 text-[10px] font-mono font-medium text-primary-foreground shadow-sm">
+              <span>&lt;{hoveredElement.selector || hoveredElement.tag}&gt;</span>
+              <span className="opacity-75">
+                {hoveredElement.rect.width}×{hoveredElement.rect.height}
+              </span>
+            </div>
+          </div>
+        ) : null}
         {agentCursor && control?.controller !== "you" ? (
           <AgentCursorMark
             {...agentCursor}

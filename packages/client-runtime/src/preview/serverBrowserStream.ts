@@ -2,6 +2,7 @@
 import { type PreviewStreamAccess, withPreviewStreamQuery } from "../state/previewStreamAccess.ts";
 import {
   PREVIEW_STREAM_HOST_SETUP_CLOSE_CODE,
+  type PreviewAnnotationPayload,
   type PreviewAutomationConsoleEntry,
   type PreviewAutomationNetworkEntry,
   type PreviewStreamHostSetup,
@@ -94,7 +95,20 @@ export type PreviewStreamInput =
   | { readonly type: "history"; readonly delta: -1 | 1 }
   | { readonly type: "reload"; readonly ignoreCache?: boolean }
   /** Asks whether the page point takes text. Touch viewers send it on touch start. */
-  | { readonly type: "probe"; readonly x: number; readonly y: number };
+  | { readonly type: "probe"; readonly x: number; readonly y: number }
+  | { readonly type: "inspectHover"; readonly x: number; readonly y: number }
+  | { readonly type: "pickElement"; readonly x: number; readonly y: number };
+
+export interface PreviewStreamElementHighlight {
+  readonly tag: string;
+  readonly selector: string;
+  readonly rect: {
+    readonly x: number;
+    readonly y: number;
+    readonly width: number;
+    readonly height: number;
+  };
+}
 
 export interface PreviewStreamDownload {
   readonly fileName: string;
@@ -221,6 +235,10 @@ export interface PreviewStreamEvents {
   readonly onGone?: () => void;
   /** The server's browser cannot start until its host is set up. The client has stopped. */
   readonly onHostSetup?: (setup: PreviewStreamHostSetup) => void;
+  /** An element was hovered during element inspection mode. */
+  readonly onElementHovered?: (highlight: PreviewStreamElementHighlight | null) => void;
+  /** An element was clicked/picked during element inspection mode. */
+  readonly onElementPicked?: (annotation: PreviewAnnotationPayload) => void;
 }
 
 export interface PreviewStreamClient {
@@ -382,6 +400,13 @@ export function createPreviewStreamClient(
         };
         control = nextControl;
         events.onControl?.(nextControl);
+      } else if (type === "elementHovered") {
+        events.onElementHovered?.(
+          (message as { target?: PreviewStreamElementHighlight | null }).target ?? null,
+        );
+      } else if (type === "elementPicked") {
+        const annotation = (message as { annotation?: PreviewAnnotationPayload }).annotation;
+        if (annotation) events.onElementPicked?.(annotation);
       }
     });
     ws.addEventListener("close", (event) => {

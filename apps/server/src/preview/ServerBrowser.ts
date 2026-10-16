@@ -40,6 +40,8 @@ import {
   type PreviewViewportSetting,
   ThreadId,
   SERVER_BROWSER_AUTOMATION_CLIENT_ID,
+  type PreviewAnnotationPayload,
+  type PreviewAnnotationScreenshot,
   type PreviewAppearancePreference,
 } from "@t3tools/contracts";
 import {
@@ -125,6 +127,101 @@ const EDITABLE_AT_POINT_SCRIPT = `(x, y) => {
   const nonText = ["button", "checkbox", "color", "file", "hidden", "image", "radio", "range", "reset", "submit"];
   return !nonText.includes(element.type) && !element.disabled && !element.readOnly;
 }`;
+const INSPECT_HOVER_SCRIPT = `(x, y) => {
+  let element = document.elementFromPoint(x, y);
+  while (element && element.shadowRoot) {
+    const inner = element.shadowRoot.elementFromPoint(x, y);
+    if (!inner || inner === element) break;
+    element = inner;
+  }
+  if (!element || element === document.documentElement || element === document.body) {
+    return null;
+  }
+  const rect = element.getBoundingClientRect();
+  const tag = element.tagName.toLowerCase();
+  let selector = tag;
+  if (element.id) {
+    selector += '#' + CSS.escape(element.id);
+  } else if (element.className && typeof element.className === 'string') {
+    const classes = element.className.trim().split(/\\s+/).filter(Boolean);
+    if (classes.length > 0) {
+      selector += '.' + classes.slice(0, 3).map(c => CSS.escape(c)).join('.');
+    }
+  }
+  return {
+    tag,
+    selector,
+    rect: {
+      x: Math.round(rect.left),
+      y: Math.round(rect.top),
+      width: Math.round(rect.width),
+      height: Math.round(rect.height),
+    },
+  };
+}`;
+const PICK_ELEMENT_SCRIPT = `(x, y) => {
+  let element = document.elementFromPoint(x, y);
+  while (element && element.shadowRoot) {
+    const inner = element.shadowRoot.elementFromPoint(x, y);
+    if (!inner || inner === element) break;
+    element = inner;
+  }
+  if (!element) return null;
+  const rect = element.getBoundingClientRect();
+  const tag = element.tagName.toLowerCase();
+  let selector = tag;
+  if (element.id) {
+    selector += '#' + CSS.escape(element.id);
+  } else if (element.className && typeof element.className === 'string') {
+    const classes = element.className.trim().split(/\\s+/).filter(Boolean);
+    if (classes.length > 0) {
+      selector += '.' + classes.slice(0, 3).map(c => CSS.escape(c)).join('.');
+    }
+  }
+
+  let componentName = null;
+  const key = Object.keys(element).find(k => k.startsWith('__reactFiber') || k.startsWith('__reactInternalInstance'));
+  if (key) {
+    let fiber = element[key];
+    while (fiber) {
+      if (typeof fiber.type === 'function' && fiber.type.name) {
+        componentName = fiber.type.name;
+        break;
+      }
+      fiber = fiber.return;
+    }
+  }
+
+  const computed = window.getComputedStyle(element);
+  const relevantProps = [
+    'display', 'position', 'flex-direction', 'justify-content', 'align-items',
+    'width', 'height', 'padding', 'margin', 'font-family', 'font-size', 'font-weight',
+    'color', 'background-color', 'border', 'border-radius', 'box-shadow', 'gap', 'opacity'
+  ];
+  const stylesArr = [];
+  for (const prop of relevantProps) {
+    const val = computed.getPropertyValue(prop);
+    if (val && val !== 'none' && val !== 'normal' && val !== 'auto' && val !== '0px') {
+      stylesArr.push(prop + ': ' + val + ';');
+    }
+  }
+
+  return {
+    pageUrl: window.location.href,
+    pageTitle: document.title || null,
+    tagName: tag,
+    selector,
+    htmlPreview: element.outerHTML.slice(0, 4000),
+    componentName,
+    styles: stylesArr.join('\\n'),
+    rect: {
+      x: Math.round(rect.left),
+      y: Math.round(rect.top),
+      width: Math.round(rect.width),
+      height: Math.round(rect.height),
+    },
+  };
+}`;
 const UNATTACHED_FILL_VIEWPORT = { width: 1280, height: 800 } as const;
 const NAVIGATION_TIMEOUT_MS = 15_000;
 const VIEWER_NAVIGATION_OPTIONS = { waitUntil: "commit", timeout: NAVIGATION_TIMEOUT_MS } as const;
@@ -207,7 +304,21 @@ export type ServerBrowserViewerOutput =
   | { readonly _tag: "network"; readonly entry: PreviewAutomationNetworkEntry }
   | { readonly _tag: "gone" }
   /** The page is still open, but this connection to it ended; the viewer reconnects. */
-  | { readonly _tag: "reconnect" };
+  | { readonly _tag: "reconnect" }
+  | {
+      readonly _tag: "elementHovered";
+      readonly target: {
+        readonly tag: string;
+        readonly selector: string;
+        readonly rect: {
+          readonly x: number;
+          readonly y: number;
+          readonly width: number;
+          readonly height: number;
+        };
+      } | null;
+    }
+  | { readonly _tag: "elementPicked"; readonly annotation: PreviewAnnotationPayload };
 
 export interface ServerBrowserViewer {
   readonly output: Queue.Dequeue<ServerBrowserViewerOutput>;
@@ -2255,6 +2366,97 @@ const make = Effect.gen(function* () {
           returnByValue: true,
         });
         viewer.push({ _tag: "probe", x, y, editable: result.result.value === true });
+        return;
+      }
+      case "inspectHover": {
+        const x = num(message.x);
+        const y = num(message.y);
+        const evalRes = await session
+          .send("Runtime.evaluate", {
+            expression: `(${INSPECT_HOVER_SCRIPT})(${x}, ${y})`,
+            returnByValue: true,
+          })
+          .catch(() => null);
+        const target = evalRes?.result?.value ?? null;
+        viewer.push({ _tag: "elementHovered", target });
+        return;
+      }
+      case "pickElement": {
+        const x = num(message.x);
+        const y = num(message.y);
+        const evalRes = await session
+          .send("Runtime.evaluate", {
+            expression: `(${PICK_ELEMENT_SCRIPT})(${x}, ${y})`,
+            returnByValue: true,
+          })
+          .catch(() => null);
+        const data = evalRes?.result?.value;
+        if (!data || !data.tagName) return;
+
+        let screenshot: PreviewAnnotationScreenshot | null = null;
+        const rx = num(data.rect?.x);
+        const ry = num(data.rect?.y);
+        const rw = num(data.rect?.width);
+        const rh = num(data.rect?.height);
+        if (rw > 0 && rh > 0) {
+          try {
+            const clip = {
+              x: Math.max(0, rx),
+              y: Math.max(0, ry),
+              width: Math.max(1, rw),
+              height: Math.max(1, rh),
+              scale: 1,
+            };
+            const captureResult = await session.send("Page.captureScreenshot", {
+              format: "png",
+              clip,
+              captureBeyondViewport: false,
+            });
+            if (captureResult.data) {
+              screenshot = {
+                dataUrl: `data:image/png;base64,${captureResult.data}`,
+                width: clip.width,
+                height: clip.height,
+                cropRect: { x: clip.x, y: clip.y, width: clip.width, height: clip.height },
+              };
+            }
+          } catch {
+            // Screenshot crop is optional
+          }
+        }
+
+        const id = NodeCrypto.randomUUID();
+        const now = new Date().toISOString();
+        const annotation: PreviewAnnotationPayload = {
+          id,
+          pageUrl: data.pageUrl,
+          pageTitle: data.pageTitle,
+          comment: "",
+          elements: [
+            {
+              id,
+              element: {
+                pageUrl: data.pageUrl,
+                pageTitle: data.pageTitle,
+                tagName: data.tagName,
+                selector: data.selector,
+                htmlPreview: data.htmlPreview,
+                componentName: data.componentName,
+                source: null,
+                stack: [],
+                styles: data.styles,
+                pickedAt: now,
+              },
+              rect: { x: rx, y: ry, width: rw, height: rh },
+            },
+          ],
+          regions: [],
+          strokes: [],
+          styleChanges: [],
+          screenshot,
+          createdAt: now,
+        };
+        viewer.push({ _tag: "elementPicked", annotation });
         return;
       }
     }

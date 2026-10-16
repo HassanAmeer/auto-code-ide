@@ -35,68 +35,127 @@ const END_CALL_TRIGGERS = [
 ];
 
 const INTERRUPT_COMMAND_TRIGGERS = [
+  // "stop" variants:
   "stop",
-  "ruk jao",
-  "ruko",
-  "ruk ja",
-  "ruk",
-  "chup",
-  "chup karo",
-  "chup kar",
-  "chup ho jao",
-  "chup raho",
-  "bas",
-  "bas karo",
-  "pause",
-  "wait",
-  "hold on",
-  "hold up",
-  "cancel",
-  "shut up",
-  "quiet",
-  "silence",
-  "khamosh",
-  "khamosh raho",
-  "thehro",
-  "thehr jao",
+  "stop please",
+  "please stop",
+  "stop it",
+  "stop now",
+  "stop talking",
+  "stop speaking",
+  "stop karo",
+  "stop kar do",
+  "stop ho jao",
+  // "listen" variants:
+  "listen",
+  "listen to me",
+  "please listen",
+  "listen please",
+  "just listen",
+  "suno",
+  "sun lo",
+  "sunen",
+  "suno please",
+  "please suno",
+  "ek minute suno",
+  // Urdu script:
+  "سٹاپ",
+  "سنو",
+  "سنیں",
+];
+
+const FILLERS = [
+  "please",
+  "bhai",
+  "yaar",
+  "sir",
+  "bro",
+  "ok",
+  "okay",
+  "hey",
+  "ab",
+  "zara",
+  "ek minute",
+  "one second",
+  "just",
 ];
 
 const SILENCE_TIMEOUT_MS = 2000;
 const ACOUSTIC_ECHO_COOLDOWN_MS = 600;
 
-function isPureInterruptCommand(text: string): boolean {
-  const lower = text
+function cleanForComparison(text: string): string {
+  return text
     .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, "")
+    .replace(/[.,/#!$%^&*;:{}=\-_`~()?"'۔،؟]/g, "")
+    .replace(/\s+/g, " ")
     .trim();
-  if (!lower) return false;
+}
+
+function isPureInterruptCommand(text: string): boolean {
+  const clean = cleanForComparison(text);
+  if (!clean) return false;
 
   for (const trigger of INTERRUPT_COMMAND_TRIGGERS) {
-    const cleanTrigger = trigger
-      .toLowerCase()
-      .replace(/[^a-z0-9\s]/g, "")
-      .trim();
-    if (
-      lower === cleanTrigger ||
-      lower === `${cleanTrigger} please` ||
-      lower === `please ${cleanTrigger}` ||
-      lower === `${cleanTrigger} bhai` ||
-      lower === `${cleanTrigger} yaar` ||
-      lower === `${cleanTrigger} sir`
-    ) {
+    const cleanTrigger = cleanForComparison(trigger);
+    if (clean === cleanTrigger) return true;
+
+    for (const filler of FILLERS) {
+      if (
+        clean === `${cleanTrigger} ${filler}` ||
+        clean === `${filler} ${cleanTrigger}` ||
+        clean === `${filler} ${cleanTrigger} ${filler}`
+      ) {
+        return true;
+      }
+    }
+  }
+
+  // Repetition: "stop stop", "listen listen", "suno suno"
+  if (/^(?:stop|listen|suno)(\s+(?:stop|listen|suno))+$/i.test(clean)) {
+    return true;
+  }
+
+  return false;
+}
+
+function containsInterruptCommand(text: string): boolean {
+  const clean = cleanForComparison(text);
+  if (!clean) return false;
+
+  if (isPureInterruptCommand(clean)) return true;
+
+  for (const trigger of INTERRUPT_COMMAND_TRIGGERS) {
+    const cleanTrigger = cleanForComparison(trigger);
+    const prefixRegex = new RegExp(`^(?:(?:${FILLERS.join("|")})\\s+)?${cleanTrigger}\\b`, "i");
+    if (prefixRegex.test(clean)) {
       return true;
     }
   }
+
+  // Exact word boundary for stop or listen or suno
+  if (/\b(?:stop|listen|suno)\b/i.test(clean)) {
+    return true;
+  }
+
+  // Urdu script
+  if (/(?:سٹاپ|سنو|سنیں)/.test(clean)) {
+    return true;
+  }
+
   return false;
 }
 
 function stripInterruptCommand(text: string): string {
   let cleaned = text;
-  for (const trigger of INTERRUPT_COMMAND_TRIGGERS) {
-    const pattern = `^\\s*(?:please\\s+)?${trigger.replace(/\s+/g, "\\s+")}(?:\\s+(?:please|bhai|yaar|sir))?[,!.\\s]*`;
+  const sortedTriggers = [...INTERRUPT_COMMAND_TRIGGERS].sort((a, b) => b.length - a.length);
+
+  for (const trigger of sortedTriggers) {
+    const escaped = trigger.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const pattern = `^\\s*(?:(?:${FILLERS.join("|")})\\s+)*${escaped}(?:\\s+(?:${FILLERS.join("|")}))*[,!.\\s-]*`;
     const regex = new RegExp(pattern, "i");
     cleaned = cleaned.replace(regex, "").trim();
   }
+
   return cleaned;
 }
 
@@ -285,22 +344,15 @@ export function useVoiceCallAssistant({
 
   // Creates and starts a fresh SpeechRecognition instance
   const startFreshRecognition = useCallback(() => {
-    // CRITICAL: NEVER start recognition if call is inactive, TTS is speaking, or status is speaking!
-    // This physically guarantees the microphone never captures laptop speakers.
-    if (
-      !isCallActiveRef.current ||
-      isTtsActiveRef.current ||
-      callStatusRef.current === "speaking" ||
-      isCurrentlySpeaking() ||
-      Date.now() - lastTtsEndedTimestampRef.current < ACOUSTIC_ECHO_COOLDOWN_MS
-    ) {
+    // Only proceed if call is active
+    if (!isCallActiveRef.current) {
       return;
     }
 
     cleanupRecognition();
     clearRestartTimer();
 
-    // Ensure mic hardware track is unmuted
+    // Ensure mic hardware track is unmuted so speech and "stop" interrupts can be detected
     setMicrophoneMuted(false);
 
     try {
@@ -329,15 +381,7 @@ export function useVoiceCallAssistant({
       };
 
       recognition.onresult = (event: any) => {
-        // STRICT ACOUSTIC FIREWALL:
-        // Drop any delayed/stale events if call is inactive, TTS is active, speakers are outputting, or during echo drain cooldown
-        if (
-          !isCallActiveRef.current ||
-          isTtsActiveRef.current ||
-          callStatusRef.current === "speaking" ||
-          isCurrentlySpeaking() ||
-          Date.now() - lastTtsEndedTimestampRef.current < ACOUSTIC_ECHO_COOLDOWN_MS
-        ) {
+        if (!isCallActiveRef.current) {
           return;
         }
 
@@ -373,10 +417,39 @@ export function useVoiceCallAssistant({
 
         const currentStatus = callStatusRef.current;
 
-        // --- Handle thinking state (AI thinking / executing in background) ---
+        // --- 1. Assistant is actively SPEAKING: only listen for interrupt command ("stop", "ruko", etc.) ---
+        if (currentStatus === "speaking" || isCurrentlySpeaking()) {
+          const isInterrupt =
+            containsInterruptCommand(processedSpeech) || containsInterruptCommand(rawSpeech);
+          if (!isInterrupt) {
+            // Speaker feedback or ambient non-interrupt chatter: ignore completely to prevent corrupting input
+            return;
+          }
+
+          // User explicitly commanded STOP or interrupt!
+          interruptSpeaking();
+
+          const remaining = stripInterruptCommand(processedSpeech);
+          if (remaining.length > 0) {
+            promptRef.current = remaining;
+            lastTranscribedTextRef.current = remaining;
+            lastSpeechTimestampRef.current = Date.now();
+            hasPendingSpeechRef.current = true;
+            updateCallStatus("user-speaking");
+            onTranscriptChangeRef.current(remaining);
+          } else {
+            promptRef.current = "";
+            lastTranscribedTextRef.current = "";
+            hasPendingSpeechRef.current = false;
+            updateCallStatus("listening");
+            onTranscriptChangeRef.current("");
+          }
+          return;
+        }
+
+        // --- 2. Assistant is THINKING / EXECUTING ---
         if (currentStatus === "thinking") {
-          // If user gave a pure stop command
-          if (isPureInterruptCommand(processedSpeech)) {
+          if (isPureInterruptCommand(processedSpeech) || isPureInterruptCommand(rawSpeech)) {
             thinkingAmbientSound.stop();
             if (canInterruptRef.current && onInterruptRef.current) {
               onInterruptRef.current();
@@ -385,11 +458,13 @@ export function useVoiceCallAssistant({
             updateCallStatus("listening");
             manualBaselineRef.current = "";
             lastTranscribedTextRef.current = "";
+            promptRef.current = "";
             hasPendingSpeechRef.current = false;
+            onTranscriptChangeRef.current("");
             return;
           }
 
-          // User is asking a new question while AI is thinking: interrupt and switch to user
+          // User is asking something while AI is thinking: interrupt and capture new text
           thinkingAmbientSound.stop();
           if (canInterruptRef.current && onInterruptRef.current) {
             onInterruptRef.current();
@@ -405,8 +480,8 @@ export function useVoiceCallAssistant({
           return;
         }
 
-        // --- Handle normal listening / user-speaking state ---
-        if (isPureInterruptCommand(processedSpeech)) {
+        // --- 3. Normal LISTENING / USER-SPEAKING state ---
+        if (isPureInterruptCommand(processedSpeech) || isPureInterruptCommand(rawSpeech)) {
           if (canInterruptRef.current && onInterruptRef.current) {
             onInterruptRef.current();
           }
@@ -414,7 +489,9 @@ export function useVoiceCallAssistant({
           updateCallStatus("listening");
           manualBaselineRef.current = "";
           lastTranscribedTextRef.current = "";
+          promptRef.current = "";
           hasPendingSpeechRef.current = false;
+          onTranscriptChangeRef.current("");
           return;
         }
 
@@ -447,16 +524,10 @@ export function useVoiceCallAssistant({
           }
           scheduleRestartRecognition(300);
         } else if (event.error === "no-speech") {
-          // Standard silence event on mobile Android
-          if (
-            isCallActiveRef.current &&
-            !isTtsActiveRef.current &&
-            callStatusRef.current !== "speaking"
-          ) {
+          if (isCallActiveRef.current) {
             scheduleRestartRecognition(80);
           }
         } else if (event.error === "aborted") {
-          // Triggered by mobile OS when phone screen sleeps or tab goes to background
           if (typeof document === "undefined" || document.visibilityState === "visible") {
             scheduleRestartRecognition(120);
           }
@@ -466,26 +537,14 @@ export function useVoiceCallAssistant({
           }
           scheduleRestartRecognition(200);
         } else {
-          // Non-fatal error; schedule restart ONLY if TTS is not speaking
-          if (
-            !isTtsActiveRef.current &&
-            callStatusRef.current !== "speaking" &&
-            !isCurrentlySpeaking() &&
-            Date.now() - lastTtsEndedTimestampRef.current >= ACOUSTIC_ECHO_COOLDOWN_MS
-          ) {
+          if (isCallActiveRef.current) {
             scheduleRestartRecognition(isMobileDevice ? 100 : 250);
           }
         }
       };
 
       recognition.onend = () => {
-        if (
-          isCallActiveRef.current &&
-          !isTtsActiveRef.current &&
-          callStatusRef.current !== "speaking" &&
-          !isCurrentlySpeaking() &&
-          Date.now() - lastTtsEndedTimestampRef.current >= ACOUSTIC_ECHO_COOLDOWN_MS
-        ) {
+        if (isCallActiveRef.current) {
           if (typeof document === "undefined" || document.visibilityState === "visible") {
             scheduleRestartRecognition(isMobileDevice ? 60 : 100);
           }
@@ -496,7 +555,7 @@ export function useVoiceCallAssistant({
       recognitionRef.current = recognition;
     } catch (err) {
       console.warn("Failed to instantiate fresh speech recognition:", err);
-      if (!isTtsActiveRef.current) {
+      if (isCallActiveRef.current) {
         scheduleRestartRecognition(500);
       }
     }
@@ -504,13 +563,7 @@ export function useVoiceCallAssistant({
 
   const scheduleRestartRecognition = useCallback(
     (delay = 150) => {
-      if (
-        !isCallActiveRef.current ||
-        isTtsActiveRef.current ||
-        callStatusRef.current === "speaking" ||
-        isCurrentlySpeaking() ||
-        Date.now() - lastTtsEndedTimestampRef.current < ACOUSTIC_ECHO_COOLDOWN_MS
-      ) {
+      if (!isCallActiveRef.current) {
         return;
       }
       clearRestartTimer();
@@ -522,9 +575,12 @@ export function useVoiceCallAssistant({
   );
 
   // Global subscription to TTS speech state (e.g. Read Aloud button or settings voice tests)
-  // Ensures microphone is physically aborted whenever ANY audio speech occurs in the app
+  // Ensures microphone is physically aborted whenever ANY audio speech occurs outside the call
   useEffect(() => {
     return subscribeSpeechState((isSpeaking) => {
+      // In active voice call mode, recognition stays alive to listen for "stop" keyword!
+      if (isCallActiveRef.current) return;
+
       if (isSpeaking) {
         isTtsActiveRef.current = true;
         lastTtsEndedTimestampRef.current = Date.now();
@@ -534,18 +590,11 @@ export function useVoiceCallAssistant({
         setTimeout(() => {
           if (!isCurrentlySpeaking()) {
             isTtsActiveRef.current = false;
-            if (
-              isCallActiveRef.current &&
-              callStatusRef.current === "listening" &&
-              !waitingForAssistantResponseRef.current
-            ) {
-              startFreshRecognition();
-            }
           }
         }, ACOUSTIC_ECHO_COOLDOWN_MS);
       }
     });
-  }, [cleanupRecognition, startFreshRecognition]);
+  }, [cleanupRecognition]);
 
   const dispatchAutoSend = useCallback(() => {
     clearRestartTimer();
@@ -593,21 +642,24 @@ export function useVoiceCallAssistant({
         thinkingAmbientSound.stop();
         updateCallStatus("speaking");
         isTtsActiveRef.current = true;
-        cleanupRecognition();
-        setMicrophoneMuted(true);
+        setMicrophoneMuted(false);
+        if (!recognitionRef.current && isCallActiveRef.current) {
+          startFreshRecognition();
+        }
       },
       onFinished: () => {
         isTtsActiveRef.current = false;
         lastTtsEndedTimestampRef.current = Date.now();
         clearTtsCooldownTimer();
-        // Post-speech cooldown ensures room reverb and audio buffers have completely drained
         ttsCooldownTimerRef.current = setTimeout(() => {
           if (!isCallActiveRef.current) return;
           manualBaselineRef.current = "";
           lastTranscribedTextRef.current = "";
           setMicrophoneMuted(false);
           updateCallStatus("listening");
-          startFreshRecognition();
+          if (!recognitionRef.current) {
+            startFreshRecognition();
+          }
         }, ACOUSTIC_ECHO_COOLDOWN_MS);
       },
     });
@@ -725,6 +777,8 @@ export function useVoiceCallAssistant({
     hasPendingSpeechRef.current = false;
     manualBaselineRef.current = "";
     lastTranscribedTextRef.current = "";
+    promptRef.current = "";
+    onTranscriptChangeRef.current("");
 
     updateCallStatus("listening");
     setMicrophoneMuted(false);

@@ -160,7 +160,9 @@ const makeHandler = (browser: ServerBrowser.ServerBrowser["Service"]) =>
               case "pointer":
               case "probe":
               case "console":
-              case "network": {
+              case "network":
+              case "elementHovered":
+              case "elementPicked": {
                 const { _tag: type, ...data } = output;
                 return write(JSON.stringify({ type, ...data }));
               }
