@@ -391,7 +391,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
     <button
       type={showResume ? "button" : "submit"}
       className={cn(
-        "relative isolate flex h-9 w-9 items-center justify-center overflow-hidden rounded-full shadow-xs transition-all duration-150 enabled:cursor-pointer enabled:inset-shadow-control-highlight hover:scale-105 active:inset-shadow-control-pressed active:shadow-none disabled:pointer-events-none disabled:opacity-64 disabled:shadow-none disabled:hover:scale-100 sm:h-8 sm:w-8 [&_svg]:pointer-events-none",
+        "relative isolate flex size-8 items-center justify-center overflow-hidden rounded-full shadow-xs transition-all duration-150 enabled:cursor-pointer enabled:inset-shadow-control-highlight hover:scale-105 active:inset-shadow-control-pressed active:shadow-none disabled:pointer-events-none disabled:opacity-64 disabled:shadow-none disabled:hover:scale-100 sm:size-8 [&_svg]:pointer-events-none",
         stageBackdropVariant
           ? "bg-transparent text-white enabled:shadow-black/24 enabled:hover:brightness-110"
           : "bg-message-action text-message-action-foreground enabled:shadow-message-action/24 hover:bg-message-action-hover",
@@ -442,7 +442,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
         render={
           <button
             type="button"
-            className="p-0 m-0 border-0 bg-transparent flex items-center justify-center cursor-pointer outline-none transition-all duration-200"
+            className="flex size-7 sm:size-8 items-center justify-center cursor-pointer outline-none transition-all duration-200 rounded-full hover:bg-muted/60"
             {...pointerFocusProps}
             onClick={handleToggleWebSearch}
             aria-label={
@@ -453,7 +453,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
           >
             <Globe
               className={cn(
-                "size-4 sm:size-4.5 transition-colors duration-150",
+                "size-3.5 sm:size-4 transition-colors duration-150",
                 isWebSearchActive ? "web-search-shimmer" : "text-zinc-500 hover:text-zinc-300",
               )}
               aria-hidden="true"
@@ -479,7 +479,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
           <button
             type="button"
             className={cn(
-              "relative isolate flex h-9 w-9 items-center justify-center overflow-hidden rounded-full shadow-xs transition-all duration-150 cursor-pointer sm:h-8 sm:w-8",
+              "relative isolate flex size-8 items-center justify-center overflow-hidden rounded-full shadow-xs transition-all duration-150 cursor-pointer sm:size-8",
               isDictating
                 ? "bg-red-600 text-white hover:bg-red-700 hover:scale-105 active:scale-95 animate-pulse shadow-md shadow-red-500/40 ring-2 ring-red-400/50"
                 : "bg-muted/70 text-muted-foreground hover:bg-muted hover:text-foreground hover:scale-105 active:scale-95",
@@ -513,11 +513,16 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
     </Tooltip>
   );
 
+  const unifiedPrimaryButton = isDictating
+    ? micButton
+    : hasSendableContent || showResume || isEditingQueuedMessage
+      ? sendButtonElement
+      : micButton;
+
   const actions = (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-1 sm:gap-1.5">
       {webSearchButton}
-      {micButton}
-      {sendButtonElement}
+      {unifiedPrimaryButton}
     </div>
   );
 

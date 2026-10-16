@@ -34,6 +34,8 @@ interface TerminalState {
   inputMode: "bash" | "ai";
 }
 
+import { saveServerSetting } from "~/lib/serverSettingsSync";
+
 const STORAGE_KEY_CWD = "adc_terminal_active_cwd";
 const STORAGE_KEY_OPEN = "adc_terminal_quickbar_open";
 const STORAGE_KEY_SSH = "adc_terminal_ssh_profiles";
@@ -194,6 +196,7 @@ export const terminalStore = {
     state = { ...state, sshProfiles: updated, activeTarget: profile.id };
     if (typeof window !== "undefined") {
       window.localStorage.setItem(STORAGE_KEY_SSH, JSON.stringify(updated));
+      void saveServerSetting(STORAGE_KEY_SSH, updated);
     }
     notify();
   },
@@ -207,6 +210,7 @@ export const terminalStore = {
     };
     if (typeof window !== "undefined") {
       window.localStorage.setItem(STORAGE_KEY_SSH, JSON.stringify(updated));
+      void saveServerSetting(STORAGE_KEY_SSH, updated);
     }
     notify();
   },
@@ -233,6 +237,7 @@ export const terminalStore = {
     state = { ...state, accessKeys: updated };
     if (typeof window !== "undefined") {
       window.localStorage.setItem(STORAGE_KEY_KEYS, JSON.stringify(updated));
+      void saveServerSetting(STORAGE_KEY_KEYS, updated);
     }
     notify();
   },
@@ -242,6 +247,7 @@ export const terminalStore = {
     state = { ...state, accessKeys: updated };
     if (typeof window !== "undefined") {
       window.localStorage.setItem(STORAGE_KEY_KEYS, JSON.stringify(updated));
+      void saveServerSetting(STORAGE_KEY_KEYS, updated);
     }
     notify();
   },
@@ -251,6 +257,7 @@ export const terminalStore = {
     state = { ...state, accessKeys: updated };
     if (typeof window !== "undefined") {
       window.localStorage.setItem(STORAGE_KEY_KEYS, JSON.stringify(updated));
+      void saveServerSetting(STORAGE_KEY_KEYS, updated);
     }
     notify();
   },
@@ -312,6 +319,7 @@ export const terminalStore = {
     };
     if (typeof window !== "undefined") {
       window.localStorage.setItem(STORAGE_KEY_KEYS, JSON.stringify(updated));
+      void saveServerSetting(STORAGE_KEY_KEYS, updated);
       if (!nextSelectedKey) window.localStorage.removeItem(STORAGE_KEY_SELECTED_KEY);
     }
     notify();

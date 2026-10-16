@@ -17,6 +17,49 @@ import {
   getTriggerDisplayModelLabel,
   getTriggerDisplayModelName,
 } from "./providerIconUtils";
+
+export function getCompactDisplayModelName(name: string): string {
+  if (!name || name === "Choose model" || name === "Choose models") return name;
+  let clean = name
+    .replace(/[-_]\d{8}/g, "")
+    .replace(/\(\d{4}[-/]\d{2}[-/]\d{2}\)/g, "")
+    .trim();
+  clean = clean.replace(/\s*\([^)]*\)/g, "").trim();
+  clean = clean.replace(/^(anthropic|openai|google|deepseek|meta|xai)\//i, "");
+
+  if (/claude\s*3[.-]7\s*sonnet/i.test(clean)) return "Sonnet 3.7";
+  if (/claude\s*3[.-]5\s*sonnet/i.test(clean)) return "Sonnet 3.5";
+  if (/claude\s*3[.-]5\s*haiku/i.test(clean)) return "Haiku 3.5";
+  if (/claude\s*3\s*opus/i.test(clean)) return "Opus 3";
+  if (/claude\s*sonnet/i.test(clean)) return "Sonnet";
+  if (/claude\s*haiku/i.test(clean)) return "Haiku";
+  if (/claude\s*opus/i.test(clean)) return "Opus";
+
+  if (/gpt[- ]4o[- ]mini/i.test(clean)) return "4o-mini";
+  if (/gpt[- ]4o/i.test(clean)) return "GPT-4o";
+  if (/gpt[- ]4\.5/i.test(clean)) return "GPT-4.5";
+  if (/chatgpt[- ]4o/i.test(clean)) return "GPT-4o";
+
+  if (/gemini[- ]2\.0[- ]flash/i.test(clean)) return "Flash 2.0";
+  if (/gemini[- ]2\.5[- ]flash/i.test(clean)) return "Flash 2.5";
+  if (/gemini[- ]2\.5[- ]pro/i.test(clean)) return "Pro 2.5";
+  if (/gemini[- ]1\.5[- ]pro/i.test(clean)) return "Pro 1.5";
+  if (/gemini[- ]1\.5[- ]flash/i.test(clean)) return "Flash 1.5";
+  if (/gemini[- ]flash/i.test(clean)) return "Flash";
+  if (/gemini[- ]pro/i.test(clean)) return "Pro";
+
+  if (/deepseek[- ]r1/i.test(clean)) return "DeepSeek-R1";
+  if (/deepseek[- ]v3/i.test(clean)) return "DeepSeek-V3";
+
+  if (/grok[- ]beta/i.test(clean)) return "Grok";
+  if (/grok[- ]2/i.test(clean)) return "Grok 2";
+
+  if (clean.length > 14) {
+    return clean.slice(0, 12) + "…";
+  }
+
+  return clean;
+}
 import { shouldShowInstanceBadge, type ProviderInstanceEntry } from "../../providerInstances";
 import {
   ComposerControl,
@@ -270,7 +313,12 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
                 />
               }
             >
-              {props.triggerLabel ?? multipleLabel ?? triggerTitle}
+              <span className="hidden sm:inline">
+                {props.triggerLabel ?? multipleLabel ?? triggerTitle}
+              </span>
+              <span className="sm:hidden">
+                {props.triggerLabel ?? multipleLabel ?? getCompactDisplayModelName(triggerTitle)}
+              </span>
             </TooltipTrigger>
             <TooltipPopup side="top">{triggerTooltipContent}</TooltipPopup>
           </Tooltip>

@@ -128,7 +128,7 @@ export function saveCustomProviders(providers: CustomProvider[]): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(providers));
     window.dispatchEvent(new CustomEvent(EVENT_KEY, { detail: providers }));
-    // Synchronize with server in the background
+    // Synchronize with server database
     void fetch("/api/custom-provider/sync", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -145,32 +145,49 @@ export function saveCustomProvider(
   const providers = getCustomProviders();
   const now = new Date().toISOString();
 
+  let updatedProvider: CustomProvider;
   if (data.id) {
     const index = providers.findIndex((p) => p.id === data.id);
     if (index !== -1) {
       const existing = providers[index]!;
-      const updated: CustomProvider = {
+      updatedProvider = {
         ...existing,
         ...data,
         id: existing.id,
         createdAt: existing.createdAt,
         updatedAt: now,
       };
-      providers[index] = updated;
-      saveCustomProviders(providers);
-      return updated;
+      providers[index] = updatedProvider;
+    } else {
+      updatedProvider = {
+        ...data,
+        id: data.id,
+        createdAt: now,
+        updatedAt: now,
+      };
+      providers.push(updatedProvider);
     }
+  } else {
+    updatedProvider = {
+      ...data,
+      id: `custom_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      createdAt: now,
+      updatedAt: now,
+    };
+    providers.push(updatedProvider);
   }
 
-  const newProvider: CustomProvider = {
-    ...data,
-    id: data.id || `custom_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-    createdAt: now,
-    updatedAt: now,
-  };
-  providers.push(newProvider);
   saveCustomProviders(providers);
-  return newProvider;
+
+  if (typeof window !== "undefined") {
+    void fetch("/api/custom-provider/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updatedProvider),
+    }).catch(() => {});
+  }
+
+  return updatedProvider;
 }
 
 export function toggleCustomProvider(id: string): boolean {
@@ -197,18 +214,33 @@ export function deleteCustomProvider(id: string): void {
   }
 }
 
-// Auto-sync existing custom providers to the server on module load
+// Fetch persisted custom providers from the server database on load
 if (typeof window !== "undefined") {
-  setTimeout(() => {
-    const list = getCustomProviders();
-    if (list.length > 0) {
+  void (async () => {
+    try {
+      const res = await fetch("/api/custom-provider/list");
+      if (res.ok) {
+        const data = (await res.json()) as { ok?: boolean; providers?: CustomProvider[] };
+        if (data.ok && Array.isArray(data.providers) && data.providers.length > 0) {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(data.providers));
+          window.dispatchEvent(new CustomEvent(EVENT_KEY, { detail: data.providers }));
+          return;
+        }
+      }
+    } catch {
+      // server may be offline or connecting
+    }
+
+    // If server is empty, seed with current local non-empty providers
+    const currentList = getCustomProviders();
+    if (currentList.length > 0) {
       void fetch("/api/custom-provider/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ providers: list }),
+        body: JSON.stringify({ providers: currentList }),
       }).catch(() => {});
     }
-  }, 200);
+  })();
 }
 
 export function subscribeCustomProviders(

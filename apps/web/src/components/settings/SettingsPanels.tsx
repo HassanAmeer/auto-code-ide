@@ -4,7 +4,14 @@ import { SettingsGroup } from "./SettingsGroup";
 import { useScopedSettingsWriteAllowed } from "./useScopedSettings";
 import { Spinner } from "~/components/ui/spinner";
 import { NotificationSettings } from "./NotificationSettings";
-import { ArchiveIcon, ArchiveX, CheckIcon, ChevronRightIcon, SettingsIcon } from "lucide-react";
+import {
+  ArchiveIcon,
+  ArchiveX,
+  CheckIcon,
+  ChevronRightIcon,
+  SettingsIcon,
+  Trash2Icon,
+} from "lucide-react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import type { CSSProperties, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -1990,16 +1997,33 @@ export function GeneralSettingsPanel() {
             />
             <SettingsRow
               id="auto-retry-switch-model"
-              title="Auto-switch to another model on failure"
-              description="When the current model reaches max retries, automatically shift to the next available AI model and continue work."
+              title="Auto-route (Auto-switch model after retries)"
+              description="When the current model exhausts its retry attempts (e.g. 3 attempts), automatically shift to the next available AI model."
               control={
                 <Switch
                   checked={autoRetrySettings.autoSwitchModel}
                   onCheckedChange={(checked) =>
                     updateAutoRetrySettings({ autoSwitchModel: Boolean(checked) })
                   }
-                  aria-label="Auto-switch to another model on failure"
+                  aria-label="Auto-route to another model on failure"
                 />
+              }
+            />
+            <SettingsRow
+              id="auto-retry-timeout"
+              title="Response & stream timeout (seconds)"
+              description="Maximum seconds to wait without response or tokens before timing out and retrying (Default: 90s)."
+              control={
+                <div className="flex items-center gap-2">
+                  <AutoRetryNumberInput
+                    value={autoRetrySettings.timeoutSeconds ?? 90}
+                    min={15}
+                    max={600}
+                    onCommit={(seconds) => updateAutoRetrySettings({ timeoutSeconds: seconds })}
+                    ariaLabel="Response timeout in seconds"
+                  />
+                  <span className="text-xs text-muted-foreground">seconds</span>
+                </div>
               }
             />
             <SettingsRow
@@ -2022,7 +2046,8 @@ export function GeneralSettingsPanel() {
                 Active Failover Workflow
               </div>
               <p>
-                Run model ➜ wait{" "}
+                Run model ➜ if stalled ({autoRetrySettings.timeoutSeconds ?? 90}s) or error (429) ➜
+                wait{" "}
                 <span className="font-semibold text-foreground">
                   {autoRetrySettings.delaySeconds}s
                 </span>{" "}
@@ -2031,7 +2056,7 @@ export function GeneralSettingsPanel() {
                   {autoRetrySettings.maxRetries} times
                 </span>{" "}
                 {autoRetrySettings.autoSwitchModel
-                  ? "➜ auto-shift to next available provider model and retry"
+                  ? "➜ auto-route / shift to next available provider model"
                   : "➜ stop on failure"}
                 .
               </p>
@@ -2980,7 +3005,7 @@ export function GeneralSettingsPanel() {
 
 export function ArchivedThreadsPanel() {
   const { scope } = useSettingsScope();
-  const { unarchiveThread, confirmAndDeleteThread } = useThreadActions();
+  const { unarchiveThread, confirmAndDeleteThread, deleteThread } = useThreadActions();
   const {
     snapshots: archivedSnapshots,
     error: archiveError,
@@ -3158,37 +3183,69 @@ export function ArchivedThreadsPanel() {
                   </>
                 }
                 control={
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="xs"
-                    className="shrink-0"
-                    onClick={() => {
-                      void (async () => {
-                        const result = await unarchiveThread(
-                          scopeThreadRef(thread.environmentId, thread.id),
-                        );
-                        if (result._tag === "Success") {
-                          refreshArchivedThreads();
-                          return;
-                        }
-                        if (!isAtomCommandInterrupted(result)) {
-                          const error = squashAtomCommandFailure(result);
-                          toastManager.add(
-                            stackedThreadToast({
-                              type: "error",
-                              title: "Failed to unarchive thread",
-                              description:
-                                error instanceof Error ? error.message : "An error occurred.",
-                            }),
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="xs"
+                      onClick={() => {
+                        void (async () => {
+                          const result = await unarchiveThread(
+                            scopeThreadRef(thread.environmentId, thread.id),
                           );
-                        }
-                      })();
-                    }}
-                  >
-                    <ArchiveX className="size-3.5" />
-                    <span>Unarchive</span>
-                  </Button>
+                          if (result._tag === "Success") {
+                            refreshArchivedThreads();
+                            return;
+                          }
+                          if (!isAtomCommandInterrupted(result)) {
+                            const error = squashAtomCommandFailure(result);
+                            toastManager.add(
+                              stackedThreadToast({
+                                type: "error",
+                                title: "Failed to unarchive thread",
+                                description:
+                                  error instanceof Error ? error.message : "An error occurred.",
+                              }),
+                            );
+                          }
+                        })();
+                      }}
+                    >
+                      <ArchiveX className="size-3.5" />
+                      <span>Unarchive</span>
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost-destructive"
+                      size="icon-xs"
+                      aria-label="Delete thread"
+                      title="Delete thread"
+                      onClick={() => {
+                        void (async () => {
+                          const result = await deleteThread(
+                            scopeThreadRef(thread.environmentId, thread.id),
+                          );
+                          if (result._tag === "Success") {
+                            refreshArchivedThreads();
+                            return;
+                          }
+                          if (!isAtomCommandInterrupted(result)) {
+                            const error = squashAtomCommandFailure(result);
+                            toastManager.add(
+                              stackedThreadToast({
+                                type: "error",
+                                title: "Failed to delete thread",
+                                description:
+                                  error instanceof Error ? error.message : "An error occurred.",
+                              }),
+                            );
+                          }
+                        })();
+                      }}
+                    >
+                      <Trash2Icon />
+                    </Button>
+                  </div>
                 }
               />
             ))}

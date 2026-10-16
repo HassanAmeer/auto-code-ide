@@ -27,6 +27,8 @@ export const DEFAULT_TINYFISH_CONFIG: TinyFishConfig = {
   fetchRpd: 1000,
 };
 
+import { saveServerSetting } from "./serverSettingsSync";
+
 const TINYFISH_STORAGE_KEY = "t3_tinyfish_config_v1";
 const COMPOSER_WEB_SEARCH_KEY = "t3_composer_web_search_enabled";
 
@@ -45,6 +47,8 @@ export function saveTinyFishConfig(config: TinyFishConfig): void {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(TINYFISH_STORAGE_KEY, JSON.stringify(config));
+    window.dispatchEvent(new CustomEvent("t3_tinyfish_config_updated", { detail: config }));
+    void saveServerSetting(TINYFISH_STORAGE_KEY, config);
   } catch (error) {
     console.error("Failed to save TinyFish config:", error);
   }
@@ -65,6 +69,7 @@ export function setComposerWebSearchEnabled(enabled: boolean): void {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(COMPOSER_WEB_SEARCH_KEY, String(enabled));
+    void saveServerSetting(COMPOSER_WEB_SEARCH_KEY, enabled);
   } catch (error) {
     console.error("Failed to save composer web search state:", error);
   }

@@ -8,6 +8,7 @@ export interface AutoRetrySettings {
   maxRetries: number;
   autoSwitchModel: boolean;
   retryOnRateLimit: boolean;
+  timeoutSeconds: number;
 }
 
 const STORAGE_KEY = "t3code:auto-retry-settings:v2";
@@ -19,6 +20,7 @@ export const DEFAULT_AUTO_RETRY_SETTINGS: AutoRetrySettings = {
   maxRetries: 3,
   autoSwitchModel: true,
   retryOnRateLimit: true,
+  timeoutSeconds: 90,
 };
 
 export function loadAutoRetrySettings(): AutoRetrySettings {
@@ -46,11 +48,17 @@ export function loadAutoRetrySettings(): AutoRetrySettings {
         typeof parsed.retryOnRateLimit === "boolean"
           ? parsed.retryOnRateLimit
           : DEFAULT_AUTO_RETRY_SETTINGS.retryOnRateLimit,
+      timeoutSeconds:
+        typeof parsed.timeoutSeconds === "number" && parsed.timeoutSeconds > 0
+          ? parsed.timeoutSeconds
+          : DEFAULT_AUTO_RETRY_SETTINGS.timeoutSeconds,
     };
   } catch {
     return DEFAULT_AUTO_RETRY_SETTINGS;
   }
 }
+
+import { saveServerSetting } from "./serverSettingsSync";
 
 export function saveAutoRetrySettings(patch: Partial<AutoRetrySettings>): void {
   if (typeof window === "undefined") return;
@@ -62,6 +70,7 @@ export function saveAutoRetrySettings(patch: Partial<AutoRetrySettings>): void {
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
     window.dispatchEvent(new CustomEvent("t3-auto-retry-settings-changed", { detail: updated }));
+    void saveServerSetting(STORAGE_KEY, updated);
   } catch (err) {
     console.warn("Failed to save auto-retry settings:", err);
   }

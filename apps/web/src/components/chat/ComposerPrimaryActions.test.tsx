@@ -106,4 +106,56 @@ describe("ComposerPrimaryActions", () => {
 
     expect(markup).not.toContain("stage-nightly");
   });
+
+  it("renders mic button when there is no sendable content and thread is idle", () => {
+    const markup = renderToStaticMarkup(
+      createElement(ComposerPrimaryActions, {
+        compact: true,
+        canOperateThread: true,
+        pendingAction: null,
+        isRunning: false,
+        canInterrupt: false,
+        showPlanFollowUpPrompt: false,
+        promptHasText: false,
+        isSendBusy: false,
+        sendDisabledReason: null,
+        isConnecting: false,
+        isEnvironmentUnavailable: false,
+        isPreparingWorktree: false,
+        hasSendableContent: false,
+        onPreviousPendingQuestion: () => {},
+        onInterrupt: () => {},
+        onImplementPlanInNewThread: () => {},
+      }),
+    );
+
+    expect(markup).toContain("Dictate message");
+    expect(markup).not.toContain("Submit message");
+  });
+
+  it("renders send button when input field has sendable content", () => {
+    const markup = renderToStaticMarkup(
+      createElement(ComposerPrimaryActions, {
+        compact: true,
+        canOperateThread: true,
+        pendingAction: null,
+        isRunning: false,
+        canInterrupt: false,
+        showPlanFollowUpPrompt: false,
+        promptHasText: true,
+        isSendBusy: false,
+        sendDisabledReason: null,
+        isConnecting: false,
+        isEnvironmentUnavailable: false,
+        isPreparingWorktree: false,
+        hasSendableContent: true,
+        onPreviousPendingQuestion: () => {},
+        onInterrupt: () => {},
+        onImplementPlanInNewThread: () => {},
+      }),
+    );
+
+    expect(markup).toContain("Submit message");
+    expect(markup).not.toContain("Dictate message");
+  });
 });

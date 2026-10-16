@@ -3125,6 +3125,7 @@ function V2EventTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "event"
         data-v2-item-type={item.type}
         data-v2-item-visibility={visibility}
         data-v2-event-disclosure="true"
+        open
       >
         <summary className="flex min-w-0 cursor-pointer list-none items-center gap-2 px-2.5 py-1.5 text-xs [&::-webkit-details-marker]:hidden">
           <Icon

@@ -154,6 +154,7 @@ import {
   type ComposerBannerStackItem,
 } from "./ComposerBannerStack";
 import { compressImageForStash, prepareImageForAttachment } from "../../lib/imageCompression";
+import { deduplicateOverlap } from "../../lib/speech/stt";
 import {
   fileAttachmentTooLargeMessage,
   formatAttachmentSize,
@@ -1320,7 +1321,12 @@ const ComposerFooterModeControls = memo(function ComposerFooterModeControls(prop
             }
           >
             <ComposerControlIcon icon={RuntimeModeIcon} size={size} />
-            <SelectValue data-composer-control-label>{runtimeModeOption.label}</SelectValue>
+            <SelectValue data-composer-control-label>
+              <span className="hidden sm:inline">{runtimeModeOption.label}</span>
+              <span className="sm:hidden">
+                {runtimeModeOption.shortLabel ?? runtimeModeOption.label}
+              </span>
+            </SelectValue>
           </TooltipTrigger>
           <SelectPopup alignItemWithTrigger={false} {...composerFloatingLayerProps}>
             {props.runtimeModeOptions.map((option) => {
@@ -6260,8 +6266,12 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   useEffect(() => {
     const handleSpeechText = (e: Event) => {
       const customEvent = e as CustomEvent<{ text: string }>;
-      if (customEvent.detail?.text) {
-        insertComposerTextAtEnd(customEvent.detail.text.trim(), {
+      const incoming = customEvent.detail?.text?.trim();
+      if (!incoming) return;
+      const currentPrompt = promptRef.current || "";
+      const toInsert = deduplicateOverlap(currentPrompt, incoming);
+      if (toInsert) {
+        insertComposerTextAtEnd(toInsert, {
           ensureLeadingBoundary: true,
         });
       }
@@ -7632,9 +7642,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                 data-chat-composer-footer="true"
                 data-chat-composer-footer-compact={isComposerFooterCompact ? "true" : "false"}
                 className={cn(
-                  "flex min-w-0 flex-nowrap items-center justify-between gap-2 overflow-visible px-3 pb-3 sm:px-4 sm:pb-4",
+                  "flex min-w-0 flex-nowrap items-center justify-between gap-1 sm:gap-2 overflow-visible px-2.5 pb-2.5 sm:px-4 sm:pb-4",
                   pendingUserInputs.length > 0 && "pt-2",
-                  isComposerFooterCompact ? "gap-1.5" : "gap-2 sm:gap-0",
+                  isComposerFooterCompact ? "gap-1" : "gap-1 sm:gap-0",
                   showMobilePendingAnswerActions && "hidden sm:flex",
                   isComposerResting &&
                     "absolute right-[56px] z-10 h-12 w-auto gap-0 py-0 sm:gap-0 sm:py-0",
@@ -7647,7 +7657,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   data-chat-composer-controls="left"
                   data-chat-composer-footer-controls="true"
                   className={cn(
-                    "relative -m-1 -ms-3.5 flex min-w-0 flex-1 items-center gap-1 overflow-x-auto p-1 ps-3.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+                    "relative -m-1 -ms-2.5 sm:-ms-3.5 flex min-w-0 flex-1 items-center gap-0.5 sm:gap-1 overflow-x-auto p-1 ps-2.5 sm:ps-3.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
                     isComposerResting && "hidden",
                   )}
                 >
@@ -7662,7 +7672,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   data-chat-composer-primary-actions-compact={
                     isComposerPrimaryActionsCompact ? "true" : "false"
                   }
-                  className="flex shrink-0 flex-nowrap items-center justify-end gap-2"
+                  className="flex shrink-0 flex-nowrap items-center justify-end gap-1 sm:gap-1.5"
                 >
                   {showComposerAttachAction ? (
                     <>
@@ -7687,7 +7697,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                           render={
                             <Button
                               type="button"
-                              variant="ghost"
+                              variant="ghost-muted"
                               size="icon-sm"
                               onPointerDown={(event) => event.preventDefault()}
                               onClick={() => attachmentInputRef.current?.click()}

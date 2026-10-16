@@ -2280,13 +2280,7 @@ export default function ChatView(props: ChatViewProps) {
     widthStorageKey: `t3code:preview-panel-width:${activeThreadKey}`,
   });
   const activeThreadShell = useThreadShell(isServerThread ? activeThreadRef : null);
-  const timelineThreadError =
-    serverRuntime?.status === "failed" &&
-    serverRuntime.lastErrorClass === "usage_limit" &&
-    activeThreadShell?.latestRun &&
-    visibleThreadError === serverRuntime.lastError
-      ? null
-      : visibleThreadError;
+  const timelineThreadError = visibleThreadError;
 
   const [timelineAnchor, setTimelineAnchor] = useState<{
     readonly threadKey: string | null;
@@ -10974,25 +10968,32 @@ export default function ChatView(props: ChatViewProps) {
         setThreadErrorBannerDismissTick((tick) => tick + 1);
       }
 
-      setAutoRetryAttempt((prev) => prev + 1);
+      const isExhausted = autoRetryAttempt + 1 >= autoRetrySettings.maxRetries;
+      let retryModelSelection: ModelSelection | undefined = options?.overrideModel;
 
       try {
-        const sendCtx = composerRef.current?.getSendContext();
-        let retryModelSelection: ModelSelection | undefined =
-          options?.overrideModel ?? sendCtx?.selectedModelSelection;
-        if (!options?.overrideModel && autoRetrySettings.autoSwitchModel && nextFallbackCandidate) {
-          retryModelSelection = {
-            instanceId: nextFallbackCandidate.instanceId,
-            model: nextFallbackCandidate.model,
-          };
-          onProviderModelSelect(nextFallbackCandidate.instanceId, nextFallbackCandidate.model, {
-            focusComposer: false,
-          });
-          toastManager.add({
-            type: "info",
-            title: "Switched to Fallback Model",
-            description: `Auto-switched to ${nextFallbackCandidate.displayName} for retry.`,
-          });
+        if (!options?.overrideModel) {
+          if (isExhausted && autoRetrySettings.autoSwitchModel && nextFallbackCandidate) {
+            retryModelSelection = {
+              instanceId: nextFallbackCandidate.instanceId,
+              model: nextFallbackCandidate.model,
+            };
+            onProviderModelSelect(nextFallbackCandidate.instanceId, nextFallbackCandidate.model, {
+              focusComposer: false,
+            });
+            setAutoRetryAttempt(0);
+            toastManager.add({
+              type: "info",
+              title: "Auto-Routed to Next Model",
+              description: `Model reached ${autoRetrySettings.maxRetries} failed retries. Auto-switched to ${nextFallbackCandidate.displayName}.`,
+            });
+          } else {
+            setAutoRetryAttempt((prev) => prev + 1);
+            const sendCtx = composerRef.current?.getSendContext();
+            retryModelSelection = sendCtx?.selectedModelSelection;
+          }
+        } else {
+          setAutoRetryAttempt(0);
         }
 
         const createdAt = new Date().toISOString();
@@ -11106,7 +11107,7 @@ export default function ChatView(props: ChatViewProps) {
       return;
     }
 
-    if (autoRetryAttempt >= autoRetrySettings.maxRetries) {
+    if (autoRetryAttempt >= autoRetrySettings.maxRetries && !autoRetrySettings.autoSwitchModel) {
       setAutoRetryCountdown(null);
       return;
     }
@@ -11137,6 +11138,7 @@ export default function ChatView(props: ChatViewProps) {
     autoRetryAttempt,
     autoRetryCancelledBannerKey,
     autoRetryCountdown,
+    autoRetrySettings.autoSwitchModel,
     autoRetrySettings.delaySeconds,
     autoRetrySettings.enabled,
     autoRetrySettings.maxRetries,
@@ -11145,6 +11147,73 @@ export default function ChatView(props: ChatViewProps) {
     serverRuntime?.status,
     threadErrorBannerKey,
     visibleThreadError,
+  ]);
+
+  const currentTurnItemCount = serverVisibleTurnItems?.length ?? 0;
+  const currentTurnTokenCount =
+    (activeThreadLiveTokenUsage?.inputTokens ?? 0) +
+    (activeThreadLiveTokenUsage?.outputTokens ?? 0);
+  const lastActiveProgressRef = useRef<{
+    timestamp: number;
+    itemCount: number;
+    tokenCount: number;
+  }>({
+    timestamp: Date.now(),
+    itemCount: 0,
+    tokenCount: 0,
+  });
+
+  useEffect(() => {
+    if (!isWorking) {
+      lastActiveProgressRef.current = {
+        timestamp: Date.now(),
+        itemCount: currentTurnItemCount,
+        tokenCount: currentTurnTokenCount,
+      };
+      return;
+    }
+
+    if (
+      currentTurnItemCount > lastActiveProgressRef.current.itemCount ||
+      currentTurnTokenCount > lastActiveProgressRef.current.tokenCount
+    ) {
+      lastActiveProgressRef.current = {
+        timestamp: Date.now(),
+        itemCount: currentTurnItemCount,
+        tokenCount: currentTurnTokenCount,
+      };
+    }
+
+    const checkInterval = setInterval(() => {
+      if (!isWorking || !activeThread) return;
+      const timeoutLimitMs = (autoRetrySettings.timeoutSeconds ?? 90) * 1000;
+      const elapsed = Date.now() - lastActiveProgressRef.current.timestamp;
+      if (elapsed >= timeoutLimitMs) {
+        lastActiveProgressRef.current.timestamp = Date.now();
+        void interruptThreadTurn({
+          environmentId,
+          input: { threadId: activeThread.id },
+        });
+        const timeoutMsg = `Model response timed out (no stream response for ${autoRetrySettings.timeoutSeconds ?? 90}s). Connection dropped or model stalled (HTTP 429 / Stream Timeout).`;
+        setThreadError(activeThread.id, timeoutMsg);
+        toastManager.add({
+          type: "error",
+          title: "Model Stream Timed Out",
+          description: timeoutMsg,
+        });
+      }
+    }, 2000);
+
+    return () => clearInterval(checkInterval);
+  }, [
+    activeThread,
+    autoRetrySettings.timeoutSeconds,
+    currentTurnItemCount,
+    currentTurnTokenCount,
+    environmentId,
+    interruptThreadTurn,
+    isWorking,
+    setThreadError,
   ]);
 
   const pendingSidebarFileDrops = useSidebarPendingFileDropStore((state) => state.pending);

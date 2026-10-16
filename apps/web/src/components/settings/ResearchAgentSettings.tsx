@@ -506,7 +506,7 @@ export function ResearchAgentSettings() {
                   value={config.searchApiKey ?? ""}
                   onChange={(e) => setConfig((prev) => ({ ...prev, searchApiKey: e.target.value }))}
                   placeholder="Optional (Free for DuckDuckGo)"
-                  className="h-8 w-56 rounded-md border border-border/80 bg-background pr-7 pl-2.5 font-mono text-xs text-foreground focus:outline-hidden"
+                  className="h-8 w-full max-w-56 rounded-md border border-border/80 bg-background pr-7 pl-2.5 font-mono text-xs text-foreground focus:outline-hidden"
                 />
                 <button
                   type="button"
@@ -526,7 +526,7 @@ export function ResearchAgentSettings() {
 
         {/* Live Search Sandbox */}
         <div className="flex flex-col gap-2.5 rounded-lg border border-border/70 bg-card/80 p-3">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-1">
             <div className="flex items-center gap-2">
               <SparklesIcon className="size-3.5 text-foreground/80" />
               <h4 className="text-xs font-semibold text-foreground">Live Search Sandbox</h4>
@@ -542,16 +542,21 @@ export function ResearchAgentSettings() {
               value={testQuery}
               onChange={(e) => setTestQuery(e.target.value)}
               placeholder="e.g. bitcoin rate today, quantum computing, latest news"
-              className="h-8 flex-1 rounded-md border border-border/80 bg-background px-2.5 text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-hidden"
+              className="h-8 flex-1 min-w-0 rounded-md border border-border/80 bg-background px-2.5 text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-hidden"
             />
             <Button
               type="button"
-              size="xs"
+              size="icon-sm"
               disabled={isRunningTest || !testQuery.trim()}
               onClick={handleRunTest}
+              aria-label="Execute Search"
+              title="Execute Search"
             >
-              <RefreshCwIcon className={cn("size-3", isRunningTest && "animate-spin")} />
-              {isRunningTest ? "Searching..." : "Execute Search"}
+              {isRunningTest ? (
+                <RefreshCwIcon className="size-3.5 animate-spin" />
+              ) : (
+                <SearchIcon className="size-3.5" />
+              )}
             </Button>
           </div>
 
@@ -661,7 +666,7 @@ export function ResearchAgentSettings() {
                     setTinyFishConfig((prev) => ({ ...prev, apiKey: e.target.value }))
                   }
                   placeholder="e.g. tf_live_..."
-                  className="h-8 w-60 rounded-md border border-border/80 bg-background pr-7 pl-2.5 font-mono text-xs text-foreground focus:outline-hidden"
+                  className="h-8 w-full max-w-60 rounded-md border border-border/80 bg-background pr-7 pl-2.5 font-mono text-xs text-foreground focus:outline-hidden"
                 />
                 <button
                   type="button"
@@ -689,7 +694,7 @@ export function ResearchAgentSettings() {
                   setTinyFishConfig((prev) => ({ ...prev, searchEndpoint: e.target.value }))
                 }
                 placeholder="https://api.search.tinyfish.ai"
-                className="h-8 w-60 rounded-md border border-border/80 bg-background px-2.5 font-mono text-xs text-foreground focus:outline-hidden"
+                className="h-8 w-full max-w-60 rounded-md border border-border/80 bg-background px-2.5 font-mono text-xs text-foreground focus:outline-hidden"
               />
             }
           />
@@ -705,7 +710,7 @@ export function ResearchAgentSettings() {
                   setTinyFishConfig((prev) => ({ ...prev, fetchEndpoint: e.target.value }))
                 }
                 placeholder="https://api.fetch.tinyfish.ai"
-                className="h-8 w-60 rounded-md border border-border/80 bg-background px-2.5 font-mono text-xs text-foreground focus:outline-hidden"
+                className="h-8 w-full max-w-60 rounded-md border border-border/80 bg-background px-2.5 font-mono text-xs text-foreground focus:outline-hidden"
               />
             }
           />
@@ -762,20 +767,21 @@ export function ResearchAgentSettings() {
                   ? "e.g. quantum computing breakthrough, gold rate today"
                   : "e.g. https://www.tinyfish.ai or any https:// URL"
               }
-              className="h-8 flex-1 rounded-md border border-border/80 bg-background px-2.5 font-mono text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-hidden"
+              className="h-8 flex-1 min-w-0 rounded-md border border-border/80 bg-background px-2.5 font-mono text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-hidden"
             />
             <Button
               type="button"
-              size="xs"
+              size="icon-sm"
               disabled={isRunningTinyFishTest || !tinyFishTestInput.trim()}
               onClick={handleRunTinyFishTest}
+              aria-label={tinyFishTestMode === "search" ? "Search Web" : "Extract URL"}
+              title={tinyFishTestMode === "search" ? "Search Web" : "Extract URL"}
             >
-              <RefreshCwIcon className={cn("size-3", isRunningTinyFishTest && "animate-spin")} />
-              {isRunningTinyFishTest
-                ? "Running..."
-                : tinyFishTestMode === "search"
-                  ? "Search Web"
-                  : "Extract URL"}
+              {isRunningTinyFishTest ? (
+                <RefreshCwIcon className="size-3.5 animate-spin" />
+              ) : (
+                <SearchIcon className="size-3.5" />
+              )}
             </Button>
           </div>
 

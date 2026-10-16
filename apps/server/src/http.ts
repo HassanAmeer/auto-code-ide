@@ -48,6 +48,15 @@ import {
   GLOBAL_AI_MODEL_LOGS,
   clearAiModelLogs,
 } from "./provider/Drivers/CustomDriver.ts";
+import {
+  getAllAppSettings,
+  setAppSetting,
+  listCustomProviders,
+  saveCustomProvider,
+  deleteCustomProvider,
+  syncCustomProviders,
+  type StoredCustomProvider,
+} from "./persistence/AppSettingsStore.ts";
 import { ASSET_ROUTE_PREFIX, resolveAsset } from "./assets/AssetAccess.ts";
 import { githubMediaResponse } from "./assets/GitHubMediaFetch.ts";
 import { statMediaFile, streamMediaFile, type OpenMediaFile } from "./assets/MediaFile.ts";
@@ -760,10 +769,24 @@ export const layerCustomProviderFetchModelsRoute = HttpRouter.add(
   }),
 );
 
+export const layerCustomProviderListRoute = HttpRouter.add(
+  "GET",
+  "/api/custom-provider/list",
+  Effect.gen(function* () {
+    const config = yield* ServerConfig.ServerConfig;
+    const providers = listCustomProviders(config.dbPath);
+    return HttpServerResponse.jsonUnsafe({
+      ok: true,
+      providers,
+    });
+  }),
+);
+
 export const layerCustomProviderSaveRoute = HttpRouter.add(
   "POST",
   "/api/custom-provider/save",
   Effect.gen(function* () {
+    const config = yield* ServerConfig.ServerConfig;
     const request = yield* HttpServerRequest.HttpServerRequest;
     const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
       id?: string;
@@ -773,24 +796,40 @@ export const layerCustomProviderSaveRoute = HttpRouter.add(
       headers?: Array<{ key: string; value: string }>;
       models?: Array<{ id: string; name?: string }>;
       enabled?: boolean;
+      createdAt?: string;
     };
 
     const nowMs = yield* Clock.currentTimeMillis;
     const cleanId = (bodyJson?.id ?? "").startsWith("custom_")
       ? bodyJson.id!
       : `custom_${bodyJson?.id || nowMs}`;
+    const nowIso = new Date(nowMs).toISOString();
+
+    const provider: StoredCustomProvider = {
+      id: cleanId,
+      name: bodyJson?.name ?? "Custom Provider",
+      baseUrl: bodyJson?.baseUrl ?? "",
+      apiKey: bodyJson?.apiKey ?? "",
+      headers: bodyJson?.headers ?? [],
+      models: bodyJson?.models ?? [],
+      enabled: bodyJson?.enabled ?? true,
+      createdAt: bodyJson?.createdAt ?? nowIso,
+      updatedAt: nowIso,
+    };
+
+    saveCustomProvider(config.dbPath, provider);
 
     registerFallbackCustomProvider({
       instanceId: cleanId,
-      displayName: bodyJson?.name ?? "Custom Provider",
-      baseUrl: bodyJson?.baseUrl ?? "",
-      ...(bodyJson?.apiKey ? { apiKey: bodyJson.apiKey } : {}),
-      ...(bodyJson?.headers ? { headers: bodyJson.headers } : {}),
-      ...(bodyJson?.models ? { models: bodyJson.models } : {}),
-      enabled: bodyJson?.enabled ?? true,
+      displayName: provider.name,
+      baseUrl: provider.baseUrl,
+      apiKey: provider.apiKey,
+      headers: provider.headers,
+      models: provider.models,
+      enabled: provider.enabled,
     });
 
-    return HttpServerResponse.jsonUnsafe({ ok: true, id: cleanId });
+    return HttpServerResponse.jsonUnsafe({ ok: true, id: cleanId, provider });
   }),
 );
 
@@ -798,12 +837,14 @@ export const layerCustomProviderDeleteRoute = HttpRouter.add(
   "POST",
   "/api/custom-provider/delete",
   Effect.gen(function* () {
+    const config = yield* ServerConfig.ServerConfig;
     const request = yield* HttpServerRequest.HttpServerRequest;
     const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
       id?: string;
     };
 
     if (bodyJson?.id) {
+      deleteCustomProvider(config.dbPath, bodyJson.id);
       unregisterFallbackCustomProvider(bodyJson.id);
     }
 
@@ -815,6 +856,7 @@ export const layerCustomProviderSyncRoute = HttpRouter.add(
   "POST",
   "/api/custom-provider/sync",
   Effect.gen(function* () {
+    const config = yield* ServerConfig.ServerConfig;
     const request = yield* HttpServerRequest.HttpServerRequest;
     const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
       providers?: Array<{
@@ -825,30 +867,85 @@ export const layerCustomProviderSyncRoute = HttpRouter.add(
         headers?: Array<{ key: string; value: string }>;
         models?: Array<{ id: string; name?: string }>;
         enabled?: boolean;
+        createdAt?: string;
+        updatedAt?: string;
       }>;
     };
 
     const nowMs = yield* Clock.currentTimeMillis;
+    const nowIso = new Date(nowMs).toISOString();
     if (Array.isArray(bodyJson?.providers)) {
+      const storedList: StoredCustomProvider[] = [];
       for (const p of bodyJson.providers) {
         if (!p) continue;
         const cleanId = (p.id ?? "").startsWith("custom_") ? p.id! : `custom_${p.id || nowMs}`;
+        const item: StoredCustomProvider = {
+          id: cleanId,
+          name: p.name ?? "Custom Provider",
+          baseUrl: p.baseUrl ?? "",
+          apiKey: p.apiKey ?? "",
+          headers: p.headers ?? [],
+          models: p.models ?? [],
+          enabled: p.enabled ?? true,
+          createdAt: p.createdAt ?? nowIso,
+          updatedAt: nowIso,
+        };
+        storedList.push(item);
+
         registerFallbackCustomProvider({
           instanceId: cleanId,
-          displayName: p.name ?? "Custom Provider",
-          baseUrl: p.baseUrl ?? "",
-          ...(p.apiKey ? { apiKey: p.apiKey } : {}),
-          ...(p.headers ? { headers: p.headers } : {}),
-          ...(p.models ? { models: p.models } : {}),
-          enabled: p.enabled ?? true,
+          displayName: item.name,
+          baseUrl: item.baseUrl,
+          apiKey: item.apiKey,
+          headers: item.headers,
+          models: item.models,
+          enabled: item.enabled,
         });
       }
+      syncCustomProviders(config.dbPath, storedList);
     }
 
     return HttpServerResponse.jsonUnsafe({
       ok: true,
       count: bodyJson?.providers?.length ?? 0,
     });
+  }),
+);
+
+export const layerAppSettingsGetRoute = HttpRouter.add(
+  "GET",
+  "/api/app-settings",
+  Effect.gen(function* () {
+    const config = yield* ServerConfig.ServerConfig;
+    const settings = getAllAppSettings(config.dbPath);
+    return HttpServerResponse.jsonUnsafe({
+      ok: true,
+      settings,
+    });
+  }),
+);
+
+export const layerAppSettingsSaveRoute = HttpRouter.add(
+  "POST",
+  "/api/app-settings/save",
+  Effect.gen(function* () {
+    const config = yield* ServerConfig.ServerConfig;
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      key?: string;
+      value?: any;
+      settings?: Record<string, any>;
+    };
+
+    if (bodyJson?.key && bodyJson.value !== undefined) {
+      setAppSetting(config.dbPath, bodyJson.key, bodyJson.value);
+    } else if (bodyJson?.settings && typeof bodyJson.settings === "object") {
+      for (const [k, v] of Object.entries(bodyJson.settings)) {
+        setAppSetting(config.dbPath, k, v);
+      }
+    }
+
+    return HttpServerResponse.jsonUnsafe({ ok: true });
   }),
 );
 

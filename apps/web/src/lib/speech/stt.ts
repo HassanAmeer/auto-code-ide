@@ -32,11 +32,14 @@ export function loadSttSettings(): SttSettings {
   }
 }
 
+import { saveServerSetting } from "../serverSettingsSync";
+
 export function saveSttSettings(settings: SttSettings): void {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(STT_STORAGE_KEY, JSON.stringify(settings));
     window.dispatchEvent(new CustomEvent("t3-stt-settings-changed", { detail: settings }));
+    void saveServerSetting(STT_STORAGE_KEY, settings);
   } catch (err) {
     console.warn("Failed to persist STT settings:", err);
   }
@@ -75,6 +78,60 @@ export const isMobileDevice =
   (/Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
     (navigator.maxTouchPoints > 0 && typeof window !== "undefined" && window.innerWidth < 800));
 
+/**
+ * Normalizes a word for comparison by removing punctuation and lowercasing.
+ */
+export function normalizeWord(w: string): string {
+  return w.toLowerCase().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
+}
+
+/**
+ * Removes immediate consecutive duplicate words that speech recognition engines (especially on mobile) occasionally emit.
+ * E.g. "hello hello hello" -> "hello"
+ */
+export function removeConsecutiveDuplicateWords(text: string): string {
+  if (!text) return "";
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (words.length <= 1) return text.trim();
+  const deduped: string[] = [];
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i]!;
+    if (i === 0) {
+      deduped.push(word);
+    } else {
+      const prevNorm = normalizeWord(words[i - 1]!);
+      const currNorm = normalizeWord(word);
+      if (prevNorm && currNorm && prevNorm === currNorm) {
+        continue;
+      }
+      deduped.push(word);
+    }
+  }
+  return deduped.join(" ");
+}
+
+/**
+ * Strips overlapping leading words from incoming text that match trailing words in existing text.
+ * E.g. if existing is "hello world" and incoming is "world how are you", returns "how are you".
+ * E.g. if existing is "hello" and incoming is "hello", returns "".
+ */
+export function deduplicateOverlap(existingText: string, incomingText: string): string {
+  if (!existingText || !incomingText) return incomingText.trim();
+  const existingWords = existingText.trim().split(/\s+/).filter(Boolean);
+  const incomingWords = incomingText.trim().split(/\s+/).filter(Boolean);
+  if (!existingWords.length || !incomingWords.length) return incomingText.trim();
+
+  const maxOverlap = Math.min(existingWords.length, incomingWords.length);
+  for (let len = maxOverlap; len >= 1; len--) {
+    const trailingExisting = existingWords.slice(-len).map(normalizeWord).join(" ");
+    const leadingIncoming = incomingWords.slice(0, len).map(normalizeWord).join(" ");
+    if (trailingExisting && trailingExisting === leadingIncoming) {
+      return incomingWords.slice(len).join(" ").trim();
+    }
+  }
+  return incomingText.trim();
+}
+
 export function createSttSession({
   mode,
   onResult,
@@ -111,6 +168,8 @@ export function createSttSession({
   let lastProcessedFinalIndex = 0;
   let currentInterimText = "";
   let accumulatedSessionText = "";
+  let lastFinalizedPhrase = "";
+  let lastFinalizedTimestamp = 0;
 
   const processTranscript = (raw: string) => {
     if (!raw) return "";
@@ -146,7 +205,9 @@ export function createSttSession({
     try {
       recognition = new SpeechRecognitionClass();
       recognition.lang = langCode;
-      recognition.continuous = true;
+      // On mobile browsers, continuous mode causes duplicated chunks and restarts.
+      // Setting continuous to false on mobile ensures clean, discrete phrase finalization.
+      recognition.continuous = !isMobileDevice;
       recognition.interimResults = true;
 
       lastProcessedFinalIndex = 0;
@@ -162,43 +223,67 @@ export function createSttSession({
         let newlyFinalized = "";
         let interim = "";
 
-        for (let i = 0; i < event.results.length; ++i) {
+        const startIndex = Math.max(event.resultIndex ?? 0, lastProcessedFinalIndex);
+
+        for (let i = startIndex; i < event.results.length; ++i) {
           const item = event.results[i];
           if (!item || !item[0]) continue;
           if (item.isFinal) {
-            if (i >= lastProcessedFinalIndex) {
-              const phrase = item[0].transcript.trim();
-              if (phrase) {
-                newlyFinalized += (newlyFinalized ? " " : "") + phrase;
+            const rawPhrase = item[0].transcript.trim();
+            if (rawPhrase) {
+              const cleaned = removeConsecutiveDuplicateWords(rawPhrase);
+              if (cleaned) {
+                newlyFinalized += (newlyFinalized ? " " : "") + cleaned;
               }
-              lastProcessedFinalIndex = i + 1;
             }
+            lastProcessedFinalIndex = i + 1;
           } else {
             const interimPhrase = item[0].transcript.trim();
             if (interimPhrase) {
-              interim += (interim ? " " : "") + interimPhrase;
+              const cleaned = removeConsecutiveDuplicateWords(interimPhrase);
+              if (cleaned) {
+                interim += (interim ? " " : "") + cleaned;
+              }
             }
           }
         }
 
-        currentInterimText = interim;
-
         if (newlyFinalized) {
           const processedFinal = processTranscript(newlyFinalized).trim();
           if (processedFinal) {
-            accumulatedSessionText += (accumulatedSessionText ? " " : "") + processedFinal;
-            onResult(processedFinal, true, accumulatedSessionText);
+            const now = Date.now();
+            // Deduplicate exact duplicate phrases emitted within rapid succession (2.5s)
+            const isRapidDuplicate =
+              normalizeWord(processedFinal) === normalizeWord(lastFinalizedPhrase) &&
+              now - lastFinalizedTimestamp < 2500;
+
+            if (!isRapidDuplicate) {
+              const nonOverlapping = deduplicateOverlap(accumulatedSessionText, processedFinal);
+              if (nonOverlapping) {
+                lastFinalizedPhrase = processedFinal;
+                lastFinalizedTimestamp = now;
+                accumulatedSessionText += (accumulatedSessionText ? " " : "") + nonOverlapping;
+                currentInterimText = "";
+                onResult(nonOverlapping, true, accumulatedSessionText);
+              }
+            }
           }
         }
 
         if (interim) {
           const processedInterim = processTranscript(interim).trim();
+          const nonOverlappingInterim = deduplicateOverlap(
+            accumulatedSessionText,
+            processedInterim,
+          );
+          currentInterimText = nonOverlappingInterim;
           const cumulativeWithInterim = accumulatedSessionText
-            ? `${accumulatedSessionText} ${processedInterim}`
-            : processedInterim;
-          onInterim?.(processedInterim);
-          onResult(processedInterim, false, cumulativeWithInterim);
+            ? `${accumulatedSessionText} ${nonOverlappingInterim}`
+            : nonOverlappingInterim;
+          onInterim?.(nonOverlappingInterim);
+          onResult(nonOverlappingInterim, false, cumulativeWithInterim);
         } else {
+          currentInterimText = "";
           onInterim?.("");
         }
       };
@@ -226,13 +311,14 @@ export function createSttSession({
 
       recognition.onend = () => {
         if (isRunning) {
-          // Browser closed the audio stream on pause or timeout:
-          // Immediately schedule a fresh seamless restart!
+          // Browser closed audio stream on pause or timeout:
+          // Mobile devices need 200ms to cleanly flush audio buffers before restarting.
+          const delay = isMobileDevice ? 200 : 60;
           restartTimer = setTimeout(() => {
             if (isRunning) {
               startInstance();
             }
-          }, 60);
+          }, delay);
           return;
         }
 
@@ -258,6 +344,8 @@ export function createSttSession({
       isRunning = true;
       currentInterimText = "";
       accumulatedSessionText = "";
+      lastFinalizedPhrase = "";
+      lastFinalizedTimestamp = 0;
       startInstance();
     },
     stop: () => {
@@ -269,10 +357,13 @@ export function createSttSession({
 
       // If user stops while there's uncommitted interim text, flush it as final before stopping!
       if (currentInterimText.trim()) {
-        const flushed = processTranscript(currentInterimText.trim()).trim();
-        if (flushed) {
-          accumulatedSessionText += (accumulatedSessionText ? " " : "") + flushed;
-          onResult(flushed, true, accumulatedSessionText);
+        const flushed = processTranscript(
+          removeConsecutiveDuplicateWords(currentInterimText.trim()),
+        ).trim();
+        const nonOverlapping = deduplicateOverlap(accumulatedSessionText, flushed);
+        if (nonOverlapping) {
+          accumulatedSessionText += (accumulatedSessionText ? " " : "") + nonOverlapping;
+          onResult(nonOverlapping, true, accumulatedSessionText);
         }
         currentInterimText = "";
       }
