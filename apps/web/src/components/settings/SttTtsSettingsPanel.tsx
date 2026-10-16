@@ -53,7 +53,7 @@ export function SttTtsSettingsPanel() {
   const [tts, setTts] = useState<TtsSettings>(loadTtsSettings);
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [testText, setTestText] = useState(
-    "Assalam o alaikum! Yeh T3 Code ka text to speech test hai.",
+    "Assalam o alaikum! Yeh AutoCode ka text to speech test hai.",
   );
   const [isSpeaking, setIsSpeaking] = useState(false);
 
@@ -97,14 +97,14 @@ export function SttTtsSettingsPanel() {
     saveTtsSettings(updated);
     if (lang === "auto-male" || lang === "auto-female") {
       setTestText(
-        "Assalam o alaikum! Yeh auto-detected text to speech test hai. T3 Code will read this automatically.",
+        "Assalam o alaikum! Yeh auto-detected text to speech test hai. AutoCode will read this automatically.",
       );
     } else if (lang === "natural-urdu") {
-      setTestText("السلام علیکم! یہ ٹی تھری کوڈ کا ٹیکسٹ ٹو اسپیچ ٹیسٹ ہے۔");
+      setTestText("السلام علیکم! یہ آٹو کوڈ کا ٹیکسٹ ٹو اسپیچ ٹیسٹ ہے۔");
     } else if (lang === "english") {
-      setTestText("Hello! This is a text to speech test for T3 Code.");
+      setTestText("Hello! This is a text to speech test for AutoCode.");
     } else {
-      setTestText("Assalam o alaikum! Yeh T3 Code ka text to speech test hai.");
+      setTestText("Assalam o alaikum! Yeh AutoCode ka text to speech test hai.");
     }
   };
 

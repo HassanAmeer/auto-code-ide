@@ -201,7 +201,6 @@ export const makePreviewBrowser = Effect.fn("PreviewBrowser.make")(function* (
   // Check both the worktree install root and global user directories for an already installed browser.
   const candidateInstallRoots = (relPlatform: string) => [
     installRoot,
-    path.join(NodeOS.homedir(), ".t3", "tools", "chrome-headless-shell", relPlatform),
     path.join(NodeOS.homedir(), ".autocode", "tools", "chrome-headless-shell", relPlatform),
   ];
 

@@ -1240,7 +1240,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                                   >
                                     openrouter.ai/settings/keys
                                   </a>
-                                  , generate a fresh key, and update it in T3 Code Provider
+                                  , generate a fresh key, and update it in AutoCode Provider
                                   Settings.
                                 </p>
                               ) : selectedAiLog.status === 429 ? (

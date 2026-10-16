@@ -823,8 +823,8 @@ export const layerCustomProviderSaveRoute = HttpRouter.add(
       instanceId: cleanId,
       displayName: provider.name,
       baseUrl: provider.baseUrl,
-      apiKey: provider.apiKey,
-      headers: provider.headers,
+      apiKey: provider.apiKey ?? "",
+      headers: provider.headers ?? [],
       models: provider.models,
       enabled: provider.enabled,
     });
@@ -896,8 +896,8 @@ export const layerCustomProviderSyncRoute = HttpRouter.add(
           instanceId: cleanId,
           displayName: item.name,
           baseUrl: item.baseUrl,
-          apiKey: item.apiKey,
-          headers: item.headers,
+          apiKey: item.apiKey ?? "",
+          headers: item.headers ?? [],
           models: item.models,
           enabled: item.enabled,
         });
@@ -1303,7 +1303,7 @@ export const layerProjectDownloadZipRoute = HttpRouter.add(
 
     const tempZipFile = `/tmp/t3_dl_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.zip`;
     // Exclude dependencies and heavy bloat just like GitHub repository download
-    const zipCmd = `zip -r -q "${tempZipFile}" . -x "node_modules/*" "*/node_modules/*" ".git/*" "*/.git/*" "dist/*" "*/dist/*" ".next/*" "*/.next/*" "build/*" "*/build/*" ".cache/*" "*/.cache/*" ".turbo/*" "*/.turbo/*" ".venv/*" "*/.venv/*" "__pycache__/*" "*/__pycache__/*" ".t3/*" "*/.t3/*"`;
+    const zipCmd = `zip -r -q "${tempZipFile}" . -x "node_modules/*" "*/node_modules/*" ".git/*" "*/.git/*" "dist/*" "*/dist/*" ".next/*" "*/.next/*" "build/*" "*/build/*" ".cache/*" "*/.cache/*" ".turbo/*" "*/.turbo/*" ".venv/*" "*/.venv/*" "__pycache__/*" "*/__pycache__/*" ".t3/*" "*/.t3/*" ".autocode/*" "*/.autocode/*"`;
 
     const zipResult = yield* Effect.promise(() =>
       runBashCommandOnHost(zipCmd, workspaceRoot, 120_000),

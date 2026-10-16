@@ -69,17 +69,7 @@ export function isProxiableBindHost(host: string): boolean {
 }
 
 export const DEFAULT_T3_HOME = Effect.map(Effect.service(Path.Path), (path) => {
-  const autocodeDir = path.join(NodeOS.homedir(), ".autocode");
-  const adcDir = path.join(NodeOS.homedir(), ".adc");
-  const autodeskDir = path.join(NodeOS.homedir(), ".autodeskcode");
-  const jobiDir = path.join(NodeOS.homedir(), ".jobi");
-  const t3Dir = path.join(NodeOS.homedir(), ".t3");
-  if (NodeFS.existsSync(autocodeDir)) return autocodeDir;
-  if (NodeFS.existsSync(adcDir)) return adcDir;
-  if (NodeFS.existsSync(autodeskDir)) return autodeskDir;
-  if (NodeFS.existsSync(jobiDir)) return jobiDir;
-  if (NodeFS.existsSync(t3Dir)) return t3Dir;
-  return autocodeDir;
+  return path.join(NodeOS.homedir(), ".autocode");
 });
 
 const MODE_ARGS = {
@@ -669,6 +659,7 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
     // Trim before choosing: `--home-dir ""` is not a selection, and treating it
     // as one would skip the worktree default and land on the shared home —
     // exactly the outcome this precedence exists to prevent.
+    const projectLocalHome = NodePath.join(yield* HostProcessWorkingDirectory, ".autocode");
     const resolvedT3Home =
       (input.t3Home?.trim() || undefined) ??
       worktreeHome ??
@@ -677,7 +668,7 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
         hostEnvironment.ADC_HOME?.trim() ||
         hostEnvironment.JOBICODE_HOME?.trim() ||
         hostEnvironment.T3CODE_HOME?.trim() ||
-        undefined);
+        projectLocalHome);
     const env = yield* createDevRunnerEnv({
       mode: input.mode,
       baseEnv: hostEnvironment,

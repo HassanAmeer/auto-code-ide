@@ -528,7 +528,7 @@ export function useImportLocalProject() {
         }
 
         projectUploadStore.setState({
-          stage: "Opening project in T3 Code...",
+          stage: "Opening project in AutoCode...",
           percent: 100,
         });
 

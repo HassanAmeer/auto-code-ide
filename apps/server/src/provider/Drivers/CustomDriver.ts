@@ -436,6 +436,9 @@ export function makeCustomAdapterV2(
                   ? turnInput.modelSelection.model
                   : (config.models?.[0]?.id ?? "default");
               let chatUrl = "";
+              let cleanBase = "";
+              let currentAiLogId: string | null = null;
+              let currentStartMs = Date.now();
 
               const runTurn = Effect.gen(function* () {
                 yield* Queue.offer(eventsQueue, {
@@ -486,7 +489,7 @@ export function makeCustomAdapterV2(
                   );
                 }
 
-                let cleanBase = rawBase.replace(/\/chat\/completions\/?$/i, "").replace(/\/+$/, "");
+                cleanBase = rawBase.replace(/\/chat\/completions\/?$/i, "").replace(/\/+$/, "");
                 if (cleanBase.includes("openrouter.ai")) {
                   cleanBase = "https://openrouter.ai/api/v1";
                 }
@@ -666,8 +669,8 @@ Provide full, complete, production-ready code with no placeholders.`;
                   }
                 }
 
-                let currentAiLogId: string | null = null;
-                const currentStartMs = Date.now();
+                currentAiLogId = null;
+                currentStartMs = Date.now();
                 const timeFormatted = new Date().toLocaleTimeString();
 
                 const reqHeadersRecord: Record<string, string> = {
@@ -748,7 +751,7 @@ Provide full, complete, production-ready code with no placeholders.`;
                   if (currentAiLogId) {
                     updateAiModelLog(currentAiLogId, {
                       status: rawResponse.status,
-                      statusText: rawResponse.statusText || "Error",
+                      statusText: String(rawResponse.status),
                       durationMs: Date.now() - currentStartMs,
                       state: "error",
                       error: statusMsg,
@@ -954,7 +957,7 @@ Provide full, complete, production-ready code with no placeholders.`;
                 if (currentAiLogId) {
                   updateAiModelLog(currentAiLogId, {
                     status: rawResponse.status,
-                    statusText: rawResponse.statusText || "OK",
+                    statusText: "OK",
                     durationMs: Date.now() - currentStartMs,
                     state: "completed",
                     responseBody: finalText,
@@ -1195,12 +1198,12 @@ function loadPersistedCustomProviders(): void {
 export function registerFallbackCustomProvider(
   params: {
     instanceId: string;
-    displayName?: string;
+    displayName?: string | undefined;
     baseUrl: string;
-    apiKey?: string;
-    headers?: Array<CustomHeaderConfig>;
-    models?: Array<CustomModelConfig>;
-    enabled?: boolean;
+    apiKey?: string | undefined;
+    headers?: Array<CustomHeaderConfig> | undefined;
+    models?: Array<CustomModelConfig> | undefined;
+    enabled?: boolean | undefined;
   },
   shouldPersist = true,
 ): ProviderInstance {

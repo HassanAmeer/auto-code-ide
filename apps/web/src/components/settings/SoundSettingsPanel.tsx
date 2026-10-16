@@ -40,7 +40,7 @@ export function SoundSettingsPanel() {
   // --- TTS State ---
   const [tts, setTts] = useState<TtsSettings>(loadTtsSettings);
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-  const [testText, setTestText] = useState("Assalam o alaikum! Yeh T3 Code ka voice test hai.");
+  const [testText, setTestText] = useState("Assalam o alaikum! Yeh AutoCode ka voice test hai.");
   const [isSpeaking, setIsSpeaking] = useState(false);
 
   useEffect(() => {
@@ -75,7 +75,7 @@ export function SoundSettingsPanel() {
     if (isSpeaking) {
       stopSpeaking();
     } else {
-      speakText(testText || "T3 Code voice output test.", tts);
+      speakText(testText || "AutoCode voice output test.", tts);
     }
   };
 
