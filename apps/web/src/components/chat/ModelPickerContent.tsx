@@ -303,12 +303,16 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
   const currentCustomProvider = useMemo(() => {
     if (!selectedInstanceId || selectedInstanceId === "favorites") return null;
     return (
-      customProvidersList.find(
-        (cp) =>
-          cp.id === selectedInstanceId ||
-          `custom_${cp.id}` === selectedInstanceId ||
-          cp.id === `custom_${selectedInstanceId}`,
-      ) ?? null
+      customProvidersList.find((cp) => {
+        if (!cp) return false;
+        const id = cp.id ?? (cp as any).instanceId;
+        if (!id) return false;
+        return (
+          id === selectedInstanceId ||
+          `custom_${id}` === selectedInstanceId ||
+          id === `custom_${selectedInstanceId}`
+        );
+      }) ?? null
     );
   }, [selectedInstanceId, customProvidersList]);
 
@@ -343,12 +347,14 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
       });
 
       if (instanceId !== "favorites") {
-        const cp = customProvidersList.find(
-          (p) =>
-            p.id === instanceId ||
-            `custom_${p.id}` === instanceId ||
-            p.id === `custom_${instanceId}`,
-        );
+        const cp = customProvidersList.find((p) => {
+          if (!p) return false;
+          const id = p.id ?? (p as any).instanceId;
+          if (!id) return false;
+          return (
+            id === instanceId || `custom_${id}` === instanceId || id === `custom_${instanceId}`
+          );
+        });
         if (
           cp &&
           (cp.models.length === 0 || (cp.models.length === 1 && cp.models[0]?.id === "default"))

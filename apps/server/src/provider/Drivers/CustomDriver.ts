@@ -17,6 +17,7 @@ import {
   TextGenerationError,
 } from "@t3tools/contracts";
 import * as NodeFS from "node:fs";
+import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
@@ -1156,7 +1157,18 @@ const fallbackParams = new Map<string, any>();
 function getCustomProvidersFilePath(): string {
   const procEnv = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process
     ?.env;
-  const baseDir = procEnv?.T3CODE_HOME || "/root/autojobs/data";
+  let baseDir = procEnv?.T3CODE_HOME;
+  if (!baseDir) {
+    try {
+      if (NodeFS.existsSync("/root/autojobs/data")) {
+        NodeFS.accessSync("/root/autojobs/data", NodeFS.constants.W_OK);
+        baseDir = "/root/autojobs/data";
+      }
+    } catch {}
+  }
+  if (!baseDir) {
+    baseDir = NodePath.join(NodeOS.homedir(), ".autojobs/data");
+  }
   const userDir = NodePath.resolve(baseDir, "userdata");
   try {
     if (!NodeFS.existsSync(userDir)) {
@@ -1169,7 +1181,19 @@ function getCustomProvidersFilePath(): string {
 function saveCustomProvidersToDisk(): void {
   try {
     const filePath = getCustomProvidersFilePath();
-    const list = Array.from(fallbackParams.values());
+    const list = Array.from(fallbackParams.values()).map((p) => {
+      const rawId = p.instanceId || p.id || `custom_${Date.now()}`;
+      const strId = String(rawId);
+      const cleanId = strId.startsWith("custom_") ? strId : `custom_${strId}`;
+      const name = p.name || p.displayName || "Custom Provider";
+      return {
+        ...p,
+        instanceId: cleanId,
+        id: cleanId,
+        displayName: name,
+        name,
+      };
+    });
     NodeFS.writeFileSync(filePath, JSON.stringify(list, null, 2), "utf-8");
   } catch (err) {
     console.error("Failed saving custom providers to disk:", err);
@@ -1184,8 +1208,19 @@ function loadPersistedCustomProviders(): void {
       const list = JSON.parse(content);
       if (Array.isArray(list)) {
         for (const p of list) {
-          if (p && p.instanceId) {
-            registerFallbackCustomProvider(p, false);
+          if (p && (p.instanceId || p.id)) {
+            registerFallbackCustomProvider(
+              {
+                instanceId: p.instanceId || p.id,
+                displayName: p.displayName || p.name,
+                baseUrl: p.baseUrl || "",
+                apiKey: p.apiKey,
+                headers: p.headers,
+                models: p.models,
+                enabled: p.enabled,
+              },
+              false,
+            );
           }
         }
       }
@@ -1207,13 +1242,14 @@ export function registerFallbackCustomProvider(
   },
   shouldPersist = true,
 ): ProviderInstance {
-  const cleanId = params.instanceId.startsWith("custom_")
-    ? params.instanceId
-    : `custom_${params.instanceId}`;
+  const rawId = params.instanceId || (params as any).id || `custom_${Date.now()}`;
+  const strId = String(rawId);
+  const cleanId = strId.startsWith("custom_") ? strId : `custom_${strId}`;
+  const displayName = params.displayName ?? (params as any).name ?? "Custom Provider";
   const instanceId = ProviderInstanceId.make(cleanId);
   const instance = createCustomProviderInstance({
     instanceId,
-    displayName: params.displayName ?? "Custom Provider",
+    displayName,
     enabled: params.enabled ?? true,
     environment: [],
     config: {
@@ -1224,8 +1260,14 @@ export function registerFallbackCustomProvider(
     },
   });
   fallbackInstances.set(cleanId, instance);
-  fallbackInstances.set(params.instanceId, instance);
-  fallbackParams.set(cleanId, { ...params, instanceId: cleanId });
+  fallbackInstances.set(strId, instance);
+  fallbackParams.set(cleanId, {
+    ...params,
+    instanceId: cleanId,
+    id: cleanId,
+    displayName,
+    name: displayName,
+  });
 
   if (shouldPersist) {
     saveCustomProvidersToDisk();
@@ -1235,11 +1277,13 @@ export function registerFallbackCustomProvider(
 }
 
 export function unregisterFallbackCustomProvider(id: string): void {
-  const cleanId = id.startsWith("custom_") ? id : `custom_${id}`;
+  if (!id) return;
+  const strId = String(id);
+  const cleanId = strId.startsWith("custom_") ? strId : `custom_${strId}`;
   fallbackInstances.delete(cleanId);
-  fallbackInstances.delete(id);
+  fallbackInstances.delete(strId);
   fallbackParams.delete(cleanId);
-  fallbackParams.delete(id);
+  fallbackParams.delete(strId);
   saveCustomProvidersToDisk();
 }
 

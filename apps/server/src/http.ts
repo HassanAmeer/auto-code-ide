@@ -800,14 +800,14 @@ export const layerCustomProviderSaveRoute = HttpRouter.add(
     };
 
     const nowMs = yield* Clock.currentTimeMillis;
-    const cleanId = (bodyJson?.id ?? "").startsWith("custom_")
-      ? bodyJson.id!
-      : `custom_${bodyJson?.id || nowMs}`;
+    const rawId = bodyJson?.id || (bodyJson as any)?.instanceId || nowMs;
+    const strId = String(rawId);
+    const cleanId = strId.startsWith("custom_") ? strId : `custom_${strId}`;
     const nowIso = new Date(nowMs).toISOString();
 
     const provider: StoredCustomProvider = {
       id: cleanId,
-      name: bodyJson?.name ?? "Custom Provider",
+      name: bodyJson?.name ?? (bodyJson as any)?.displayName ?? "Custom Provider",
       baseUrl: bodyJson?.baseUrl ?? "",
       apiKey: bodyJson?.apiKey ?? "",
       headers: bodyJson?.headers ?? [],
@@ -843,9 +843,11 @@ export const layerCustomProviderDeleteRoute = HttpRouter.add(
       id?: string;
     };
 
-    if (bodyJson?.id) {
-      deleteCustomProvider(config.dbPath, bodyJson.id);
-      unregisterFallbackCustomProvider(bodyJson.id);
+    const targetId = bodyJson?.id || (bodyJson as any)?.instanceId;
+    if (targetId) {
+      const deleteId = String(targetId);
+      deleteCustomProvider(config.dbPath, deleteId);
+      unregisterFallbackCustomProvider(deleteId);
     }
 
     return HttpServerResponse.jsonUnsafe({ ok: true });
@@ -878,10 +880,12 @@ export const layerCustomProviderSyncRoute = HttpRouter.add(
       const storedList: StoredCustomProvider[] = [];
       for (const p of bodyJson.providers) {
         if (!p) continue;
-        const cleanId = (p.id ?? "").startsWith("custom_") ? p.id! : `custom_${p.id || nowMs}`;
+        const rawId = p.id || (p as any).instanceId || nowMs;
+        const strId = String(rawId);
+        const cleanId = strId.startsWith("custom_") ? strId : `custom_${strId}`;
         const item: StoredCustomProvider = {
           id: cleanId,
-          name: p.name ?? "Custom Provider",
+          name: p.name ?? (p as any).displayName ?? "Custom Provider",
           baseUrl: p.baseUrl ?? "",
           apiKey: p.apiKey ?? "",
           headers: p.headers ?? [],

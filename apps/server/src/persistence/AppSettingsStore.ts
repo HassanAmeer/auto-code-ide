@@ -157,47 +157,86 @@ export function setAppSetting(dbPath: string, key: string, value: any): void {
   }
 }
 
+export function normalizeStoredCustomProvider(p: any): StoredCustomProvider {
+  const rawId = p?.id ?? p?.instanceId ?? `custom_${Date.now()}`;
+  const strId = String(rawId);
+  const cleanId = strId.startsWith("custom_") ? strId : `custom_${strId}`;
+  const name = String(p?.name ?? p?.displayName ?? "Custom Provider");
+  const baseUrl = String(p?.baseUrl ?? p?.base_url ?? "");
+  const apiKey = p?.apiKey ?? p?.api_key ?? "";
+
+  let headers: CustomHeaderConfig[] = [];
+  if (Array.isArray(p?.headers)) {
+    headers = p.headers;
+  } else if (typeof p?.headers === "string") {
+    try {
+      const parsed = JSON.parse(p.headers);
+      if (Array.isArray(parsed)) headers = parsed;
+    } catch {}
+  }
+
+  let models: CustomModelConfig[] = [];
+  if (Array.isArray(p?.models)) {
+    models = p.models;
+  } else if (typeof p?.models === "string") {
+    try {
+      const parsed = JSON.parse(p.models);
+      if (Array.isArray(parsed)) models = parsed;
+    } catch {}
+  }
+
+  const enabled = p?.enabled !== undefined ? Boolean(p.enabled) : true;
+  const createdAt = p?.createdAt ?? p?.created_at ?? new Date().toISOString();
+  const updatedAt = p?.updatedAt ?? p?.updated_at ?? new Date().toISOString();
+
+  return {
+    id: cleanId,
+    name,
+    baseUrl,
+    apiKey,
+    headers,
+    models,
+    enabled,
+    createdAt,
+    updatedAt,
+  };
+}
+
 export function listCustomProviders(dbPath: string): StoredCustomProvider[] {
-  const fileProviders = readJsonFile<StoredCustomProvider[]>(
-    getCustomProvidersFilePath(dbPath),
-    [],
-  );
+  const fileProviders = readJsonFile<any[]>(getCustomProvidersFilePath(dbPath), []);
+  const normalizedFileProviders = (Array.isArray(fileProviders) ? fileProviders : [])
+    .filter((p) => Boolean(p && typeof p === "object"))
+    .map(normalizeStoredCustomProvider);
+
   const db = getDb(dbPath);
-  if (!db) return fileProviders;
+  if (!db) return normalizedFileProviders;
 
   try {
     const stmt = db.prepare("SELECT * FROM app_custom_providers ORDER BY updated_at DESC");
     const rows = stmt.all() as any[];
-    if (rows.length === 0 && fileProviders.length > 0) {
-      for (const p of fileProviders) {
+    if (rows.length === 0 && normalizedFileProviders.length > 0) {
+      for (const p of normalizedFileProviders) {
         saveCustomProvider(dbPath, p);
       }
-      return fileProviders;
+      return normalizedFileProviders;
     }
-    return rows.map((row) => ({
-      id: row.id,
-      name: row.name,
-      baseUrl: row.base_url,
-      apiKey: row.api_key || "",
-      headers: typeof row.headers === "string" ? JSON.parse(row.headers) : (row.headers ?? []),
-      models: typeof row.models === "string" ? JSON.parse(row.models) : (row.models ?? []),
-      enabled: Boolean(row.enabled),
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-    }));
+    return rows.map((row) => normalizeStoredCustomProvider(row));
   } catch (err) {
     console.error("Error listing custom providers from SQLite:", err);
-    return fileProviders;
+    return normalizedFileProviders;
   }
 }
 
 export function saveCustomProvider(dbPath: string, provider: StoredCustomProvider): void {
+  const norm = normalizeStoredCustomProvider(provider);
   const providers = readJsonFile<StoredCustomProvider[]>(getCustomProvidersFilePath(dbPath), []);
-  const idx = providers.findIndex((p) => p.id === provider.id);
+  const idx = providers.findIndex(
+    (p) => p && (p.id === norm.id || (p as any).instanceId === norm.id),
+  );
   if (idx !== -1) {
-    providers[idx] = provider;
+    providers[idx] = norm;
   } else {
-    providers.push(provider);
+    providers.push(norm);
   }
   writeJsonFile(getCustomProvidersFilePath(dbPath), providers);
 
@@ -218,15 +257,15 @@ export function saveCustomProvider(dbPath: string, provider: StoredCustomProvide
         updated_at = excluded.updated_at
     `);
     stmt.run(
-      provider.id,
-      provider.name,
-      provider.baseUrl,
-      provider.apiKey ?? "",
-      JSON.stringify(provider.headers ?? []),
-      JSON.stringify(provider.models ?? []),
-      provider.enabled ? 1 : 0,
-      provider.createdAt || new Date().toISOString(),
-      provider.updatedAt || new Date().toISOString(),
+      norm.id,
+      norm.name,
+      norm.baseUrl,
+      norm.apiKey ?? "",
+      JSON.stringify(norm.headers ?? []),
+      JSON.stringify(norm.models ?? []),
+      norm.enabled ? 1 : 0,
+      norm.createdAt || new Date().toISOString(),
+      norm.updatedAt || new Date().toISOString(),
     );
   } catch (err) {
     console.error("Error saving custom provider to SQLite:", err);
@@ -234,24 +273,37 @@ export function saveCustomProvider(dbPath: string, provider: StoredCustomProvide
 }
 
 export function deleteCustomProvider(dbPath: string, id: string): void {
+  if (!id) return;
+  const rawId = String(id);
+  const cleanId = rawId.startsWith("custom_") ? rawId : `custom_${rawId}`;
   const providers = readJsonFile<StoredCustomProvider[]>(getCustomProvidersFilePath(dbPath), []);
-  const filtered = providers.filter((p) => p.id !== id);
+  const filtered = providers.filter(
+    (p) =>
+      p &&
+      p.id !== rawId &&
+      p.id !== cleanId &&
+      (p as any).instanceId !== rawId &&
+      (p as any).instanceId !== cleanId,
+  );
   writeJsonFile(getCustomProvidersFilePath(dbPath), filtered);
 
   const db = getDb(dbPath);
   if (!db) return;
 
   try {
-    const stmt = db.prepare("DELETE FROM app_custom_providers WHERE id = ?");
-    stmt.run(id);
+    const stmt = db.prepare("DELETE FROM app_custom_providers WHERE id = ? OR id = ?");
+    stmt.run(rawId, cleanId);
   } catch (err) {
     console.error("Error deleting custom provider from SQLite:", err);
   }
 }
 
 export function syncCustomProviders(dbPath: string, providers: StoredCustomProvider[]): void {
-  writeJsonFile(getCustomProvidersFilePath(dbPath), providers);
-  for (const p of providers) {
+  const normalized = (Array.isArray(providers) ? providers : [])
+    .filter((p) => Boolean(p && typeof p === "object"))
+    .map(normalizeStoredCustomProvider);
+  writeJsonFile(getCustomProvidersFilePath(dbPath), normalized);
+  for (const p of normalized) {
     saveCustomProvider(dbPath, p);
   }
 }

@@ -3105,8 +3105,12 @@ export default function ChatView(props: ChatViewProps) {
     const nonCustomRaw = rawProviderStatuses.filter(
       (p) => p.driver !== "custom" && p.instanceId !== "custom",
     );
-    if (customProvidersList.length === 0) return nonCustomRaw;
-    const customStatuses = customProvidersList.map(customProviderToServerProvider);
+    if (!Array.isArray(customProvidersList) || customProvidersList.length === 0)
+      return nonCustomRaw;
+    const customStatuses = customProvidersList
+      .filter((cp): cp is CustomProvider => Boolean(cp && typeof cp === "object"))
+      .map(customProviderToServerProvider)
+      .filter(Boolean);
     return [...nonCustomRaw, ...customStatuses];
   }, [rawProviderStatuses, customProvidersList]);
   const selectedProviderByThreadId = composerActiveProvider ?? null;

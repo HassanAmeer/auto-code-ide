@@ -87,4 +87,28 @@ describe("AppSettingsStore", () => {
       NodeFS.rmSync(tempDir, { recursive: true, force: true });
     }
   });
+
+  it("handles legacy provider format with instanceId and displayName safely", () => {
+    const tempDir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-legacy-providers-test-"));
+    const dbPath = NodePath.join(tempDir, "statev2.sqlite");
+
+    try {
+      const legacyProvider = {
+        instanceId: "custom_legacy_api",
+        displayName: "Legacy Custom API",
+        baseUrl: "https://api.legacy.com/v1",
+        apiKey: "sk-legacy",
+        models: [{ id: "model-1" }],
+      } as any;
+
+      saveCustomProvider(dbPath, legacyProvider);
+      const list = listCustomProviders(dbPath);
+      expect(list.length).toBe(1);
+      expect(list[0]?.id).toBe("custom_legacy_api");
+      expect(list[0]?.name).toBe("Legacy Custom API");
+      expect(list[0]?.baseUrl).toBe("https://api.legacy.com/v1");
+    } finally {
+      NodeFS.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
 });

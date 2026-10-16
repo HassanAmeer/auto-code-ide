@@ -27,13 +27,55 @@ export interface CustomProvider {
   updatedAt: string;
 }
 
+export function normalizeCustomProvider(p: unknown): CustomProvider | null {
+  if (!p || typeof p !== "object") return null;
+  const anyP = p as Record<string, any>;
+  const rawId = anyP.id ?? anyP.instanceId;
+  const strId = rawId
+    ? String(rawId)
+    : `custom_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const cleanId = strId.startsWith("custom_") ? strId : `custom_${strId}`;
+  const name = String(anyP.name ?? anyP.displayName ?? "Custom Provider");
+  const baseUrl = String(anyP.baseUrl ?? anyP.base_url ?? "");
+  const apiKey = anyP.apiKey ? String(anyP.apiKey) : undefined;
+  const headers: CustomHeader[] = Array.isArray(anyP.headers)
+    ? anyP.headers.filter((h: any) => h && typeof h === "object" && typeof h.key === "string")
+    : [];
+  const models: CustomProviderModel[] = Array.isArray(anyP.models)
+    ? anyP.models
+        .filter((m: any) => m && (typeof m.id === "string" || typeof m.name === "string"))
+        .map((m: any) => ({
+          id: String(m.id || m.name),
+          name: m.name ? String(m.name) : undefined,
+        }))
+    : [];
+  const enabled = anyP.enabled !== undefined ? Boolean(anyP.enabled) : true;
+  const createdAt = anyP.createdAt ? String(anyP.createdAt) : new Date().toISOString();
+  const updatedAt = anyP.updatedAt ? String(anyP.updatedAt) : new Date().toISOString();
+
+  return {
+    id: cleanId,
+    name,
+    baseUrl,
+    apiKey,
+    headers,
+    models,
+    enabled,
+    createdAt,
+    updatedAt,
+  };
+}
+
 export function customProviderToServerProvider(cp: CustomProvider): ServerProvider {
-  const cleanId = cp.id.startsWith("custom_") ? cp.id : `custom_${cp.id}`;
+  const norm = normalizeCustomProvider(cp);
+  const cleanId = norm ? norm.id : `custom_${Date.now()}`;
   const instanceId = ProviderInstanceId.make(cleanId);
   const driver = ProviderDriverKind.make("custom");
+  const name = norm ? norm.name : "Custom Provider";
+  const enabled = norm ? norm.enabled : true;
   const models: ServerProviderModel[] =
-    cp.models && cp.models.length > 0
-      ? cp.models.map((m) => ({
+    norm && norm.models.length > 0
+      ? norm.models.map((m) => ({
           id: m.id,
           slug: m.id,
           name: m.name ?? m.id,
@@ -45,8 +87,8 @@ export function customProviderToServerProvider(cp: CustomProvider): ServerProvid
           {
             id: "default",
             slug: "default",
-            name: `${cp.name} (Default)`,
-            displayName: `${cp.name} (Default)`,
+            name: `${name} (Default)`,
+            displayName: `${name} (Default)`,
             isCustom: false,
             capabilities: null,
           },
@@ -55,15 +97,15 @@ export function customProviderToServerProvider(cp: CustomProvider): ServerProvid
   return {
     instanceId,
     driver,
-    displayName: cp.name,
-    name: cp.name,
-    enabled: cp.enabled,
+    displayName: name,
+    name,
+    enabled,
     installed: true,
     version: null,
-    status: cp.enabled ? "ready" : "disabled",
+    status: enabled ? "ready" : "disabled",
     auth: { status: "authenticated" },
     checkedAt: new Date().toISOString(),
-    availability: cp.enabled ? "available" : "unavailable",
+    availability: enabled ? "available" : "unavailable",
     models,
     slashCommands: [],
     skills: [],
@@ -116,7 +158,29 @@ export function getCustomProviders(): CustomProvider[] {
       saveCustomProviders(DEFAULT_CUSTOM_PROVIDERS);
       return DEFAULT_CUSTOM_PROVIDERS;
     }
-    return parsed;
+    const normalized: CustomProvider[] = [];
+    let needsRewrite = false;
+    for (const item of parsed) {
+      const norm = normalizeCustomProvider(item);
+      if (norm) {
+        normalized.push(norm);
+        if (!item || typeof item !== "object" || item.id !== norm.id || item.name !== norm.name) {
+          needsRewrite = true;
+        }
+      } else {
+        needsRewrite = true;
+      }
+    }
+    if (normalized.length === 0) {
+      saveCustomProviders(DEFAULT_CUSTOM_PROVIDERS);
+      return DEFAULT_CUSTOM_PROVIDERS;
+    }
+    if (needsRewrite) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+      } catch {}
+    }
+    return normalized;
   } catch (error) {
     console.error("Failed to load custom providers:", error);
     return DEFAULT_CUSTOM_PROVIDERS;
@@ -126,13 +190,16 @@ export function getCustomProviders(): CustomProvider[] {
 export function saveCustomProviders(providers: CustomProvider[]): void {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(providers));
-    window.dispatchEvent(new CustomEvent(EVENT_KEY, { detail: providers }));
+    const normalized = (Array.isArray(providers) ? providers : [])
+      .map(normalizeCustomProvider)
+      .filter((p): p is CustomProvider => p !== null);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+    window.dispatchEvent(new CustomEvent(EVENT_KEY, { detail: normalized }));
     // Synchronize with server database
     void fetch("/api/custom-provider/sync", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ providers }),
+      body: JSON.stringify({ providers: normalized }),
     }).catch(() => {});
   } catch (error) {
     console.error("Failed to save custom providers:", error);
@@ -147,7 +214,9 @@ export function saveCustomProvider(
 
   let updatedProvider: CustomProvider;
   if (data.id) {
-    const index = providers.findIndex((p) => p.id === data.id);
+    const rawId = String(data.id);
+    const cleanId = rawId.startsWith("custom_") ? rawId : `custom_${rawId}`;
+    const index = providers.findIndex((p) => p.id === cleanId || p.id === data.id);
     if (index !== -1) {
       const existing = providers[index]!;
       updatedProvider = {
@@ -161,7 +230,7 @@ export function saveCustomProvider(
     } else {
       updatedProvider = {
         ...data,
-        id: data.id,
+        id: cleanId,
         createdAt: now,
         updatedAt: now,
       };
@@ -191,8 +260,11 @@ export function saveCustomProvider(
 }
 
 export function toggleCustomProvider(id: string): boolean {
+  if (!id) return false;
+  const rawId = String(id);
+  const cleanId = rawId.startsWith("custom_") ? rawId : `custom_${rawId}`;
   const providers = getCustomProviders();
-  const provider = providers.find((p) => p.id === id);
+  const provider = providers.find((p) => p.id === id || p.id === cleanId);
   if (!provider) return false;
 
   provider.enabled = !provider.enabled;
@@ -202,14 +274,17 @@ export function toggleCustomProvider(id: string): boolean {
 }
 
 export function deleteCustomProvider(id: string): void {
+  if (!id) return;
+  const rawId = String(id);
+  const cleanId = rawId.startsWith("custom_") ? rawId : `custom_${rawId}`;
   const providers = getCustomProviders();
-  const filtered = providers.filter((p) => p.id !== id);
+  const filtered = providers.filter((p) => p.id !== id && p.id !== cleanId);
   saveCustomProviders(filtered);
   if (typeof window !== "undefined") {
     void fetch("/api/custom-provider/delete", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
+      body: JSON.stringify({ id: cleanId }),
     }).catch(() => {});
   }
 }
@@ -222,9 +297,14 @@ if (typeof window !== "undefined") {
       if (res.ok) {
         const data = (await res.json()) as { ok?: boolean; providers?: CustomProvider[] };
         if (data.ok && Array.isArray(data.providers) && data.providers.length > 0) {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(data.providers));
-          window.dispatchEvent(new CustomEvent(EVENT_KEY, { detail: data.providers }));
-          return;
+          const normalized = data.providers
+            .map(normalizeCustomProvider)
+            .filter((p): p is CustomProvider => p !== null);
+          if (normalized.length > 0) {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+            window.dispatchEvent(new CustomEvent(EVENT_KEY, { detail: normalized }));
+            return;
+          }
         }
       }
     } catch {
@@ -250,7 +330,15 @@ export function subscribeCustomProviders(
 
   const handler = (event: Event) => {
     const customEvent = event as CustomEvent<CustomProvider[]>;
-    callback(customEvent.detail ?? getCustomProviders());
+    const detail = customEvent.detail;
+    if (Array.isArray(detail)) {
+      const normalized = detail
+        .map(normalizeCustomProvider)
+        .filter((p): p is CustomProvider => p !== null);
+      callback(normalized);
+    } else {
+      callback(getCustomProviders());
+    }
   };
 
   window.addEventListener(EVENT_KEY, handler);

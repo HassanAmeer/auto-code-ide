@@ -1,4 +1,4 @@
-import type { CustomProvider } from "./customProviders";
+import { type CustomProvider, normalizeCustomProvider } from "./customProviders";
 
 let isInitialized = false;
 let isSyncing = false;
@@ -94,11 +94,15 @@ export async function initServerSettingsSync(): Promise<void> {
     }
 
     if (serverProviders && serverProviders.length > 0) {
-      // Server has providers: update localStorage and dispatch update event
-      localStorage.setItem("t3_custom_providers_v1", JSON.stringify(serverProviders));
-      window.dispatchEvent(
-        new CustomEvent("t3_custom_providers_updated", { detail: serverProviders }),
-      );
+      const normalized = serverProviders
+        .map(normalizeCustomProvider)
+        .filter((p): p is CustomProvider => p !== null);
+      if (normalized.length > 0) {
+        localStorage.setItem("t3_custom_providers_v1", JSON.stringify(normalized));
+        window.dispatchEvent(
+          new CustomEvent("t3_custom_providers_updated", { detail: normalized }),
+        );
+      }
     } else if (localProviders.length > 0) {
       // Server empty but client has local providers: seed server database
       void syncCustomProvidersToServer(localProviders);
