@@ -1,9 +1,10 @@
 import type { EnvironmentId } from "@t3tools/contracts";
-import { AlertCircleIcon, CheckCircle2Icon, FolderUpIcon, Loader2Icon, XIcon } from "lucide-react";
+import { AlertCircleIcon, CheckCircle2Icon, Loader2Icon, XIcon } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 
 import { useImportLocalProject } from "~/hooks/useImportLocalProject";
 import { projectUploadStore, useProjectUploadProgress } from "~/state/projectUploadProgress";
+import { ProjectUploadDrawer } from "./ProjectUploadDrawer";
 
 export function GlobalProjectImportProgress() {
   const folderInputRef = useRef<HTMLInputElement | null>(null);
@@ -76,6 +77,9 @@ export function GlobalProjectImportProgress() {
         onChange={(e) => void handleZipChange(e)}
       />
 
+      {/* Right-Side Project Upload and Extraction Drawer with Drag-and-Drop */}
+      <ProjectUploadDrawer />
+
       {/* Top Fixed Progress Bar */}
       {progress.isImporting && (
         <div
@@ -92,8 +96,8 @@ export function GlobalProjectImportProgress() {
         </div>
       )}
 
-      {/* Floating Top HUD Card with Live Percentage */}
-      {progress.isImporting && (
+      {/* Floating Top HUD Card with Live Percentage (shown when drawer is closed/collapsed) */}
+      {progress.isImporting && (!progress.isDrawerOpen || progress.isDrawerCollapsed) && (
         <div className="pointer-events-auto fixed top-2.5 left-1/2 -translate-x-1/2 z-[999999] flex max-w-[92vw] items-center gap-3 rounded-full border border-primary/30 bg-background/95 px-4 py-1.5 shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-top-3 duration-200">
           {progress.percent >= 100 ? (
             <CheckCircle2Icon className="size-4 shrink-0 text-emerald-500" />
@@ -114,8 +118,8 @@ export function GlobalProjectImportProgress() {
         </div>
       )}
 
-      {/* Error Floating Banner */}
-      {!progress.isImporting && progress.error && showError && (
+      {/* Error Floating Banner (if drawer is closed) */}
+      {!progress.isDrawerOpen && !progress.isImporting && progress.error && showError && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[999999] flex max-w-lg items-center gap-3 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-destructive shadow-xl backdrop-blur-md animate-in fade-in slide-in-from-top-4">
           <AlertCircleIcon className="size-5 shrink-0" />
           <div className="min-w-0 flex-1 text-xs">
