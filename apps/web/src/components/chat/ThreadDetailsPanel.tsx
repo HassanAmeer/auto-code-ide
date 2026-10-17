@@ -21,6 +21,7 @@ import { OpenInPicker } from "./OpenInPicker";
 import { ThreadDetailsSection } from "./ThreadDetailsSection";
 import { ThreadAutomationsPanel } from "./ThreadAutomationsPanel";
 import { ThreadRelationshipsPanel } from "./ThreadRelationshipsControl";
+import { BackgroundServicesWidget } from "../background/BackgroundServicesWidget";
 
 export interface ThreadDetailsPanelProps extends Pick<
   ComponentProps<typeof ThreadDetailsCard>,
@@ -169,6 +170,22 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
                   />
                 ) : null}
               </div>
+            </ThreadDetailsSection>
+          ) : null}
+
+          {density !== "essential" ? (
+            <ThreadDetailsSection
+              headingId="thread-details-background-services-heading"
+              title="Background Services"
+              showHeading={false}
+              separated={density === "full"}
+            >
+              <BackgroundServicesWidget
+                environmentId={props.environmentId}
+                threadId={props.threadId}
+                compact={density !== "full"}
+                showOpenSheetButton={true}
+              />
             </ThreadDetailsSection>
           ) : null}
 

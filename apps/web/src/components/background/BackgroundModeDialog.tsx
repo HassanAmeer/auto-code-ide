@@ -11,6 +11,7 @@ import {
 
 import { useBackgroundModeStore } from "../../lib/backgroundModeStore";
 import { cn } from "../../lib/utils";
+import { BackgroundServicesWidget } from "./BackgroundServicesWidget";
 
 export const BackgroundModeDialog = memo(function BackgroundModeDialog() {
   const { isBgEnabled, keepTabAwake, isModalOpen, setBgEnabled, setKeepTabAwake, setModalOpen } =
@@ -135,6 +136,9 @@ export const BackgroundModeDialog = memo(function BackgroundModeDialog() {
               <span className="text-[9px] text-zinc-400">Live State</span>
             </div>
           </div>
+
+          {/* Antigravity-Style Collapsible Background Services */}
+          <BackgroundServicesWidget initialExpanded={true} showOpenSheetButton={false} />
 
           {/* Screen Wake Lock Switch Card */}
           <div className="rounded-2xl bg-white/[0.04] border border-white/[0.08] p-3.5 flex items-center justify-between gap-3 shadow-xs">

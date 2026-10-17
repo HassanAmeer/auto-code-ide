@@ -9,7 +9,10 @@ import { createModelSelection } from "@t3tools/shared/model";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import { useNavigate } from "@tanstack/react-router";
 
-import { getAppModelOptionsForInstance } from "../../modelSelection";
+import {
+  getAppModelOptionsForInstance,
+  getCustomModelOptionsByInstance,
+} from "../../modelSelection";
 import {
   getCustomProviders,
   subscribeCustomProviders,
@@ -160,7 +163,7 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
         !entry?.enabled ||
         !entry.isAvailable ||
         entry.driverKind !== sourceEntry?.driverKind ||
-        !options?.some((option) => option.slug === model && !option.isUnavailable)
+        !options?.some((option: ModelEsque) => option.slug === model && !option.isUnavailable)
       ) {
         return `This model is unavailable on ${environment?.label ?? "a selected environment"}. Select that environment to choose its model separately.`;
       }
