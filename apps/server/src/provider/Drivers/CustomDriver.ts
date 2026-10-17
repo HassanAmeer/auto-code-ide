@@ -352,7 +352,7 @@ export function findPythonBlockRange(
     const line = lines[i];
     if (line === undefined || line.trim().length === 0) continue;
     const indentMatch = line.match(/^(\s*)/);
-    const lineIndent = indentMatch ? indentMatch[1].length : 0;
+    const lineIndent = indentMatch && indentMatch[1] ? indentMatch[1].length : 0;
     if (lineIndent <= baseIndent) {
       endLine = i;
       break;
@@ -799,6 +799,10 @@ export function makeCustomAdapterV2(
               let cleanBase = "";
               let currentAiLogId: string | null = null;
               let currentStartMs = Date.now();
+              let threadKey = "";
+              let history: Array<{ role: "system" | "user" | "assistant"; content: string }> = [];
+              let projectCwd = "";
+              let userPrompt = "";
 
               const runTurn = Effect.gen(function* () {
                 yield* Queue.offer(eventsQueue, {
@@ -864,12 +868,12 @@ export function makeCustomAdapterV2(
                   chatUrl = `${cleanBase}/v1/chat/completions`;
                 }
 
-                const threadKey = String(
+                threadKey = String(
                   turnInput.providerThread.appThreadId ??
                     turnInput.threadId ??
                     turnInput.providerThread.id,
                 );
-                const history = GLOBAL_CUSTOM_THREAD_HISTORIES.get(threadKey) ?? [];
+                history = GLOBAL_CUSTOM_THREAD_HISTORIES.get(threadKey) ?? [];
 
                 const procEnv = (
                   globalThis as { process?: { env?: Record<string, string | undefined> } }
@@ -878,7 +882,7 @@ export function makeCustomAdapterV2(
                 const storageFolderName = "autocode-storage";
                 const defaultAutocodeStorageDir = NodePath.resolve(userHomeDir, storageFolderName);
 
-                let projectCwd = turnInput.runtimePolicy?.cwd?.trim() || "";
+                projectCwd = turnInput.runtimePolicy?.cwd?.trim() || "";
                 if (!projectCwd || projectCwd === "/" || projectCwd === ".") {
                   projectCwd = defaultAutocodeStorageDir;
                 }
@@ -891,7 +895,7 @@ export function makeCustomAdapterV2(
                   // ignore
                 }
 
-                let userPrompt = (turnInput.message.text || "Hello").trim();
+                userPrompt = (turnInput.message.text || "Hello").trim();
                 if (userPrompt.includes("User message:\n")) {
                   const parts = userPrompt.split("User message:\n");
                   userPrompt = (parts[parts.length - 1] || userPrompt).trim();
@@ -1614,13 +1618,15 @@ ${userPrompt || "Continue generating from where you were interrupted"}`;
                       });
 
                       // Also best-effort extract and save any project files generated so far
-                      try {
-                        const partialFiles = extractFilesFromMarkdown(cleanPartialText);
-                        for (const file of partialFiles) {
-                          applyFileContentOrPatch(projectCwd, file);
+                      if (projectCwd) {
+                        try {
+                          const partialFiles = extractFilesFromMarkdown(cleanPartialText);
+                          for (const file of partialFiles) {
+                            applyFileContentOrPatch(projectCwd, file);
+                          }
+                        } catch {
+                          // ignore
                         }
-                      } catch {
-                        // ignore
                       }
                     }
 
