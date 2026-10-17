@@ -314,21 +314,16 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
               className={cn(
                 "flex items-center gap-2 rounded-lg p-1.5 text-xs font-medium transition-all text-left cursor-pointer",
                 isNotesOpen
-                  ? "bg-amber-500/15 text-amber-300 border border-amber-500/30"
+                  ? "bg-muted text-foreground border border-border/50"
                   : "hover:bg-sidebar-row-hover text-sidebar-foreground border border-transparent",
               )}
             >
-              <div className="size-6 rounded-md bg-amber-500/10 text-amber-400 flex items-center justify-center shrink-0 relative">
+              <div className="size-6 rounded-md bg-muted text-muted-foreground flex items-center justify-center shrink-0">
                 <FileCheckIcon className="size-3.5" />
-                {activeCount > 0 && (
-                  <span className="absolute -top-1 -right-1 size-2 rounded-full bg-amber-400" />
-                )}
               </div>
               <div className="flex flex-col min-w-0">
                 <span className="font-semibold text-[11px] truncate">Notes</span>
-                <span className="text-[9px] text-muted-foreground truncate">
-                  {activeCount > 0 ? `${activeCount} active` : "Open sheet"}
-                </span>
+                <span className="text-[9px] text-muted-foreground truncate">Open sheet</span>
               </div>
             </button>
 
@@ -525,17 +520,10 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
                 isActive={isFileExplorerOpen}
               />
               <SidebarUtilityItem
-                icon={<FileCheckIcon className={cn(activeCount > 0 && "text-amber-400")} />}
+                icon={<FileCheckIcon />}
                 label="Notes & Reminders"
                 onClick={handleNotesClick}
                 isActive={isNotesOpen}
-                badge={
-                  activeCount > 0 ? (
-                    <span className="absolute -top-1 -right-1 text-[9px] font-mono font-bold px-1 rounded-full bg-amber-500 text-black leading-none py-0.5 shadow-xs">
-                      {activeCount}
-                    </span>
-                  ) : undefined
-                }
               />
               <SidebarUtilityItem
                 icon={
@@ -713,7 +701,7 @@ export const SidebarNotesItem = memo(function SidebarNotesItem() {
           className={cn(
             "w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs transition-all group font-medium cursor-pointer",
             isOpen
-              ? "bg-amber-500/15 text-amber-300 border border-amber-500/30 shadow-sm"
+              ? "bg-muted text-foreground border border-border/50 shadow-xs"
               : "text-sidebar-foreground/80 hover:bg-sidebar-row-hover hover:text-sidebar-foreground border border-transparent",
           )}
         >
@@ -721,9 +709,7 @@ export const SidebarNotesItem = memo(function SidebarNotesItem() {
             <div
               className={cn(
                 "size-5 rounded-md flex items-center justify-center transition-transform group-hover:scale-105",
-                isOpen
-                  ? "bg-amber-500/20 text-amber-300"
-                  : "bg-amber-500/10 border border-amber-500/25 text-amber-400",
+                isOpen ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground",
               )}
             >
               <FileCheckIcon className="size-3.5" />
