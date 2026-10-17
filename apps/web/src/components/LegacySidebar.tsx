@@ -3232,11 +3232,12 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
               {project.displayName}
             </span>
             {isProjectWorking ? (
-              <Spinner
-                size="xs"
-                className="size-3.5 shrink-0 text-sky-500 animate-spin"
+              <span
                 title="Working / Processing..."
-              />
+                className="inline-flex shrink-0 items-center justify-center"
+              >
+                <Spinner size="xs" className="size-3.5 text-sky-500 animate-spin" />
+              </span>
             ) : null}
             {project.groupedProjectCount > 1 ? (
               <span className="shrink-0 rounded-full bg-sidebar-muted/30 px-1.5 py-0.5 text-[10px] font-medium text-sidebar-muted-foreground/90">
