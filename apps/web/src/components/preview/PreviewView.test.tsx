@@ -307,6 +307,17 @@ class TestNode {
     return child;
   }
 
+  insertBefore(child: TestNode, reference: TestNode | null) {
+    child.parentNode = this;
+    const index = reference ? this.childNodes.indexOf(reference) : -1;
+    if (index >= 0) {
+      this.childNodes.splice(index, 0, child);
+    } else {
+      this.childNodes.push(child);
+    }
+    return child;
+  }
+
   removeChild(child: TestNode) {
     this.childNodes.splice(this.childNodes.indexOf(child), 1);
     child.parentNode = null;

@@ -1264,15 +1264,17 @@ export function PreviewView({
             onOpenUrl={(next) => void handleOpenServerUrl(next)}
           />
         ) : null}
-        {snapshot ? <ZoomIndicator zoomFactor={effectiveZoomFactor} /> : null}
+        {snapshot && (serverOwnsRendering || desktopOverlay) ? (
+          <ZoomIndicator zoomFactor={effectiveZoomFactor} />
+        ) : null}
         {runtimeTabId &&
-        (serverOwnsRendering || desktopOverlay) &&
+        desktopOverlay &&
         !showEmptyState &&
         !isUnreachable &&
         !activeRecordingTabIds.has(runtimeTabId) ? (
           <AgentBrowserCursor
             tabId={runtimeTabId}
-            zoomFactor={effectiveZoomFactor}
+            zoomFactor={desktopOverlay.zoomFactor}
             controller={controller}
           />
         ) : null}

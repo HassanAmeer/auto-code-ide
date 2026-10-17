@@ -228,11 +228,11 @@ function namedProjectIconSvg(name: string): string {
 
 function namedProjectReadme(name: string): string {
   return [
-    `<img src="assets/icon.svg" width="64" height="64" alt="">`,
-    "",
     `# ${name}`,
     "",
-    "Created in AutoCode.",
+    "Blank project workspace.",
+    "",
+    "You can ask the AI in chat to build any application here (React, Vite, Next.js, Python, PHP or more...).",
     "",
   ].join("\n");
 }

@@ -1,11 +1,12 @@
 import type { OrchestrationV2ProviderFailureClass } from "@t3tools/contracts";
-import { memo } from "react";
+import { memo, useState } from "react";
 import { Alert, AlertAction, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
-import { CircleAlertIcon, XIcon } from "lucide-react";
+import { CircleAlertIcon, ChevronDown, ChevronUp, XIcon } from "lucide-react";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { OpenAI } from "../Icons";
 import { ChatGptUsageButton } from "../settings/ChatGptUsageButton";
+import { parseErrorDetails, truncateModelName } from "~/lib/compactErrorFormatter";
 
 export function getThreadErrorBannerKey(threadKey: string, error: string | null): string | null {
   return error === null ? null : `${threadKey}\u0000${error}`;
@@ -61,11 +62,21 @@ export const ThreadErrorBanner = memo(function ThreadErrorBanner({
   onSwitchModelNow?: (() => void) | undefined;
   nextFallbackModelName?: string | null | undefined;
 }) {
+  const [expanded, setExpanded] = useState(false);
   if (!error) return null;
   const variant = errorClass === "usage_limit" ? "warning" : "error";
+  const parsed = parseErrorDetails(error);
+  const shortFallback = truncateModelName(nextFallbackModelName);
+
   return (
-    <div className="pointer-events-auto mx-auto w-fit max-w-[min(48rem,calc(100%-2rem))] pt-3">
-      <Alert variant={variant} surface="glass" controlAlignment="first-line" data-variant={variant}>
+    <div className="pointer-events-auto mx-auto w-fit max-w-[min(48rem,calc(100%-2rem))] pt-2.5">
+      <Alert
+        variant={variant}
+        surface="glass"
+        controlAlignment="first-line"
+        data-variant={variant}
+        className="rounded-xl border border-white/10 shadow-lg backdrop-blur-xl py-2 px-3 text-xs"
+      >
         {chatGptUsageLimit ? (
           <OpenAI className="size-4 text-foreground!" aria-hidden="true" />
         ) : (
@@ -78,13 +89,48 @@ export const ThreadErrorBanner = memo(function ThreadErrorBanner({
               <p>Review your usage settings in ChatGPT to continue.</p>
             </div>
           ) : (
-            <div>
-              <Tooltip>
-                <TooltipTrigger render={<div className="line-clamp-3" />}>{error}</TooltipTrigger>
-                <TooltipPopup side="top" className="whitespace-pre-wrap">
+            <div className="min-w-0">
+              {/* Compact Cupertino single-line error summary */}
+              <div className="flex flex-wrap items-center gap-1.5 leading-snug">
+                {parsed.statusCode ? (
+                  <span className="font-mono text-3xs font-semibold px-1.5 py-0.5 rounded-full bg-rose-500/15 border border-rose-500/30 text-rose-400 dark:text-rose-300 shrink-0">
+                    {parsed.statusCode}
+                  </span>
+                ) : null}
+                {parsed.shortModel ? (
+                  <span
+                    className="font-medium text-foreground/90 shrink-0"
+                    title={parsed.fullModel || undefined}
+                  >
+                    {parsed.shortModel}
+                  </span>
+                ) : null}
+                {parsed.shortModel && parsed.shortReason ? (
+                  <span className="text-muted-foreground/50 text-3xs">•</span>
+                ) : null}
+                <span className="text-muted-foreground truncate max-w-[280px] sm:max-w-[380px]">
+                  {parsed.shortReason}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setExpanded((prev) => !prev)}
+                  className="inline-flex items-center gap-0.5 text-3xs font-medium text-primary hover:underline ml-1 cursor-pointer shrink-0"
+                  aria-expanded={expanded}
+                  title={expanded ? "Hide error details" : "Uncollapse full error details"}
+                >
+                  <span>{expanded ? "Hide" : "Details"}</span>
+                  {expanded ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
+                </button>
+              </div>
+
+              {/* Uncollapsed / Expanded full error panel */}
+              {expanded ? (
+                <div className="mt-2 text-2xs font-mono text-muted-foreground bg-muted/30 p-2.5 rounded-lg border border-border/40 select-text max-h-44 overflow-y-auto leading-relaxed whitespace-pre-wrap break-all animate-in fade-in duration-150">
                   {error}
-                </TooltipPopup>
-              </Tooltip>
+                </div>
+              ) : null}
+
+              {/* Retry actions & countdown */}
               {onRetryNow ||
               (onSwitchModelNow && nextFallbackModelName) ||
               (autoRetryCountdown !== null && autoRetryCountdown !== undefined) ? (
@@ -105,7 +151,7 @@ export const ThreadErrorBanner = memo(function ThreadErrorBanner({
                       size="xs"
                       variant="outline"
                       onClick={onRetryNow}
-                      className="h-5 text-2xs px-2"
+                      className="h-5 text-2xs px-2 rounded-md"
                     >
                       Retry now
                     </Button>
@@ -116,10 +162,10 @@ export const ThreadErrorBanner = memo(function ThreadErrorBanner({
                       size="xs"
                       variant="outline"
                       onClick={onSwitchModelNow}
-                      className="h-5 text-2xs px-2 border-primary/40 text-primary hover:bg-primary/10"
+                      className="h-5 text-2xs px-2 rounded-md border-primary/40 text-primary hover:bg-primary/10"
                       title={`Switch to ${nextFallbackModelName} and retry`}
                     >
-                      Next Model ({nextFallbackModelName})
+                      Next Model ({shortFallback || nextFallbackModelName})
                     </Button>
                   ) : null}
                   {autoRetryCountdown !== null &&
@@ -144,7 +190,13 @@ export const ThreadErrorBanner = memo(function ThreadErrorBanner({
           <AlertAction>
             {chatGptUsageLimit ? <ChatGptUsageButton variant="default" size="sm" /> : null}
             {onDismiss ? (
-              <Button variant="ghost" size="icon-xs" aria-label="Dismiss error" onClick={onDismiss}>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                aria-label="Dismiss error"
+                onClick={onDismiss}
+                className="rounded-full"
+              >
                 <XIcon />
               </Button>
             ) : null}

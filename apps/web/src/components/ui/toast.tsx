@@ -14,7 +14,15 @@ import {
 } from "react";
 import { useParams } from "@tanstack/react-router";
 import { type ScopedThreadRef, type ThreadId } from "@t3tools/contracts";
-import { CircleAlertIcon, CircleCheckIcon, InfoIcon, TriangleAlertIcon, XIcon } from "lucide-react";
+import {
+  ChevronDownIcon,
+  ChevronUpIcon,
+  CircleAlertIcon,
+  CircleCheckIcon,
+  InfoIcon,
+  TriangleAlertIcon,
+  XIcon,
+} from "lucide-react";
 import { Check, ChevronDown, ChevronUp, Copy } from "lucide";
 
 import { cn } from "~/lib/utils";
@@ -30,6 +38,7 @@ import {
   shouldRenderThreadScopedToast,
 } from "./toast.logic";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./tooltip";
+import { parseErrorDetails } from "~/lib/compactErrorFormatter";
 
 export type ThreadToastData = {
   threadRef?: ScopedThreadRef | null;
@@ -94,11 +103,11 @@ function errorDescriptionClampClass(type: unknown, description: unknown): string
 }
 
 /** Dismiss-only: circular control overlapping the card corner (iOS notification–style). */
-const toastCornerDismissClass = "absolute z-20 -top-1.5 -right-1.5";
+const toastCornerDismissClass = "absolute z-20 top-2 right-2";
 const toastCornerOrbClass = cn(
-  "inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-full border border-border/60 bg-popover/92 text-muted-foreground shadow-sm outline-none backdrop-blur-sm",
-  "transition-[color,background-color,box-shadow] hover:bg-popover hover:text-foreground",
-  "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+  "inline-flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-full border border-border/50 bg-background/80 text-muted-foreground shadow-xs outline-none backdrop-blur-sm",
+  "transition-[color,background-color,box-shadow] hover:bg-muted hover:text-foreground",
+  "focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
 );
 
 function handleToastDismissClick(
@@ -310,6 +319,7 @@ interface ToastBodyContentProps extends ToastBodyDescriptor {
   readonly actionProps: { readonly children?: ReactNode } | undefined;
   readonly toastData: ThreadToastData | undefined;
   readonly toastDescription: unknown;
+  readonly toastTitle?: unknown;
   readonly toastType: unknown;
 }
 
@@ -323,13 +333,23 @@ function ToastBodyContent({
   hasTrailingControls,
   toastData,
   toastDescription,
+  toastTitle,
   toastType,
 }: ToastBodyContentProps) {
+  const [uncollapsed, setUncollapsed] = useState(false);
   const additionalActions = toastData?.additionalActions ?? [];
   const secondaryActionProps = toastData?.secondaryActionProps;
   const leadingIcon = toastData?.leadingIcon;
   const { className: secondaryActionClassName, ...secondaryActionRest } =
     secondaryActionProps ?? {};
+
+  const isError = toastType === "error";
+  const rawTitle = typeof toastTitle === "string" ? toastTitle : "";
+  const rawDesc = typeof toastDescription === "string" ? toastDescription : "";
+  const errorInfo = isError ? parseErrorDetails(`${rawTitle} ${rawDesc}`, rawTitle) : null;
+  const effectiveCopyText =
+    copyErrorText ||
+    (isError && (rawDesc || rawTitle) ? `${rawTitle ? rawTitle + ": " : ""}${rawDesc}` : null);
 
   return (
     <>
@@ -339,38 +359,127 @@ function ToastBodyContent({
           stackedActionLayout ? "pr-5" : "flex-1",
         )}
       >
-        <div className="flex min-w-0 gap-2">
-          {leadingIcon ? (
-            <div
-              className="flex h-lh w-4 shrink-0 items-center justify-center"
-              data-slot="toast-icon"
-            >
-              {leadingIcon}
+        {isError && errorInfo ? (
+          <div className="flex min-w-0 flex-col">
+            <div className="flex min-w-0 items-center gap-1.5 flex-wrap leading-tight">
+              {leadingIcon ? (
+                <div
+                  className="flex size-3.5 shrink-0 items-center justify-center"
+                  data-slot="toast-icon"
+                >
+                  {leadingIcon}
+                </div>
+              ) : Icon ? (
+                <div
+                  className="[&>svg]:size-3.5 [&_svg]:pointer-events-none [&_svg]:shrink-0 text-destructive flex items-center justify-center shrink-0"
+                  data-slot="toast-icon"
+                >
+                  <Icon />
+                </div>
+              ) : null}
+
+              {errorInfo.statusCode ? (
+                <span className="font-mono text-3xs font-semibold px-1.5 py-0.5 rounded-full bg-destructive/15 border border-destructive/30 text-destructive shrink-0">
+                  {errorInfo.statusCode}
+                </span>
+              ) : null}
+
+              {errorInfo.shortModel ? (
+                <span
+                  className="font-semibold text-xs text-foreground/95 shrink-0"
+                  title={errorInfo.fullModel || undefined}
+                >
+                  {errorInfo.shortModel}
+                </span>
+              ) : (
+                <Toast.Title
+                  className="min-w-0 wrap-break-word font-semibold text-xs text-foreground/95"
+                  data-slot="toast-title"
+                >
+                  {rawTitle || "Error"}
+                </Toast.Title>
+              )}
+
+              {errorInfo.shortModel && errorInfo.shortReason ? (
+                <span className="text-muted-foreground/50 text-3xs">•</span>
+              ) : null}
+
+              <span className="text-xs text-muted-foreground truncate max-w-[130px] sm:max-w-[200px]">
+                {errorInfo.shortReason}
+              </span>
+
+              <button
+                type="button"
+                onClick={() => setUncollapsed((v) => !v)}
+                className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-muted/40 hover:text-foreground transition-colors ml-0.5 shrink-0"
+                aria-expanded={uncollapsed}
+                title={uncollapsed ? "Hide details" : "Uncollapse error details"}
+              >
+                {uncollapsed ? (
+                  <ChevronUpIcon className="size-3.5" />
+                ) : (
+                  <ChevronDownIcon className="size-3.5" />
+                )}
+              </button>
             </div>
-          ) : Icon ? (
-            <div
-              className="[&>svg]:h-lh [&>svg]:w-4 [&_svg]:pointer-events-none [&_svg]:shrink-0"
-              data-slot="toast-icon"
-            >
-              <Icon className="in-data-[type=error]:text-destructive in-data-[type=info]:text-info in-data-[type=success]:text-success in-data-[type=warning]:text-warning in-data-[type=loading]:opacity-80" />
+
+            {uncollapsed ? (
+              <div className="mt-1.5 flex flex-col gap-1 border-t border-border/30 pt-1.5 text-2xs animate-in fade-in duration-150">
+                {errorInfo.fullModel ? (
+                  <div className="text-muted-foreground font-mono">
+                    Model: <span className="text-foreground">{errorInfo.fullModel}</span>
+                  </div>
+                ) : null}
+                {errorInfo.statusCode ? (
+                  <div className="text-muted-foreground font-mono">
+                    Status: <span className="text-foreground">{errorInfo.statusCode}</span>
+                  </div>
+                ) : null}
+                <div className="text-muted-foreground font-mono bg-muted/30 p-2 rounded-md border border-border/40 select-text max-h-36 overflow-y-auto leading-relaxed whitespace-pre-wrap break-all">
+                  {rawDesc || rawTitle}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <>
+            <div className="flex min-w-0 gap-2">
+              {leadingIcon ? (
+                <div
+                  className="flex h-lh w-4 shrink-0 items-center justify-center"
+                  data-slot="toast-icon"
+                >
+                  {leadingIcon}
+                </div>
+              ) : Icon ? (
+                <div
+                  className="[&>svg]:h-lh [&>svg]:w-4 [&_svg]:pointer-events-none [&_svg]:shrink-0"
+                  data-slot="toast-icon"
+                >
+                  <Icon className="in-data-[type=error]:text-destructive in-data-[type=info]:text-info in-data-[type=success]:text-success in-data-[type=warning]:text-warning in-data-[type=loading]:opacity-80" />
+                </div>
+              ) : null}
+              <Toast.Title
+                className="min-w-0 wrap-break-word font-medium"
+                data-slot="toast-title"
+              />
             </div>
-          ) : null}
-          <Toast.Title className="min-w-0 wrap-break-word font-medium" data-slot="toast-title" />
-        </div>
-        <ToastDescriptionAndExpandable
-          toastData={toastData}
-          toastDescription={toastDescription}
-          toastType={toastType}
-        />
+            <ToastDescriptionAndExpandable
+              toastData={toastData}
+              toastDescription={toastDescription}
+              toastType={toastType}
+            />
+          </>
+        )}
       </div>
-      {hasTrailingControls ? (
+      {hasTrailingControls || effectiveCopyText !== null ? (
         <div
           className={cn(
             "flex items-center gap-1.5",
             stackedActionLayout ? "w-full justify-end" : "shrink-0",
           )}
         >
-          {copyErrorText !== null ? <CopyErrorButton text={copyErrorText} /> : null}
+          {effectiveCopyText !== null ? <CopyErrorButton text={effectiveCopyText} /> : null}
           {additionalActions.map(({ id, props: { className, ...props } }) => (
             <Button
               {...props}
@@ -576,7 +685,7 @@ function Toasts({ position }: { position: ToastPosition }) {
           return (
             <Toast.Root
               className={cn(
-                "dropdown-glass absolute z-[calc(9999-var(--toast-index))] w-full overflow-visible select-none rounded-lg text-popover-foreground shadow-xl shadow-black/25 [transition:transform_.5s_cubic-bezier(.22,1,.36,1),opacity_.5s,height_.15s]",
+                "dropdown-glass absolute z-[calc(9999-var(--toast-index))] w-full overflow-visible select-none rounded-xl sm:rounded-2xl border border-white/10 dark:border-white/10 text-popover-foreground shadow-xl shadow-black/25 [transition:transform_.5s_cubic-bezier(.22,1,.36,1),opacity_.5s,height_.15s]",
                 // Base positioning using data-position
                 "data-[position*=right]:right-0 data-[position*=right]:left-auto",
                 "data-[position*=left]:right-auto data-[position*=left]:left-0",
@@ -666,10 +775,10 @@ function Toasts({ position }: { position: ToastPosition }) {
                 className={cn(
                   // `overflow-x: clip` avoids the CSS quirk where pairing `hidden` + `y: visible`
                   // forces `y` to `auto`. Expandable detail panels can extend below without being cut off.
-                  "pointer-events-auto min-h-0 overflow-y-visible pl-3.5 text-sm transition-opacity duration-250 [overflow-x:clip] data-expanded:opacity-100",
+                  "pointer-events-auto min-h-0 overflow-y-visible pl-3 pr-8 text-xs transition-opacity duration-250 [overflow-x:clip] data-expanded:opacity-100",
                   stackedActionLayout
-                    ? "flex flex-col gap-2 py-2.5 pr-3.5"
-                    : cn("py-3", "flex items-center justify-between gap-1.5", inlineContentEndPad),
+                    ? "flex flex-col gap-1.5 py-2 pr-8"
+                    : cn("py-2", "flex items-center justify-between gap-1.5", inlineContentEndPad),
                   hideCollapsedContent &&
                     "not-data-expanded:pointer-events-none not-data-expanded:opacity-0",
                 )}
@@ -679,6 +788,7 @@ function Toasts({ position }: { position: ToastPosition }) {
                   actionProps={toast.actionProps}
                   toastData={toast.data}
                   toastDescription={toast.description}
+                  toastTitle={toast.title}
                   toastType={toast.type}
                 />
               </Toast.Content>
@@ -759,11 +869,11 @@ function AnchoredToasts() {
                       </div>
                       <Toast.Content
                         className={cn(
-                          "pointer-events-auto min-h-0 overflow-y-visible pl-3.5 text-sm [overflow-x:clip]",
+                          "pointer-events-auto min-h-0 overflow-y-visible pl-3 pr-8 text-xs [overflow-x:clip]",
                           stackedActionLayout
-                            ? "flex flex-col gap-2 py-2.5 pr-3.5"
+                            ? "flex flex-col gap-1.5 py-2 pr-8"
                             : cn(
-                                "py-3",
+                                "py-2",
                                 "flex items-center justify-between gap-1.5",
                                 inlineContentEndPad,
                               ),
@@ -774,6 +884,7 @@ function AnchoredToasts() {
                           actionProps={toast.actionProps}
                           toastData={toast.data}
                           toastDescription={toast.description}
+                          toastTitle={toast.title}
                           toastType={toast.type}
                         />
                       </Toast.Content>

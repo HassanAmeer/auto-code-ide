@@ -176,6 +176,7 @@ import { ProposedPlanCard } from "./ProposedPlanCard";
 import { HtmlRenderFrame } from "./HtmlRenderFrame";
 import { McpAppFrame } from "./McpAppFrame";
 import { ChangedFilesCard } from "./ChangedFilesTree";
+import { parseErrorDetails } from "~/lib/compactErrorFormatter";
 import { useFileContextMenuHandler } from "../../fileContextMenu";
 import { useProject, useThreadShell } from "../../state/entities";
 import {
@@ -3114,10 +3115,11 @@ function V2EventTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "event"
   const presentation = v2EventPresentation(item);
   const Icon = presentation.icon;
   if (item.type === "error") {
+    const errorInfo = parseErrorDetails(presentation.detail || item.failure.message);
     return (
       <details
         className={cn(
-          "group rounded-md border",
+          "group rounded-xl border transition-all duration-200",
           presentation.tone === "warning" && "border-warning/25 bg-warning/5",
           presentation.tone === "danger" && "border-destructive/25 bg-destructive/5",
           presentation.tone === "success" && "border-success/20 bg-success/5",
@@ -3125,9 +3127,8 @@ function V2EventTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "event"
         data-v2-item-type={item.type}
         data-v2-item-visibility={visibility}
         data-v2-event-disclosure="true"
-        open
       >
-        <summary className="flex min-w-0 cursor-pointer list-none items-center gap-2 px-2.5 py-1.5 text-xs [&::-webkit-details-marker]:hidden">
+        <summary className="flex min-w-0 cursor-pointer list-none items-center gap-1.5 px-2.5 py-1.5 text-xs [&::-webkit-details-marker]:hidden select-none hover:bg-muted/20 rounded-xl transition-colors">
           <Icon
             className={cn(
               "size-3.5 shrink-0",
@@ -3136,30 +3137,42 @@ function V2EventTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "event"
               presentation.tone === "success" && "text-success",
             )}
           />
-          <span className="shrink-0 font-medium text-foreground/90">{presentation.label}</span>
-          {item.status !== "completed" ? (
+          {errorInfo.statusCode ? (
+            <span className="shrink-0 font-mono text-3xs font-semibold px-1.5 py-0.5 rounded-full bg-rose-500/15 border border-rose-500/30 text-rose-400 dark:text-rose-300">
+              {errorInfo.statusCode}
+            </span>
+          ) : null}
+          {errorInfo.shortModel ? (
+            <span
+              className="shrink-0 font-medium text-foreground/90 text-xs"
+              title={errorInfo.fullModel || undefined}
+            >
+              {errorInfo.shortModel}
+            </span>
+          ) : (
+            <span className="shrink-0 font-medium text-foreground/90 text-xs">
+              {presentation.label}
+            </span>
+          )}
+          {item.status !== "completed" && item.status !== "failed" ? (
             <span
               className={cn(
                 "shrink-0 rounded-full border px-1.5 py-0.5 font-mono text-3xs",
-                item.status === "failed"
-                  ? "border-destructive/40 text-destructive"
-                  : "border-border/70 text-muted-foreground",
+                "border-border/70 text-muted-foreground",
               )}
             >
               {item.status}
             </span>
           ) : null}
-          {presentation.detail ? (
-            <span className="min-w-0 flex-1 truncate text-muted-foreground/65">
-              {presentation.detail}
-            </span>
-          ) : null}
+          <span className="min-w-0 flex-1 truncate text-muted-foreground/75 text-xs">
+            {errorInfo.shortReason || presentation.detail}
+          </span>
           {visibility !== "local" ? (
             <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-3xs text-muted-foreground">
               {visibility === "inherited" ? "Inherited" : "Synthetic"}
             </span>
           ) : null}
-          <ChevronDownIcon className="size-3 shrink-0 text-muted-foreground/60 transition-transform group-open:rotate-180" />
+          <ChevronDownIcon className="size-3.5 shrink-0 text-muted-foreground/60 transition-transform group-open:rotate-180" />
         </summary>
         <div className="border-t border-border/45 px-3 py-2 ps-8">
           {presentation.detail ? (

@@ -1704,7 +1704,7 @@ function OpenCommandPaletteDialog(props: {
             "empty",
           ],
           title: "Create new project",
-          description: "Start from scratch (Blank, React + Vite, Next.js, Node, Python, PHP)",
+          description: "Start from scratch (Blank, React, Vite, Next.js, Python, PHP or more...)",
           icon: <SparklesIcon className={ITEM_ICON_CLASS} />,
           keepOpen: false,
           run: async () => {
