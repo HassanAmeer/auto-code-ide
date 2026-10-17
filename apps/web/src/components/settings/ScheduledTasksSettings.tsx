@@ -37,7 +37,14 @@ import {
 
 import { formatRelativeTime } from "../../timestampFormat";
 import { useEnvironmentSettings } from "../../hooks/useSettings";
-import { getCustomModelOptionsByInstance } from "../../modelSelection";
+import { getAppModelOptionsForInstance } from "../../modelSelection";
+import {
+  getCustomProviders,
+  subscribeCustomProviders,
+  customProviderToServerProvider,
+  type CustomProvider,
+} from "../../lib/customProviders";
+import type { ModelEsque } from "../chat/providerIconUtils";
 import {
   applyProviderInstanceSettings,
   deriveProviderInstanceEntries,
@@ -796,8 +803,35 @@ function ScheduledTaskEditorDialog({
     [allProjects, environmentId, scope],
   );
   const settings = useEnvironmentSettings(environmentId);
-  const providers =
-    useAtomValue(serverEnvironment.providersValueAtom(environmentId)) ?? EMPTY_SERVER_PROVIDERS;
+  const [customProvidersList, setCustomProvidersList] = useState<CustomProvider[]>(() =>
+    getCustomProviders(),
+  );
+
+  useEffect(() => {
+    return subscribeCustomProviders((list) => {
+      setCustomProvidersList(list);
+    });
+  }, []);
+
+  const serverProvidersAtomValue = useAtomValue(
+    serverEnvironment.providersValueAtom(environmentId),
+  );
+  const rawServerProviders =
+    environment?.serverConfig?.providers ?? serverProvidersAtomValue ?? EMPTY_SERVER_PROVIDERS;
+
+  const providers = useMemo(() => {
+    const nonCustomRaw = rawServerProviders.filter(
+      (p) => p.driver !== "custom" && p.instanceId !== "custom",
+    );
+    if (!Array.isArray(customProvidersList) || customProvidersList.length === 0)
+      return nonCustomRaw;
+    const customStatuses = customProvidersList
+      .filter((cp): cp is CustomProvider => Boolean(cp && typeof cp === "object"))
+      .map(customProviderToServerProvider)
+      .filter(Boolean);
+    return [...nonCustomRaw, ...customStatuses];
+  }, [rawServerProviders, customProvidersList]);
+
   const canOperate = useAtomValue(
     serverEnvironment.upsertScheduledTask.permissionAtom(environmentId),
   );
@@ -837,10 +871,22 @@ function ScheduledTaskEditorDialog({
   const activeInstanceId =
     activeSelection?.instanceId ?? firstInstance?.instanceId ?? ("" as ProviderInstanceId);
   const activeModel = activeSelection?.model ?? "";
-  const modelOptionsByInstance = useMemo(
-    () => getCustomModelOptionsByInstance(settings, providers, activeInstanceId, activeModel),
-    [settings, providers, activeInstanceId, activeModel],
-  );
+  const modelOptionsByInstance = useMemo<
+    ReadonlyMap<ProviderInstanceId, ReadonlyArray<ModelEsque>>
+  >(() => {
+    const out = new Map<ProviderInstanceId, ReadonlyArray<ModelEsque>>();
+    for (const entry of instanceEntries) {
+      out.set(
+        entry.instanceId,
+        getAppModelOptionsForInstance(
+          settings,
+          entry,
+          entry.instanceId === activeInstanceId ? activeModel : null,
+        ),
+      );
+    }
+    return out;
+  }, [instanceEntries, activeInstanceId, activeModel, settings]);
 
   const reportFailure = (title: string, error: unknown) => {
     toastManager.add(

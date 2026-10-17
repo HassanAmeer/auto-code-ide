@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from "react";
 import {
   DEFAULT_SERVER_SETTINGS,
   type ModelSelection,
@@ -8,7 +9,14 @@ import { createModelSelection } from "@t3tools/shared/model";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import { useNavigate } from "@tanstack/react-router";
 
-import { getCustomModelOptionsByInstance } from "../../modelSelection";
+import { getAppModelOptionsForInstance } from "../../modelSelection";
+import {
+  getCustomProviders,
+  subscribeCustomProviders,
+  customProviderToServerProvider,
+  type CustomProvider,
+} from "../../lib/customProviders";
+import type { ModelEsque } from "../chat/providerIconUtils";
 import {
   applyProviderInstanceSettings,
   deriveProviderInstanceEntries,
@@ -60,17 +68,53 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
   const representative = target
     ? environments.find((environment) => environment.environmentId === target.environmentId)
     : undefined;
-  const providers = representative?.serverConfig?.providers ?? EMPTY_SERVER_PROVIDERS;
+  const [customProvidersList, setCustomProvidersList] = useState<CustomProvider[]>(() =>
+    getCustomProviders(),
+  );
+
+  useEffect(() => {
+    return subscribeCustomProviders((list) => {
+      setCustomProvidersList(list);
+    });
+  }, []);
+
+  const rawServerProviders = representative?.serverConfig?.providers ?? EMPTY_SERVER_PROVIDERS;
+
+  const providers = useMemo(() => {
+    const nonCustomRaw = rawServerProviders.filter(
+      (p) => p.driver !== "custom" && p.instanceId !== "custom",
+    );
+    if (!Array.isArray(customProvidersList) || customProvidersList.length === 0)
+      return nonCustomRaw;
+    const customStatuses = customProvidersList
+      .filter((cp): cp is CustomProvider => Boolean(cp && typeof cp === "object"))
+      .map(customProviderToServerProvider)
+      .filter(Boolean);
+    return [...nonCustomRaw, ...customStatuses];
+  }, [rawServerProviders, customProvidersList]);
+
   const selection = resolveDefaultProviderModelSelection(providers, settings.defaultModelSelection);
-  const entries = sortProviderInstanceEntries(
-    applyProviderInstanceSettings(deriveProviderInstanceEntries(providers), settings),
+  const entries = useMemo(
+    () =>
+      sortProviderInstanceEntries(
+        applyProviderInstanceSettings(deriveProviderInstanceEntries(providers), settings),
+      ),
+    [providers, settings],
   );
-  const modelOptions = getCustomModelOptionsByInstance(
-    settings,
-    providers,
-    selection?.instanceId,
-    selection?.model,
-  );
+  const modelOptions = useMemo<ReadonlyMap<ProviderInstanceId, ReadonlyArray<ModelEsque>>>(() => {
+    const out = new Map<ProviderInstanceId, ReadonlyArray<ModelEsque>>();
+    for (const entry of entries) {
+      out.set(
+        entry.instanceId,
+        getAppModelOptionsForInstance(
+          settings,
+          entry,
+          entry.instanceId === selection?.instanceId ? selection?.model : null,
+        ),
+      );
+    }
+    return out;
+  }, [entries, selection?.instanceId, selection?.model, settings]);
   const activeEntry = entries.find((entry) => entry.instanceId === selection?.instanceId);
   const mixedModel = useScopedSettingsMixed(["defaultModelSelection"]);
   const mixedPermissions = useScopedSettingsMixed(["defaultRuntimeMode"]);
@@ -95,6 +139,9 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
 
   function modelDisabledReason(instanceId: ProviderInstanceId, model: string): string | null {
     const sourceEntry = entries.find((entry) => entry.instanceId === instanceId);
+    if (sourceEntry?.driverKind === "custom") {
+      return null;
+    }
     for (const candidate of targets) {
       const environment = environments.find(
         (entry) => entry.environmentId === candidate.environmentId,

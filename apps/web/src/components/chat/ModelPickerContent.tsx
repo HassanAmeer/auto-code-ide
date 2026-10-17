@@ -259,18 +259,16 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
       modelOptionsByInstance.get(props.activeInstanceId) ?? [],
     );
   const [selectedInstanceId, setSelectedInstanceId] = useState<ProviderInstanceId | "favorites">(
-    () => {
-      if (
-        props.lockedProvider !== null ||
-        activeInstanceHasSelectableUnavailableModel ||
-        activeInstanceNeedsSetup
-      ) {
-        // Keep the active instance visible when it is locked or needs setup.
-        return props.activeInstanceId;
-      }
-      return favorites.length > 0 ? "favorites" : props.activeInstanceId;
-    },
+    () =>
+      props.activeInstanceId ||
+      (props.instanceEntries[0]?.instanceId ?? ("" as ProviderInstanceId)),
   );
+
+  useEffect(() => {
+    if (props.activeInstanceId) {
+      setSelectedInstanceId(props.activeInstanceId);
+    }
+  }, [props.activeInstanceId]);
   const [expandedLegacyInstances, setExpandedLegacyInstances] = useState(
     () =>
       new Set<ProviderInstanceId>(
@@ -520,7 +518,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
     }
     return [...available, ...disabled];
   }, [instanceEntries, isLocked, matchesLockedProvider]);
-  const showSidebar = !isSearching && sidebarInstanceEntries.length > 0;
+  const showSidebar = sidebarInstanceEntries.length > 0;
   const instanceOrder = useMemo(
     () => instanceEntries.map((entry) => entry.instanceId),
     [instanceEntries],
@@ -530,7 +528,17 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
   const filteredModels = useMemo(() => {
     let result = flatModels;
 
-    // Apply tokenized fuzzy search across the combined provider/model search fields.
+    if (props.lockedProvider !== null) {
+      result = result.filter((m) => matchesLockedProvider(m));
+    }
+    if (selectedInstanceId === "favorites") {
+      result = result.filter((m) => favoritesSet.has(providerModelKey(m.instanceId, m.slug)));
+    } else if (selectedInstanceId) {
+      result = result.filter((m) => m.instanceId === selectedInstanceId);
+    }
+
+    // Apply tokenized fuzzy search across the combined provider/model search fields,
+    // strictly scoped to the selected provider instance.
     if (searchQuery.trim()) {
       const rankedMatches = result
         .map((model) => ({
@@ -566,30 +574,6 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
           } => rankedModel.score !== null,
         );
 
-      // When searching, we only respect locked provider (by driver kind),
-      // ignoring sidebar selection so account-scoped searches can find a
-      // model before the user chooses a specific instance rail item.
-      if (props.lockedProvider !== null) {
-        const lockedProviderMatches: Array<(typeof rankedMatches)[number]> = [];
-        for (const rankedModel of rankedMatches) {
-          if (matchesLockedProvider(rankedModel.model)) {
-            lockedProviderMatches.push(rankedModel);
-          }
-        }
-        return lockedProviderMatches
-          .toSorted((a, b) => {
-            const scoreDelta = a.score - b.score;
-            if (scoreDelta !== 0) {
-              return scoreDelta;
-            }
-            if (a.isFavorite !== b.isFavorite) {
-              return a.isFavorite ? -1 : 1;
-            }
-            return a.tieBreaker.localeCompare(b.tieBreaker);
-          })
-          .map((rankedModel) => rankedModel.model);
-      }
-
       return rankedMatches
         .toSorted((a, b) => {
           const scoreDelta = a.score - b.score;
@@ -602,19 +586,6 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
           return a.tieBreaker.localeCompare(b.tieBreaker);
         })
         .map((rankedModel) => rankedModel.model);
-    }
-
-    if (props.lockedProvider !== null) {
-      result = result.filter((m) => matchesLockedProvider(m));
-      if (selectedInstanceId === "favorites") {
-        result = result.filter((m) => favoritesSet.has(providerModelKey(m.instanceId, m.slug)));
-      } else {
-        result = result.filter((m) => m.instanceId === selectedInstanceId);
-      }
-    } else if (selectedInstanceId === "favorites") {
-      result = result.filter((m) => favoritesSet.has(providerModelKey(m.instanceId, m.slug)));
-    } else {
-      result = result.filter((m) => m.instanceId === selectedInstanceId);
     }
 
     return sortProviderModelItems(result, {
@@ -679,13 +650,8 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
   // Models the manifest announces that this provider's installed CLI is too
   // old to run. Without this, a new model just seems missing until the user
   // happens to update the CLI.
-  // A search spans every instance, so it can explain gated matches from any of them.
   const updateRequiredNotices = (
-    isSearching
-      ? instanceEntries.filter(matchesLockedProvider)
-      : selectedEntry
-        ? [selectedEntry]
-        : []
+    selectedEntry ? [selectedEntry] : instanceEntries.filter(matchesLockedProvider)
   ).flatMap((entry) => {
     const notice = formatProviderUpdateRequiredNotice(entry.snapshot, searchQuery);
     return notice ? [{ instanceId: entry.instanceId, notice }] : [];
@@ -944,7 +910,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
             onSelectInstance={handleSelectInstance}
             onFocusSearch={focusSearchInput}
             instanceEntries={sidebarInstanceEntries}
-            showFavorites
+            showFavorites={false}
             {...(selectableUnavailableInstanceIds ? { selectableUnavailableInstanceIds } : {})}
             {...(lockedDisabledInstanceIds
               ? {

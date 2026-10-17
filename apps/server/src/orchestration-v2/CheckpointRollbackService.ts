@@ -113,6 +113,7 @@ export const layer: Layer.Layer<
       readonly checkpointId: CheckpointId;
       readonly scopeId: CheckpointScopeId;
       readonly restoreFiles?: boolean;
+      readonly restoreFilesOnly?: boolean;
     }) {
       const projection = yield* projections.getThreadRecords(input.threadId, [
         "providerThreads",
@@ -173,6 +174,45 @@ export const layer: Layer.Layer<
           providerThreadId: input.providerThreadId,
           checkpointId: input.checkpointId,
         });
+      }
+
+      if (input.restoreFilesOnly === true) {
+        if (input.restoreFiles !== false) {
+          yield* checkpoints.restore({ scope, checkpoint });
+        }
+        yield* threadCommands.withLock(
+          input.threadId,
+          Effect.gen(function* () {
+            const now = yield* DateTime.now;
+            const makeEvent = <Event extends OrchestrationV2DomainEvent>(
+              event: Omit<Event, "id">,
+            ) =>
+              Effect.map(
+                ids.allocate.event({ threadId: event.threadId }),
+                (id) =>
+                  ({
+                    ...event,
+                    id,
+                  }) as Event,
+              );
+            const events: Array<OrchestrationV2DomainEvent> = [
+              yield* makeEvent({
+                type: "thread.metadata-updated",
+                threadId: input.threadId,
+                providerInstanceId: providerThread.providerInstanceId,
+                occurredAt: now,
+                payload: {
+                  ...projection.thread,
+                  rollbackRequestId: undefined,
+                  rollbackFailure: null,
+                  updatedAt: now,
+                },
+              }),
+            ];
+            yield* eventSink.write({ events });
+          }),
+        );
+        return;
       }
 
       const modelSelection = projection.thread.modelSelection;

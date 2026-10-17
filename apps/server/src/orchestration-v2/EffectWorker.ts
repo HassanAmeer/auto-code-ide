@@ -377,6 +377,9 @@ export const layerExecutor: Layer.Layer<
                 ...(effect.request.restoreFiles === undefined
                   ? {}
                   : { restoreFiles: effect.request.restoreFiles }),
+                ...(effect.request.restoreFilesOnly === undefined
+                  ? {}
+                  : { restoreFilesOnly: effect.request.restoreFilesOnly }),
               })
               .pipe(
                 // The last failed attempt tells waiting clients it failed,

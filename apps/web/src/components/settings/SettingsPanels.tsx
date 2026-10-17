@@ -97,10 +97,18 @@ import { ProjectDefaultsSettings } from "./ProjectDefaultsSettings";
 import { useThreadActions } from "../../hooks/useThreadActions";
 import { useDesktopUpdateState } from "../../state/desktopUpdate";
 import {
+  getAppModelOptionsForInstance,
   getCustomModelOptionsByInstance,
   resolveAppModelSelectionState,
   selectsPlanAgent,
 } from "../../modelSelection";
+import {
+  getCustomProviders,
+  subscribeCustomProviders,
+  customProviderToServerProvider,
+  type CustomProvider,
+} from "../../lib/customProviders";
+import type { ModelEsque } from "../chat/providerIconUtils";
 import {
   applyProviderInstanceSettings,
   deriveProviderInstanceEntries,
@@ -1903,7 +1911,31 @@ export function GeneralSettingsPanel() {
   const isEnvironmentScope = scope.environmentIds.length === 1 && environmentId !== null;
   const hasServerTargets = connectedEnvironments.length > 0;
   const mixedResponseStreamingMode = useScopedSettingsMixed(["responseStreamingMode"]);
-  const serverProviders = environment?.serverConfig?.providers ?? EMPTY_SERVER_PROVIDERS;
+  const [customProvidersList, setCustomProvidersList] = useState<CustomProvider[]>(() =>
+    getCustomProviders(),
+  );
+
+  useEffect(() => {
+    return subscribeCustomProviders((list) => {
+      setCustomProvidersList(list);
+    });
+  }, []);
+
+  const rawServerProviders = environment?.serverConfig?.providers ?? EMPTY_SERVER_PROVIDERS;
+
+  const serverProviders = useMemo(() => {
+    const nonCustomRaw = rawServerProviders.filter(
+      (p) => p.driver !== "custom" && p.instanceId !== "custom",
+    );
+    if (!Array.isArray(customProvidersList) || customProvidersList.length === 0)
+      return nonCustomRaw;
+    const customStatuses = customProvidersList
+      .filter((cp): cp is CustomProvider => Boolean(cp && typeof cp === "object"))
+      .map(customProviderToServerProvider)
+      .filter(Boolean);
+    return [...nonCustomRaw, ...customStatuses];
+  }, [rawServerProviders, customProvidersList]);
+
   const supportsAutoSettlement =
     connectedEnvironments.length > 0 &&
     connectedEnvironments.every(
@@ -1915,8 +1947,9 @@ export function GeneralSettingsPanel() {
       (target) => target.serverConfig?.environment.capabilities.threadRestartContinuation === true,
     );
 
-  const textGenerationProviders = serverProviders.filter(
-    (provider) => provider.supportsTextGeneration !== false,
+  const textGenerationProviders = useMemo(
+    () => serverProviders.filter((provider) => provider.supportsTextGeneration !== false),
+    [serverProviders],
   );
   const textGenerationModelSelection = resolveAppModelSelectionState(
     settings,
@@ -1925,8 +1958,15 @@ export function GeneralSettingsPanel() {
   const textGenInstanceId = textGenerationModelSelection.instanceId;
   const textGenModel = textGenerationModelSelection.model;
   const textGenModelOptions = textGenerationModelSelection.options;
-  const textGenerationModelInstanceEntries = sortProviderInstanceEntries(
-    applyProviderInstanceSettings(deriveProviderInstanceEntries(textGenerationProviders), settings),
+  const textGenerationModelInstanceEntries = useMemo(
+    () =>
+      sortProviderInstanceEntries(
+        applyProviderInstanceSettings(
+          deriveProviderInstanceEntries(textGenerationProviders),
+          settings,
+        ),
+      ),
+    [textGenerationProviders, settings],
   );
   const hasTextGenerationProvider = textGenerationModelInstanceEntries.some(
     (entry) => entry.enabled && entry.isAvailable,
@@ -1936,12 +1976,22 @@ export function GeneralSettingsPanel() {
   );
   const textGenProvider: ProviderDriverKind =
     textGenInstanceEntry?.driverKind ?? DEFAULT_DRIVER_KIND;
-  const textGenerationModelOptionsByInstance = getCustomModelOptionsByInstance(
-    settings,
-    textGenerationProviders,
-    textGenInstanceId,
-    textGenModel,
-  );
+  const textGenerationModelOptionsByInstance = useMemo<
+    ReadonlyMap<ProviderInstanceId, ReadonlyArray<ModelEsque>>
+  >(() => {
+    const out = new Map<ProviderInstanceId, ReadonlyArray<ModelEsque>>();
+    for (const entry of textGenerationModelInstanceEntries) {
+      out.set(
+        entry.instanceId,
+        getAppModelOptionsForInstance(
+          settings,
+          entry,
+          entry.instanceId === textGenInstanceId ? textGenModel : null,
+        ),
+      );
+    }
+    return out;
+  }, [textGenerationModelInstanceEntries, textGenInstanceId, textGenModel, settings]);
   const isTextGenerationModelDirty = !Equal.equals(
     settings.textGenerationModelSelection ?? null,
     DEFAULT_UNIFIED_SETTINGS.textGenerationModelSelection ?? null,

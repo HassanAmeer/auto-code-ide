@@ -1,5 +1,5 @@
 import { useNavigate } from "@tanstack/react-router";
-import { useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   ProviderInstanceId,
   ServerSettings,
@@ -22,9 +22,17 @@ import {
   sortProviderInstanceEntries,
 } from "../../providerInstances";
 import {
+  getAppModelOptionsForInstance,
   getCustomModelOptionsByInstance,
   resolveAppModelSelectionState,
 } from "../../modelSelection";
+import {
+  getCustomProviders,
+  subscribeCustomProviders,
+  customProviderToServerProvider,
+  type CustomProvider,
+} from "../../lib/customProviders";
+import type { ModelEsque } from "../chat/providerIconUtils";
 import { EMPTY_SERVER_PROVIDERS } from "../../state/server";
 import { ProviderModelPicker } from "../chat/ProviderModelPicker";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
@@ -67,7 +75,30 @@ export function SourceControlWritingSettingsSection() {
   // against every target before it fans out.
   const environmentId = environment?.environmentId ?? null;
   const hasServerTargets = connectedEnvironments.length > 0;
-  const serverProviders = environment?.serverConfig?.providers ?? EMPTY_SERVER_PROVIDERS;
+  const [customProvidersList, setCustomProvidersList] = useState<CustomProvider[]>(() =>
+    getCustomProviders(),
+  );
+
+  useEffect(() => {
+    return subscribeCustomProviders((list) => {
+      setCustomProvidersList(list);
+    });
+  }, []);
+
+  const rawServerProviders = environment?.serverConfig?.providers ?? EMPTY_SERVER_PROVIDERS;
+
+  const serverProviders = useMemo(() => {
+    const nonCustomRaw = rawServerProviders.filter(
+      (p) => p.driver !== "custom" && p.instanceId !== "custom",
+    );
+    if (!Array.isArray(customProvidersList) || customProvidersList.length === 0)
+      return nonCustomRaw;
+    const customStatuses = customProvidersList
+      .filter((cp): cp is CustomProvider => Boolean(cp && typeof cp === "object"))
+      .map(customProviderToServerProvider)
+      .filter(Boolean);
+    return [...nonCustomRaw, ...customStatuses];
+  }, [rawServerProviders, customProvidersList]);
   // The writing style is one object; each control only cares about its own field.
   const styleFieldMixed = (field: keyof ServerSettings["sourceControlWritingStyle"]) => {
     const first = targets[0];
@@ -95,8 +126,9 @@ export function SourceControlWritingSettingsSection() {
     style.mode !== defaults.mode ||
     style.customInstructions !== defaults.customInstructions;
 
-  const textGenerationProviders = serverProviders.filter(
-    (provider) => provider.supportsTextGeneration !== false,
+  const textGenerationProviders = useMemo(
+    () => serverProviders.filter((provider) => provider.supportsTextGeneration !== false),
+    [serverProviders],
   );
   const defaultModelSelection = resolveAppModelSelectionState(settings, textGenerationProviders);
   const usesDedicatedModel = settings.sourceControlWriterModelSelection !== null;
@@ -110,19 +142,36 @@ export function SourceControlWritingSettingsSection() {
     },
     textGenerationProviders,
   );
-  const instanceEntries = sortProviderInstanceEntries(
-    applyProviderInstanceSettings(deriveProviderInstanceEntries(textGenerationProviders), settings),
+  const instanceEntries = useMemo(
+    () =>
+      sortProviderInstanceEntries(
+        applyProviderInstanceSettings(
+          deriveProviderInstanceEntries(textGenerationProviders),
+          settings,
+        ),
+      ),
+    [textGenerationProviders, settings],
   );
   const canEnableDedicatedModel = instanceEntries.some(
     (entry) =>
       entry.instanceId === defaultModelSelection.instanceId && entry.enabled && entry.isAvailable,
   );
-  const modelOptionsByInstance = getCustomModelOptionsByInstance(
-    settings,
-    textGenerationProviders,
-    activeSelection.instanceId,
-    activeSelection.model,
-  );
+  const modelOptionsByInstance = useMemo<
+    ReadonlyMap<ProviderInstanceId, ReadonlyArray<ModelEsque>>
+  >(() => {
+    const out = new Map<ProviderInstanceId, ReadonlyArray<ModelEsque>>();
+    for (const entry of instanceEntries) {
+      out.set(
+        entry.instanceId,
+        getAppModelOptionsForInstance(
+          settings,
+          entry,
+          entry.instanceId === activeSelection.instanceId ? activeSelection.model : null,
+        ),
+      );
+    }
+    return out;
+  }, [instanceEntries, activeSelection.instanceId, activeSelection.model, settings]);
   const writerModelDisabledReason = useScopedModelDisabledReason(settings, instanceEntries);
 
   return (

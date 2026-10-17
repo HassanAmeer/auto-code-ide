@@ -2653,7 +2653,7 @@ function RevertUserMessageButton({
       >
         <Undo2Icon className="size-3" />
       </TooltipTrigger>
-      <TooltipPopup side="top">Edit from here</TooltipPopup>
+      <TooltipPopup side="top">Edit from here / Revert changes</TooltipPopup>
     </Tooltip>
   );
 }

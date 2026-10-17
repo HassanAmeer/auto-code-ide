@@ -25,6 +25,9 @@ export function useScopedModelDisabledReason(
   return useCallback(
     (instanceId: ProviderInstanceId, model: string): string | null => {
       const sourceEntry = entries.find((entry) => entry.instanceId === instanceId);
+      if (sourceEntry?.driverKind === "custom") {
+        return null;
+      }
       for (const candidate of targets) {
         const environment = environments.find(
           (entry) => entry.environmentId === candidate.environmentId,

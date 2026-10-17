@@ -508,7 +508,7 @@ export const layer: Layer.Layer<
           const restored = yield* checkpointStore.restoreCheckpoint({
             cwd: input.scope.cwd,
             checkpointRef: input.checkpoint.ref,
-            fallbackToHead: false,
+            fallbackToHead: true,
           });
           if (!restored) {
             return yield* new CheckpointRestoreError({

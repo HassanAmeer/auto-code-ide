@@ -8362,7 +8362,12 @@ export default function ChatView(props: ChatViewProps) {
   }
 
   const onRevertToTurnCount = useCallback(
-    async (turnCount: number, messageId: MessageId, restoreFiles?: boolean) => {
+    async (
+      turnCount: number,
+      messageId: MessageId,
+      restoreFiles?: boolean,
+      restoreFilesOnly?: boolean,
+    ) => {
       const localApi = readLocalApi();
       if (
         !localApi ||
@@ -8407,6 +8412,44 @@ export default function ChatView(props: ChatViewProps) {
       }
       if (restoreFiles === undefined) {
         setPendingRevert({ turnCount, messageId, routeThreadKey });
+        return;
+      }
+
+      if (restoreFilesOnly) {
+        useComposerDraftStore.setState((store) => ({
+          rewindingThreadKeys: new Set(store.rewindingThreadKeys).add(routeThreadKey),
+        }));
+        setThreadError(activeThread.id, null);
+        try {
+          const commandId = CommandId.make(randomUUID());
+          const result = await revertThreadCheckpoint({
+            environmentId,
+            input: {
+              commandId,
+              threadId: activeThread.id,
+              turnCount,
+              restoreFiles: true,
+              restoreFilesOnly: true,
+            },
+          });
+          if (result._tag === "Failure") throw squashAtomCommandFailure(result);
+          toastManager.add({
+            type: "success",
+            title: "فائل چینجز ریورٹ ہو گئیں / Files Reverted",
+            description: "Workspace files have been restored to checkpoint successfully.",
+          });
+        } catch (error) {
+          setThreadError(
+            activeThread.id,
+            error instanceof Error ? error.message : "Failed to revert files.",
+          );
+        } finally {
+          useComposerDraftStore.setState((store) => {
+            const remaining = new Set(store.rewindingThreadKeys);
+            remaining.delete(routeThreadKey);
+            return { rewindingThreadKeys: remaining };
+          });
+        }
         return;
       }
 
@@ -12322,35 +12365,68 @@ export default function ChatView(props: ChatViewProps) {
           if (!open) setPendingRevert(null);
         }}
       >
-        <AlertDialogPopup>
+        <AlertDialogPopup className="max-w-md">
           <AlertDialogHeader>
-            <AlertDialogTitle>Edit from here?</AlertDialogTitle>
+            <AlertDialogTitle>ریورٹ آپشنز / Revert Options</AlertDialogTitle>
             <AlertDialogDescription>
-              Rewind chat to before this message. Your prompt and attachments return to the
-              composer.
+              منتخب کریں کہ آپ کون سی تبدیلیاں واپس (revert) کرنا چاہتے ہیں:
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogClose render={<Button variant="outline" />}>Cancel</AlertDialogClose>
+          <div className="flex flex-col gap-2 py-2">
             <Button
               variant="destructive"
+              className="w-full justify-start text-left h-auto py-2.5 px-3 flex flex-col items-start gap-0.5"
               onClick={() => {
                 if (!pendingRevert || pendingRevert.routeThreadKey !== routeThreadKey) return;
+                const { turnCount, messageId } = pendingRevert;
                 setPendingRevert(null);
-                void onRevertToTurnCount(pendingRevert.turnCount, pendingRevert.messageId, true);
+                void onRevertToTurnCount(turnCount, messageId, true, false);
               }}
             >
-              Revert files too
+              <span className="font-semibold text-sm">
+                آل چینجز بیک / All Changes (Files & Response)
+              </span>
+              <span className="text-xs opacity-90 font-normal">
+                Revert both workspace file changes and conversation back to this turn.
+              </span>
             </Button>
+
             <Button
+              variant="secondary"
+              className="w-full justify-start text-left h-auto py-2.5 px-3 flex flex-col items-start gap-0.5"
               onClick={() => {
                 if (!pendingRevert || pendingRevert.routeThreadKey !== routeThreadKey) return;
+                const { turnCount, messageId } = pendingRevert;
                 setPendingRevert(null);
-                void onRevertToTurnCount(pendingRevert.turnCount, pendingRevert.messageId, false);
+                void onRevertToTurnCount(turnCount, messageId, true, true);
               }}
             >
-              Revert and keep changes
+              <span className="font-semibold text-sm">فائل چینجز بیک / File Changes Only</span>
+              <span className="text-xs text-muted-foreground font-normal">
+                Revert only workspace files to checkpoint commit. Keep conversation history.
+              </span>
             </Button>
+
+            <Button
+              variant="outline"
+              className="w-full justify-start text-left h-auto py-2.5 px-3 flex flex-col items-start gap-0.5"
+              onClick={() => {
+                if (!pendingRevert || pendingRevert.routeThreadKey !== routeThreadKey) return;
+                const { turnCount, messageId } = pendingRevert;
+                setPendingRevert(null);
+                void onRevertToTurnCount(turnCount, messageId, false, false);
+              }}
+            >
+              <span className="font-semibold text-sm">
+                رسپانس چینجز بیک / Response Only (Keep Files)
+              </span>
+              <span className="text-xs text-muted-foreground font-normal">
+                Rewind chat response and return prompt to composer. Keep current files.
+              </span>
+            </Button>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogClose render={<Button variant="ghost" />}>Cancel / کینسل</AlertDialogClose>
           </AlertDialogFooter>
         </AlertDialogPopup>
       </AlertDialog>
