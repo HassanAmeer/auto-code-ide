@@ -232,7 +232,10 @@ export interface ExtractedProjectFile {
   readonly content: string;
 }
 
-export function extractFilesFromMarkdown(markdown: string): Array<ExtractedProjectFile> {
+export function extractFilesFromMarkdown(
+  markdown: string,
+  projectCwd?: string,
+): Array<ExtractedProjectFile> {
   const files: Array<ExtractedProjectFile> = [];
   const seenPaths = new Set<string>();
   const codeBlockRegex = /```([^\n]*)\n([\s\S]*?)(?:```|$)/g;
@@ -306,14 +309,67 @@ export function extractFilesFromMarkdown(markdown: string): Array<ExtractedProje
       }
     }
 
-    // 4. Preceding context check (e.g. `In index.html:` or `file: style.css`)
+    // 4. Preceding context check (e.g. `In index.html:` or `create new file audio.js`)
     if (!detectedPath && match.index > 0) {
       const precedingText = markdown.slice(Math.max(0, match.index - 200), match.index);
       const preMatch = precedingText.match(
-        /(?:file(?:path)?|in|to|update|edit|modify)\s+[`'"]?([a-zA-Z0-9_\-./]+\.[a-zA-Z0-9]+)[`'"]?/i,
+        /(?:file(?:path)?|in|to|update|edit|modify|create|new|for|add)\s+[`'"]?([a-zA-Z0-9_\-./]+\.[a-zA-Z0-9]+)[`'"]?/i,
       );
       if (preMatch && preMatch[1]) {
         detectedPath = preMatch[1].trim();
+      }
+    }
+
+    // 5. Intelligent diff target resolver: If this is a SEARCH/REPLACE diff without path,
+    // match the search target against existing files in projectCwd!
+    if (!detectedPath && projectCwd && NodeFS.existsSync(projectCwd)) {
+      const srMatch = content.match(/<{3,7}\s*SEARCH\s*\n([\s\S]*?)\n[=]{3,7}/);
+      if (srMatch && srMatch[1]) {
+        const searchTarget = srMatch[1].trim();
+        if (searchTarget.length > 3) {
+          try {
+            const diskEntries = NodeFS.readdirSync(projectCwd, { recursive: true });
+            for (const rel of diskEntries) {
+              const relStr = String(rel);
+              if (
+                !relStr.startsWith(".") &&
+                !relStr.startsWith("node_modules") &&
+                !relStr.includes("/node_modules") &&
+                !relStr.includes("/.autocode")
+              ) {
+                const fullEntryPath = NodePath.join(projectCwd, relStr);
+                if (NodeFS.statSync(fullEntryPath).isFile()) {
+                  const diskCode = NodeFS.readFileSync(fullEntryPath, "utf-8");
+                  if (
+                    diskCode.includes(searchTarget) ||
+                    diskCode.replace(/\r\n/g, "\n").includes(searchTarget.replace(/\r\n/g, "\n"))
+                  ) {
+                    detectedPath = relStr;
+                    break;
+                  }
+                }
+              }
+            }
+          } catch {
+            // ignore
+          }
+        }
+      }
+
+      // If still not detected and workspace has only 1 source file, default to it
+      if (!detectedPath) {
+        try {
+          const filesInRoot = NodeFS.readdirSync(projectCwd).filter(
+            (f) =>
+              !f.startsWith(".") &&
+              (f.endsWith(".html") || f.endsWith(".js") || f.endsWith(".ts") || f.endsWith(".py")),
+          );
+          if (filesInRoot.length === 1 && filesInRoot[0]) {
+            detectedPath = filesInRoot[0];
+          }
+        } catch {
+          // ignore
+        }
       }
     }
 
@@ -623,6 +679,9 @@ export function universalPatchFile(
           patched.slice(0, scriptIdx) +
           `\n\n// Added: ${identifier}\n${newCode}\n` +
           patched.slice(scriptIdx);
+        braceApplied = true;
+      } else {
+        patched = patched.trimEnd() + `\n\n// Added: ${identifier}\n${newCode}\n`;
         braceApplied = true;
       }
     }
@@ -1199,65 +1258,72 @@ export function makeCustomAdapterV2(
 
                 const workspace = scanWorkspaceContext(projectCwd);
 
-                let systemPrompt = "";
+                let filesContext = "";
                 if (workspace.hasFiles && workspace.fileCount > 0) {
-                  let filesContext = "";
                   for (const f of workspace.fileDetails) {
                     if (f.isFull && f.content) {
-                      filesContext += `\n--- CURRENT FILE ON DISK: ${f.relPath} (${f.linesCount} lines) ---\n\`\`\`\n${f.content}\n\`\`\`\n`;
+                      filesContext += `\n--- EXISTING FILE ON DISK: ${f.relPath} (${f.linesCount} lines) ---\n\`\`\`\n${f.content}\n\`\`\`\n`;
                     } else if (f.outline) {
-                      filesContext += `\n--- FILE STRUCTURE OUTLINE: ${f.relPath} (${f.linesCount} lines) ---\n${f.outline}\n`;
+                      filesContext += `\n--- EXISTING FILE STRUCTURE: ${f.relPath} (${f.linesCount} lines) ---\n${f.outline}\n`;
                     }
                   }
+                }
 
-                  systemPrompt = `You are AutoCode (AC) AI Developer in TARGETED INCREMENTAL EDITING MODE.
+                const systemPrompt = `You are AutoCode (AC) AI Senior Developer and Game Architect with integrated Live Web Preview, Multi-Language Code Generation, and Smart Patching capabilities.
 Project Workspace Directory: ${projectCwd}
-${workspace.summary}
-${filesContext}
+${workspace.hasFiles && workspace.fileCount > 0 ? `${workspace.summary}\n${filesContext}` : "Workspace Status: Fresh / Empty Project Workspace"}
+
 ================================================================================
-CRITICAL INCREMENTAL EDITING RULES:
-1. The project already exists on disk (shown above).
-2. DO NOT REWRITE OR REPRINT ENTIRE FILES. Full file rewrites waste time and tokens and are strictly prohibited on edits.
-3. For changes, you MUST use one of these two targeted formats:
+INTELLIGENT AUTONOMOUS ACTION SELECTION (CRITICAL INSTRUCTIONS):
+You must dynamically choose the exact right action based on what the user wants to accomplish:
 
-FORMAT A - SEARCH/REPLACE Diff Block (Preferred for fast edits, colors, speed, settings, bug fixes):
-\`\`\`<language> filepath=<relative/path>
-<<<< SEARCH
-// exact lines from the existing file above to be replaced
-====
-// new replacement lines
->>>>
-\`\`\`
+1. ACTION A: NEW GAME, NEW WEB APP, NEW PROJECT, OR COMPLETE OVERHAUL
+   • Trigger:
+     - User asks to build a game or web app (e.g. "make a 2D racing game", "build a plane shooter", "create a snake game", "build a website/app").
+     - User wants to start a fresh project, restart, or rebuild from scratch.
+     - User explicitly asks to rewrite, overhaul, or replace a file.
+   • What to generate:
+     - Provide the FULL, COMPLETE, PRODUCTION-READY code for each required file (e.g. \`index.html\`, \`style.css\`, \`game.js\`).
+     - Always create a complete, self-contained \`index.html\` as the primary entry point so it immediately runs in the built-in Live Preview!
+     - Implement complete, interactive controls (arrow keys, WASD, touch/mouse buttons on canvas, restart/pause buttons, score tracking).
+     - Ensure canvas sizing and game loop (\`requestAnimationFrame\`) work smoothly with complete physics, obstacles, player movement, and collision detection.
+     - NEVER use placeholder comments like \`// ... rest of code unchanged ...\` when writing new files or full overhauls.
 
-FORMAT B - Targeted Function / Class Block (For replacing an entire function or class):
-\`\`\`<language> filepath=<relative/path>
-function drawJet() {
-  // updated implementation only
-}
-\`\`\`
+2. ACTION B: CREATING A NEW FILE OR SIBLING COMPONENT
+   • Trigger:
+     - The user asks to create a new file or feature that does not exist on disk yet (e.g., adding \`audio.js\`, \`car.js\`, \`leaderboard.html\`, \`utils.ts\`).
+   • What to generate:
+     - Output the FULL, COMPLETE code for the new file using:
+       \`\`\`<language> filepath=<relative/path>
+       // full complete implementation
+       \`\`\`
+     - If an existing file needs to import or link this new file (e.g. adding \`<script src="car.js"></script>\` to \`index.html\`), include a SEARCH/REPLACE diff for that existing file in the same turn.
 
-4. The automated engine will patch ONLY these lines directly into the existing file on disk. All other code, HTML structure, game loop, canvas, and event listeners will be 100% preserved.`;
-                } else {
-                  systemPrompt = `You are AutoCode (AC) AI Developer with integrated Live Preview and Testing capabilities.
-Project Workspace Directory: ${projectCwd}
-
-WEB PREVIEW & MULTI-LANGUAGE CODE GENERATION INSTRUCTIONS:
-1. When asked to build games (e.g. 2D canvas, arcade, puzzle, RPG) or web tools:
-   - Always create a complete, self-contained \`index.html\` as the primary entrypoint so it immediately runs in the built-in Web Preview!
-   - Embed all necessary CSS styles and JavaScript logic directly in \`index.html\` (or properly linked in sibling files like \`style.css\` and \`game.js\`).
-   - Implement complete, interactive controls (arrow keys, WASD, mouse clicks, on-screen touch/tap buttons, restart/pause buttons, score tracking).
-   - Ensure canvas sizing and game loop (\`requestAnimationFrame\`) work smoothly without runtime errors or uncaught exceptions.
-   - Self-verify that all buttons, event listeners, and DOM elements exist and are properly bound.
+3. ACTION C: TARGETED EDITS, FIXES & TWEAKS ON EXISTING FILES
+   • Trigger:
+     - User asks to tweak, adjust, fix a bug, or change settings/features in existing code (e.g. "change car/jet color to yellow", "increase bullet speed", "fix score counter", "add turbo boost").
+   • What to generate:
+     - Do NOT reprint 1,000 lines of unchanged code.
+     - Use targeted SEARCH/REPLACE diff blocks:
+       \`\`\`<language> filepath=<relative/path>
+       <<<< SEARCH
+       // exact lines from the existing file above to be replaced
+       ====
+       // new replacement lines
+       >>>>
+       \`\`\`
+     - Or provide the complete updated function/class block:
+       \`\`\`<language> filepath=<relative/path>
+       function drawCar() {
+         // updated implementation only
+       }
+       \`\`\`
+     - The engine will patch ONLY these lines directly into the existing file on disk, preserving all surrounding canvas setup, game loops, and event listeners.
 
 FILE SPECIFICATION INSTRUCTIONS:
-Always clearly specify the file path for each file at the top of each code block using:
+Always clearly specify the relative file path for each file at the top of each code block using:
 \`\`\`<language> filepath=<relative/path>
-...content...
-\`\`\`
-or with a comment on the very first line inside the code block:
-\`\`\`<language>
-// filepath: <relative/path>
-...content...
+...content or diff...
 \`\`\`
 or for HTML/web:
 \`\`\`html
@@ -1265,8 +1331,7 @@ or for HTML/web:
 ...content...
 \`\`\`
 
-All generated files will automatically be saved into the project workspace directory (${projectCwd}) and committed to Git.`;
-                }
+All generated files and patches will automatically be written to disk in ${projectCwd} and committed to Git.`;
 
                 // Check if previous turn was interrupted or user is requesting continuation
                 const interruptedInfo = GLOBAL_THREAD_INTERRUPTED_STATE.get(threadKey);
@@ -1724,7 +1789,7 @@ ${userPrompt || "Continue generating from where you were interrupted"}`;
                 const finishedTime = yield* DateTime.now;
 
                 // Automatically extract and save generated project files to disk in projectCwd
-                const extractedFiles = extractFilesFromMarkdown(accumulatedText);
+                const extractedFiles = extractFilesFromMarkdown(accumulatedText, projectCwd);
                 const savedFiles: string[] = [];
 
                 for (const file of extractedFiles) {
@@ -1937,7 +2002,10 @@ ${userPrompt || "Continue generating from where you were interrupted"}`;
                       // Also best-effort extract and save any project files generated so far
                       if (projectCwd) {
                         try {
-                          const partialFiles = extractFilesFromMarkdown(cleanPartialText);
+                          const partialFiles = extractFilesFromMarkdown(
+                            cleanPartialText,
+                            projectCwd,
+                          );
                           for (const file of partialFiles) {
                             applyFileContentOrPatch(projectCwd, file);
                           }
