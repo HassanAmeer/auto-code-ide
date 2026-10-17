@@ -1006,10 +1006,31 @@ export function PreviewView({
       }
 
       if (!relativePath) {
+        // Try to derive the relative path from the current preview URL (e.g. index.html or game.html)
+        if (url) {
+          try {
+            const parsed = new URL(url);
+            const paramPath = parsed.searchParams.get("path");
+            if (paramPath && !paramPath.startsWith("/")) {
+              relativePath = paramPath;
+            } else {
+              const pathname = decodeURIComponent(parsed.pathname);
+              const fileMatch = pathname.match(/[^/]+\.[a-zA-Z0-9]+$/);
+              if (fileMatch && !fileMatch[0].endsWith(".map")) {
+                relativePath = fileMatch[0];
+              }
+            }
+          } catch {
+            // ignore
+          }
+        }
+      }
+
+      if (!relativePath) {
         if (target.highlight.componentName) {
           relativePath = `src/${target.highlight.componentName}.tsx`;
         } else {
-          relativePath = "src/App.tsx";
+          relativePath = "index.html";
         }
       }
 
@@ -1021,7 +1042,7 @@ export function PreviewView({
         htmlPreview: target.highlight.htmlPreview ?? null,
       });
     },
-    [workspaceCwd],
+    [workspaceCwd, url],
   );
 
   useEffect(() => {

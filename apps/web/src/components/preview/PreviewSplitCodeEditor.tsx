@@ -14,6 +14,7 @@ import {
 import { resolvePrimaryEnvironmentHttpUrl } from "~/environments/primary";
 import {
   setProjectFileQueryData,
+  useProjectEntriesQuery,
   useProjectFileQuery,
 } from "~/components/files/projectFilesQueryState";
 import { Button } from "~/components/ui/button";
@@ -94,6 +95,30 @@ export function PreviewSplitCodeEditor({
       setIsDirty(false);
     }
   }, [currentPath, fileQuery.data]);
+
+  const entriesQuery = useProjectEntriesQuery(environmentId, cwd);
+  const availableFiles = entriesQuery.data?.entries
+    ? entriesQuery.data.entries.filter((e) => e.kind === "file").map((e) => e.path)
+    : [];
+
+  // If the initial file failed to load (e.g. src/App.tsx was requested but only index.html exists),
+  // automatically try to fallback to existing project files:
+  useEffect(() => {
+    if (fileQuery.error && !content && !initialLoadedRef.current && availableFiles.length > 0) {
+      const candidate =
+        availableFiles.find((f) => f === "index.html") ||
+        availableFiles.find((f) => f.endsWith(".html")) ||
+        availableFiles.find((f) => f === "App.tsx" || f === "App.jsx") ||
+        availableFiles.find((f) => f.endsWith(".tsx") || f.endsWith(".jsx")) ||
+        availableFiles.find((f) => f.endsWith(".js") && !f.startsWith(".")) ||
+        availableFiles[0];
+
+      if (candidate && candidate !== currentPath) {
+        setCurrentPath(candidate);
+        setPathInput(candidate);
+      }
+    }
+  }, [fileQuery.error, content, availableFiles, currentPath]);
 
   // Determine target line number: either from target or resolved from component/selector
   const [activeLine, setActiveLine] = useState<number>(target.lineNumber ?? 1);
@@ -495,6 +520,24 @@ export function PreviewSplitCodeEditor({
           <div className="flex size-full flex-col items-center justify-center gap-2 p-4 text-center">
             <p className="text-sm font-medium text-destructive">Could not load file</p>
             <p className="text-xs text-muted-foreground font-mono">{currentPath}</p>
+            {availableFiles.length > 0 ? (
+              <div className="my-2 flex max-w-md flex-wrap items-center justify-center gap-1.5">
+                <span className="mr-1 text-[11px] text-muted-foreground">Available files:</span>
+                {availableFiles.map((filePath) => (
+                  <button
+                    key={filePath}
+                    type="button"
+                    onClick={() => {
+                      setCurrentPath(filePath);
+                      setPathInput(filePath);
+                    }}
+                    className="rounded border border-primary/40 bg-primary/10 px-2 py-0.5 font-mono text-xs font-medium text-primary hover:bg-primary/20 transition-colors"
+                  >
+                    {filePath}
+                  </button>
+                ))}
+              </div>
+            ) : null}
             <Button
               size="xs"
               variant="outline"
