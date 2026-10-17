@@ -306,6 +306,17 @@ export function extractFilesFromMarkdown(markdown: string): Array<ExtractedProje
       }
     }
 
+    // 4. Preceding context check (e.g. `In index.html:` or `file: style.css`)
+    if (!detectedPath && match.index > 0) {
+      const precedingText = markdown.slice(Math.max(0, match.index - 200), match.index);
+      const preMatch = precedingText.match(
+        /(?:file(?:path)?|in|to|update|edit|modify)\s+[`'"]?([a-zA-Z0-9_\-./]+\.[a-zA-Z0-9]+)[`'"]?/i,
+      );
+      if (preMatch && preMatch[1]) {
+        detectedPath = preMatch[1].trim();
+      }
+    }
+
     if (detectedPath) {
       const cleanPath = detectedPath.replace(/^[/\\]+/, "").replace(/\.\./g, "");
       if (cleanPath && !seenPaths.has(cleanPath)) {
@@ -429,16 +440,27 @@ export function applySearchReplace(
   searchBlock: string,
   replaceBlock: string,
 ): string | null {
-  if (code.includes(searchBlock)) {
-    return code.replace(searchBlock, replaceBlock);
+  const normCode = code.replace(/\r\n/g, "\n");
+  const normSearch = searchBlock.replace(/\r\n/g, "\n");
+  const normReplace = replaceBlock.replace(/\r\n/g, "\n");
+
+  // 1. Direct substring match
+  if (normCode.includes(normSearch)) {
+    return normCode.replace(normSearch, normReplace);
   }
 
-  const codeLines = code.split("\n");
-  const searchLines = searchBlock
-    .trim()
-    .split("\n")
-    .map((l) => l.trimEnd());
+  // 2. Trim only leading/trailing blank newlines from searchBlock
+  const cleanSearch = normSearch.replace(/^\n+|\n+$/g, "");
+  if (cleanSearch && normCode.includes(cleanSearch)) {
+    return normCode.replace(cleanSearch, normReplace);
+  }
 
+  const codeLines = normCode.split("\n");
+  const searchLines = cleanSearch.split("\n").map((l) => l.trimEnd());
+
+  if (searchLines.length === 0 || !cleanSearch.trim()) return null;
+
+  // 3. Exact trimmed-end match (preserves leading indentation)
   for (let i = 0; i <= codeLines.length - searchLines.length; i++) {
     let matches = true;
     for (let j = 0; j < searchLines.length; j++) {
@@ -450,7 +472,45 @@ export function applySearchReplace(
     if (matches) {
       const before = codeLines.slice(0, i).join("\n");
       const after = codeLines.slice(i + searchLines.length).join("\n");
-      return (before ? before + "\n" : "") + replaceBlock + (after ? "\n" + after : "");
+      return (before ? before + "\n" : "") + normReplace + (after ? "\n" + after : "");
+    }
+  }
+
+  // 4. Fuzzy match: trim leading & trailing whitespace on each line
+  // and re-indent replaceBlock to match original indentation
+  const fullyTrimmedSearch = searchLines.map((l) => l.trim()).filter((l) => l.length > 0);
+  if (fullyTrimmedSearch.length > 0) {
+    for (let i = 0; i <= codeLines.length - fullyTrimmedSearch.length; i++) {
+      let matches = true;
+      for (let j = 0; j < fullyTrimmedSearch.length; j++) {
+        if (codeLines[i + j]?.trim() !== fullyTrimmedSearch[j]) {
+          matches = false;
+          break;
+        }
+      }
+      if (matches) {
+        const origIndent = (codeLines[i]?.match(/^\s*/) || [""])[0];
+        const searchIndent = (searchLines[0]?.match(/^\s*/) || [""])[0];
+
+        let finalReplace = normReplace;
+        if (origIndent !== searchIndent) {
+          const replaceLines = normReplace.split("\n");
+          finalReplace = replaceLines
+            .map((line) => {
+              if (!line.trim()) return line;
+              const lineIndent = (line.match(/^\s*/) || [""])[0];
+              const relativeIndent = lineIndent.startsWith(searchIndent)
+                ? lineIndent.slice(searchIndent.length)
+                : "";
+              return origIndent + relativeIndent + line.trimStart();
+            })
+            .join("\n");
+        }
+
+        const before = codeLines.slice(0, i).join("\n");
+        const after = codeLines.slice(i + fullyTrimmedSearch.length).join("\n");
+        return (before ? before + "\n" : "") + finalReplace + (after ? "\n" + after : "");
+      }
     }
   }
 
@@ -663,6 +723,235 @@ export function applyFileContentOrPatch(
   return { saved: true, method: "overwritten", path: file.path };
 }
 
+export interface ScannedFileDetail {
+  readonly relPath: string;
+  readonly linesCount: number;
+  readonly content?: string;
+  readonly outline?: string;
+  readonly isFull: boolean;
+}
+
+export interface WorkspaceContextResult {
+  readonly hasFiles: boolean;
+  readonly fileCount: number;
+  readonly summary: string;
+  readonly fileDetails: ScannedFileDetail[];
+}
+
+export function scanWorkspaceContext(
+  projectCwd: string,
+  maxTotalBytes = 40000,
+): WorkspaceContextResult {
+  if (!NodeFS.existsSync(projectCwd)) {
+    return { hasFiles: false, fileCount: 0, summary: "", fileDetails: [] };
+  }
+
+  const ignoreDirs = new Set([
+    ".git",
+    "node_modules",
+    "dist",
+    "build",
+    ".next",
+    "__pycache__",
+    ".venv",
+    ".autocode",
+    ".cache",
+    ".turbo",
+  ]);
+  const files: Array<{ relPath: string; fullPath: string; size: number }> = [];
+
+  function walk(dir: string, depth = 0) {
+    if (depth > 4 || files.length >= 60) return;
+    try {
+      const entries = NodeFS.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.name.startsWith(".") && entry.name !== ".env.example") continue;
+        if (ignoreDirs.has(entry.name)) continue;
+
+        const full = NodePath.join(dir, entry.name);
+        const rel = NodePath.relative(projectCwd, full);
+
+        if (entry.isDirectory()) {
+          walk(full, depth + 1);
+        } else if (entry.isFile()) {
+          try {
+            const stat = NodeFS.statSync(full);
+            files.push({ relPath: rel, fullPath: full, size: stat.size });
+          } catch {
+            // ignore
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  walk(projectCwd);
+
+  if (files.length === 0) {
+    return { hasFiles: false, fileCount: 0, summary: "Workspace is empty.", fileDetails: [] };
+  }
+
+  files.sort((a, b) => {
+    const extOrder: Record<string, number> = {
+      html: 1,
+      js: 2,
+      ts: 3,
+      tsx: 4,
+      jsx: 5,
+      py: 6,
+      php: 7,
+      css: 8,
+      json: 9,
+    };
+    const extA = a.relPath.split(".").pop()?.toLowerCase() || "";
+    const extB = b.relPath.split(".").pop()?.toLowerCase() || "";
+    const rankA = extOrder[extA] ?? 99;
+    const rankB = extOrder[extB] ?? 99;
+    return rankA - rankB;
+  });
+
+  let currentBytes = 0;
+  const fileDetails: ScannedFileDetail[] = [];
+  const summaryLines = [
+    `Existing Workspace Files (${files.length} file${files.length > 1 ? "s" : ""}):`,
+  ];
+
+  for (const f of files) {
+    try {
+      const content = NodeFS.readFileSync(f.fullPath, "utf-8");
+      const lines = content.split("\n");
+      const ext = f.relPath.split(".").pop()?.toLowerCase() || "";
+      summaryLines.push(
+        `- ${f.relPath} (${lines.length} lines, ${Math.round((f.size / 1024) * 10) / 10} KB)`,
+      );
+
+      if (currentBytes + f.size <= maxTotalBytes) {
+        currentBytes += f.size;
+        fileDetails.push({
+          relPath: f.relPath,
+          linesCount: lines.length,
+          content,
+          isFull: true,
+        });
+      } else {
+        const outlineLines: string[] = [];
+        for (let i = 0; i < lines.length; i++) {
+          const l = lines[i]?.trim() || "";
+          if (ext === "py") {
+            if (/^(?:async\s+)?(?:def|class)\s+([a-zA-Z0-9_]+)\b/.test(l)) {
+              outlineLines.push(`Line ${i + 1}: ${l}`);
+            }
+          } else {
+            if (
+              /^(?:export\s+)?(?:async\s+)?(?:function|class|interface|type)\s+([a-zA-Z0-9_$]+)\b/.test(
+                l,
+              ) ||
+              /^(?:export\s+)?(?:const|let|var)\s+([a-zA-Z0-9_$]+)\s*=\s*(?:async\s+)?(?:function|\([^)]*\)\s*=>)/.test(
+                l,
+              ) ||
+              /^(?:public|private|protected|static)\s+(?:async\s+)?function\s+([a-zA-Z0-9_$]+)\b/.test(
+                l,
+              )
+            ) {
+              const signature = l.split("{")[0]?.trim() || l;
+              outlineLines.push(`Line ${i + 1}: ${signature}`);
+            }
+          }
+        }
+        fileDetails.push({
+          relPath: f.relPath,
+          linesCount: lines.length,
+          outline: outlineLines.join("\n"),
+          isFull: false,
+        });
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return {
+    hasFiles: true,
+    fileCount: files.length,
+    summary: summaryLines.join("\n"),
+    fileDetails,
+  };
+}
+
+export function getThreadHistory(
+  threadKeys: Array<string | null | undefined>,
+  projectCwd?: string,
+): Array<{ role: "system" | "user" | "assistant"; content: string }> {
+  for (const k of threadKeys) {
+    if (k && GLOBAL_CUSTOM_THREAD_HISTORIES.has(String(k))) {
+      const mem = GLOBAL_CUSTOM_THREAD_HISTORIES.get(String(k));
+      if (mem && mem.length > 0) return mem;
+    }
+  }
+
+  if (projectCwd) {
+    for (const k of threadKeys) {
+      if (!k) continue;
+      const historyFile = NodePath.join(projectCwd, ".autocode", `thread_${String(k)}.json`);
+      try {
+        if (NodeFS.existsSync(historyFile)) {
+          const raw = NodeFS.readFileSync(historyFile, "utf-8");
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            for (const key of threadKeys) {
+              if (key) GLOBAL_CUSTOM_THREAD_HISTORIES.set(String(key), parsed);
+            }
+            return parsed;
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  return [];
+}
+
+export function saveThreadHistory(
+  threadKeys: Array<string | null | undefined>,
+  history: Array<{ role: "system" | "user" | "assistant"; content: string }>,
+  projectCwd?: string,
+): void {
+  for (const k of threadKeys) {
+    if (k) {
+      GLOBAL_CUSTOM_THREAD_HISTORIES.set(String(k), history);
+    }
+  }
+
+  if (projectCwd && history.length > 0) {
+    try {
+      const autoDir = NodePath.join(projectCwd, ".autocode");
+      if (!NodeFS.existsSync(autoDir)) {
+        NodeFS.mkdirSync(autoDir, { recursive: true });
+      }
+      for (const k of threadKeys) {
+        if (!k) continue;
+        const historyFile = NodePath.join(autoDir, `thread_${String(k)}.json`);
+        NodeFS.writeFileSync(historyFile, JSON.stringify(history, null, 2), "utf-8");
+      }
+      const gitIgnorePath = NodePath.join(projectCwd, ".gitignore");
+      if (!NodeFS.existsSync(gitIgnorePath)) {
+        NodeFS.writeFileSync(gitIgnorePath, ".autocode/\nnode_modules/\n", "utf-8");
+      } else {
+        const cur = NodeFS.readFileSync(gitIgnorePath, "utf-8");
+        if (!cur.includes(".autocode")) {
+          NodeFS.writeFileSync(gitIgnorePath, `${cur.trim()}\n.autocode/\n`, "utf-8");
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+}
+
 export const GLOBAL_CUSTOM_THREAD_HISTORIES = new Map<
   string,
   Array<{ role: "system" | "user" | "assistant"; content: string }>
@@ -755,7 +1044,7 @@ export function makeCustomAdapterV2(
             }),
           injectHistory: (args) =>
             Effect.sync(() => {
-              const threadKey = String(args.providerThread.appThreadId ?? args.providerThread.id);
+              const threadKeys = [args.providerThread.appThreadId, args.providerThread.id];
               const msgs: Array<{ role: "system" | "user" | "assistant"; content: string }> = [];
               if (args.context && args.context.trim()) {
                 msgs.push({ role: "system", content: args.context.trim() });
@@ -769,7 +1058,7 @@ export function makeCustomAdapterV2(
                 });
               }
               if (msgs.length > 0) {
-                GLOBAL_CUSTOM_THREAD_HISTORIES.set(threadKey, msgs);
+                saveThreadHistory(threadKeys, msgs, openInput.runtimePolicy?.cwd);
               }
               return true;
             }),
@@ -800,6 +1089,7 @@ export function makeCustomAdapterV2(
               let currentAiLogId: string | null = null;
               let currentStartMs = Date.now();
               let threadKey = "";
+              let threadKeys: Array<string | null | undefined> = [];
               let history: Array<{ role: "system" | "user" | "assistant"; content: string }> = [];
               let projectCwd = "";
               let userPrompt = "";
@@ -868,12 +1158,16 @@ export function makeCustomAdapterV2(
                   chatUrl = `${cleanBase}/v1/chat/completions`;
                 }
 
+                threadKeys = [
+                  turnInput.providerThread.appThreadId,
+                  turnInput.threadId,
+                  turnInput.providerThread.id,
+                ];
                 threadKey = String(
                   turnInput.providerThread.appThreadId ??
                     turnInput.threadId ??
                     turnInput.providerThread.id,
                 );
-                history = GLOBAL_CUSTOM_THREAD_HISTORIES.get(threadKey) ?? [];
 
                 const procEnv = (
                   globalThis as { process?: { env?: Record<string, string | undefined> } }
@@ -895,13 +1189,56 @@ export function makeCustomAdapterV2(
                   // ignore
                 }
 
+                history = getThreadHistory(threadKeys, projectCwd);
+
                 userPrompt = (turnInput.message.text || "Hello").trim();
                 if (userPrompt.includes("User message:\n")) {
                   const parts = userPrompt.split("User message:\n");
                   userPrompt = (parts[parts.length - 1] || userPrompt).trim();
                 }
 
-                const systemPrompt = `You are AutoCode (AC) AI Developer with integrated Live Preview and Testing capabilities.
+                const workspace = scanWorkspaceContext(projectCwd);
+
+                let systemPrompt = "";
+                if (workspace.hasFiles && workspace.fileCount > 0) {
+                  let filesContext = "";
+                  for (const f of workspace.fileDetails) {
+                    if (f.isFull && f.content) {
+                      filesContext += `\n--- CURRENT FILE ON DISK: ${f.relPath} (${f.linesCount} lines) ---\n\`\`\`\n${f.content}\n\`\`\`\n`;
+                    } else if (f.outline) {
+                      filesContext += `\n--- FILE STRUCTURE OUTLINE: ${f.relPath} (${f.linesCount} lines) ---\n${f.outline}\n`;
+                    }
+                  }
+
+                  systemPrompt = `You are AutoCode (AC) AI Developer in TARGETED INCREMENTAL EDITING MODE.
+Project Workspace Directory: ${projectCwd}
+${workspace.summary}
+${filesContext}
+================================================================================
+CRITICAL INCREMENTAL EDITING RULES:
+1. The project already exists on disk (shown above).
+2. DO NOT REWRITE OR REPRINT ENTIRE FILES. Full file rewrites waste time and tokens and are strictly prohibited on edits.
+3. For changes, you MUST use one of these two targeted formats:
+
+FORMAT A - SEARCH/REPLACE Diff Block (Preferred for fast edits, colors, speed, settings, bug fixes):
+\`\`\`<language> filepath=<relative/path>
+<<<< SEARCH
+// exact lines from the existing file above to be replaced
+====
+// new replacement lines
+>>>>
+\`\`\`
+
+FORMAT B - Targeted Function / Class Block (For replacing an entire function or class):
+\`\`\`<language> filepath=<relative/path>
+function drawJet() {
+  // updated implementation only
+}
+\`\`\`
+
+4. The automated engine will patch ONLY these lines directly into the existing file on disk. All other code, HTML structure, game loop, canvas, and event listeners will be 100% preserved.`;
+                } else {
+                  systemPrompt = `You are AutoCode (AC) AI Developer with integrated Live Preview and Testing capabilities.
 Project Workspace Directory: ${projectCwd}
 
 WEB PREVIEW & MULTI-LANGUAGE CODE GENERATION INSTRUCTIONS:
@@ -911,27 +1248,6 @@ WEB PREVIEW & MULTI-LANGUAGE CODE GENERATION INSTRUCTIONS:
    - Implement complete, interactive controls (arrow keys, WASD, mouse clicks, on-screen touch/tap buttons, restart/pause buttons, score tracking).
    - Ensure canvas sizing and game loop (\`requestAnimationFrame\`) work smoothly without runtime errors or uncaught exceptions.
    - Self-verify that all buttons, event listeners, and DOM elements exist and are properly bound.
-
-MULTI-LANGUAGE PROJECT ARCHITECTURE & TARGETED EDITS:
-2. You support large projects across ALL programming languages and frameworks (TypeScript, React, Next.js, Python, Node.js, PHP, Go, C++, Rust, HTML/CSS, etc.).
-3. When asked to modify, update, or fix existing code:
-   - NEVER wipe out or destroy existing code. Preserve the surrounding architecture, state, classes, and helper functions.
-   - For targeted edits, provide either:
-     a) The complete updated function, method, or class block with the exact same identifier/signature:
-        \`\`\`<language> filepath=<relative/path>
-        function drawJet() {
-          // updated implementation
-        }
-        \`\`\`
-     b) Or a precise SEARCH/REPLACE diff block:
-        \`\`\`<language> filepath=<relative/path>
-        <<<< SEARCH
-        // exact existing lines to replace
-        ====
-        // new replacement lines
-        >>>>
-        \`\`\`
-     c) If generating or completely refactoring an entire file, provide the FULL, complete, production-ready code from start to finish without placeholders like \`// ... rest of code unchanged ...\`.
 
 FILE SPECIFICATION INSTRUCTIONS:
 Always clearly specify the file path for each file at the top of each code block using:
@@ -949,7 +1265,8 @@ or for HTML/web:
 ...content...
 \`\`\`
 
-All generated and modified files will automatically be saved into the project workspace directory (${projectCwd}) and committed to Git.`;
+All generated files will automatically be saved into the project workspace directory (${projectCwd}) and committed to Git.`;
+                }
 
                 // Check if previous turn was interrupted or user is requesting continuation
                 const interruptedInfo = GLOBAL_THREAD_INTERRUPTED_STATE.get(threadKey);
@@ -1571,7 +1888,7 @@ ${userPrompt || "Continue generating from where you were interrupted"}`;
                     content: finalText.trim() || "(Response received)",
                   },
                 ];
-                GLOBAL_CUSTOM_THREAD_HISTORIES.set(threadKey, updatedHistory);
+                saveThreadHistory(threadKeys, updatedHistory, projectCwd);
                 GLOBAL_THREAD_INTERRUPTED_STATE.delete(threadKey);
               }).pipe(
                 Effect.provide(FetchHttpClient.layer),
@@ -1610,7 +1927,7 @@ ${userPrompt || "Continue generating from where you were interrupted"}`;
                         { role: "user" as const, content: userPrompt || "Hello" },
                         { role: "assistant" as const, content: cleanPartialText },
                       ];
-                      GLOBAL_CUSTOM_THREAD_HISTORIES.set(threadKey, updatedHistory);
+                      saveThreadHistory(threadKeys, updatedHistory, projectCwd);
                       GLOBAL_THREAD_INTERRUPTED_STATE.set(threadKey, {
                         lastInterruptedText: cleanPartialText,
                         model: selectedModel,
