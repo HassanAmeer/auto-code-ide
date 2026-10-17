@@ -318,6 +318,351 @@ export function extractFilesFromMarkdown(markdown: string): Array<ExtractedProje
   return files;
 }
 
+// --- Universal Multi-Language In-Place Patching & Diff Engine ---
+
+export function findPythonBlockRange(
+  code: string,
+  blockName: string,
+): {
+  startLine: number;
+  endLine: number;
+  content: string;
+  startChar: number;
+  endChar: number;
+} | null {
+  const lines = code.split("\n");
+  const regex = new RegExp(`^(\\s*)(?:async\\s+)?(?:def|class)\\s+${blockName}\\b`);
+
+  let startLine = -1;
+  let baseIndent = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    const match = lines[i]?.match(regex);
+    if (match && match[1] !== undefined) {
+      startLine = i;
+      baseIndent = match[1].length;
+      break;
+    }
+  }
+
+  if (startLine === -1) return null;
+
+  let endLine = lines.length;
+  for (let i = startLine + 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (line === undefined || line.trim().length === 0) continue;
+    const indentMatch = line.match(/^(\s*)/);
+    const lineIndent = indentMatch ? indentMatch[1].length : 0;
+    if (lineIndent <= baseIndent) {
+      endLine = i;
+      break;
+    }
+  }
+
+  return {
+    startLine,
+    endLine,
+    content: lines.slice(startLine, endLine).join("\n"),
+    startChar: lines.slice(0, startLine).join("\n").length + (startLine > 0 ? 1 : 0),
+    endChar: lines.slice(0, endLine).join("\n").length,
+  };
+}
+
+export function findBraceBlockRange(
+  code: string,
+  identifier: string,
+): { start: number; end: number } | null {
+  const pattern = new RegExp(
+    `(?:(?:async\\s+)?(?:function|class|interface|type)\\s+${identifier}\\b|(?:const|let|var|public|private|protected|static|fn|def)\\s+${identifier}\\b|(?:^|\\s)${identifier}\\s*[:=]\\s*(?:async\\s+)?(?:function|\\([^)]*\\)\\s*=>)|(?:^|\\s)${identifier}\\s*\\([^)]*\\)\\s*\\{)`,
+    "m",
+  );
+  const match = pattern.exec(code);
+  if (!match) return null;
+
+  const startIdx = match.index;
+  const braceStart = code.indexOf("{", startIdx);
+  if (braceStart === -1) return null;
+
+  let depth = 0;
+  let inString: string | null = null;
+  let inComment = false;
+
+  for (let i = braceStart; i < code.length; i++) {
+    const char = code[i];
+    const prev = code[i - 1];
+
+    if (!inString && !inComment) {
+      if (char === '"' || char === "'" || char === "`") {
+        inString = char;
+      } else if (char === "/" && code[i + 1] === "/") {
+        inComment = true;
+        i++;
+      } else if (char === "/" && code[i + 1] === "*") {
+        inComment = true;
+        i++;
+      } else if (char === "{") {
+        depth++;
+      } else if (char === "}") {
+        depth--;
+        if (depth === 0) {
+          let endIdx = i + 1;
+          if (code[endIdx] === ";") endIdx++;
+          return { start: startIdx, end: endIdx };
+        }
+      }
+    } else if (inString) {
+      if (char === inString && prev !== "\\") {
+        inString = null;
+      }
+    } else if (inComment) {
+      if (char === "\n" || (prev === "*" && char === "/")) {
+        inComment = false;
+      }
+    }
+  }
+
+  return null;
+}
+
+export function applySearchReplace(
+  code: string,
+  searchBlock: string,
+  replaceBlock: string,
+): string | null {
+  if (code.includes(searchBlock)) {
+    return code.replace(searchBlock, replaceBlock);
+  }
+
+  const codeLines = code.split("\n");
+  const searchLines = searchBlock
+    .trim()
+    .split("\n")
+    .map((l) => l.trimEnd());
+
+  for (let i = 0; i <= codeLines.length - searchLines.length; i++) {
+    let matches = true;
+    for (let j = 0; j < searchLines.length; j++) {
+      if (codeLines[i + j]?.trimEnd() !== searchLines[j]) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches) {
+      const before = codeLines.slice(0, i).join("\n");
+      const after = codeLines.slice(i + searchLines.length).join("\n");
+      return (before ? before + "\n" : "") + replaceBlock + (after ? "\n" + after : "");
+    }
+  }
+
+  return null;
+}
+
+export function universalPatchFile(
+  existingCode: string,
+  patchSnippet: string,
+  filePath: string,
+): { success: boolean; content: string; method?: string } {
+  // A. Search / Replace blocks (<<<< SEARCH ... ==== ... >>>>)
+  const searchReplaceRegex = /<{3,7}\s*SEARCH\s*\n([\s\S]*?)\n[=]{3,7}\s*\n([\s\S]*?)\n[>]{3,7}/g;
+  let srMatch: RegExpExecArray | null;
+  let patched = existingCode;
+  let srApplied = false;
+
+  while ((srMatch = searchReplaceRegex.exec(patchSnippet)) !== null) {
+    const s = srMatch[1];
+    const r = srMatch[2];
+    if (s !== undefined && r !== undefined) {
+      const res = applySearchReplace(patched, s, r);
+      if (res !== null) {
+        patched = res;
+        srApplied = true;
+      }
+    }
+  }
+  if (srApplied) {
+    return { success: true, content: patched, method: "search_replace" };
+  }
+
+  const ext = filePath.split(".").pop()?.toLowerCase() || "";
+
+  // B. Python files (.py)
+  if (ext === "py") {
+    const pyDefRegex = /(?:^|\n)(\s*)(?:async\s+)?(?:def|class)\s+([a-zA-Z0-9_]+)\b/g;
+    let pyMatch: RegExpExecArray | null;
+    let pyApplied = false;
+
+    while ((pyMatch = pyDefRegex.exec(patchSnippet)) !== null) {
+      const blockName = pyMatch[2];
+      if (!blockName) continue;
+      const patchRange = findPythonBlockRange(patchSnippet, blockName);
+      if (!patchRange) continue;
+      const newBlockCode = patchRange.content;
+
+      const existingRange = findPythonBlockRange(patched, blockName);
+      if (existingRange) {
+        patched =
+          patched.slice(0, existingRange.startChar) +
+          newBlockCode +
+          patched.slice(existingRange.endChar);
+        pyApplied = true;
+      }
+    }
+    if (pyApplied) {
+      return { success: true, content: patched, method: "python_block_patch" };
+    }
+  }
+
+  // C. C-style brace languages (JS, TS, TSX, JSX, PHP, C, CPP, Java, Rust, Go, C#, HTML script)
+  const braceLangs = [
+    "js",
+    "ts",
+    "tsx",
+    "jsx",
+    "php",
+    "c",
+    "cpp",
+    "cc",
+    "h",
+    "hpp",
+    "java",
+    "rs",
+    "go",
+    "cs",
+    "html",
+  ];
+  if (braceLangs.includes(ext)) {
+    const blockRegex =
+      /(?:(?:async\\s+)?function\s+([a-zA-Z0-9_$]+)|class\s+([a-zA-Z0-9_$]+)|(?:const|let|var)\s+([a-zA-Z0-9_$]+)\s*=\s*(?:async\s+)?(?:function|\([^)]*\)\s*=>)|(?:public|private|protected|static|fn|def)\s+([a-zA-Z0-9_$]+)\b)/g;
+    let match: RegExpExecArray | null;
+    let braceApplied = false;
+
+    while ((match = blockRegex.exec(patchSnippet)) !== null) {
+      const identifier = match[1] || match[2] || match[3] || match[4];
+      if (
+        !identifier ||
+        identifier === "if" ||
+        identifier === "for" ||
+        identifier === "while" ||
+        identifier === "switch"
+      ) {
+        continue;
+      }
+
+      const patchRange = findBraceBlockRange(patchSnippet, identifier);
+      if (!patchRange) continue;
+      const newCode = patchSnippet.slice(patchRange.start, patchRange.end).trim();
+
+      const existingRange = findBraceBlockRange(patched, identifier);
+      if (existingRange) {
+        patched =
+          patched.slice(0, existingRange.start) + newCode + patched.slice(existingRange.end);
+        braceApplied = true;
+      } else if (ext === "html" && patched.includes("</script>")) {
+        const scriptIdx = patched.lastIndexOf("</script>");
+        patched =
+          patched.slice(0, scriptIdx) +
+          `\n\n// Added: ${identifier}\n${newCode}\n` +
+          patched.slice(scriptIdx);
+        braceApplied = true;
+      }
+    }
+    if (braceApplied) {
+      return { success: true, content: patched, method: "brace_block_patch" };
+    }
+  }
+
+  return { success: false, content: existingCode };
+}
+
+export function applyFileContentOrPatch(
+  projectCwd: string,
+  file: { path: string; content: string },
+): {
+  saved: boolean;
+  method: "created" | "patched" | "overwritten" | "skipped_protected";
+  path: string;
+} {
+  const fullPath = NodePath.resolve(projectCwd, file.path);
+  const rel = NodePath.relative(projectCwd, fullPath);
+  if (rel.startsWith("..") || NodePath.isAbsolute(rel)) {
+    return { saved: false, method: "skipped_protected", path: file.path };
+  }
+
+  const dir = NodePath.dirname(fullPath);
+  if (!NodeFS.existsSync(dir)) {
+    NodeFS.mkdirSync(dir, { recursive: true });
+  }
+
+  if (!NodeFS.existsSync(fullPath)) {
+    NodeFS.writeFileSync(fullPath, file.content, "utf-8");
+    return { saved: true, method: "created", path: file.path };
+  }
+
+  const existingContent = NodeFS.readFileSync(fullPath, "utf-8");
+  const trimmedNew = file.content.trim();
+  const ext = file.path.split(".").pop()?.toLowerCase() || "";
+
+  // Check if new content has SEARCH/REPLACE diff markers
+  const hasSearchReplace = /<{3,7}\s*SEARCH\s*\n[\s\S]*?\n[=]{3,7}\s*\n[\s\S]*?\n[>]{3,7}/.test(
+    file.content,
+  );
+
+  // Check if content is a partial snippet / placeholder
+  const hasPlaceholder =
+    /\/\/\s*\.\.\.\s*(?:rest|existing|code|remaining|unchanged)/i.test(trimmedNew) ||
+    /#\s*\.\.\.\s*(?:rest|existing|code|remaining|unchanged)/i.test(trimmedNew) ||
+    /\/\*\s*\.\.\.\s*(?:rest|existing|code|remaining|unchanged)/i.test(trimmedNew);
+
+  const isHtmlTargetWithoutHtmlStructure =
+    ext === "html" &&
+    existingContent.toLowerCase().includes("<html") &&
+    !trimmedNew.toLowerCase().includes("<html") &&
+    !trimmedNew.toLowerCase().includes("<!doctype");
+
+  const isSignificantLengthDrop =
+    existingContent.length > 300 && trimmedNew.length < existingContent.length * 0.65;
+
+  const isCandidateForPatch =
+    hasSearchReplace ||
+    hasPlaceholder ||
+    isHtmlTargetWithoutHtmlStructure ||
+    isSignificantLengthDrop;
+
+  if (isCandidateForPatch) {
+    const patchResult = universalPatchFile(existingContent, file.content, file.path);
+    if (patchResult.success && patchResult.content !== existingContent) {
+      NodeFS.writeFileSync(fullPath, patchResult.content, "utf-8");
+      return { saved: true, method: "patched", path: file.path };
+    }
+
+    // Safety guard: If patch failed but this was clearly a partial placeholder/stub
+    // that would destroy a large existing file, preserve existing file instead of wiping it!
+    if (hasPlaceholder || (isHtmlTargetWithoutHtmlStructure && existingContent.length > 200)) {
+      console.warn(
+        `[AutoCode Protect] Prevented destructive overwrite of ${file.path} with partial snippet.`,
+      );
+      if (
+        ext === "html" &&
+        existingContent.includes("</script>") &&
+        !trimmedNew.includes("<script>")
+      ) {
+        const scriptIdx = existingContent.lastIndexOf("</script>");
+        const appended =
+          existingContent.slice(0, scriptIdx) +
+          `\n\n// Added targeted snippet:\n${trimmedNew}\n` +
+          existingContent.slice(scriptIdx);
+        NodeFS.writeFileSync(fullPath, appended, "utf-8");
+        return { saved: true, method: "patched", path: file.path };
+      }
+      return { saved: false, method: "skipped_protected", path: file.path };
+    }
+  }
+
+  // Genuine complete file write or full rewrite
+  NodeFS.writeFileSync(fullPath, file.content, "utf-8");
+  return { saved: true, method: "overwritten", path: file.path };
+}
+
 export const GLOBAL_CUSTOM_THREAD_HISTORIES = new Map<
   string,
   Array<{ role: "system" | "user" | "assistant"; content: string }>
@@ -555,21 +900,36 @@ export function makeCustomAdapterV2(
                 const systemPrompt = `You are AutoCode (AC) AI Developer with integrated Live Preview and Testing capabilities.
 Project Workspace Directory: ${projectCwd}
 
-WEB PREVIEW & GAME DEVELOPMENT INSTRUCTIONS:
-1. When asked to build games (e.g. 2D canvas, arcade, puzzle, RPG) or websites / web tools:
+WEB PREVIEW & MULTI-LANGUAGE CODE GENERATION INSTRUCTIONS:
+1. When asked to build games (e.g. 2D canvas, arcade, puzzle, RPG) or web tools:
    - Always create a complete, self-contained \`index.html\` as the primary entrypoint so it immediately runs in the built-in Web Preview!
    - Embed all necessary CSS styles and JavaScript logic directly in \`index.html\` (or properly linked in sibling files like \`style.css\` and \`game.js\`).
    - Implement complete, interactive controls (arrow keys, WASD, mouse clicks, on-screen touch/tap buttons, restart/pause buttons, score tracking).
    - Ensure canvas sizing and game loop (\`requestAnimationFrame\`) work smoothly without runtime errors or uncaught exceptions.
    - Self-verify that all buttons, event listeners, and DOM elements exist and are properly bound.
 
-BUG FIXING & TARGETED EDITS:
-2. When asked to fix bugs, solve errors, or modify existing features:
-   - Do NOT rewrite or dump the entire project from scratch unnecessarily.
-   - Perform targeted, precise edits to the specific problematic functions, event handlers, or sections.
-   - Clearly state which function or block is being updated and provide the updated code block with the exact filepath.
+MULTI-LANGUAGE PROJECT ARCHITECTURE & TARGETED EDITS:
+2. You support large projects across ALL programming languages and frameworks (TypeScript, React, Next.js, Python, Node.js, PHP, Go, C++, Rust, HTML/CSS, etc.).
+3. When asked to modify, update, or fix existing code:
+   - NEVER wipe out or destroy existing code. Preserve the surrounding architecture, state, classes, and helper functions.
+   - For targeted edits, provide either:
+     a) The complete updated function, method, or class block with the exact same identifier/signature:
+        \`\`\`<language> filepath=<relative/path>
+        function drawJet() {
+          // updated implementation
+        }
+        \`\`\`
+     b) Or a precise SEARCH/REPLACE diff block:
+        \`\`\`<language> filepath=<relative/path>
+        <<<< SEARCH
+        // exact existing lines to replace
+        ====
+        // new replacement lines
+        >>>>
+        \`\`\`
+     c) If generating or completely refactoring an entire file, provide the FULL, complete, production-ready code from start to finish without placeholders like \`// ... rest of code unchanged ...\`.
 
-FILE CREATION INSTRUCTIONS:
+FILE SPECIFICATION INSTRUCTIONS:
 Always clearly specify the file path for each file at the top of each code block using:
 \`\`\`<language> filepath=<relative/path>
 ...content...
@@ -585,8 +945,7 @@ or for HTML/web:
 ...content...
 \`\`\`
 
-All generated files will automatically be saved into the project workspace directory (${projectCwd}) and committed to Git.
-Provide full, complete, production-ready code with no placeholders.`;
+All generated and modified files will automatically be saved into the project workspace directory (${projectCwd}) and committed to Git.`;
 
                 // Check if previous turn was interrupted or user is requesting continuation
                 const interruptedInfo = GLOBAL_THREAD_INTERRUPTED_STATE.get(threadKey);
@@ -1049,18 +1408,16 @@ ${userPrompt || "Continue generating from where you were interrupted"}`;
 
                 for (const file of extractedFiles) {
                   try {
-                    const fullPath = NodePath.resolve(projectCwd, file.path);
-                    const rel = NodePath.relative(projectCwd, fullPath);
-                    if (!rel.startsWith("..") && !NodePath.isAbsolute(rel)) {
-                      const dir = NodePath.dirname(fullPath);
-                      if (!NodeFS.existsSync(dir)) {
-                        NodeFS.mkdirSync(dir, { recursive: true });
-                      }
-                      NodeFS.writeFileSync(fullPath, file.content, "utf-8");
+                    const result = applyFileContentOrPatch(projectCwd, file);
+                    if (result.saved) {
                       savedFiles.push(file.path);
                     }
                   } catch (saveErr) {
-                    console.error("Failed saving generated file to project:", file.path, saveErr);
+                    console.error(
+                      "Failed saving/patching generated file to project:",
+                      file.path,
+                      saveErr,
+                    );
                   }
                 }
 
@@ -1260,15 +1617,7 @@ ${userPrompt || "Continue generating from where you were interrupted"}`;
                       try {
                         const partialFiles = extractFilesFromMarkdown(cleanPartialText);
                         for (const file of partialFiles) {
-                          const fullPath = NodePath.resolve(projectCwd, file.path);
-                          const rel = NodePath.relative(projectCwd, fullPath);
-                          if (!rel.startsWith("..") && !NodePath.isAbsolute(rel)) {
-                            const dir = NodePath.dirname(fullPath);
-                            if (!NodeFS.existsSync(dir)) {
-                              NodeFS.mkdirSync(dir, { recursive: true });
-                            }
-                            NodeFS.writeFileSync(fullPath, file.content, "utf-8");
-                          }
+                          applyFileContentOrPatch(projectCwd, file);
                         }
                       } catch {
                         // ignore
