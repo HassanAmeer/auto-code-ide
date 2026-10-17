@@ -218,6 +218,7 @@ import {
   resolveAdjacentThreadId,
   isContextMenuPointerDown,
   isSidebarNestedLinkClick,
+  isSidebarThreadWorking,
   isTrailingDoubleClick,
   resolveProjectStatusIndicator,
   resolveThreadRowClassName,
@@ -230,6 +231,8 @@ import {
   useThreadJumpHintVisibility,
   ThreadStatusPill,
 } from "./Sidebar.logic";
+import { isLatestRunSettled } from "../session-logic";
+import { useProjectUploadProgress } from "~/state/projectUploadProgress";
 import { sortThreads } from "../lib/threadSort";
 import { SidebarChromeFooter, SidebarChromeHeader } from "./sidebar/SidebarChrome";
 import { terminalStore } from "./chat/terminal";
@@ -1443,6 +1446,47 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       visibleProjectThreads,
     };
   }, [projectThreads, threadLastVisitedAts, threadSortOrder]);
+
+  const uploadProgress = useProjectUploadProgress();
+  const isProjectImporting = useMemo(() => {
+    if (!uploadProgress.isImporting) return false;
+    const name = uploadProgress.projectName || uploadProgress.customProjectName;
+    if (!name) return false;
+    const lowerName = name.toLowerCase();
+    return (
+      project.displayName.toLowerCase() === lowerName ||
+      project.memberProjects.some(
+        (m) =>
+          m.title.toLowerCase() === lowerName ||
+          (m.workspaceRoot ? m.workspaceRoot.toLowerCase().endsWith(lowerName) : false),
+      )
+    );
+  }, [project.displayName, project.memberProjects, uploadProgress]);
+
+  const isProjectWorking = useMemo(() => {
+    if (isProjectImporting) return true;
+    if (projectStatus?.label === "Working" || projectStatus?.label === "Connecting") {
+      return true;
+    }
+    return projectThreads.some((thread) => {
+      if (isSidebarThreadWorking(thread)) return true;
+      const status = thread.runtime?.status;
+      if (
+        status === "running" ||
+        status === "waiting" ||
+        status === "preparing" ||
+        status === "starting" ||
+        status === "queued"
+      ) {
+        return true;
+      }
+      if (thread.latestRun && !isLatestRunSettled(thread.latestRun, thread.runtime)) {
+        return true;
+      }
+      return false;
+    });
+  }, [isProjectImporting, projectStatus, projectThreads]);
+
   const pinnedCollapsedThread = useMemo(() => {
     const activeThreadKey = activeRouteThreadKey ?? undefined;
     if (!activeThreadKey || projectExpanded) {
@@ -3180,13 +3224,20 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
           {/* Left Side: Folder icon & Project title */}
           <span className="flex min-w-0 flex-1 items-center gap-2">
             {projectExpanded ? (
-              <FolderOpenIcon className="size-4 shrink-0 text-muted-foreground group-hover/project-header:text-foreground transition-colors" />
+              <FolderOpenIcon className="size-4 shrink-0 text-sidebar-foreground/85 group-hover/project-header:text-foreground transition-all duration-150 animate-in fade-in-50 zoom-in-95" />
             ) : (
-              <FolderIcon className="size-4 shrink-0 text-muted-foreground group-hover/project-header:text-foreground transition-colors" />
+              <FolderIcon className="size-4 shrink-0 text-muted-foreground group-hover/project-header:text-foreground transition-all duration-150 animate-in fade-in-50 zoom-in-95" />
             )}
             <span className="truncate text-[13px] font-semibold tracking-[-0.015em] text-sidebar-foreground">
               {project.displayName}
             </span>
+            {isProjectWorking ? (
+              <Spinner
+                size="xs"
+                className="size-3.5 shrink-0 text-sky-500 animate-spin"
+                title="Working / Processing..."
+              />
+            ) : null}
             {project.groupedProjectCount > 1 ? (
               <span className="shrink-0 rounded-full bg-sidebar-muted/30 px-1.5 py-0.5 text-[10px] font-medium text-sidebar-muted-foreground/90">
                 {project.groupedProjectCount} projects
@@ -3200,7 +3251,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
             onClick={(e) => e.stopPropagation()}
             onPointerDown={(e) => e.stopPropagation()}
           >
-            {!projectExpanded && projectStatus && (
+            {!isProjectWorking && !projectExpanded && projectStatus && (
               <span
                 title={projectStatus.label}
                 className={cn(

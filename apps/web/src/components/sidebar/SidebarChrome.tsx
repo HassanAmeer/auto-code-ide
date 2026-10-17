@@ -44,7 +44,6 @@ import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
 import { useTerminalStore, terminalStore } from "../chat/terminal/terminalStore";
 import { SidebarResourceStats } from "./SidebarResourceStats";
 import { useBackgroundModeStore } from "../../lib/backgroundModeStore";
-import { BackgroundModeDialog } from "../background/BackgroundModeDialog";
 
 export const SidebarChromeHeader = memo(function SidebarChromeHeader({
   isElectron,
@@ -560,7 +559,6 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
           </>
         )}
       </SidebarMenu>
-      <BackgroundModeDialog />
     </div>
   );
 });

@@ -42,6 +42,7 @@ import { GlobalProjectImportProgress } from "../components/project/GlobalProject
 import { CreateNewProjectModal } from "../components/project/CreateNewProjectModal";
 import { RequestLogsFloatingButton } from "../components/logs/RequestLogsFloatingButton";
 import { NotesSheet } from "../components/notes/NotesSheet";
+import { BackgroundModeDialog } from "../components/background/BackgroundModeDialog";
 import { useCopyToClipboard } from "../hooks/useCopyToClipboard";
 import { useDefaultThemeAdoption } from "../hooks/useDefaultTheme";
 import { useEnvironmentThemeSync } from "../hooks/useEnvironmentTheme";
@@ -234,6 +235,7 @@ function RootRouteView() {
           {appShell}
           <RequestLogsFloatingButton />
           <NotesSheet />
+          <BackgroundModeDialog />
           {/* Above the router: a theme draft is judged by walking the app, so the
               editor has to survive navigation away from settings. */}
           <ThemeEditorHost />

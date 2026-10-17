@@ -255,6 +255,7 @@ import {
 } from "./ThreadStatusIndicators";
 import { resolveSnoozePresets, snoozeWakeLabel, type SnoozePreset } from "./Sidebar.snooze";
 import { ProjectFavicon, type ProjectFaviconProject } from "./ProjectFavicon";
+import { Spinner } from "~/components/ui/spinner";
 import { ThreadSearchMatchExcerpt } from "./ThreadSearchMatch";
 import { makeWorkspaceFileDropHandlers } from "./chat/workspaceFileDrop";
 import { ProviderInstanceIcon } from "./chat/ProviderInstanceIcon";
@@ -5210,6 +5211,11 @@ export default function Sidebar() {
                 </button>
                 {projectGroups.map((group) => {
                   const isSelected = projectScopeKey === group.projectKey;
+                  const isWorking = workingThreads.some((thread) =>
+                    group.memberProjects.some(
+                      (m) => m.environmentId === thread.environmentId && m.id === thread.projectId,
+                    ),
+                  );
                   return (
                     <button
                       key={group.projectKey}
@@ -5229,6 +5235,9 @@ export default function Sidebar() {
                     >
                       <ProjectFavicon project={group} className="size-3.5 shrink-0" />
                       <span className="truncate">{group.displayName}</span>
+                      {isWorking ? (
+                        <Spinner size="xs" className="size-3 shrink-0 text-sky-400 animate-spin" />
+                      ) : null}
                     </button>
                   );
                 })}
@@ -5702,6 +5711,12 @@ export default function Sidebar() {
                   <div className="flex flex-col gap-1 w-full">
                     {projectGroups.map((group) => {
                       const isSelected = projectScopeKey === group.projectKey;
+                      const isWorking = workingThreads.some((thread) =>
+                        group.memberProjects.some(
+                          (m) =>
+                            m.environmentId === thread.environmentId && m.id === thread.projectId,
+                        ),
+                      );
                       return (
                         <button
                           key={group.projectKey}
@@ -5720,6 +5735,12 @@ export default function Sidebar() {
                           <div className="flex items-center gap-2 min-w-0">
                             <ProjectFavicon project={group} className="size-4 shrink-0" />
                             <span className="truncate">{group.displayName}</span>
+                            {isWorking ? (
+                              <Spinner
+                                size="xs"
+                                className="size-3 shrink-0 text-sky-400 animate-spin"
+                              />
+                            ) : null}
                           </div>
                           <span
                             className={cn(

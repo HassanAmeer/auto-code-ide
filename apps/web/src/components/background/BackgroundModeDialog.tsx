@@ -1,9 +1,7 @@
-import { memo } from "react";
+import { memo, useEffect } from "react";
 import {
   ActivityIcon,
-  CheckCircle2Icon,
   DatabaseIcon,
-  LaptopIcon,
   MoonIcon,
   ServerIcon,
   SunIcon,
@@ -12,91 +10,94 @@ import {
 } from "lucide-react";
 
 import { useBackgroundModeStore } from "../../lib/backgroundModeStore";
-import { Dialog, DialogPopup, DialogTitle } from "../ui/dialog";
 import { cn } from "../../lib/utils";
 
 export const BackgroundModeDialog = memo(function BackgroundModeDialog() {
   const { isBgEnabled, keepTabAwake, isModalOpen, setBgEnabled, setKeepTabAwake, setModalOpen } =
     useBackgroundModeStore();
 
+  useEffect(() => {
+    if (!isModalOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setModalOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isModalOpen, setModalOpen]);
+
+  if (!isModalOpen) return null;
+
   return (
-    <Dialog open={isModalOpen} onOpenChange={setModalOpen}>
-      <DialogPopup className="max-w-md w-full p-0 overflow-hidden rounded-2xl border border-border/60 bg-sidebar/95 backdrop-blur-xl shadow-2xl">
-        {/* Header */}
-        <div className="relative px-5 py-4 border-b border-border/40 bg-gradient-to-r from-emerald-500/10 via-primary/5 to-transparent">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div
-                className={cn(
-                  "size-8 rounded-xl flex items-center justify-center transition-all shadow-xs",
-                  isBgEnabled
-                    ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shadow-emerald-500/10"
-                    : "bg-muted text-muted-foreground border border-border/50",
-                )}
-              >
-                <ServerIcon className="size-4" />
-              </div>
-              <div>
-                <DialogTitle className="text-sm font-bold tracking-tight text-foreground flex items-center gap-2">
-                  <span>VPS Background Mode</span>
-                  <span
-                    className={cn(
-                      "text-[10px] font-mono uppercase px-1.5 py-0.5 rounded-full font-bold border transition-colors",
-                      isBgEnabled
-                        ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
-                        : "bg-muted text-muted-foreground border-border/50",
-                    )}
-                  >
-                    {isBgEnabled ? "BG: ON" : "BG: OFF"}
-                  </span>
-                </DialogTitle>
-                <p className="text-2xs text-muted-foreground mt-0.5">
-                  24/7 non-stop execution on remote VPS server
-                </p>
-              </div>
-            </div>
+    <div className="fixed inset-0 z-[120] flex justify-end">
+      {/* Cupertino Frosted Backdrop */}
+      <div
+        className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity animate-in fade-in duration-200"
+        onClick={() => setModalOpen(false)}
+        aria-hidden="true"
+      />
 
-            <button
-              type="button"
-              onClick={() => setModalOpen(false)}
-              className="size-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-sidebar-row-hover transition-colors cursor-pointer"
+      {/* Slide-over Cupertino iOS Sheet (90% width on Mobile) */}
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="VPS Background Mode"
+        className="relative z-[121] flex h-full w-[90vw] max-w-[90vw] sm:w-[380px] sm:max-w-[380px] flex-col bg-zinc-950/95 backdrop-blur-2xl text-zinc-100 border-l border-white/10 shadow-2xl animate-in slide-in-from-right duration-200 overflow-hidden"
+      >
+        {/* iOS Header (Clean, No top X button to prevent duplicate crosses) */}
+        <div className="flex items-center justify-between px-4 py-3.5 border-b border-white/[0.08] bg-zinc-900/70 backdrop-blur-xl shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div
+              className={cn(
+                "size-8 rounded-xl flex items-center justify-center transition-all shadow-xs shrink-0",
+                isBgEnabled
+                  ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shadow-emerald-500/10"
+                  : "bg-zinc-800 text-zinc-400 border border-white/10",
+              )}
             >
-              <XIcon className="size-4" />
-            </button>
+              <ServerIcon className="size-4" />
+            </div>
+            <div className="flex flex-col min-w-0">
+              <h2 className="text-sm font-semibold tracking-tight text-white flex items-center gap-1.5 truncate">
+                VPS Background
+              </h2>
+              <p className="text-[11px] text-zinc-400 truncate">Continuous 24/7 Execution</p>
+            </div>
           </div>
-        </div>
 
-        {/* Body */}
-        <div className="p-5 flex flex-col gap-4 max-h-[75vh] overflow-y-auto">
-          {/* Main 24/7 Switch Card */}
-          <div
+          <span
             className={cn(
-              "p-3.5 rounded-xl border transition-all flex items-center justify-between gap-3",
+              "text-[10px] font-mono uppercase px-2 py-0.5 rounded-full font-bold border transition-colors shrink-0",
               isBgEnabled
-                ? "bg-emerald-500/10 border-emerald-500/30 shadow-xs"
-                : "bg-card/50 border-border/40",
+                ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+                : "bg-zinc-800/80 text-zinc-400 border-white/10",
             )}
           >
-            <div className="flex flex-col gap-1 min-w-0">
+            {isBgEnabled ? "Active" : "Paused"}
+          </span>
+        </div>
+
+        {/* Essential Content Only (Numbers, Toggles & Buttons) */}
+        <div className="p-4 flex flex-col gap-3.5 flex-1 overflow-y-auto">
+          {/* Main 24/7 Switch Card (Cupertino Inset Row) */}
+          <div className="rounded-2xl bg-white/[0.04] border border-white/[0.08] p-3.5 flex items-center justify-between gap-3 shadow-xs">
+            <div className="flex flex-col gap-0.5 min-w-0">
               <div className="flex items-center gap-1.5">
                 <ZapIcon
                   className={cn(
                     "size-3.5 shrink-0",
-                    isBgEnabled ? "text-emerald-400" : "text-muted-foreground",
+                    isBgEnabled ? "text-emerald-400" : "text-zinc-500",
                   )}
                 />
-                <span className="text-xs font-semibold text-foreground">
-                  Continuous 24h Background Run
-                </span>
+                <span className="text-xs font-semibold text-white">24/7 VPS Background</span>
               </div>
-              <p className="text-2xs text-muted-foreground leading-relaxed">
-                {isBgEnabled
-                  ? "Tasks and agent modifications run 24/7 on the VPS even after you close Chrome or turn off your computer."
-                  : "Background continuation is paused when all browser tabs are closed."}
+              <p className="text-[11px] text-zinc-400 leading-tight">
+                Runs on VPS even when browser is closed
               </p>
             </div>
 
-            {/* Toggle Switch */}
+            {/* iOS Switch */}
             <button
               type="button"
               role="switch"
@@ -104,7 +105,7 @@ export const BackgroundModeDialog = memo(function BackgroundModeDialog() {
               onClick={() => setBgEnabled(!isBgEnabled)}
               className={cn(
                 "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden",
-                isBgEnabled ? "bg-emerald-500" : "bg-muted-foreground/30",
+                isBgEnabled ? "bg-[#34C759]" : "bg-zinc-700",
               )}
             >
               <span
@@ -116,48 +117,27 @@ export const BackgroundModeDialog = memo(function BackgroundModeDialog() {
             </button>
           </div>
 
-          {/* Database Status Info Card */}
-          <div className="p-3.5 rounded-xl border border-border/40 bg-card/40 flex flex-col gap-2">
-            <div className="flex items-center gap-2">
-              <DatabaseIcon className="size-3.5 text-sky-400 shrink-0" />
-              <span className="text-xs font-semibold text-foreground">
-                VPS SQLite Database Storage
-              </span>
+          {/* Key Numbers & Stats (Cupertino 3-Column Metrics) */}
+          <div className="grid grid-cols-3 gap-2">
+            <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-2.5 flex flex-col items-center justify-center text-center">
+              <span className="text-[10px] uppercase font-mono text-zinc-400">Mode</span>
+              <span className="text-xs font-bold text-emerald-400 mt-0.5">24/7</span>
+              <span className="text-[9px] text-zinc-400">VPS Run</span>
             </div>
-            <p className="text-2xs text-muted-foreground leading-relaxed">
-              All threads, prompt history, diffs, and project modifications are stored permanently
-              on the VPS at:
-            </p>
-            <div className="font-mono text-3xs px-2 py-1.5 rounded-md bg-black/40 text-emerald-300 border border-emerald-500/20 break-all select-all">
-              /root/autojobs/data/userdata/statev2.sqlite
+            <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-2.5 flex flex-col items-center justify-center text-center">
+              <span className="text-[10px] uppercase font-mono text-zinc-400">Storage</span>
+              <span className="text-xs font-bold text-sky-400 mt-0.5">SQLite</span>
+              <span className="text-[9px] text-zinc-400">Server DB</span>
             </div>
-            <div className="flex items-center gap-1.5 text-3xs text-muted-foreground mt-0.5">
-              <CheckCircle2Icon className="size-3 text-emerald-400 shrink-0" />
-              <span>
-                Zero data stored locally in your browser. Fully synced across all devices.
-              </span>
+            <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-2.5 flex flex-col items-center justify-center text-center">
+              <span className="text-[10px] uppercase font-mono text-zinc-400">Sync</span>
+              <span className="text-xs font-bold text-amber-400 mt-0.5">100%</span>
+              <span className="text-[9px] text-zinc-400">Live State</span>
             </div>
           </div>
 
-          {/* Cross-Device Continuity Card */}
-          <div className="p-3.5 rounded-xl border border-border/40 bg-card/40 flex items-start gap-2.5">
-            <div className="size-7 rounded-lg bg-violet-500/10 text-violet-400 flex items-center justify-center shrink-0 mt-0.5">
-              <LaptopIcon className="size-3.5" />
-            </div>
-            <div className="flex flex-col gap-0.5 min-w-0">
-              <span className="text-xs font-semibold text-foreground">
-                Multi-Computer & Mobile Sync
-              </span>
-              <p className="text-2xs text-muted-foreground leading-relaxed">
-                Start a task from your work computer, close the tab, and open it later from your
-                home laptop or smartphone. The exact live progress and completed results are always
-                preserved.
-              </p>
-            </div>
-          </div>
-
-          {/* Screen Wake Lock Option */}
-          <div className="p-3.5 rounded-xl border border-border/40 bg-card/40 flex items-center justify-between gap-3">
+          {/* Screen Wake Lock Switch Card */}
+          <div className="rounded-2xl bg-white/[0.04] border border-white/[0.08] p-3.5 flex items-center justify-between gap-3 shadow-xs">
             <div className="flex items-center gap-2.5 min-w-0">
               <div className="size-7 rounded-lg bg-amber-500/10 text-amber-400 flex items-center justify-center shrink-0">
                 {keepTabAwake ? (
@@ -166,16 +146,15 @@ export const BackgroundModeDialog = memo(function BackgroundModeDialog() {
                   <MoonIcon className="size-3.5" />
                 )}
               </div>
-              <div className="flex flex-col">
-                <span className="text-xs font-medium text-foreground">
-                  Prevent Tab Sleep (Wake Lock)
-                </span>
-                <span className="text-3xs text-muted-foreground">
-                  Keep device display active when this browser tab is open
+              <div className="flex flex-col min-w-0">
+                <span className="text-xs font-medium text-white">Prevent Screen Sleep</span>
+                <span className="text-[11px] text-zinc-400 leading-tight">
+                  Keep display active while tab is open
                 </span>
               </div>
             </div>
 
+            {/* iOS Switch */}
             <button
               type="button"
               role="switch"
@@ -183,7 +162,7 @@ export const BackgroundModeDialog = memo(function BackgroundModeDialog() {
               onClick={() => setKeepTabAwake(!keepTabAwake)}
               className={cn(
                 "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden",
-                keepTabAwake ? "bg-amber-500" : "bg-muted-foreground/30",
+                keepTabAwake ? "bg-[#34C759]" : "bg-zinc-700",
               )}
             >
               <span
@@ -194,29 +173,43 @@ export const BackgroundModeDialog = memo(function BackgroundModeDialog() {
               />
             </button>
           </div>
+
+          {/* Database Storage Path Card */}
+          <div className="rounded-2xl bg-white/[0.04] border border-white/[0.08] p-3 flex flex-col gap-1.5 shadow-xs">
+            <div className="flex items-center gap-1.5 text-xs font-medium text-white">
+              <DatabaseIcon className="size-3.5 text-sky-400 shrink-0" />
+              <span>VPS Persistence Path</span>
+            </div>
+            <div className="font-mono text-[10px] px-2 py-1.5 rounded-lg bg-black/40 text-emerald-300 border border-white/[0.06] select-all break-all">
+              /root/autojobs/data/userdata/statev2.sqlite
+            </div>
+          </div>
         </div>
 
-        {/* Footer */}
-        <div className="px-5 py-3 border-t border-border/40 bg-card/30 flex items-center justify-between">
-          <div className="flex items-center gap-1.5 text-2xs text-muted-foreground">
+        {/* Footer with Close (X) Icon Button at Bottom Right */}
+        <div className="mt-auto px-4 py-3 border-t border-white/[0.08] bg-zinc-900/70 backdrop-blur-xl flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-1.5 text-[11px] text-zinc-400">
             <ActivityIcon
               className={cn(
-                "size-3",
-                isBgEnabled ? "text-emerald-400 animate-pulse" : "text-muted-foreground",
+                "size-3.5",
+                isBgEnabled ? "text-emerald-400 animate-pulse" : "text-zinc-500",
               )}
             />
-            <span>{isBgEnabled ? "VPS Service Active" : "Foreground Only"}</span>
+            <span>{isBgEnabled ? "VPS 24/7 Active" : "Foreground Only"}</span>
           </div>
 
+          {/* Single Close Button strictly at the Bottom Right Side */}
           <button
             type="button"
             onClick={() => setModalOpen(false)}
-            className="px-3.5 py-1.5 text-xs font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors cursor-pointer"
+            aria-label="Close VPS Background Mode"
+            className="size-8 rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white border border-white/10 flex items-center justify-center transition-all shadow-md active:scale-95 cursor-pointer"
+            title="Close"
           >
-            Done
+            <XIcon className="size-4" />
           </button>
         </div>
-      </DialogPopup>
-    </Dialog>
+      </div>
+    </div>
   );
 });

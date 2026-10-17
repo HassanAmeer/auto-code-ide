@@ -1,5 +1,6 @@
 import { useAutoRetrySettings } from "~/lib/autoRetrySettings";
 import { useShowLogFloatingButton } from "~/lib/floatingLogButtonSettings";
+import { useBackgroundModeStore } from "~/lib/backgroundModeStore";
 import { SettingsGroup } from "./SettingsGroup";
 import { useScopedSettingsWriteAllowed } from "./useScopedSettings";
 import { Spinner } from "~/components/ui/spinner";
@@ -1877,6 +1878,13 @@ function LegacyFeaturesSection() {
 export function GeneralSettingsPanel() {
   const [autoRetrySettings, updateAutoRetrySettings] = useAutoRetrySettings();
   const [showLogFloatingButton, setShowLogFloatingButton] = useShowLogFloatingButton();
+  const {
+    isBgEnabled,
+    setBgEnabled,
+    keepTabAwake,
+    setKeepTabAwake,
+    setModalOpen: setBgModalOpen,
+  } = useBackgroundModeStore();
   const modifierLabel = isMacPlatform(navigator.platform) ? "⌘" : "Ctrl";
   const sendShortcutOptions = [
     { value: "enter", label: "Enter" },
@@ -2063,6 +2071,48 @@ export function GeneralSettingsPanel() {
             </div>
           </>
         ) : null}
+      </SettingsSection>
+      <SettingsSection id="vps-background-mode" title="VPS Background Mode (24/7)">
+        <SettingsRow
+          id="vps-bg-enabled"
+          title="24/7 VPS Background Execution"
+          description="Continuous task and agent execution on the remote VPS server even when browser tab or computer is closed."
+          control={
+            <Switch
+              checked={isBgEnabled}
+              onCheckedChange={(checked) => setBgEnabled(Boolean(checked))}
+              aria-label="24/7 VPS Background Execution"
+            />
+          }
+        />
+        <SettingsRow
+          id="vps-wake-lock"
+          title="Prevent Screen Sleep"
+          description="Keep device display active when this browser tab is open."
+          control={
+            <Switch
+              checked={keepTabAwake}
+              onCheckedChange={(checked) => setKeepTabAwake(Boolean(checked))}
+              aria-label="Prevent Screen Sleep"
+            />
+          }
+        />
+        <div className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/30 p-3.5 text-xs">
+          <div className="flex flex-col gap-0.5">
+            <span className="font-medium text-foreground">VPS SQLite Persistence</span>
+            <span className="font-mono text-3xs text-muted-foreground select-all">
+              /root/autojobs/data/userdata/statev2.sqlite
+            </span>
+          </div>
+          <Button
+            size="xs"
+            variant="outline"
+            onClick={() => setBgModalOpen(true)}
+            className="text-xs"
+          >
+            Open Side Sheet
+          </Button>
+        </div>
       </SettingsSection>
       <ProjectDefaultsSettings category="general" />
       <SettingsSection id="organization" title="Organization">
