@@ -8462,7 +8462,7 @@ export default function ChatView(props: ChatViewProps) {
           if (result._tag === "Failure") throw squashAtomCommandFailure(result);
           toastManager.add({
             type: "success",
-            title: "فائل چینجز ریورٹ ہو گئیں / Files Reverted",
+            title: "Files Reverted",
             description: "Workspace files have been restored to checkpoint successfully.",
           });
         } catch (error) {
@@ -12394,9 +12394,9 @@ export default function ChatView(props: ChatViewProps) {
       >
         <AlertDialogPopup className="max-w-md">
           <AlertDialogHeader>
-            <AlertDialogTitle>ریورٹ آپشنز / Revert Options</AlertDialogTitle>
+            <AlertDialogTitle>Revert Options</AlertDialogTitle>
             <AlertDialogDescription>
-              منتخب کریں کہ آپ کون سی تبدیلیاں واپس (revert) کرنا چاہتے ہیں:
+              Choose which changes you want to revert:
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="flex flex-col gap-2 py-2">
@@ -12410,9 +12410,7 @@ export default function ChatView(props: ChatViewProps) {
                 void onRevertToTurnCount(turnCount, messageId, true, false);
               }}
             >
-              <span className="font-semibold text-sm">
-                آل چینجز بیک / All Changes (Files & Response)
-              </span>
+              <span className="font-semibold text-sm">All Changes (Files & Response)</span>
               <span className="text-xs opacity-90 font-normal">
                 Revert both workspace file changes and conversation back to this turn.
               </span>
@@ -12428,7 +12426,7 @@ export default function ChatView(props: ChatViewProps) {
                 void onRevertToTurnCount(turnCount, messageId, true, true);
               }}
             >
-              <span className="font-semibold text-sm">فائل چینجز بیک / File Changes Only</span>
+              <span className="font-semibold text-sm">File Changes Only</span>
               <span className="text-xs text-muted-foreground font-normal">
                 Revert only workspace files to checkpoint commit. Keep conversation history.
               </span>
@@ -12444,16 +12442,14 @@ export default function ChatView(props: ChatViewProps) {
                 void onRevertToTurnCount(turnCount, messageId, false, false);
               }}
             >
-              <span className="font-semibold text-sm">
-                رسپانس چینجز بیک / Response Only (Keep Files)
-              </span>
+              <span className="font-semibold text-sm">Response Only (Keep Files)</span>
               <span className="text-xs text-muted-foreground font-normal">
                 Rewind chat response and return prompt to composer. Keep current files.
               </span>
             </Button>
           </div>
           <AlertDialogFooter>
-            <AlertDialogClose render={<Button variant="ghost" />}>Cancel / کینسل</AlertDialogClose>
+            <AlertDialogClose render={<Button variant="ghost" />}>Cancel</AlertDialogClose>
           </AlertDialogFooter>
         </AlertDialogPopup>
       </AlertDialog>
