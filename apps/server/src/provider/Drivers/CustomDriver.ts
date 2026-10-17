@@ -16,6 +16,7 @@ import {
   TurnItemId,
   TextGenerationError,
 } from "@t3tools/contracts";
+import * as child_process from "node:child_process";
 import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
@@ -544,11 +545,24 @@ export function makeCustomAdapterV2(
                   userPrompt = (parts[parts.length - 1] || userPrompt).trim();
                 }
 
-                const systemPrompt = `You are AutoCode (AC) AI Developer.
+                const systemPrompt = `You are AutoCode (AC) AI Developer with integrated Live Preview and Testing capabilities.
 Project Workspace Directory: ${projectCwd}
 
+WEB PREVIEW & GAME DEVELOPMENT INSTRUCTIONS:
+1. When asked to build games (e.g. 2D canvas, arcade, puzzle, RPG) or websites / web tools:
+   - Always create a complete, self-contained \`index.html\` as the primary entrypoint so it immediately runs in the built-in Web Preview!
+   - Embed all necessary CSS styles and JavaScript logic directly in \`index.html\` (or properly linked in sibling files like \`style.css\` and \`game.js\`).
+   - Implement complete, interactive controls (arrow keys, WASD, mouse clicks, on-screen touch/tap buttons, restart/pause buttons, score tracking).
+   - Ensure canvas sizing and game loop (\`requestAnimationFrame\`) work smoothly without runtime errors or uncaught exceptions.
+   - Self-verify that all buttons, event listeners, and DOM elements exist and are properly bound.
+
+BUG FIXING & TARGETED EDITS:
+2. When asked to fix bugs, solve errors, or modify existing features:
+   - Do NOT rewrite or dump the entire project from scratch unnecessarily.
+   - Perform targeted, precise edits to the specific problematic functions, event handlers, or sections.
+   - Clearly state which function or block is being updated and provide the updated code block with the exact filepath.
+
 FILE CREATION INSTRUCTIONS:
-When you create or edit files (e.g. 2D game, website, scripts, components):
 Always clearly specify the file path for each file at the top of each code block using:
 \`\`\`<language> filepath=<relative/path>
 ...content...
@@ -564,7 +578,7 @@ or for HTML/web:
 ...content...
 \`\`\`
 
-All generated files will automatically be saved into the project workspace directory (${projectCwd}).
+All generated files will automatically be saved into the project workspace directory (${projectCwd}) and committed to Git.
 Provide full, complete, production-ready code with no placeholders.`;
 
                 // Free/open models on OpenRouter often reject "system" role (returning HTTP 400).
@@ -1006,9 +1020,29 @@ Provide full, complete, production-ready code with no placeholders.`;
 
                 let finalText = accumulatedText;
                 if (savedFiles.length > 0) {
+                  try {
+                    const gitDir = NodePath.join(projectCwd, ".git");
+                    if (!NodeFS.existsSync(gitDir)) {
+                      child_process.execSync("git init", { cwd: projectCwd, stdio: "ignore" });
+                    }
+                    child_process.execSync("git add -A", { cwd: projectCwd, stdio: "ignore" });
+                    const commitMsg = `AI generation: ${savedFiles.slice(0, 3).join(", ")}${savedFiles.length > 3 ? "..." : ""}`;
+                    child_process.execSync(
+                      `git -c user.name="AutoCode AI" -c user.email="autocode@t3.tools" commit -m "${commitMsg.replace(/"/g, '\\"')}" --allow-empty`,
+                      { cwd: projectCwd, stdio: "ignore" },
+                    );
+                  } catch (_gitErr) {
+                    // Git tracking best-effort, safe to ignore
+                  }
+
                   finalText +=
                     `\n\n---\n📁 **Saved ${savedFiles.length} file${savedFiles.length > 1 ? "s" : ""} to project (\`${NodePath.basename(projectCwd)}\`):**\n` +
                     savedFiles.map((f) => `- \`${f}\``).join("\n");
+
+                  const hasHtml = savedFiles.some((f) => f.toLowerCase().endsWith(".html"));
+                  if (hasHtml) {
+                    finalText += `\n\n🎮 **Live Preview Ready**: \`index.html\` is available. Open in Preview to play and test!`;
+                  }
                 }
 
                 if (reasoningActive && accumulatedReasoning) {

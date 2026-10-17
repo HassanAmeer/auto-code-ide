@@ -237,6 +237,11 @@ export const ChangedFilesTree = memo(function ChangedFilesTree(props: {
         <span className="flex min-w-0 font-mono text-xs text-foreground/85 group-hover:text-foreground">
           <MiddleTruncate value={node.name} />
         </span>
+        {/\.(?:html?)$/i.test(node.path) && (
+          <span className="rounded bg-primary/10 px-1.5 py-0.5 font-sans text-3xs font-medium text-primary">
+            Preview
+          </span>
+        )}
         {node.stat && (
           <span className="ml-auto shrink-0 font-mono text-3xs tabular-nums">
             <DiffStatLabel additions={node.stat.additions} deletions={node.stat.deletions} />

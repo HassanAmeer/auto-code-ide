@@ -1167,6 +1167,7 @@ export const makeVcsDriverShape = Effect.fn("makeGitVcsDriverShape")(function* (
       });
 
       let fromRevision: string = input.fromCheckpointRef;
+      let fromIsTree = false;
       if (input.fallbackFromToHead === true) {
         const resolvedFromCommit = yield* resolveCheckpointCommit(
           input.cwd,
@@ -1176,18 +1177,23 @@ export const makeVcsDriverShape = Effect.fn("makeGitVcsDriverShape")(function* (
           fromRevision = resolvedFromCommit;
         } else {
           const headCommit = yield* resolveHeadCommit(input.cwd);
-          if (!headCommit) {
-            return yield* new VcsProcessExitError({
-              operation,
-              command: "git diff",
-              cwd: input.cwd,
-              exitCode: 1,
-              detail: "Checkpoint ref is unavailable for diff operation.",
-            });
+          if (headCommit) {
+            fromRevision = headCommit;
+          } else {
+            // Universal Git empty tree SHA
+            fromRevision = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+            fromIsTree = true;
           }
-          fromRevision = headCommit;
         }
       }
+
+      // If from and to are identical revisions, diff is guaranteed empty
+      if (fromRevision === input.toCheckpointRef) {
+        return "";
+      }
+
+      const fromArg = fromIsTree ? fromRevision : `${fromRevision}^{commit}`;
+      const toArg = `${input.toCheckpointRef}^{commit}`;
 
       const result = yield* execute({
         operation,
@@ -1200,8 +1206,8 @@ export const makeVcsDriverShape = Effect.fn("makeGitVcsDriverShape")(function* (
           "--no-textconv",
           ...PATCH_RENDER_PREFIX_ARGS,
           ...(input.ignoreWhitespace ? ["--ignore-all-space"] : []),
-          `${fromRevision}^{commit}`,
-          `${input.toCheckpointRef}^{commit}`,
+          fromArg,
+          toArg,
         ],
         allowNonZeroExit: true,
         maxOutputBytes: CHECKPOINT_DIFF_MAX_OUTPUT_BYTES,
@@ -1209,6 +1215,9 @@ export const makeVcsDriverShape = Effect.fn("makeGitVcsDriverShape")(function* (
       });
 
       if (result.exitCode !== 0) {
+        if (input.fallbackFromToHead === true) {
+          return "";
+        }
         return yield* new VcsProcessExitError({
           operation,
           command: "git diff",

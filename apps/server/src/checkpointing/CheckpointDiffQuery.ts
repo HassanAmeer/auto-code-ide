@@ -190,7 +190,19 @@ export const make = Effect.gen(function* () {
           fallbackFromToHead: false,
           ignoreWhitespace,
         })
-        .pipe(Effect.withSpan("checkpoint.turnDiff.diffCheckpoints"));
+        .pipe(
+          Effect.catch(() =>
+            checkpointStore.diffCheckpoints({
+              cwd: toScope.cwd,
+              fromCheckpointRef,
+              toCheckpointRef: toCheckpoint.ref,
+              fallbackFromToHead: true,
+              ignoreWhitespace,
+            }),
+          ),
+          Effect.orElseSucceed(() => ""),
+          Effect.withSpan("checkpoint.turnDiff.diffCheckpoints"),
+        );
 
       const turnDiff = buildTurnDiffResult(input, diff);
       if (!isTurnDiffResult(turnDiff)) {

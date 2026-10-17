@@ -263,7 +263,12 @@ import {
   setActivePreviewTab,
   useThreadPreviewState,
 } from "../previewStateStore";
-import { BrowserSettingsReadError, openUrlInPreview } from "../browser/openFileInPreview";
+import {
+  BrowserSettingsReadError,
+  isBrowserPreviewFile,
+  openFileInPreview,
+  openUrlInPreview,
+} from "../browser/openFileInPreview";
 import { resolveDiscoveredServerUrl } from "../browser/browserTargetResolver";
 import { previewRuntimeTabId } from "../browser/previewRuntimeTabId";
 import { addBrowserSurface } from "./preview/addBrowserSurface";
@@ -5802,6 +5807,24 @@ export default function ChatView(props: ChatViewProps) {
       runningTurnId:
         diffAction === "defer" || shouldDeferLink ? previousRunningTurnId : activeRunningTurnId,
     };
+    const htmlFile =
+      completedCheckpoint?.files.find((f) => f.path.toLowerCase().endsWith("index.html")) ??
+      completedCheckpoint?.files.find((f) => isBrowserPreviewFile(f.path));
+    if (htmlFile && activeThreadRef && canOperatePreview) {
+      const connection = readPreparedConnection(activeThreadRef.environmentId);
+      if (connection) {
+        void openFileInPreview({
+          threadRef: activeThreadRef,
+          filePath: htmlFile.path,
+          workspaceRoot: gitCwd ?? undefined,
+          httpBaseUrl: connection.httpBaseUrl,
+          createAssetUrl: createAttachmentAssetUrl,
+          openPreview,
+        });
+        return;
+      }
+    }
+
     if (diffAction !== "open" || newlyCompletedTurnId === null) return;
     if (!panels.openProactive(activeThreadRef, { id: "diff", kind: "diff" }, userActionRevision)) {
       return;
@@ -5809,6 +5832,10 @@ export default function ChatView(props: ChatViewProps) {
     useDiffPanelStore.getState().selectGitScope(activeThreadRef, "branch");
     onDiffPanelOpen?.();
   }, [
+    canOperatePreview,
+    createAttachmentAssetUrl,
+    gitCwd,
+    openPreview,
     turnDiffSummaries,
     activeLatestRun?.runId,
     activeLatestRun?.status,
