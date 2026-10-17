@@ -43,7 +43,7 @@ export const BackgroundModeDialog = memo(function BackgroundModeDialog() {
         role="dialog"
         aria-modal="true"
         aria-label="VPS Background Mode"
-        className="relative z-[121] flex h-full w-[90vw] max-w-[90vw] sm:w-[380px] sm:max-w-[380px] flex-col bg-zinc-950/95 backdrop-blur-2xl text-zinc-100 border-l border-white/10 shadow-2xl animate-in slide-in-from-right duration-200 overflow-hidden"
+        className="relative z-[121] flex h-full max-sm:h-dvh w-[90vw] max-w-[90vw] sm:w-[380px] sm:max-w-[380px] flex-col bg-zinc-950/95 backdrop-blur-2xl text-zinc-100 border-l border-white/10 shadow-2xl animate-in slide-in-from-right duration-200 overflow-hidden"
       >
         {/* iOS Header (Clean, No top X button to prevent duplicate crosses) */}
         <div className="flex items-center justify-between px-4 py-3.5 border-b border-white/[0.08] bg-zinc-900/70 backdrop-blur-xl shrink-0">
@@ -186,8 +186,8 @@ export const BackgroundModeDialog = memo(function BackgroundModeDialog() {
           </div>
         </div>
 
-        {/* Footer with Close (X) Icon Button at Bottom Right */}
-        <div className="mt-auto px-4 py-3 border-t border-white/[0.08] bg-zinc-900/70 backdrop-blur-xl flex items-center justify-between shrink-0">
+        {/* Footer with Close (X) Icon Button at Bottom Right (end mein, bottom se strictly 5px) */}
+        <div className="mt-auto pl-3.5 pr-[5px] pt-2 pb-[5px] border-t border-white/[0.08] bg-zinc-900/70 backdrop-blur-xl flex items-center justify-between shrink-0">
           <div className="flex items-center gap-1.5 text-[11px] text-zinc-400">
             <ActivityIcon
               className={cn(
@@ -195,15 +195,15 @@ export const BackgroundModeDialog = memo(function BackgroundModeDialog() {
                 isBgEnabled ? "text-emerald-400 animate-pulse" : "text-zinc-500",
               )}
             />
-            <span>{isBgEnabled ? "VPS 24/7 Active" : "Foreground Only"}</span>
+            <span className="truncate">{isBgEnabled ? "VPS 24/7 Active" : "Foreground Only"}</span>
           </div>
 
-          {/* Single Close Button strictly at the Bottom Right Side */}
+          {/* Single Close Button strictly at the Bottom Right Side with 5px bottom gap */}
           <button
             type="button"
             onClick={() => setModalOpen(false)}
             aria-label="Close VPS Background Mode"
-            className="size-8 rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white border border-white/10 flex items-center justify-center transition-all shadow-md active:scale-95 cursor-pointer"
+            className="size-8 rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white border border-white/10 flex items-center justify-center transition-all shadow-md active:scale-95 cursor-pointer shrink-0"
             title="Close"
           >
             <XIcon className="size-4" />
