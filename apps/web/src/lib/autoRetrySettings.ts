@@ -117,34 +117,67 @@ export interface FallbackModelCandidate {
 export function findNextFallbackModel(
   currentSelection: ModelSelection | null,
   providerEntries: ReadonlyArray<ProviderInstanceEntry>,
+  favorites?: ReadonlyArray<{
+    readonly provider: ProviderInstanceId;
+    readonly model: string;
+  }> | null,
 ): FallbackModelCandidate | null {
   const availableEntries = providerEntries.filter(
     (p) => p.enabled && p.isAvailable && p.models.length > 0,
   );
   if (availableEntries.length === 0) return null;
 
-  const allModels: FallbackModelCandidate[] = [];
+  // Build a lookup of favorited model keys
+  const favoriteKeys = new Set((favorites ?? []).map((f) => `${f.provider}:${f.model}`));
+
+  // Per user instruction:
+  // "The next model that was favorited can move.
+  // In the general settings, we have a setting for auto-retry, and then the next model is selected.
+  // If it's on retry, after two to three attempts, it moves to the next model.
+  // It should only move from the favorited models.
+  // We have favorited or starred models that we select from the dropdown in the provider.
+  // When we click on the favorite, only that model should auto-retry,
+  // and no other model from any provider should retry until it's added to the favorites."
+  const favoriteCandidates: FallbackModelCandidate[] = [];
+
   for (const entry of availableEntries) {
     for (const m of entry.models) {
-      allModels.push({
-        instanceId: entry.instanceId,
-        model: m.slug,
-        displayName: `${entry.displayName} (${m.name || m.slug})`,
-      });
+      const key = `${entry.instanceId}:${m.slug}`;
+      if (favoriteKeys.has(key)) {
+        favoriteCandidates.push({
+          instanceId: entry.instanceId,
+          model: m.slug,
+          displayName: `${entry.displayName} (${m.name || m.slug})`,
+        });
+      }
     }
   }
 
-  if (allModels.length <= 1) return null;
+  // If no favorited models are available, return null
+  if (favoriteCandidates.length === 0) {
+    return null;
+  }
 
-  const currentIndex = allModels.findIndex(
+  // If there's only 1 favorited model:
+  if (favoriteCandidates.length === 1) {
+    if (
+      favoriteCandidates[0]?.instanceId !== currentSelection?.instanceId ||
+      favoriteCandidates[0]?.model !== currentSelection?.model
+    ) {
+      return favoriteCandidates[0] ?? null;
+    }
+    return null;
+  }
+
+  const currentIndex = favoriteCandidates.findIndex(
     (item) =>
       item.instanceId === currentSelection?.instanceId && item.model === currentSelection?.model,
   );
 
   if (currentIndex === -1) {
-    return allModels[0] ?? null;
+    return favoriteCandidates[0] ?? null;
   }
 
-  const nextIndex = (currentIndex + 1) % allModels.length;
-  return allModels[nextIndex] ?? null;
+  const nextIndex = (currentIndex + 1) % favoriteCandidates.length;
+  return favoriteCandidates[nextIndex] ?? null;
 }

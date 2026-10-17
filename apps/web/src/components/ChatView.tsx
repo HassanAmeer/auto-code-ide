@@ -10888,8 +10888,12 @@ export default function ChatView(props: ChatViewProps) {
 
   const nextFallbackCandidate = useMemo(() => {
     if (!activeThread?.modelSelection) return null;
-    return findNextFallbackModel(activeThread.modelSelection, providerInstanceEntries);
-  }, [activeThread?.modelSelection, providerInstanceEntries]);
+    return findNextFallbackModel(
+      activeThread.modelSelection,
+      providerInstanceEntries,
+      settings.favorites,
+    );
+  }, [activeThread?.modelSelection, providerInstanceEntries, settings.favorites]);
 
   const onEnvModeChange = useCallback(
     (mode: DraftThreadEnvMode) => {
@@ -11190,6 +11194,21 @@ export default function ChatView(props: ChatViewProps) {
       return;
     }
 
+    // Only favorited models are permitted to auto-retry
+    const isCurrentModelFavorited = Boolean(
+      activeThread?.modelSelection &&
+      settings?.favorites?.some(
+        (fav) =>
+          fav.provider === activeThread.modelSelection?.instanceId &&
+          fav.model === activeThread.modelSelection?.model,
+      ),
+    );
+
+    if (!isCurrentModelFavorited) {
+      setAutoRetryCountdown(null);
+      return;
+    }
+
     if (autoRetryAttempt >= autoRetrySettings.maxRetries && !autoRetrySettings.autoSwitchModel) {
       setAutoRetryCountdown(null);
       return;
@@ -11228,6 +11247,7 @@ export default function ChatView(props: ChatViewProps) {
     isServerThread,
     isWorking,
     serverRuntime?.status,
+    settings?.favorites,
     threadErrorBannerKey,
     visibleThreadError,
   ]);
@@ -11712,6 +11732,7 @@ export default function ChatView(props: ChatViewProps) {
               />
               <ThreadErrorBanner
                 error={timelineThreadError}
+                currentModelName={activeThread?.modelSelection?.model}
                 errorClass={
                   localServerError === null && visibleThreadError === serverRuntime?.lastError
                     ? (serverRuntime?.lastErrorClass ?? null)
