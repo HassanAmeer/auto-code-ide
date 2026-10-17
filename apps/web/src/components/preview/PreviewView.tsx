@@ -376,6 +376,9 @@ export function PreviewView({
   );
 
   const serverZoomFactor = snapshot?.zoomFactor ?? DEFAULT_PREVIEW_ZOOM_FACTOR;
+  const effectiveZoomFactor = serverOwnsRendering
+    ? serverZoomFactor
+    : (desktopOverlay?.zoomFactor ?? 1);
   const stepServerZoom = useCallback(
     (direction: -1 | 0 | 1) => {
       const index = PREVIEW_ZOOM_LEVELS.indexOf(serverZoomFactor);
@@ -1116,7 +1119,7 @@ export function PreviewView({
         logsErrorCount={logsErrorCount}
         onToggleDeviceToolbar={handleToggleDeviceToolbar}
         deviceToolbarVisible={viewport._tag !== "fill"}
-        zoomFactor={serverOwnsRendering ? serverZoomFactor : (desktopOverlay?.zoomFactor ?? 1)}
+        zoomFactor={effectiveZoomFactor}
         onZoomIn={handleZoomIn}
         onZoomOut={handleZoomOut}
         onResetZoom={handleResetZoom}
@@ -1161,9 +1164,7 @@ export function PreviewView({
                 ? { move: { label: moveLabel, onMove: () => void handleMoveTab() } }
                 : {})}
               profileName={activeProfileName}
-              zoomFactor={
-                serverOwnsRendering ? serverZoomFactor : (desktopOverlay?.zoomFactor ?? 1)
-              }
+              zoomFactor={effectiveZoomFactor}
               colorScheme={
                 serverOwnsRendering
                   ? (snapshot?.colorScheme ?? "system")
@@ -1223,6 +1224,7 @@ export function PreviewView({
                 pickActive={pickActive}
                 onElementPicked={handleServerElementPicked}
                 onOpenCode={handleOpenCode}
+                onCancelPick={() => setPickActive(false)}
                 onFirstFrame={() => setServerFrameTabId(runtimeTabId)}
                 onControl={(control) =>
                   setServerControlledTabId(control?.controller === "you" ? runtimeTabId : null)
@@ -1262,17 +1264,15 @@ export function PreviewView({
             onOpenUrl={(next) => void handleOpenServerUrl(next)}
           />
         ) : null}
-        {snapshot && desktopOverlay ? (
-          <ZoomIndicator zoomFactor={desktopOverlay.zoomFactor} />
-        ) : null}
+        {snapshot ? <ZoomIndicator zoomFactor={effectiveZoomFactor} /> : null}
         {runtimeTabId &&
-        desktopOverlay &&
+        (serverOwnsRendering || desktopOverlay) &&
         !showEmptyState &&
         !isUnreachable &&
         !activeRecordingTabIds.has(runtimeTabId) ? (
           <AgentBrowserCursor
             tabId={runtimeTabId}
-            zoomFactor={desktopOverlay.zoomFactor}
+            zoomFactor={effectiveZoomFactor}
             controller={controller}
           />
         ) : null}

@@ -154,29 +154,26 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
     if (isDictating) {
       sttSessionRef.current?.stop();
       setIsDictating(false);
-      window.dispatchEvent(new CustomEvent("t3:speech-interim", { detail: { text: "" } }));
+      window.dispatchEvent(new CustomEvent("t3:speech-stream", { detail: { reset: true } }));
     } else {
       const session = createSttSession({
-        onResult: (text, isFinal) => {
-          if (isFinal && text.trim()) {
-            window.dispatchEvent(
-              new CustomEvent("t3:insert-speech-text", { detail: { text: text.trim() } }),
-            );
-          }
-        },
-        onInterim: (interim) => {
-          window.dispatchEvent(new CustomEvent("t3:speech-interim", { detail: { text: interim } }));
+        onResult: (text, isFinal, cumulative) => {
+          window.dispatchEvent(
+            new CustomEvent("t3:speech-stream", {
+              detail: { text: text.trim(), isFinal, cumulative: cumulative?.trim() },
+            }),
+          );
         },
         onStateChange: (active) => {
           setIsDictating(active);
           if (!active) {
-            window.dispatchEvent(new CustomEvent("t3:speech-interim", { detail: { text: "" } }));
+            window.dispatchEvent(new CustomEvent("t3:speech-stream", { detail: { reset: true } }));
           }
         },
         onError: (err) => {
           console.warn("STT error:", err);
           setIsDictating(false);
-          window.dispatchEvent(new CustomEvent("t3:speech-interim", { detail: { text: "" } }));
+          window.dispatchEvent(new CustomEvent("t3:speech-stream", { detail: { reset: true } }));
         },
       });
       sttSessionRef.current = session;
@@ -378,7 +375,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
     if (isDictating) {
       sttSessionRef.current?.stop();
       setIsDictating(false);
-      window.dispatchEvent(new CustomEvent("t3:speech-interim", { detail: { text: "" } }));
+      window.dispatchEvent(new CustomEvent("t3:speech-stream", { detail: { reset: true } }));
     }
     if (showResume) {
       onResume?.();

@@ -24,34 +24,30 @@ export const ComposerMicButton = memo(function ComposerMicButton({
     if (listening) {
       sessionRef.current?.stop();
       setListening(false);
-      window.dispatchEvent(new CustomEvent("t3:speech-interim", { detail: { text: "" } }));
+      window.dispatchEvent(new CustomEvent("t3:speech-stream", { detail: { reset: true } }));
     } else {
       const session = createSttSession({
-        onResult: (text, isFinal) => {
-          if (isFinal && text.trim()) {
-            if (onTranscript) {
-              onTranscript(text.trim());
-            } else {
-              // Dispatch custom event that composer listens to
-              window.dispatchEvent(
-                new CustomEvent("t3:insert-speech-text", { detail: { text: text.trim() } }),
-              );
-            }
+        onResult: (text, isFinal, cumulative) => {
+          if (onTranscript) {
+            onTranscript(cumulative || text);
+          } else {
+            window.dispatchEvent(
+              new CustomEvent("t3:speech-stream", {
+                detail: { text: text.trim(), isFinal, cumulative: cumulative?.trim() },
+              }),
+            );
           }
-        },
-        onInterim: (interim) => {
-          window.dispatchEvent(new CustomEvent("t3:speech-interim", { detail: { text: interim } }));
         },
         onStateChange: (active) => {
           setListening(active);
           if (!active) {
-            window.dispatchEvent(new CustomEvent("t3:speech-interim", { detail: { text: "" } }));
+            window.dispatchEvent(new CustomEvent("t3:speech-stream", { detail: { reset: true } }));
           }
         },
         onError: (err) => {
           console.warn("STT error:", err);
           setListening(false);
-          window.dispatchEvent(new CustomEvent("t3:speech-interim", { detail: { text: "" } }));
+          window.dispatchEvent(new CustomEvent("t3:speech-stream", { detail: { reset: true } }));
         },
       });
 

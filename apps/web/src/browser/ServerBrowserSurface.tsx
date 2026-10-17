@@ -166,6 +166,7 @@ export function ServerBrowserSurface(props: {
     highlight: PreviewStreamElementHighlight;
     point: { x: number; y: number };
   }) => void;
+  readonly onCancelPick?: () => void;
   readonly ref?: Ref<ServerBrowserHandle>;
 }) {
   const {
@@ -183,6 +184,7 @@ export function ServerBrowserSurface(props: {
     pickActive = false,
     onElementPicked,
     onOpenCode,
+    onCancelPick,
     ref,
   } = props;
   const onElementPickedRef = useRef(onElementPicked);
@@ -369,13 +371,15 @@ export function ServerBrowserSurface(props: {
     if (!selectedTarget) return;
     send({ type: "pickElement", x: selectedTarget.point.x, y: selectedTarget.point.y });
     setSelectedTarget(null);
-  }, [selectedTarget, send]);
+    onCancelPick?.();
+  }, [onCancelPick, selectedTarget, send]);
 
   const handleOpenCode = useCallback(() => {
     if (!selectedTarget) return;
     onOpenCode?.(selectedTarget);
     setSelectedTarget(null);
-  }, [onOpenCode, selectedTarget]);
+    onCancelPick?.();
+  }, [onCancelPick, onOpenCode, selectedTarget]);
 
   useEffect(() => {
     if (!pickActive || !selectedTarget) return;
@@ -392,11 +396,12 @@ export function ServerBrowserSurface(props: {
         e.preventDefault();
         e.stopPropagation();
         setSelectedTarget(null);
+        onCancelPick?.();
       }
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [handleConfirmAttach, handleOpenCode, pickActive, selectedTarget]);
+  }, [handleConfirmAttach, handleOpenCode, onCancelPick, pickActive, selectedTarget]);
 
   const countClick = (button: PreviewStreamMouseButton, x: number, y: number, time: number) => {
     const last = lastClickRef.current;
@@ -920,115 +925,140 @@ export function ServerBrowserSurface(props: {
           onMouseDown={(event) => event.preventDefault()}
           onContextMenu={(event) => event.preventDefault()}
         />
-        {pickActive && selectedTarget ? (
-          (() => {
-            const style = getHighlightStyleFor(selectedTarget.highlight);
-            if (!style) return null;
-            const canvasBox = canvasRef.current?.getBoundingClientRect();
-            const canvasH = canvasBox?.height ?? 600;
-            const canvasW = canvasBox?.width ?? 600;
-            const cardWidth = Math.min(350, Math.max(260, canvasW - 16));
-            const cardLeft = Math.max(
-              8,
-              Math.min(style.rawLeft, Math.max(8, canvasW - cardWidth - 8)),
-            );
-            const isNearBottom = style.rawTop + style.rawHeight + 50 > canvasH;
-            return (
-              <>
-                <div
-                  style={{
-                    left: style.left,
-                    top: style.top,
-                    width: style.width,
-                    height: style.height,
-                  }}
-                  className="pointer-events-none absolute z-30 rounded-sm border-2 border-primary bg-primary/20 shadow-[0_0_16px_rgba(59,130,246,0.6)]"
-                />
-                <div
-                  style={{
-                    left: `${cardLeft}px`,
-                    top: isNearBottom
-                      ? `${Math.max(8, style.rawTop - 46)}px`
-                      : `${style.rawTop + style.rawHeight + 8}px`,
-                    maxWidth: `${cardWidth}px`,
-                  }}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onPointerUp={(e) => e.stopPropagation()}
-                  onMouseDown={(e) => e.stopPropagation()}
-                  onClick={(e) => e.stopPropagation()}
-                  className="absolute z-40 flex items-center gap-2 rounded-lg border border-border/80 bg-background/95 px-2.5 py-1.5 shadow-xl backdrop-blur-md animate-in fade-in zoom-in-95 duration-100"
-                >
+        {pickActive && selectedTarget
+          ? (() => {
+              const style = getHighlightStyleFor(selectedTarget.highlight);
+              if (!style) return null;
+              const canvasBox = canvasRef.current?.getBoundingClientRect();
+              const canvasH = canvasBox?.height ?? 600;
+              const canvasW = canvasBox?.width ?? 600;
+              const cardWidth = Math.min(320, Math.max(200, canvasW - 20));
+              const cardLeft = Math.max(
+                8,
+                Math.min(style.rawLeft, Math.max(8, canvasW - cardWidth - 8)),
+              );
+              const isNearBottom = style.rawTop + style.rawHeight + 52 > canvasH;
+              const cardTop = isNearBottom
+                ? Math.max(8, style.rawTop - 46)
+                : Math.min(canvasH - 46, style.rawTop + style.rawHeight + 8);
+              return (
+                <>
                   <div
-                    className="flex items-center gap-1.5 max-w-[140px] truncate"
-                    title={selectedTarget.highlight.selector}
+                    style={{
+                      left: style.left,
+                      top: style.top,
+                      width: style.width,
+                      height: style.height,
+                    }}
+                    className="pointer-events-none absolute z-30 rounded-sm border-2 border-primary bg-primary/20 shadow-[0_0_16px_rgba(59,130,246,0.6)]"
+                  />
+                  <div
+                    style={{
+                      left: `${cardLeft}px`,
+                      top: `${cardTop}px`,
+                      maxWidth: `${cardWidth}px`,
+                    }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onPointerUp={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => e.stopPropagation()}
+                    className="absolute z-40 flex items-center gap-1.5 sm:gap-2 rounded-lg border border-border/80 bg-background/95 p-1.5 sm:px-2.5 sm:py-1.5 shadow-xl backdrop-blur-md animate-in fade-in zoom-in-95 duration-100 select-none"
                   >
-                    <span className="size-2 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.9)] shrink-0" />
-                    <span className="font-mono text-xs font-semibold text-foreground truncate">
-                      &lt;
-                      {selectedTarget.highlight.componentName ||
-                        selectedTarget.highlight.selector ||
-                        selectedTarget.highlight.tag}
-                      &gt;
-                    </span>
+                    <div
+                      className="flex items-center gap-1 min-w-0 max-w-[90px] sm:max-w-[130px] truncate mr-0.5"
+                      title={selectedTarget.highlight.selector}
+                    >
+                      <span className="size-2 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.9)] shrink-0" />
+                      <span className="font-mono text-xs font-semibold text-foreground truncate">
+                        &lt;
+                        {selectedTarget.highlight.componentName ||
+                          selectedTarget.highlight.selector ||
+                          selectedTarget.highlight.tag}
+                        &gt;
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleConfirmAttach();
+                      }}
+                      className="flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground shadow hover:bg-primary/90 transition-colors cursor-pointer shrink-0"
+                      title="Attach element screenshot and metadata to chat input (Enter)"
+                    >
+                      <Paperclip className="size-3.5" />
+                      <span>Attach</span>
+                      <kbd className="hidden md:inline-block rounded bg-primary-foreground/20 px-1 text-[10px] font-sans">
+                        ↵
+                      </kbd>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenCode();
+                      }}
+                      className="flex items-center gap-1 rounded-md bg-secondary text-secondary-foreground hover:bg-secondary/80 border border-border/60 px-2 py-1 text-xs font-medium shadow-sm transition-colors cursor-pointer shrink-0"
+                      title="Open live code editor for this element (C)"
+                    >
+                      <Code2 className="size-3.5 text-primary" />
+                      <span>Code</span>
+                      <kbd className="hidden md:inline-block rounded bg-muted-foreground/20 px-1 text-[10px] font-sans">
+                        C
+                      </kbd>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedTarget(null);
+                        onCancelPick?.();
+                      }}
+                      className="rounded p-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer shrink-0"
+                      title="Cancel selection (Esc)"
+                    >
+                      <X className="size-3.5" />
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleConfirmAttach();
+                </>
+              );
+            })()
+          : pickActive && hoveredElement
+            ? (() => {
+                const style = getHighlightStyleFor(hoveredElement);
+                if (!style) return null;
+                const isNearTop = style.rawTop < 28;
+                return (
+                  <div
+                    style={{
+                      left: style.left,
+                      top: style.top,
+                      width: style.width,
+                      height: style.height,
                     }}
-                    className="flex items-center gap-1.5 rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground shadow hover:bg-primary/90 transition-colors cursor-pointer"
-                    title="Attach element screenshot and metadata to chat input"
+                    className="pointer-events-none absolute z-30 rounded-sm border-2 border-primary bg-primary/15 shadow-[0_0_12px_rgba(59,130,246,0.5)] transition-[top,left,width,height] duration-75 ease-out"
                   >
-                    <Paperclip className="size-3.5" />
-                    <span>Attach to Chat</span>
-                    <kbd className="hidden sm:inline-block rounded bg-primary-foreground/20 px-1 text-[10px] font-sans">
-                      ↵
-                    </kbd>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleOpenCode();
-                    }}
-                    className="flex items-center gap-1.5 rounded-md bg-secondary text-secondary-foreground hover:bg-secondary/80 border border-border/60 px-2.5 py-1 text-xs font-medium shadow-sm transition-colors cursor-pointer"
-                    title="Open live code editor for this element (or press C)"
-                  >
-                    <Code2 className="size-3.5 text-primary" />
-                    <span>Code</span>
-                    <kbd className="hidden sm:inline-block rounded bg-muted-foreground/20 px-1 text-[10px] font-sans">
-                      C
-                    </kbd>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedTarget(null);
-                    }}
-                    className="rounded p-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
-                    title="Cancel selection (Esc)"
-                  >
-                    <X className="size-3.5" />
-                  </button>
-                </div>
-              </>
-            );
-          })()
-        ) : pickActive && hoveredElement ? (
-          <div
-            style={getHighlightStyleFor(hoveredElement) ?? undefined}
-            className="pointer-events-none absolute z-30 rounded-sm border-2 border-primary bg-primary/15 shadow-[0_0_12px_rgba(59,130,246,0.5)] transition-[top,left,width,height] duration-75 ease-out"
-          >
-            <div className="absolute -top-6 left-0 flex items-center gap-1.5 whitespace-nowrap rounded bg-primary px-1.5 py-0.5 text-[10px] font-mono font-medium text-primary-foreground shadow-sm">
-              <span>&lt;{hoveredElement.selector || hoveredElement.tag}&gt;</span>
-              <span className="opacity-75">
-                {hoveredElement.rect.width}×{hoveredElement.rect.height}
-              </span>
-            </div>
-          </div>
-        ) : null}
+                    <div
+                      className={cn(
+                        "absolute flex items-center gap-1.5 whitespace-nowrap rounded bg-primary px-1.5 py-0.5 text-[10px] font-mono font-medium text-primary-foreground shadow-sm",
+                        isNearTop ? "top-1 left-1" : "-top-6 left-0",
+                      )}
+                    >
+                      <span className="truncate max-w-[180px]">
+                        &lt;
+                        {hoveredElement.componentName ||
+                          hoveredElement.selector ||
+                          hoveredElement.tag}
+                        &gt;
+                      </span>
+                      <span className="opacity-75 shrink-0">
+                        {hoveredElement.rect.width}×{hoveredElement.rect.height}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()
+            : null}
         {agentCursor && control?.controller !== "you" ? (
           <AgentCursorMark
             {...agentCursor}
