@@ -638,6 +638,7 @@ export function useVoiceCallAssistant({
     }
 
     streamingPlayerRef.current = new StreamingTtsPlayer({
+      maxChunks: 4,
       onStartSpeaking: () => {
         thinkingAmbientSound.stop();
         updateCallStatus("speaking");

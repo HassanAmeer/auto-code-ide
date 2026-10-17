@@ -495,16 +495,38 @@ export function stopSpeaking(): void {
 }
 
 /**
- * Completely strips markdown code blocks (both closed and unclosed/streaming)
- * so that code blocks are NEVER read aloud.
+ * Completely strips code blocks, reasoning/thinking tags, XML tool calls,
+ * HTML code tags, and technical diffs (both closed and unclosed/streaming)
+ * so that they are NEVER read aloud.
  */
 export function stripCodeBlocks(text: string): string {
   if (!text) return "";
-  return text
-    .replace(/```[\s\S]*?```/g, " ")
-    .replace(/~~~[\s\S]*?~~~/g, " ")
-    .replace(/```[\s\S]*$/g, " ")
-    .replace(/~~~[\s\S]*$/g, " ");
+  return (
+    text
+      // 1. Thinking / Reasoning blocks (both closed and streaming unclosed)
+      .replace(/<(?:think|thought|reasoning)>[\s\S]*?(?:<\/(?:think|thought|reasoning)>|$)/gi, " ")
+      // 2. Fenced code blocks (triple backticks and tildes, both closed and streaming unclosed)
+      .replace(/```[\s\S]*?(?:```|$)/g, " ")
+      .replace(/~~~[\s\S]*?(?:~~~|$)/g, " ")
+      // 3. HTML code / pre blocks (both closed and streaming unclosed)
+      .replace(/<(?:pre|code)>[\s\S]*?(?:<\/(?:pre|code)>|$)/gi, " ")
+      // 4. Tool call / artifacts / details blocks (both closed and streaming unclosed)
+      .replace(
+        /<(?:tool_call|antArtifact|artifact|details)>[\s\S]*?(?:<\/(?:tool_call|antArtifact|artifact|details)>|$)/gi,
+        " ",
+      )
+      // 5. Unified diff blocks (e.g. diff --git ... or @@ -1,5 +1,5 @@)
+      .replace(
+        /(?:^|\n)(?:diff --git|--- a\/|\+\+\+ b\/|@@ -\d+)[^\n]*(\n(?:[-+ @\\].*|\s*))*/g,
+        "\n ",
+      )
+      // 6. Indented code blocks (4+ spaces or tabs on multiple consecutive lines)
+      .replace(/(?:^|\n)(?: {4}|\t)[^\n]+(?:\n(?: {4}|\t)[^\n]+)*/g, "\n ")
+      // 7. Strip inline code if it is long (>50 chars) or contains code statements/syntax like semicolons, braces, arrows, assignments
+      .replace(/`([^`\n]{50,})`/g, " ")
+      .replace(/`([^`\n]*[;{}][^`\n]*)`/g, " ")
+      .replace(/`([^`\n]*(?:=>|===|!==|==|!=|\+\+|--)[^`\n]*)`/g, " ")
+  );
 }
 
 /**
@@ -513,20 +535,25 @@ export function stripCodeBlocks(text: string): string {
 export function sanitizeTextForSpeech(markdown: string): string {
   if (!markdown) return "";
   const withoutCodeBlocks = stripCodeBlocks(markdown);
-  return withoutCodeBlocks
-    .replace(/`([^`]+)`/g, "$1") // inline code: keep readable word
-    .replace(/#+\s+/g, "") // headers
-    .replace(/\*\*([^*]+)\*\*/g, "$1") // bold
-    .replace(/\*([^*]+)\*/g, "$1") // italic
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1") // links
-    .replace(/!\[.*?\]\(.*?\)/g, "") // images
-    .replace(/<[^>]+>/g, " ") // html tags
-    .replace(/^\s*[-*+]\s+/gm, "") // list bullets
-    .replace(/^\s*\d+\.\s+/gm, "") // list numbering
-    .replace(/^\s*>\s+/gm, "") // blockquotes
-    .replace(/[_~#*]/g, "") // extra symbols
-    .replace(/\s+/g, " ")
-    .trim();
+  return (
+    withoutCodeBlocks
+      // Clean remaining short inline code (e.g. `foo()` or `name` -> foo, name)
+      .replace(/`([^`\n]+)`/g, (_match, inner) => inner.replace(/[()[\]{}]/g, "").trim())
+      .replace(/#+\s+/g, "") // headers
+      .replace(/\*\*([^*]+)\*\*/g, "$1") // bold
+      .replace(/\*([^*]+)\*/g, "$1") // italic
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1") // links
+      .replace(/!\[.*?\]\(.*?\)/g, "") // images
+      .replace(/^\|[-:\s|]+\|$/gm, "") // markdown table divider rows (|---|---|)
+      .replace(/\|/g, " ") // table cell separators
+      .replace(/<[^>]+>/g, " ") // remaining html tags
+      .replace(/^\s*[-*+]\s+/gm, "") // list bullets
+      .replace(/^\s*\d+\.\s+/gm, "") // list numbering
+      .replace(/^\s*>\s+/gm, "") // blockquotes
+      .replace(/[_~#*]/g, "") // extra symbols
+      .replace(/\s+/g, " ")
+      .trim()
+  );
 }
 
 /**

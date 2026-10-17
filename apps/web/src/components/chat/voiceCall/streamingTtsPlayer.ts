@@ -9,11 +9,12 @@ export function extractSpeechChunks(
   processedOffset: number,
   isStreamComplete: boolean,
 ): { chunks: string[]; newOffset: number } {
-  // Strip code blocks first so code is NEVER extracted as speech chunks
+  // Strip code blocks and reasoning/thinking tags first so they are NEVER extracted as speech chunks
   const cleanSourceText = stripCodeBlocks(text);
-  const unprocessed = cleanSourceText.slice(processedOffset);
+  const safeOffset = Math.min(processedOffset, cleanSourceText.length);
+  const unprocessed = cleanSourceText.slice(safeOffset);
   if (!unprocessed) {
-    return { chunks: [], newOffset: processedOffset };
+    return { chunks: [], newOffset: safeOffset };
   }
 
   const chunks: string[] = [];
@@ -44,13 +45,14 @@ export function extractSpeechChunks(
         chunks.push(sanitized);
       }
     }
-    return { chunks, newOffset: processedOffset + unprocessed.length };
+    return { chunks, newOffset: safeOffset + unprocessed.length };
   }
 
-  return { chunks, newOffset: processedOffset + currentStart };
+  return { chunks, newOffset: safeOffset + currentStart };
 }
 
 export interface StreamingTtsPlayerOptions {
+  maxChunks?: number | undefined;
   onStartSpeaking?: (() => void) | undefined;
   onFinished?: (() => void) | undefined;
 }
@@ -66,16 +68,23 @@ export class StreamingTtsPlayer {
   private onStartSpeakingCallback?: (() => void) | undefined;
   private onFinishedCallback?: (() => void) | undefined;
   private stopped = false;
+  private maxChunks?: number | undefined;
+  private enqueuedChunksCount = 0;
 
   constructor(options?: StreamingTtsPlayerOptions) {
+    this.maxChunks = options?.maxChunks;
     this.onStartSpeakingCallback = options?.onStartSpeaking;
     this.onFinishedCallback = options?.onFinished;
   }
 
   enqueue(chunk: string) {
     if (this.stopped) return;
+    if (this.maxChunks !== undefined && this.enqueuedChunksCount >= this.maxChunks) {
+      return;
+    }
     const clean = sanitizeTextForSpeech(chunk);
     if (!clean) return;
+    this.enqueuedChunksCount += 1;
     this.queue.push(clean);
     this.processNext();
   }

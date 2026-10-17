@@ -67,4 +67,20 @@ describe("resolveUserMessagePresentation", () => {
       });
     }
   });
+
+  it("strips Voice Call Mode directives cleanly from user message presentation", () => {
+    const rawVoicePrompt =
+      "How do I use React state?\n\n[Voice Call Mode: You are in an interactive real-time voice call with the user. Reply concisely.]";
+    expect(
+      resolveUserMessagePresentation({
+        id: "msg-123",
+        role: "user",
+        text: rawVoicePrompt,
+      }),
+    ).toEqual({
+      text: "How do I use React state?",
+      isAutomation: false,
+      scheduledTaskId: undefined,
+    });
+  });
 });

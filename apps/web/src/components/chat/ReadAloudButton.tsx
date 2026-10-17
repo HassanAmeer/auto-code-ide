@@ -46,6 +46,11 @@ export const ReadAloudButton = memo(function ReadAloudButton({
     };
   }, [speaking]);
 
+  // If there is no speakable content (e.g. message is 100% code or thinking blocks), hide the Read Aloud button
+  if (!cleanText) {
+    return null;
+  }
+
   const toggleSpeak = () => {
     if (speaking) {
       // Toggle OFF: immediately stop speech and revert to idle gray
