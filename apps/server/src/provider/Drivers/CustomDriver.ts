@@ -323,6 +323,13 @@ export const GLOBAL_CUSTOM_THREAD_HISTORIES = new Map<
   Array<{ role: "system" | "user" | "assistant"; content: string }>
 >();
 
+export interface InterruptedThreadInfo {
+  readonly lastInterruptedText: string;
+  readonly model: string;
+  readonly timestamp: number;
+}
+export const GLOBAL_THREAD_INTERRUPTED_STATE = new Map<string, InterruptedThreadInfo>();
+
 export function makeCustomAdapterV2(
   instanceId: ProviderInstanceId,
   config: CustomDriverConfig,
@@ -581,9 +588,48 @@ or for HTML/web:
 All generated files will automatically be saved into the project workspace directory (${projectCwd}) and committed to Git.
 Provide full, complete, production-ready code with no placeholders.`;
 
+                // Check if previous turn was interrupted or user is requesting continuation
+                const interruptedInfo = GLOBAL_THREAD_INTERRUPTED_STATE.get(threadKey);
+                const isContinuationKeyword =
+                  /^(continue|carry on|resume|proceed|agay|agay se|keep going|continue generation)\b/i.test(
+                    userPrompt.trim(),
+                  );
+                const isResumeRequest =
+                  Boolean(interruptedInfo) &&
+                  (isContinuationKeyword ||
+                    !userPrompt.trim() ||
+                    userPrompt.trim() === "Hello" ||
+                    userPrompt.toLowerCase().includes("continue"));
+
+                let effectiveUserPrompt = userPrompt || "Hello";
+                if (isResumeRequest && history.length > 0) {
+                  const lastAssistantMsg = [...history]
+                    .reverse()
+                    .find((m) => m.role === "assistant");
+                  if (lastAssistantMsg?.content) {
+                    const rawLines = lastAssistantMsg.content.trim().split("\n");
+                    const tailLines = rawLines.slice(-10).join("\n");
+                    effectiveUserPrompt = `[CONTINUATION / RESUME GENERATION REQUEST]:
+The previous response was interrupted / cut off mid-stream due to a timeout or token limit.
+The previous output ended abruptly with:
+"""
+${tailLines}
+"""
+
+CRITICAL INSTRUCTIONS FOR RESUMING:
+1. DO NOT restart the implementation or file from line 1.
+2. DO NOT rewrite what you already provided above.
+3. Resume immediately from the exact character/point where you stopped.
+4. If you were inside a code block or writing a file (e.g. index.html), continue and complete the code block, OR output the complete updated file with its filepath so it can be saved properly.
+
+User prompt:
+${userPrompt || "Continue generating from where you were interrupted"}`;
+                  }
+                }
+
                 // Free/open models on OpenRouter often reject "system" role (returning HTTP 400).
                 // Embed system prompt into user message to guarantee 100% compatibility across all models.
-                const fullUserPrompt = `${systemPrompt}\n\n[User Request]:\n${userPrompt || "Hello"}`;
+                const fullUserPrompt = `${systemPrompt}\n\n[User Request]:\n${effectiveUserPrompt}`;
 
                 const candidateMessages: Array<{
                   role: "system" | "user" | "assistant";
@@ -977,11 +1023,11 @@ Provide full, complete, production-ready code with no placeholders.`;
                   }),
                 ).pipe(
                   Effect.timeoutOrElse({
-                    duration: "75 seconds",
+                    duration: "240 seconds",
                     orElse: () =>
                       Effect.fail(
                         new Error(
-                          `Model "${selectedModel}" streaming timed out after 75 seconds. The connection stalled or upstream provider stopped sending tokens.`,
+                          `Model "${selectedModel}" streaming timed out after 240 seconds. The connection stalled or upstream provider stopped sending tokens.`,
                         ),
                       ),
                   }),
@@ -1165,6 +1211,7 @@ Provide full, complete, production-ready code with no placeholders.`;
                   },
                 ];
                 GLOBAL_CUSTOM_THREAD_HISTORIES.set(threadKey, updatedHistory);
+                GLOBAL_THREAD_INTERRUPTED_STATE.delete(threadKey);
               }).pipe(
                 Effect.provide(FetchHttpClient.layer),
                 Effect.catchCause((cause: unknown) =>
@@ -1191,9 +1238,42 @@ Provide full, complete, production-ready code with no placeholders.`;
                       });
                     }
 
-                    const errorText = accumulatedText.trim()
-                      ? `${accumulatedText.trim()}\n\n---\n⚠️ **Model Stream Interrupted:**\n\n\`\`\`\n${message}\n\`\`\`\n\n*Model:* \`${selectedModel}\`\n*Endpoint:* \`${chatUrl || cleanBase}\``
-                      : `⚠️ **Model Execution Failed [${selectedModel}]:**\n\n\`\`\`\n${message}\n\`\`\`\n\n**Details:**\n- **Model:** \`${selectedModel}\`\n- **Endpoint:** \`${chatUrl || cleanBase}\`\n- **Reason:** The upstream model server failed, timed out, or rejected the request. Please verify that this model is currently available and active, check your API key/router balance, or switch to another model.`;
+                    // Preserve partial generated code cleanly without error markdown pollution
+                    const cleanPartialText = accumulatedText.trim();
+                    if (cleanPartialText) {
+                      const updatedHistory: Array<{
+                        role: "system" | "user" | "assistant";
+                        content: string;
+                      }> = [
+                        ...history,
+                        { role: "user" as const, content: userPrompt || "Hello" },
+                        { role: "assistant" as const, content: cleanPartialText },
+                      ];
+                      GLOBAL_CUSTOM_THREAD_HISTORIES.set(threadKey, updatedHistory);
+                      GLOBAL_THREAD_INTERRUPTED_STATE.set(threadKey, {
+                        lastInterruptedText: cleanPartialText,
+                        model: selectedModel,
+                        timestamp: Date.now(),
+                      });
+
+                      // Also best-effort extract and save any project files generated so far
+                      try {
+                        const partialFiles = extractFilesFromMarkdown(cleanPartialText);
+                        for (const file of partialFiles) {
+                          const fullPath = NodePath.resolve(projectCwd, file.path);
+                          const rel = NodePath.relative(projectCwd, fullPath);
+                          if (!rel.startsWith("..") && !NodePath.isAbsolute(rel)) {
+                            const dir = NodePath.dirname(fullPath);
+                            if (!NodeFS.existsSync(dir)) {
+                              NodeFS.mkdirSync(dir, { recursive: true });
+                            }
+                            NodeFS.writeFileSync(fullPath, file.content, "utf-8");
+                          }
+                        }
+                      } catch {
+                        // ignore
+                      }
+                    }
 
                     yield* Queue.offer(eventsQueue, {
                       type: "message.updated",
@@ -1204,7 +1284,7 @@ Provide full, complete, production-ready code with no placeholders.`;
                         runId: turnInput.runId,
                         nodeId: turnInput.rootNodeId,
                         role: "assistant",
-                        text: errorText,
+                        text: cleanPartialText,
                         attachments: [],
                         streaming: false,
                         createdBy: "agent",
@@ -1234,7 +1314,7 @@ Provide full, complete, production-ready code with no placeholders.`;
                         updatedAt: failTime,
                         type: "assistant_message",
                         messageId: assistantMessageId,
-                        text: errorText,
+                        text: cleanPartialText,
                         streaming: false,
                       },
                     });

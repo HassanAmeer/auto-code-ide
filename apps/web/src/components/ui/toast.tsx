@@ -379,21 +379,21 @@ function ToastBodyContent({
               ) : null}
 
               {errorInfo.statusCode ? (
-                <span className="font-mono text-3xs font-semibold px-1.5 py-0.5 rounded-full bg-destructive/15 border border-destructive/30 text-destructive shrink-0">
+                <span className="font-mono text-3xs font-semibold px-1 py-0.2 rounded bg-destructive/15 border border-destructive/30 text-destructive shrink-0">
                   {errorInfo.statusCode}
                 </span>
               ) : null}
 
               {errorInfo.shortModel ? (
                 <span
-                  className="font-semibold text-xs text-foreground/95 shrink-0"
+                  className="font-mono font-medium text-2xs text-foreground/90 shrink-0 px-1 py-0.2 rounded bg-muted/40 border border-border/40"
                   title={errorInfo.fullModel || undefined}
                 >
                   {errorInfo.shortModel}
                 </span>
               ) : (
                 <Toast.Title
-                  className="min-w-0 wrap-break-word font-semibold text-xs text-foreground/95"
+                  className="min-w-0 wrap-break-word font-semibold text-2xs text-foreground/95"
                   data-slot="toast-title"
                 >
                   {rawTitle || "Error"}
@@ -401,24 +401,24 @@ function ToastBodyContent({
               )}
 
               {errorInfo.shortModel && errorInfo.shortReason ? (
-                <span className="text-muted-foreground/50 text-3xs">•</span>
+                <span className="text-muted-foreground/40 text-3xs">•</span>
               ) : null}
 
-              <span className="text-xs text-muted-foreground truncate max-w-[130px] sm:max-w-[200px]">
+              <span className="text-3xs text-muted-foreground/80 truncate max-w-[140px] sm:max-w-[220px]">
                 {errorInfo.shortReason}
               </span>
 
               <button
                 type="button"
                 onClick={() => setUncollapsed((v) => !v)}
-                className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-muted/40 hover:text-foreground transition-colors ml-0.5 shrink-0"
+                className="inline-flex size-4.5 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-muted/40 hover:text-foreground transition-colors ml-0.5 shrink-0"
                 aria-expanded={uncollapsed}
                 title={uncollapsed ? "Hide details" : "Uncollapse error details"}
               >
                 {uncollapsed ? (
-                  <ChevronUpIcon className="size-3.5" />
+                  <ChevronUpIcon className="size-3" />
                 ) : (
-                  <ChevronDownIcon className="size-3.5" />
+                  <ChevronDownIcon className="size-3" />
                 )}
               </button>
             </div>
@@ -685,7 +685,7 @@ function Toasts({ position }: { position: ToastPosition }) {
           return (
             <Toast.Root
               className={cn(
-                "dropdown-glass absolute z-[calc(9999-var(--toast-index))] w-full overflow-visible select-none rounded-xl sm:rounded-2xl border border-white/10 dark:border-white/10 text-popover-foreground shadow-xl shadow-black/25 [transition:transform_.5s_cubic-bezier(.22,1,.36,1),opacity_.5s,height_.15s]",
+                "dropdown-glass absolute z-[calc(9999-var(--toast-index))] w-full overflow-visible select-none rounded-md sm:rounded-lg border border-white/10 dark:border-white/10 text-popover-foreground shadow-lg shadow-black/25 [transition:transform_.5s_cubic-bezier(.22,1,.36,1),opacity_.5s,height_.15s]",
                 // Base positioning using data-position
                 "data-[position*=right]:right-0 data-[position*=right]:left-auto",
                 "data-[position*=left]:right-auto data-[position*=left]:left-0",
@@ -777,8 +777,12 @@ function Toasts({ position }: { position: ToastPosition }) {
                   // forces `y` to `auto`. Expandable detail panels can extend below without being cut off.
                   "pointer-events-auto min-h-0 overflow-y-visible pl-3 pr-8 text-xs transition-opacity duration-250 [overflow-x:clip] data-expanded:opacity-100",
                   stackedActionLayout
-                    ? "flex flex-col gap-1.5 py-2 pr-8"
-                    : cn("py-2", "flex items-center justify-between gap-1.5", inlineContentEndPad),
+                    ? "flex flex-col gap-1 py-1.5 pr-8"
+                    : cn(
+                        "py-1.5",
+                        "flex items-center justify-between gap-1.5",
+                        inlineContentEndPad,
+                      ),
                   hideCollapsedContent &&
                     "not-data-expanded:pointer-events-none not-data-expanded:opacity-0",
                 )}

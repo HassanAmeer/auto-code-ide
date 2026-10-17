@@ -177,6 +177,7 @@ import { HtmlRenderFrame } from "./HtmlRenderFrame";
 import { McpAppFrame } from "./McpAppFrame";
 import { ChangedFilesCard } from "./ChangedFilesTree";
 import { parseErrorDetails } from "~/lib/compactErrorFormatter";
+import { useComposerDraftStore } from "~/composerDraftStore";
 import { useFileContextMenuHandler } from "../../fileContextMenu";
 import { useProject, useThreadShell } from "../../state/entities";
 import {
@@ -3083,6 +3084,167 @@ function v2EventPresentation(item: OrchestrationV2TurnItem): {
   }
 }
 
+function CupertinoErrorRow({
+  item,
+  presentation,
+  visibility,
+  sourceThreadId,
+  row,
+  ctx,
+}: {
+  item: Extract<OrchestrationV2TurnItem, { type: "error" }>;
+  presentation: ReturnType<typeof v2EventPresentation>;
+  visibility: "local" | "inherited" | "synthetic";
+  sourceThreadId: string | null;
+  row: Extract<TimelineRow, { kind: "event" }>;
+  ctx: TimelineRowSharedState;
+}) {
+  const [dismissed, setDismissed] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+
+  if (dismissed) return null;
+
+  const errorInfo = parseErrorDetails(presentation.detail || item.failure.message);
+  const Icon = presentation.icon;
+
+  const isInterrupted =
+    errorInfo.statusCode === "Timeout" ||
+    /timeout|timed out|stalled|interrupted/i.test(presentation.detail || item.failure.message);
+
+  const handleResume = () => {
+    if (ctx.threadRef) {
+      useComposerDraftStore
+        .getState()
+        .setPrompt(
+          ctx.threadRef,
+          "Continue generating from where you were interrupted. Do not restart from line 1.",
+        );
+    }
+  };
+
+  return (
+    <div
+      className={cn(
+        "group my-1 overflow-hidden rounded-md border text-xs transition-all duration-150 backdrop-blur-xs",
+        presentation.tone === "warning" && "border-amber-500/25 bg-amber-500/[0.04]",
+        presentation.tone === "danger" &&
+          "border-rose-500/25 bg-rose-500/[0.04] dark:bg-rose-950/20",
+        presentation.tone === "success" && "border-emerald-500/25 bg-emerald-500/[0.04]",
+      )}
+      data-v2-item-type={item.type}
+      data-v2-item-visibility={visibility}
+    >
+      <div className="flex min-w-0 items-center gap-1.5 px-2.5 py-1 text-xs select-none">
+        <Icon
+          className={cn(
+            "size-3.5 shrink-0",
+            presentation.tone === "warning" && "text-amber-500",
+            presentation.tone === "danger" && "text-rose-500 dark:text-rose-400",
+            presentation.tone === "success" && "text-emerald-500",
+          )}
+        />
+        {errorInfo.statusCode ? (
+          <span className="shrink-0 font-mono text-3xs font-semibold px-1 py-0.2 rounded bg-rose-500/15 border border-rose-500/30 text-rose-500 dark:text-rose-400">
+            {errorInfo.statusCode}
+          </span>
+        ) : null}
+        {errorInfo.shortModel ? (
+          <span
+            className="shrink-0 font-mono font-medium text-foreground/90 text-2xs px-1 py-0.2 rounded bg-muted/40 border border-border/40"
+            title={errorInfo.fullModel || undefined}
+          >
+            {errorInfo.shortModel}
+          </span>
+        ) : (
+          <span className="shrink-0 font-medium text-foreground/90 text-2xs">
+            {presentation.label}
+          </span>
+        )}
+        <span className="text-muted-foreground/40 text-3xs">•</span>
+        <span className="min-w-0 flex-1 truncate text-muted-foreground/75 text-3xs font-normal">
+          {errorInfo.shortReason || presentation.detail}
+        </span>
+
+        {isInterrupted ? (
+          <button
+            type="button"
+            onClick={handleResume}
+            className="shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded text-3xs font-medium bg-primary/10 hover:bg-primary/20 text-primary border border-primary/25 transition-colors cursor-pointer"
+            title="Resume / continue generation where it stopped"
+          >
+            <ChevronRightIcon className="size-2.5" />
+            <span>Continue</span>
+          </button>
+        ) : null}
+
+        {visibility !== "local" ? (
+          <span className="shrink-0 rounded bg-muted px-1 py-0.2 text-3xs text-muted-foreground">
+            {visibility === "inherited" ? "Inherited" : "Synthetic"}
+          </span>
+        ) : null}
+
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="shrink-0 inline-flex size-5 items-center justify-center rounded text-muted-foreground/70 hover:text-foreground hover:bg-muted/40 transition-colors cursor-pointer"
+          title={expanded ? "Collapse details" : "Expand error details"}
+        >
+          <ChevronDownIcon
+            className={cn("size-3.5 transition-transform duration-200", expanded && "rotate-180")}
+          />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setDismissed(true)}
+          className="shrink-0 inline-flex size-5 items-center justify-center rounded text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer ml-0.5"
+          title="Dismiss error"
+        >
+          <XIcon className="size-3" />
+        </button>
+      </div>
+
+      {expanded ? (
+        <div className="border-t border-border/30 bg-muted/10 px-3 py-2 ps-6 animate-in fade-in duration-150">
+          {errorInfo.fullModel ? (
+            <div className="font-mono text-3xs text-muted-foreground mb-1">
+              Model: <span className="text-foreground">{errorInfo.fullModel}</span>
+            </div>
+          ) : null}
+          {presentation.detail ? (
+            <div className="text-2xs leading-relaxed text-muted-foreground font-mono bg-muted/20 p-2 rounded border border-border/30 whitespace-pre-wrap break-all max-h-48 overflow-y-auto">
+              <ChatMarkdown
+                text={presentation.detail}
+                cwd={ctx.markdownCwd}
+                threadRef={ctx.threadRef ?? undefined}
+                skills={ctx.skills}
+                lineBreaks
+              />
+            </div>
+          ) : null}
+          {visibility === "inherited" ? (
+            <p className="mt-1 font-mono text-3xs text-muted-foreground/65">
+              From {sourceThreadId}
+            </p>
+          ) : null}
+          <div className={presentation.detail ? "mt-2" : undefined}>
+            <V2ItemInspector
+              projectedItem={row.projectedItem}
+              environmentId={ctx.activeThreadEnvironmentId}
+              cwd={ctx.markdownCwd}
+              workspaceRoot={ctx.workspaceRoot}
+              onOpenThread={ctx.onOpenThread}
+              onOpenTurnDiff={ctx.onOpenTurnDiff}
+              onRollbackCheckpoint={ctx.onRollbackCheckpoint}
+              onImageExpand={ctx.onImageExpand}
+            />
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function V2EventTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "event" }> }) {
   const ctx = use(TimelineRowCtx);
   const { item, visibility, sourceThreadId } = row.projectedItem;
@@ -3115,96 +3277,15 @@ function V2EventTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "event"
   const presentation = v2EventPresentation(item);
   const Icon = presentation.icon;
   if (item.type === "error") {
-    const errorInfo = parseErrorDetails(presentation.detail || item.failure.message);
     return (
-      <details
-        className={cn(
-          "group rounded-xl border transition-all duration-200",
-          presentation.tone === "warning" && "border-warning/25 bg-warning/5",
-          presentation.tone === "danger" && "border-destructive/25 bg-destructive/5",
-          presentation.tone === "success" && "border-success/20 bg-success/5",
-        )}
-        data-v2-item-type={item.type}
-        data-v2-item-visibility={visibility}
-        data-v2-event-disclosure="true"
-      >
-        <summary className="flex min-w-0 cursor-pointer list-none items-center gap-1.5 px-2.5 py-1.5 text-xs [&::-webkit-details-marker]:hidden select-none hover:bg-muted/20 rounded-xl transition-colors">
-          <Icon
-            className={cn(
-              "size-3.5 shrink-0",
-              presentation.tone === "warning" && "text-warning",
-              presentation.tone === "danger" && "text-destructive",
-              presentation.tone === "success" && "text-success",
-            )}
-          />
-          {errorInfo.statusCode ? (
-            <span className="shrink-0 font-mono text-3xs font-semibold px-1.5 py-0.5 rounded-full bg-rose-500/15 border border-rose-500/30 text-rose-400 dark:text-rose-300">
-              {errorInfo.statusCode}
-            </span>
-          ) : null}
-          {errorInfo.shortModel ? (
-            <span
-              className="shrink-0 font-medium text-foreground/90 text-xs"
-              title={errorInfo.fullModel || undefined}
-            >
-              {errorInfo.shortModel}
-            </span>
-          ) : (
-            <span className="shrink-0 font-medium text-foreground/90 text-xs">
-              {presentation.label}
-            </span>
-          )}
-          {item.status !== "completed" && item.status !== "failed" ? (
-            <span
-              className={cn(
-                "shrink-0 rounded-full border px-1.5 py-0.5 font-mono text-3xs",
-                "border-border/70 text-muted-foreground",
-              )}
-            >
-              {item.status}
-            </span>
-          ) : null}
-          <span className="min-w-0 flex-1 truncate text-muted-foreground/75 text-xs">
-            {errorInfo.shortReason || presentation.detail}
-          </span>
-          {visibility !== "local" ? (
-            <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-3xs text-muted-foreground">
-              {visibility === "inherited" ? "Inherited" : "Synthetic"}
-            </span>
-          ) : null}
-          <ChevronDownIcon className="size-3.5 shrink-0 text-muted-foreground/60 transition-transform group-open:rotate-180" />
-        </summary>
-        <div className="border-t border-border/45 px-3 py-2 ps-8">
-          {presentation.detail ? (
-            <div className="text-xs leading-relaxed text-muted-foreground">
-              <ChatMarkdown
-                text={presentation.detail}
-                cwd={ctx.markdownCwd}
-                threadRef={ctx.threadRef ?? undefined}
-                skills={ctx.skills}
-                lineBreaks
-              />
-            </div>
-          ) : null}
-          {visibility === "inherited" ? (
-            <p className="mt-1 font-mono text-3xs text-muted-foreground/65">
-              From {sourceThreadId}
-            </p>
-          ) : null}
-          <div className={presentation.detail ? "mt-2" : undefined}>
-            <V2ItemInspector
-              projectedItem={row.projectedItem}
-              environmentId={ctx.activeThreadEnvironmentId}
-              cwd={ctx.markdownCwd}
-              workspaceRoot={ctx.workspaceRoot}
-              onOpenThread={ctx.onOpenThread}
-              onOpenTurnDiff={ctx.onOpenTurnDiff}
-              onRollbackCheckpoint={ctx.onRollbackCheckpoint}
-              onImageExpand={ctx.onImageExpand}
-            />
-          </div>
-        </div>
-      </details>
+      <CupertinoErrorRow
+        item={item}
+        presentation={presentation}
+        visibility={visibility}
+        sourceThreadId={sourceThreadId}
+        row={row}
+        ctx={ctx}
+      />
     );
   }
   return (
