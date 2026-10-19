@@ -42,6 +42,7 @@ import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
 import { OtlpTracer, OtlpSerialization } from "effect/observability";
 
 import * as ServerConfig from "./config.ts";
+import * as ServerBrowser from "./preview/ServerBrowser.ts";
 import {
   registerFallbackCustomProvider,
   unregisterFallbackCustomProvider,
@@ -1271,6 +1272,55 @@ export const layerDirectProjectDeleteRoute = HttpRouter.add(
       ok: true,
       projectId,
     });
+  }).pipe(
+    Effect.catchCause((cause) =>
+      Effect.succeed(HttpServerResponse.jsonUnsafe({ ok: false, error: Cause.pretty(cause) })),
+    ),
+  ),
+);
+
+export const layerPreviewLogsSyncRoute = HttpRouter.add(
+  "POST",
+  "/api/preview/sync-logs",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => null))) as {
+      readonly threadId?: string;
+      readonly projectCwd?: string;
+      readonly errors?: Array<{ level: string; text: string; timestamp?: string }>;
+    } | null;
+
+    if (bodyJson?.threadId && Array.isArray(bodyJson.errors)) {
+      for (const err of bodyJson.errors) {
+        ServerBrowser.recordPreviewError(bodyJson.threadId, {
+          level: err.level || "error",
+          text: err.text || "",
+          timestamp: err.timestamp || new Date().toISOString(),
+        });
+      }
+    }
+
+    if (bodyJson?.projectCwd && Array.isArray(bodyJson.errors) && bodyJson.errors.length > 0) {
+      try {
+        const autocodeDir = NodeFs.existsSync(bodyJson.projectCwd)
+          ? `${bodyJson.projectCwd}/.autocode`
+          : null;
+        if (autocodeDir) {
+          if (!NodeFs.existsSync(autocodeDir)) {
+            NodeFs.mkdirSync(autocodeDir, { recursive: true });
+          }
+          NodeFs.writeFileSync(
+            `${autocodeDir}/preview_logs.json`,
+            JSON.stringify(bodyJson.errors, null, 2),
+            "utf-8",
+          );
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    return HttpServerResponse.jsonUnsafe({ ok: true });
   }).pipe(
     Effect.catchCause((cause) =>
       Effect.succeed(HttpServerResponse.jsonUnsafe({ ok: false, error: Cause.pretty(cause) })),

@@ -17,6 +17,9 @@ import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 
+import * as NodeFS from "node:fs";
+import * as NodeOS from "node:os";
+import * as NodePath from "node:path";
 import * as EventSink from "../orchestration-v2/EventSink.ts";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as LegacyV1ThreadImporter from "../orchestration-v2/legacy/LegacyV1ThreadImporter.ts";
@@ -501,9 +504,50 @@ export const make = Effect.gen(function* () {
       }
       yield* commit({ type: "project.delete", commandId: input.commandId, projectId });
       yield* projectEnrichment.invalidate([existing.value.workspaceRoot]);
+      safelyDeleteProjectWorkspaceFromDisk(existing.value.workspaceRoot);
       return yield* readCommitted(projectId);
     },
   );
+
+  function safelyDeleteProjectWorkspaceFromDisk(workspaceRoot: string): void {
+    try {
+      if (!workspaceRoot || typeof workspaceRoot !== "string") return;
+      const normalized = NodePath.resolve(workspaceRoot);
+      const homeDir = NodeOS.homedir();
+
+      // Protected paths that MUST NEVER be deleted
+      const protectedPaths = [
+        "/",
+        "/root",
+        "/home",
+        "/usr",
+        "/bin",
+        "/etc",
+        "/var",
+        "/tmp",
+        homeDir,
+        process.cwd(),
+      ];
+
+      if (protectedPaths.includes(normalized)) {
+        console.warn(`[Project Delete] Refusing to delete protected path: ${normalized}`);
+        return;
+      }
+
+      // Do not delete current directory or any parent of current directory
+      if (process.cwd().startsWith(normalized)) {
+        console.warn(`[Project Delete] Refusing to delete parent/current path: ${normalized}`);
+        return;
+      }
+
+      if (NodeFS.existsSync(normalized)) {
+        console.log(`[Project Delete] Removing project workspace folder from disk: ${normalized}`);
+        NodeFS.rmSync(normalized, { recursive: true, force: true });
+      }
+    } catch (err) {
+      console.error(`[Project Delete] Failed to delete folder ${workspaceRoot}:`, err);
+    }
+  }
 
   const enrichShell = (shell: OrchestrationProjectShell) =>
     projectEnrichment.getAvailable(shell.workspaceRoot).pipe(

@@ -584,6 +584,26 @@ interface Recording {
   readonly framesInFlight: Set<Promise<void>>;
 }
 
+export const GLOBAL_THREAD_PREVIEW_ERRORS = new Map<string, Array<PreviewAutomationConsoleEntry>>();
+
+export function recordPreviewError(threadId: string, entry: PreviewAutomationConsoleEntry): void {
+  if (!threadId) return;
+  const list = GLOBAL_THREAD_PREVIEW_ERRORS.get(threadId) ?? [];
+  list.push(entry);
+  if (list.length > 50) list.shift();
+  GLOBAL_THREAD_PREVIEW_ERRORS.set(threadId, list);
+}
+
+export function getThreadPreviewErrors(threadId: string): Array<PreviewAutomationConsoleEntry> {
+  if (!threadId) return [];
+  return GLOBAL_THREAD_PREVIEW_ERRORS.get(threadId) ?? [];
+}
+
+export function clearThreadPreviewErrors(threadId: string): void {
+  if (!threadId) return;
+  GLOBAL_THREAD_PREVIEW_ERRORS.delete(threadId);
+}
+
 interface ServerTab {
   readonly threadId: ThreadId;
   readonly tabId: string;
@@ -1271,6 +1291,9 @@ const make = Effect.gen(function* () {
       };
       pushBounded(tab.consoleEntries, entry);
       broadcastConsole(tab, entry);
+      if (entry.level === "error") {
+        recordPreviewError(String(tab.threadId), entry);
+      }
     });
     page.on("pageerror", (error) => {
       const entry: PreviewAutomationConsoleEntry = {
@@ -1281,6 +1304,7 @@ const make = Effect.gen(function* () {
       };
       pushBounded(tab.consoleEntries, entry);
       broadcastConsole(tab, entry);
+      recordPreviewError(String(tab.threadId), entry);
     });
     page.on("dialog", (dialog) => {
       tab.dialog = dialog;

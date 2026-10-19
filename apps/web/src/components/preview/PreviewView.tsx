@@ -1334,7 +1334,11 @@ export function PreviewView({
         />
       ) : null}
       {activeLogsTabId && isLogsOpen ? (
-        <BrowserLogsSection tabId={activeLogsTabId} onClose={() => setLogsOpen(false)} />
+        <BrowserLogsSection
+          tabId={activeLogsTabId}
+          threadRef={threadRef}
+          onClose={() => setLogsOpen(false)}
+        />
       ) : null}
     </div>
   );

@@ -14,6 +14,7 @@ import {
   ArrowUpDown,
   Maximize2,
   Minimize2,
+  Sparkles,
 } from "lucide-react";
 import { useBrowserLogsStore, type BrowserLogsFilter } from "~/browser/browserLogsStore";
 import { Button } from "~/components/ui/button";
@@ -24,7 +25,9 @@ import { cn } from "~/lib/utils";
 import type {
   PreviewAutomationConsoleEntry,
   PreviewAutomationNetworkEntry,
+  ScopedThreadRef,
 } from "@t3tools/contracts";
+import { useComposerDraftStore } from "~/composerDraftStore";
 
 interface UnifiedLogItem {
   id: string;
@@ -37,12 +40,14 @@ interface UnifiedLogItem {
 
 interface BrowserLogsSectionProps {
   tabId: string;
+  threadRef?: ScopedThreadRef;
   onClose?: () => void;
   className?: string;
 }
 
 export const BrowserLogsSection = memo(function BrowserLogsSection({
   tabId,
+  threadRef,
   onClose,
   className,
 }: BrowserLogsSectionProps) {
@@ -206,6 +211,46 @@ export const BrowserLogsSection = memo(function BrowserLogsSection({
     });
   };
 
+  const handleFixWithAi = async () => {
+    const errorDetails = store.getFormattedErrorsForAi(tabId);
+    if (!errorDetails) {
+      toastManager.add({
+        type: "info",
+        title: "No runtime errors found",
+        description: "The debug console has not captured any errors yet.",
+      });
+      return;
+    }
+
+    const fixPrompt = `Fix the following runtime errors and issues found in the live preview debug console:\n\n${errorDetails}\n\nPlease diagnose the root cause and provide the complete working code to fix it.`;
+
+    try {
+      await navigator.clipboard.writeText(fixPrompt);
+    } catch {}
+
+    if (threadRef) {
+      useComposerDraftStore.getState().setPrompt(threadRef, fixPrompt);
+    }
+
+    const rawErrors = store.getRawErrorsForSync(tabId);
+    if (rawErrors.length > 0 && threadRef?.threadId) {
+      fetch("/api/preview/sync-logs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          threadId: threadRef.threadId,
+          errors: rawErrors,
+        }),
+      }).catch(() => {});
+    }
+
+    toastManager.add({
+      type: "success",
+      title: "Loaded into AI Prompt",
+      description: "Debug console errors copied & populated into chat prompt.",
+    });
+  };
+
   const formatTime = (iso: string) => {
     try {
       const d = new Date(iso);
@@ -334,6 +379,26 @@ export const BrowserLogsSection = memo(function BrowserLogsSection({
               </button>
             )}
           </div>
+
+          {/* Fix with AI Button */}
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="outline"
+                  size="xs"
+                  onClick={handleFixWithAi}
+                  aria-label="Fix with AI"
+                  type="button"
+                  className="h-6 px-2 gap-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border-amber-500/30 text-3xs font-medium cursor-pointer shadow-xs"
+                >
+                  <Sparkles className="size-3 text-amber-400" />
+                  <span>Fix with AI</span>
+                </Button>
+              }
+            />
+            <TooltipPopup>Load captured errors into AI chat prompt</TooltipPopup>
+          </Tooltip>
 
           {/* Copy All Button */}
           <Tooltip>

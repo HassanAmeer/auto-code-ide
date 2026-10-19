@@ -263,6 +263,7 @@ import {
   setActivePreviewTab,
   useThreadPreviewState,
 } from "../previewStateStore";
+import { browserLogsStore } from "~/browser/browserLogsStore";
 import {
   BrowserSettingsReadError,
   isBrowserPreviewFile,
@@ -9336,6 +9337,29 @@ export default function ChatView(props: ChatViewProps) {
         }
       } catch (err) {
         console.warn("Live web search pre-fetch failed:", err);
+      }
+    }
+
+    const previewErrorsForSend = browserLogsStore.getFormattedErrorsForAi();
+    if (previewErrorsForSend && messageTextForSend && !messageTextForSend.startsWith("/")) {
+      messageTextForSend = `${messageTextForSend}\n\n[LIVE PREVIEW DEBUG CONSOLE - RUNTIME ERRORS DETECTED]\nThe following runtime errors/warnings occurred in the live preview:\n${previewErrorsForSend}\n[Please diagnose and fix these errors in the code]`;
+
+      try {
+        const rawErrors = browserLogsStore.getRawErrorsForSync();
+        if (rawErrors.length > 0) {
+          const effectiveCwd = activeThread?.worktreePath || projectForSend?.workspaceRoot;
+          fetch("/api/preview/sync-logs", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              threadId: threadIdForSend,
+              projectCwd: effectiveCwd,
+              errors: rawErrors,
+            }),
+          }).catch(() => {});
+        }
+      } catch {
+        // ignore
       }
     }
 

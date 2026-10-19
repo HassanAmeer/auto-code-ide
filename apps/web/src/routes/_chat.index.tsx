@@ -4,6 +4,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { LinkIcon, PlusIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { Spinner } from "../components/ui/spinner";
 import { isLocalEnvironmentDisabled } from "../localEnvironment";
 import { isElectron } from "../env";
 import { NoProjectsHero } from "../components/NoProjectsHero";
@@ -58,7 +59,11 @@ function IndexDraftLanding() {
   }, [handleNewThread, mostRecentProject, startState.retryRequest]);
 
   if (!bootstrapped && mostRecentProject !== null) {
-    return null;
+    return (
+      <SidebarInset className="h-dvh min-h-0 flex items-center justify-center bg-background">
+        <Spinner size="lg" tone="muted" />
+      </SidebarInset>
+    );
   }
   if (mostRecentProject !== null) {
     return startState.failed ? (
@@ -70,7 +75,11 @@ function IndexDraftLanding() {
           }));
         }}
       />
-    ) : null;
+    ) : (
+      <SidebarInset className="h-dvh min-h-0 flex items-center justify-center bg-background">
+        <Spinner size="lg" tone="muted" />
+      </SidebarInset>
+    );
   }
   // First-run routing to the welcome wizard happens in FirstRunGate at the
   // root, before this route ever renders.

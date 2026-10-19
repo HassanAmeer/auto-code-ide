@@ -2298,6 +2298,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         const makeLeaf = (
           action:
             | "rename"
+            | "file-manager"
             | "open-terminal"
             | "download-zip"
             | "push-github"
@@ -2317,6 +2318,11 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
             switch (action) {
               case "rename":
                 openProjectRenameDialog(member);
+                return;
+              case "file-manager":
+                terminalStore.setSelectedProject(member.id, member.title, member.workspaceRoot);
+                terminalStore.setActiveCwd(member.workspaceRoot);
+                terminalStore.setFileExplorerOpen(true);
                 return;
               case "open-terminal":
                 void handleOpenInTerminal(member);
@@ -2355,6 +2361,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         const buildTargetedItem = (
           action:
             | "rename"
+            | "file-manager"
             | "open-terminal"
             | "download-zip"
             | "push-github"
@@ -2417,6 +2424,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
               isDisabled: (member) =>
                 !readEnvironmentScope(member.environmentId, AuthOrchestrationOperateScope),
             }),
+            buildTargetedItem("file-manager", "File Manager", { icon: "folder" }),
             buildTargetedItem("open-terminal", "Open in Terminal", { icon: "terminal" }),
             buildTargetedItem("download-zip", "Download ZIP", { icon: "archive" }),
             buildTargetedItem("push-github", "Push to GitHub", { icon: "upload" }),

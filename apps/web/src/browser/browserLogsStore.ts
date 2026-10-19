@@ -28,6 +28,10 @@ export interface BrowserLogsStore {
 
   getTabLogs: (tabId: string) => BrowserLogsTabState;
   getErrorCount: (tabId: string) => number;
+  getFormattedErrorsForAi: (tabId?: string) => string;
+  getRawErrorsForSync: (
+    tabId?: string,
+  ) => Array<{ level: string; text: string; timestamp?: string }>;
 }
 
 const DEFAULT_TAB_STATE: BrowserLogsTabState = {
@@ -108,6 +112,62 @@ export const useBrowserLogsStore = create<BrowserLogsStore>((set, get) => ({
     ).length;
     return consoleErrors + networkErrors;
   },
+
+  getFormattedErrorsForAi: (tabId?: string) => {
+    const state = get();
+    const tabs =
+      tabId && state.logsByTab[tabId]
+        ? [[tabId, state.logsByTab[tabId]!] as const]
+        : Object.entries(state.logsByTab);
+
+    const errorLines: string[] = [];
+    for (const [, tab] of tabs) {
+      const consoleErrors = tab.consoleEntries.filter((c) => c.level === "error");
+      for (const ce of consoleErrors.slice(-10)) {
+        errorLines.push(`- [CONSOLE ERROR]: ${ce.text}`);
+      }
+      const netErrors = tab.networkEntries.filter(
+        (n) => n.failed || (n.status !== null && n.status >= 400),
+      );
+      for (const ne of netErrors.slice(-5)) {
+        errorLines.push(
+          `- [NETWORK FAILED]: ${ne.method} ${ne.url} (${ne.status ?? "Failed"}${ne.errorText ? `: ${ne.errorText}` : ""})`,
+        );
+      }
+    }
+    return errorLines.join("\n");
+  },
+
+  getRawErrorsForSync: (tabId?: string) => {
+    const state = get();
+    const tabs =
+      tabId && state.logsByTab[tabId]
+        ? [[tabId, state.logsByTab[tabId]!] as const]
+        : Object.entries(state.logsByTab);
+
+    const result: Array<{ level: string; text: string; timestamp?: string }> = [];
+    for (const [, tab] of tabs) {
+      for (const ce of tab.consoleEntries
+        .filter((c) => c.level === "error" || c.level === "warn")
+        .slice(-15)) {
+        result.push({
+          level: ce.level,
+          text: ce.text,
+          timestamp: ce.timestamp,
+        });
+      }
+      for (const ne of tab.networkEntries
+        .filter((n) => n.failed || (n.status !== null && n.status >= 400))
+        .slice(-10)) {
+        result.push({
+          level: "error",
+          text: `Network Request Failed: ${ne.method} ${ne.url} (${ne.status ?? "Failed"}${ne.errorText ? `: ${ne.errorText}` : ""})`,
+          timestamp: ne.timestamp,
+        });
+      }
+    }
+    return result;
+  },
 }));
 
 export const browserLogsStore = {
@@ -120,4 +180,8 @@ export const browserLogsStore = {
   toggleLogsOpen: () => useBrowserLogsStore.getState().toggleLogsOpen(),
   setLogsOpen: (open: boolean) => useBrowserLogsStore.getState().setLogsOpen(open),
   clearLogs: (tabId: string) => useBrowserLogsStore.getState().clearLogs(tabId),
+  getFormattedErrorsForAi: (tabId?: string) =>
+    useBrowserLogsStore.getState().getFormattedErrorsForAi(tabId),
+  getRawErrorsForSync: (tabId?: string) =>
+    useBrowserLogsStore.getState().getRawErrorsForSync(tabId),
 };

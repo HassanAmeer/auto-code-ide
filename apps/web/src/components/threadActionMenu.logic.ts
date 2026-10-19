@@ -29,6 +29,7 @@ export type ThreadActionMenuId =
   | "copy-thread-id"
   | "project-settings"
   | "download-project-zip"
+  | "file-manager"
   | "archive"
   | "delete";
 
@@ -36,6 +37,7 @@ export type DraftActionMenuId =
   | "copy"
   | "copy-path"
   | "copy-branch"
+  | "file-manager"
   | "project-settings"
   | "discard";
 
@@ -58,6 +60,9 @@ export function buildDraftActionMenuItems(options: {
           : []),
       ],
     },
+    ...(options.hasPath
+      ? [{ id: "file-manager" as const, label: "File Manager", icon: "folder" }]
+      : []),
     ...(options.hasProject
       ? [{ id: "project-settings" as const, label: "Project settings", icon: "settings" }]
       : []),
@@ -232,6 +237,7 @@ export function buildThreadActionMenuItems(
         { id: "copy-thread-id", label: "Thread ID", icon: "hash" },
       ],
     },
+    { id: "file-manager", label: "File Manager", icon: "folder" },
     { id: "project-settings", label: "Project settings", icon: "settings" },
     { id: "download-project-zip", label: "Download project ZIP", icon: "archive" },
     // Archive removes the thread from the sidebar while keeping its

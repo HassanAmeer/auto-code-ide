@@ -50,6 +50,7 @@ import {
 import type { ServerProviderShape } from "@t3tools/provider-core/server/snapshot";
 import type { ProviderTextGeneration } from "@t3tools/provider-core/server/textGeneration";
 import { AcpProviderCapabilitiesV2 } from "@t3tools/provider-acp/server/adapter";
+import { getThreadPreviewErrors } from "../../preview/ServerBrowser.ts";
 
 // Allow HTTPS requests with IP addresses and self-signed certificates for custom providers
 if (typeof process !== "undefined" && process.env) {
@@ -356,7 +357,8 @@ export function extractFilesFromMarkdown(
         }
       }
 
-      // If still not detected and workspace has only 1 source file, default to it
+      // If still not detected and workspace has only 1 source file:
+      // ONLY default to it if the content is actually compatible and substantial!
       if (!detectedPath) {
         try {
           const filesInRoot = NodeFS.readdirSync(projectCwd).filter(
@@ -365,7 +367,34 @@ export function extractFilesFromMarkdown(
               (f.endsWith(".html") || f.endsWith(".js") || f.endsWith(".ts") || f.endsWith(".py")),
           );
           if (filesInRoot.length === 1 && filesInRoot[0]) {
-            detectedPath = filesInRoot[0];
+            const candidateFile = filesInRoot[0];
+            const candidateExt = candidateFile.split(".").pop()?.toLowerCase();
+            const trimmed = content.trim();
+
+            if (candidateExt === "html") {
+              // HTML files can ONLY be targeted if content actually contains HTML tags!
+              if (
+                trimmed.toLowerCase().includes("<html") ||
+                trimmed.toLowerCase().startsWith("<!doctype") ||
+                trimmed.toLowerCase().includes("<!doctype") ||
+                (trimmed.includes("<head") && trimmed.includes("<body"))
+              ) {
+                detectedPath = candidateFile;
+              }
+            } else if (candidateExt === "js" || candidateExt === "ts" || candidateExt === "py") {
+              // Only associate if the block is substantial (e.g. 10+ lines or has full structure)
+              // and NOT a 1-to-3 line conversational snippet!
+              const lineCount = trimmed.split("\n").length;
+              if (
+                lineCount >= 10 ||
+                trimmed.includes("<<<< SEARCH") ||
+                trimmed.includes("class ") ||
+                trimmed.includes("function init") ||
+                trimmed.includes("function start")
+              ) {
+                detectedPath = candidateFile;
+              }
+            }
           }
         } catch {
           // ignore
@@ -673,16 +702,6 @@ export function universalPatchFile(
         patched =
           patched.slice(0, existingRange.start) + newCode + patched.slice(existingRange.end);
         braceApplied = true;
-      } else if (ext === "html" && patched.includes("</script>")) {
-        const scriptIdx = patched.lastIndexOf("</script>");
-        patched =
-          patched.slice(0, scriptIdx) +
-          `\n\n// Added: ${identifier}\n${newCode}\n` +
-          patched.slice(scriptIdx);
-        braceApplied = true;
-      } else {
-        patched = patched.trimEnd() + `\n\n// Added: ${identifier}\n${newCode}\n`;
-        braceApplied = true;
       }
     }
     if (braceApplied) {
@@ -721,63 +740,75 @@ export function applyFileContentOrPatch(
   const trimmedNew = file.content.trim();
   const ext = file.path.split(".").pop()?.toLowerCase() || "";
 
-  // Check if new content has SEARCH/REPLACE diff markers
+  // 1. Check if new content is a complete HTML document
+  const isCompleteHtml =
+    ext === "html" &&
+    (trimmedNew.toLowerCase().startsWith("<!doctype") ||
+      trimmedNew.toLowerCase().startsWith("<html") ||
+      (trimmedNew.toLowerCase().includes("<html") && trimmedNew.toLowerCase().includes("</html>")));
+
+  // Complete HTML documents must ALWAYS be written directly to disk without patching/splicing
+  if (isCompleteHtml) {
+    NodeFS.writeFileSync(fullPath, file.content, "utf-8");
+    return { saved: true, method: "overwritten", path: file.path };
+  }
+
+  // 2. Check if new content has explicit SEARCH/REPLACE diff markers
   const hasSearchReplace = /<{3,7}\s*SEARCH\s*\n[\s\S]*?\n[=]{3,7}\s*\n[\s\S]*?\n[>]{3,7}/.test(
     file.content,
   );
 
-  // Check if content is a partial snippet / placeholder
-  const hasPlaceholder =
-    /\/\/\s*\.\.\.\s*(?:rest|existing|code|remaining|unchanged)/i.test(trimmedNew) ||
-    /#\s*\.\.\.\s*(?:rest|existing|code|remaining|unchanged)/i.test(trimmedNew) ||
-    /\/\*\s*\.\.\.\s*(?:rest|existing|code|remaining|unchanged)/i.test(trimmedNew);
-
-  const isHtmlTargetWithoutHtmlStructure =
-    ext === "html" &&
-    existingContent.toLowerCase().includes("<html") &&
-    !trimmedNew.toLowerCase().includes("<html") &&
-    !trimmedNew.toLowerCase().includes("<!doctype");
-
-  const isSignificantLengthDrop =
-    existingContent.length > 300 && trimmedNew.length < existingContent.length * 0.65;
-
-  const isCandidateForPatch =
-    hasSearchReplace ||
-    hasPlaceholder ||
-    isHtmlTargetWithoutHtmlStructure ||
-    isSignificantLengthDrop;
-
-  if (isCandidateForPatch) {
+  if (hasSearchReplace) {
     const patchResult = universalPatchFile(existingContent, file.content, file.path);
     if (patchResult.success && patchResult.content !== existingContent) {
       NodeFS.writeFileSync(fullPath, patchResult.content, "utf-8");
       return { saved: true, method: "patched", path: file.path };
     }
-
-    // Safety guard: If patch failed but this was clearly a partial placeholder/stub
-    // that would destroy a large existing file, preserve existing file instead of wiping it!
-    if (hasPlaceholder || (isHtmlTargetWithoutHtmlStructure && existingContent.length > 200)) {
-      console.warn(
-        `[AutoCode Protect] Prevented destructive overwrite of ${file.path} with partial snippet.`,
-      );
-      if (
-        ext === "html" &&
-        existingContent.includes("</script>") &&
-        !trimmedNew.includes("<script>")
-      ) {
-        const scriptIdx = existingContent.lastIndexOf("</script>");
-        const appended =
-          existingContent.slice(0, scriptIdx) +
-          `\n\n// Added targeted snippet:\n${trimmedNew}\n` +
-          existingContent.slice(scriptIdx);
-        NodeFS.writeFileSync(fullPath, appended, "utf-8");
-        return { saved: true, method: "patched", path: file.path };
-      }
-      return { saved: false, method: "skipped_protected", path: file.path };
-    }
   }
 
-  // Genuine complete file write or full rewrite
+  // 3. Check if content is a partial placeholder snippet (e.g. // ... rest of code unchanged ...)
+  const hasPlaceholder =
+    /\/\/\s*\.\.\.\s*(?:rest|existing|code|remaining|unchanged)/i.test(trimmedNew) ||
+    /#\s*\.\.\.\s*(?:rest|existing|code|remaining|unchanged)/i.test(trimmedNew) ||
+    /\/\*\s*\.\.\.\s*(?:rest|existing|code|remaining|unchanged)/i.test(trimmedNew);
+
+  if (hasPlaceholder) {
+    const patchResult = universalPatchFile(existingContent, file.content, file.path);
+    if (patchResult.success && patchResult.content !== existingContent) {
+      NodeFS.writeFileSync(fullPath, patchResult.content, "utf-8");
+      return { saved: true, method: "patched", path: file.path };
+    }
+    console.warn(
+      `[AutoCode Protect] Prevented destructive overwrite of ${file.path} with placeholder snippet.`,
+    );
+    return { saved: false, method: "skipped_protected", path: file.path };
+  }
+
+  // 4. CRITICAL SAFETY GUARD: Prevent wiping a large existing file with a tiny snippet!
+  // If existing file is HTML and incoming content does NOT have HTML structure:
+  if (
+    ext === "html" &&
+    existingContent.toLowerCase().includes("<html") &&
+    !trimmedNew.toLowerCase().includes("<html") &&
+    !trimmedNew.toLowerCase().includes("<!doctype")
+  ) {
+    console.warn(
+      `[AutoCode Protect] Blocked destructive overwrite: Refusing to replace HTML file ${file.path} (${existingContent.length} chars) with non-HTML snippet (${trimmedNew.length} chars).`,
+    );
+    return { saved: false, method: "skipped_protected", path: file.path };
+  }
+
+  // If existing file is substantial (> 40 lines) and new content is tiny (< 10 lines) without SEARCH/REPLACE:
+  const existingLines = existingContent.split("\n").length;
+  const newLines = trimmedNew.split("\n").length;
+  if (existingLines > 40 && newLines < 10) {
+    console.warn(
+      `[AutoCode Protect] Blocked destructive wipe: Refusing to wipe ${file.path} (${existingLines} lines) with a ${newLines}-line snippet.`,
+    );
+    return { saved: false, method: "skipped_protected", path: file.path };
+  }
+
+  // 5. Genuine complete file write or full rewrite (games, scripts, components)
   NodeFS.writeFileSync(fullPath, file.content, "utf-8");
   return { saved: true, method: "overwritten", path: file.path };
 }
@@ -1117,7 +1148,7 @@ export function makeCustomAdapterV2(
                 });
               }
               if (msgs.length > 0) {
-                saveThreadHistory(threadKeys, msgs, openInput.runtimePolicy?.cwd);
+                saveThreadHistory(threadKeys, msgs, openInput.runtimePolicy?.cwd ?? undefined);
               }
               return true;
             }),
@@ -1269,12 +1300,98 @@ export function makeCustomAdapterV2(
                   }
                 }
 
-                const systemPrompt = `You are AutoCode (AC) AI Senior Developer and Game Architect with integrated Live Web Preview, Multi-Language Code Generation, and Smart Patching capabilities.
+                // Extract live preview errors from server preview tabs and .autocode/preview_logs.json
+                let capturedPreviewErrors: Array<{ level?: string; text: string }> = [];
+                for (const tk of threadKeys) {
+                  if (tk) {
+                    const errs = getThreadPreviewErrors(String(tk));
+                    if (errs && errs.length > 0) {
+                      capturedPreviewErrors = errs;
+                      break;
+                    }
+                  }
+                }
+
+                let diskPreviewLogs: Array<{ level?: string; text: string }> = [];
+                try {
+                  const diskLogsPath = NodePath.join(projectCwd, ".autocode", "preview_logs.json");
+                  if (NodeFS.existsSync(diskLogsPath)) {
+                    const raw = JSON.parse(NodeFS.readFileSync(diskLogsPath, "utf-8"));
+                    if (Array.isArray(raw)) {
+                      diskPreviewLogs = raw;
+                    }
+                  }
+                } catch {
+                  // ignore
+                }
+
+                const allPreviewErrors: string[] = [];
+                for (const err of [...capturedPreviewErrors, ...diskPreviewLogs]) {
+                  if (err && err.text) {
+                    const line = `- [${(err.level || "ERROR").toUpperCase()}]: ${err.text}`;
+                    if (!allPreviewErrors.includes(line)) {
+                      allPreviewErrors.push(line);
+                    }
+                  }
+                }
+
+                let previewErrorBanner = "";
+                if (allPreviewErrors.length > 0) {
+                  previewErrorBanner = `\n================================================================================
+CRITICAL LIVE PREVIEW DEBUG CONSOLE - RUNTIME ERRORS DETECTED:
+The live preview environment reported the following runtime errors:
+${allPreviewErrors.slice(-12).join("\n")}
+
+MANDATORY ERROR DIAGNOSIS & FIXING INSTRUCTIONS:
+1. You have direct awareness and visibility into the Live Preview Debug Console above.
+2. Diagnose why these errors occurred (e.g. missing elements, null canvas context, missing 404 images/audio files, syntax errors, duplicate declarations, undefined variables).
+3. If building or fixing games/HTML apps, output the COMPLETE updated file (e.g. index.html) with all fixes applied.
+4. Ensure all assets are 100% self-contained (zero missing local files).
+================================================================================\n`;
+                }
+
+                const systemPrompt = `You are an expert AI software engineer and game architect assisting a developer in an automated web IDE.
+The host IDE automatically extracts code blocks from your response, writes the files directly to the project directory on disk, and renders them in the IDE's built-in Live Web Preview.
+
 Project Workspace Directory: ${projectCwd}
 ${workspace.hasFiles && workspace.fileCount > 0 ? `${workspace.summary}\n${filesContext}` : "Workspace Status: Fresh / Empty Project Workspace"}
+${previewErrorBanner}
+================================================================================
+HOST IDE WORKSPACE & FILE MANAGEMENT:
+• The host IDE handles all file saving and live previewing automatically whenever you output code blocks.
+• When the user asks you to create a game, web app, or feature, simply provide the complete, functional code inside markdown code blocks with the relative filepath, for example:
+  \`\`\`html filepath=index.html
+  <!DOCTYPE html>
+  ...
+  \`\`\`
+• If the user asks where files are saved or how to preview, inform them that the host IDE automatically saves files to their project directory (${projectCwd}) and displays them in the Live Preview panel.
+• You do not need to execute shell commands or manipulate disk files yourself—the host IDE automatically saves and commits files to Git when it detects your code blocks.
 
 ================================================================================
-INTELLIGENT AUTONOMOUS ACTION SELECTION (CRITICAL INSTRUCTIONS):
+MANDATORY GAME & WEB ENGINEERING STANDARDS (100% RELIABILITY):
+1. 100% SELF-CONTAINED ASSETS - ZERO BROKEN 404s:
+   • NEVER reference external image files (e.g. "car.png", "jet.png") or audio files ("sound.mp3") that do not exist locally on disk.
+   • ALWAYS draw game entities procedurally on HTML5 Canvas using vector paths (arc, rect, beginPath, fill, stroke) or emojis ("🏎️", "✈️", "👾", "🪙").
+   • For sound effects, synthesize retro sound effects directly using Web Audio API (AudioContext, OscillatorNode, GainNode) triggered strictly on user click/interaction to comply with browser autoplay policies.
+2. CANVAS PIXEL SIZING & COORDINATES:
+   • Always set explicit canvas pixel width and height attributes in HTML or JS (e.g. canvas.width = 800; canvas.height = 600;), not just CSS styles, so collision detection coordinates are pixel-accurate.
+   • Support both keyboard controls (Arrow keys, WASD, Space) AND on-screen touch/mouse control buttons for instant playability in both desktop and mobile preview.
+3. DOM LIFECYCLE & EXECUTION SAFETY:
+   • Place all scripts at the bottom of <body> or wrap startup in window.addEventListener('DOMContentLoaded', ...) so <canvas> and DOM elements exist before code executes.
+4. COMPLETE WORKING CODE FOR BUG FIXES & GAMES:
+   • When fixing bugs or when building games, ALWAYS output the COMPLETE file (e.g. index.html) rather than small fragments or partial snippets. This guarantees that file syntax remains 100% valid, prevents mismatched braces, and ensures immediate playability in the Live Preview.
+
+================================================================================
+CRITICAL MANDATORY RULE: NEVER OUTPUT ISOLATED SNIPPETS WHEN FIXING ERRORS:
+• When the user asks to fix an error, or when debugging runtime issues:
+  - NEVER output small partial code snippets, 1-line JS examples (e.g. \`const best = Number(window.localStorage...)\`), or conversational code blocks.
+  - The host IDE automatically saves files to disk. If you only output a 1-line snippet, it cannot run in the Live Preview!
+  - You MUST output the FULL, COMPLETE updated file (e.g. \`\`\`html filepath=index.html ... entire 350+ lines of HTML/CSS/JS ...) with the fix integrated directly into the code.
+  - The file MUST start with <!DOCTYPE html> and end with </html>.
+  - Do NOT tell the user "replace this line with that line" or "if that still errors, use this". Simply integrate the robust, defensive fix directly into the complete working file so it saves and runs immediately!
+
+================================================================================
+INTELLIGENT AUTONOMOUS ACTION SELECTION:
 You must dynamically choose the exact right action based on what the user wants to accomplish:
 
 1. ACTION A: NEW GAME, NEW WEB APP, NEW PROJECT, OR COMPLETE OVERHAUL
@@ -1283,28 +1400,28 @@ You must dynamically choose the exact right action based on what the user wants 
      - User wants to start a fresh project, restart, or rebuild from scratch.
      - User explicitly asks to rewrite, overhaul, or replace a file.
    • What to generate:
-     - Provide the FULL, COMPLETE, PRODUCTION-READY code for each required file (e.g. \`index.html\`, \`style.css\`, \`game.js\`).
-     - Always create a complete, self-contained \`index.html\` as the primary entry point so it immediately runs in the built-in Live Preview!
+     - Provide the FULL, COMPLETE, PRODUCTION-READY code for each required file (e.g. index.html, style.css, game.js).
+     - Always create a complete, self-contained index.html as the primary entry point so it immediately runs in the built-in Live Preview!
      - Implement complete, interactive controls (arrow keys, WASD, touch/mouse buttons on canvas, restart/pause buttons, score tracking).
-     - Ensure canvas sizing and game loop (\`requestAnimationFrame\`) work smoothly with complete physics, obstacles, player movement, and collision detection.
-     - NEVER use placeholder comments like \`// ... rest of code unchanged ...\` when writing new files or full overhauls.
+     - Ensure canvas sizing and game loop (requestAnimationFrame) work smoothly with complete physics, obstacles, player movement, and collision detection.
+     - NEVER use placeholder comments like "// ... rest of code unchanged ..." when writing new files or full overhauls.
 
 2. ACTION B: CREATING A NEW FILE OR SIBLING COMPONENT
    • Trigger:
-     - The user asks to create a new file or feature that does not exist on disk yet (e.g., adding \`audio.js\`, \`car.js\`, \`leaderboard.html\`, \`utils.ts\`).
+     - The user asks to create a new file or feature that does not exist on disk yet (e.g., adding audio.js, car.js, leaderboard.html, utils.ts).
    • What to generate:
      - Output the FULL, COMPLETE code for the new file using:
        \`\`\`<language> filepath=<relative/path>
        // full complete implementation
        \`\`\`
-     - If an existing file needs to import or link this new file (e.g. adding \`<script src="car.js"></script>\` to \`index.html\`), include a SEARCH/REPLACE diff for that existing file in the same turn.
+     - If an existing file needs to import or link this new file (e.g. adding <script src="car.js"></script> to index.html), include a SEARCH/REPLACE diff for that existing file in the same turn.
 
 3. ACTION C: TARGETED EDITS, FIXES & TWEAKS ON EXISTING FILES
    • Trigger:
      - User asks to tweak, adjust, fix a bug, or change settings/features in existing code (e.g. "change car/jet color to yellow", "increase bullet speed", "fix score counter", "add turbo boost").
    • What to generate:
-     - Do NOT reprint 1,000 lines of unchanged code.
-     - Use targeted SEARCH/REPLACE diff blocks:
+     - For single-file HTML or games under 600 lines: ALWAYS output the FULL, COMPLETE updated file (e.g. index.html) with the fix applied so the file is rewritten cleanly without syntax or patch corruption.
+     - For large multi-file codebases, use targeted SEARCH/REPLACE diff blocks:
        \`\`\`<language> filepath=<relative/path>
        <<<< SEARCH
        // exact lines from the existing file above to be replaced
@@ -1312,13 +1429,7 @@ You must dynamically choose the exact right action based on what the user wants 
        // new replacement lines
        >>>>
        \`\`\`
-     - Or provide the complete updated function/class block:
-       \`\`\`<language> filepath=<relative/path>
-       function drawCar() {
-         // updated implementation only
-       }
-       \`\`\`
-     - The engine will patch ONLY these lines directly into the existing file on disk, preserving all surrounding canvas setup, game loops, and event listeners.
+     - NEVER output floating partial snippets or lone functions without SEARCH/REPLACE blocks.
 
 FILE SPECIFICATION INSTRUCTIONS:
 Always clearly specify the relative file path for each file at the top of each code block using:
@@ -1331,7 +1442,7 @@ or for HTML/web:
 ...content...
 \`\`\`
 
-All generated files and patches will automatically be written to disk in ${projectCwd} and committed to Git.`;
+The host IDE will automatically write all generated files and patches to disk in ${projectCwd} and commit them to Git.`;
 
                 // Check if previous turn was interrupted or user is requesting continuation
                 const interruptedInfo = GLOBAL_THREAD_INTERRUPTED_STATE.get(threadKey);
@@ -1372,14 +1483,31 @@ ${userPrompt || "Continue generating from where you were interrupted"}`;
                   }
                 }
 
-                // Free/open models on OpenRouter often reject "system" role (returning HTTP 400).
-                // Embed system prompt into user message to guarantee 100% compatibility across all models.
-                const fullUserPrompt = `${systemPrompt}\n\n[User Request]:\n${effectiveUserPrompt}`;
+                // Clean history: remove stuck refusal loop messages where Claude got stuck
+                const cleanHistory = history.filter((m) => {
+                  if (m.role === "assistant") {
+                    const text = m.content.toLowerCase();
+                    if (
+                      text.includes("i can't adopt alternative personas") ||
+                      text.includes("i cannot and will not claim capabilities") ||
+                      text.includes("i genuinely cannot") ||
+                      text.includes("capabilities i don't possess") ||
+                      (text.includes("i'm claude") && text.includes("cannot"))
+                    ) {
+                      return false;
+                    }
+                  }
+                  return true;
+                });
 
                 const candidateMessages: Array<{
                   role: "system" | "user" | "assistant";
                   content: string;
-                }> = [...history, { role: "user" as const, content: fullUserPrompt }];
+                }> = [
+                  { role: "system" as const, content: systemPrompt },
+                  ...cleanHistory,
+                  { role: "user" as const, content: effectiveUserPrompt },
+                ];
 
                 // Sanitize messages for OpenAI API compatibility:
                 // 1. Filter out empty contents

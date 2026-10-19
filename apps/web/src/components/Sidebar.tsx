@@ -4565,6 +4565,17 @@ export default function Sidebar() {
           case "project-settings":
             if (projectGroup) openProjectSettings(projectGroup);
             return;
+          case "file-manager":
+            if (workspacePath) {
+              terminalStore.setSelectedProject(
+                session.projectId ?? null,
+                projectGroup?.displayName ?? null,
+                workspacePath,
+              );
+              terminalStore.setActiveCwd(workspacePath);
+              terminalStore.setFileExplorerOpen(true);
+            }
+            return;
           case "copy-path":
             if (workspacePath) copyPathToClipboard(workspacePath, { path: workspacePath });
             return;
@@ -4684,6 +4695,17 @@ export default function Sidebar() {
                   ? null
                   : threadProjectGroup.projectKey,
               );
+            }
+            return;
+          case "file-manager":
+            if (threadWorkspacePath) {
+              terminalStore.setSelectedProject(
+                thread.projectId ?? null,
+                threadProjectGroup?.displayName ?? null,
+                threadWorkspacePath,
+              );
+              terminalStore.setActiveCwd(threadWorkspacePath);
+              terminalStore.setFileExplorerOpen(true);
             }
             return;
           case "project-settings":
