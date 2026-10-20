@@ -5,6 +5,7 @@ import { Spinner } from "~/components/ui/spinner";
 import {
   ArchiveIcon,
   ArrowUpDownIcon,
+  CheckIcon,
   DownloadCloudIcon,
   EraserIcon,
   FileArchiveIcon,
@@ -22,6 +23,7 @@ import {
   Trash2Icon,
   TriangleAlertIcon,
   UploadCloudIcon,
+  XIcon,
 } from "lucide-react";
 import { downloadProjectZip } from "~/lib/projectZipUtils";
 import {
@@ -659,12 +661,16 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
       threadRef,
     ],
   );
+  const renameStartTimeRef = useRef(0);
   const handleRenameInputRef = useCallback(
     (element: HTMLInputElement | null) => {
       if (element && renamingInputRef.current !== element) {
         renamingInputRef.current = element;
-        element.focus();
-        element.select();
+        renameStartTimeRef.current = Date.now();
+        requestAnimationFrame(() => {
+          element.focus();
+          element.select();
+        });
       }
     },
     [renamingInputRef],
@@ -691,6 +697,10 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     [cancelRename, commitRename, renamingCommittedRef, renamingTitle, thread.title, threadRef],
   );
   const handleRenameInputBlur = useCallback(() => {
+    if (Date.now() - renameStartTimeRef.current < 250) {
+      renamingInputRef.current?.focus();
+      return;
+    }
     if (!renamingCommittedRef.current) {
       void commitRename(threadRef, renamingTitle, thread.title);
     }
@@ -701,6 +711,14 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
   const handleRenameInputClick = useCallback((event: React.MouseEvent<HTMLInputElement>) => {
     event.stopPropagation();
   }, []);
+  const handleStartRename = useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      startThreadRename(threadKey, thread.title);
+    },
+    [startThreadRename, threadKey, thread.title],
+  );
   const handleConfirmArchiveRef = useCallback(
     (element: HTMLButtonElement | null) => {
       if (element) {
@@ -841,16 +859,52 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
           ) : null}
           {threadStatus && <ThreadStatusLabel status={threadStatus} />}
           {canOperateThread && renamingThreadKey === threadKey ? (
-            <input
-              ref={handleRenameInputRef}
-              className="min-w-0 flex-1 truncate rounded border border-ring bg-transparent px-0.5 text-sm outline-none"
-              value={renamingTitle}
-              onChange={handleRenameInputChange}
-              onKeyDown={handleRenameInputKeyDown}
-              onBlur={handleRenameInputBlur}
-              onClick={handleRenameInputClick}
-              onDoubleClick={handleRenameInputClick}
-            />
+            <div
+              className="flex min-w-0 flex-1 items-center gap-1"
+              onClick={(e) => e.stopPropagation()}
+              onDoubleClick={(e) => e.stopPropagation()}
+            >
+              <input
+                ref={handleRenameInputRef}
+                className="min-w-0 flex-1 truncate rounded border border-ring bg-background px-1.5 py-0.5 text-xs text-foreground outline-none shadow-xs"
+                value={renamingTitle}
+                onChange={handleRenameInputChange}
+                onKeyDown={handleRenameInputKeyDown}
+                onBlur={handleRenameInputBlur}
+                onClick={handleRenameInputClick}
+                onDoubleClick={handleRenameInputClick}
+              />
+              <button
+                type="button"
+                title="Save (Enter)"
+                aria-label="Save rename"
+                className="inline-flex size-5 shrink-0 items-center justify-center rounded text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/15 active:scale-95 transition-all cursor-pointer"
+                onPointerDown={(e) => e.preventDefault()}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  renamingCommittedRef.current = true;
+                  void commitRename(threadRef, renamingTitle, thread.title);
+                }}
+              >
+                <CheckIcon className="size-3.5" />
+              </button>
+              <button
+                type="button"
+                title="Cancel (Esc)"
+                aria-label="Cancel rename"
+                className="inline-flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted active:scale-95 transition-all cursor-pointer"
+                onPointerDown={(e) => e.preventDefault()}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  renamingCommittedRef.current = true;
+                  cancelRename();
+                }}
+              >
+                <XIcon className="size-3.5" />
+              </button>
+            </div>
           ) : (
             <Tooltip>
               <TooltipTrigger
@@ -926,9 +980,27 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
               >
                 Confirm
               </button>
-            ) : canOperateThread && !isThreadRunning ? (
-              appSettingsConfirmThreadArchive ? (
-                <div className="pointer-events-none absolute top-1/2 right-0.5 -translate-y-1/2 opacity-0 transition-opacity duration-150 max-sm:pointer-events-auto max-sm:opacity-100 group-hover/menu-sub-item:pointer-events-auto group-hover/menu-sub-item:opacity-100 group-focus-within/menu-sub-item:pointer-events-auto group-focus-within/menu-sub-item:opacity-100">
+            ) : canOperateThread && !isThreadRunning && renamingThreadKey !== threadKey ? (
+              <div className="pointer-events-none absolute top-1/2 right-0.5 -translate-y-1/2 flex items-center gap-0.5 opacity-0 transition-opacity duration-150 max-sm:pointer-events-auto max-sm:opacity-100 group-hover/menu-sub-item:pointer-events-auto group-hover/menu-sub-item:opacity-100 group-focus-within/menu-sub-item:pointer-events-auto group-focus-within/menu-sub-item:opacity-100 bg-sidebar/90 dark:bg-zinc-900/90 backdrop-blur-xs rounded px-0.5 shadow-xs">
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <button
+                        type="button"
+                        data-thread-selection-safe
+                        data-testid={`thread-rename-${thread.id}`}
+                        aria-label={`Rename ${thread.title}`}
+                        className={SIDEBAR_ICON_ACTION_BUTTON_CLASS}
+                        onPointerDown={stopPropagationOnPointerDown}
+                        onClick={handleStartRename}
+                      >
+                        <SquarePenIcon className="size-3.5" />
+                      </button>
+                    }
+                  />
+                  <TooltipPopup side="top">Rename chat</TooltipPopup>
+                </Tooltip>
+                {appSettingsConfirmThreadArchive ? (
                   <button
                     type="button"
                     data-thread-selection-safe
@@ -940,12 +1012,10 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                   >
                     <ArchiveIcon className="size-3.5" />
                   </button>
-                </div>
-              ) : (
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <div className="pointer-events-none absolute top-1/2 right-0.5 -translate-y-1/2 opacity-0 transition-opacity duration-150 max-sm:pointer-events-auto max-sm:opacity-100 group-hover/menu-sub-item:pointer-events-auto group-hover/menu-sub-item:opacity-100 group-focus-within/menu-sub-item:pointer-events-auto group-focus-within/menu-sub-item:opacity-100">
+                ) : (
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
                         <button
                           type="button"
                           data-thread-selection-safe
@@ -957,12 +1027,12 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                         >
                           <ArchiveIcon className="size-3.5" />
                         </button>
-                      </div>
-                    }
-                  />
-                  <TooltipPopup side="top">Archive</TooltipPopup>
-                </Tooltip>
-              )
+                      }
+                    />
+                    <TooltipPopup side="top">Archive</TooltipPopup>
+                  </Tooltip>
+                )}
+              </div>
             ) : null}
             <span className={threadMetaClassName}>
               <span className="inline-flex items-center gap-1">
@@ -3134,7 +3204,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
           ...(thread.branch
             ? [{ id: "new-thread-on-branch", label: `New thread on ${thread.branch}` }]
             : []),
-          { id: "rename", label: "Rename thread", disabled: !canOperateThread },
+          { id: "rename", label: "Rename chat", icon: "pencil", disabled: !canOperateThread },
           { id: "mark-unread", label: "Mark unread" },
           { id: "copy-path", label: "Copy Path" },
           { id: "copy-thread-id", label: "Copy Thread ID" },
