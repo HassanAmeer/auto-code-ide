@@ -1,4 +1,4 @@
-import { assert, expect, it } from "vitest";
+import { assert, expect, it } from "@effect/vitest";
 
 import {
   buildPairingUrl,

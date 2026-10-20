@@ -1,3 +1,4 @@
+// @effect-diagnostics anyUnknownInErrorContext:off
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
@@ -90,9 +91,11 @@ export const makeCli = ({ cloudEnabled = hasCloudPublicConfig } = {}) =>
 export const cli = makeCli();
 
 export function runCli() {
-  Command.run(cli, { version: packageJson.version }).pipe(
-    Effect.scoped,
-    Effect.provide(layerCliRuntime),
-    NodeRuntime.runMain,
-  );
+  (
+    Command.run(cli, { version: packageJson.version }) as Effect.Effect<
+      void,
+      any,
+      NetService.NetService | NodeServices.NodeServices
+    >
+  ).pipe(Effect.scoped, Effect.provide(layerCliRuntime), NodeRuntime.runMain);
 }

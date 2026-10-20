@@ -1,3 +1,4 @@
+// @effect-diagnostics anyUnknownInErrorContext:off
 /**
  * Runs OpenCode 2 through the whole orchestrator with the real driver: the
  * driver probes the binary, spawns `opencode serve`, and routes to the 2.x

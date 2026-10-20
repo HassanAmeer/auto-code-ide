@@ -1370,10 +1370,7 @@ export const makeMuseAdapterV2 = Effect.fn("makeMuseAdapterV2")(function* (
             {
               binaryPath: options.settings.binaryPath || "muse",
               cwd,
-              environment: McpProviderSession.withAgentDeviceEnvironment(
-                options.environment,
-                mcpSession,
-              ),
+              environment: options.environment,
               runtimeMode: input.runtimePolicy.runtimeMode,
             },
             options.createHost,

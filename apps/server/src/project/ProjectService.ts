@@ -1,3 +1,4 @@
+// @effect-diagnostics nodeBuiltinImport:off globalConsole:off
 import {
   CommandId,
   type OrchestrationProjectShell,

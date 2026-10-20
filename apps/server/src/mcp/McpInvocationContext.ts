@@ -95,6 +95,22 @@ export const requireMcpCapability = <const C extends McpCapability>(
     Effect.withSpan("mcp.requireCapability"),
   );
 
+const missingPreviewCapability = (
+  invocation: McpInvocationScope,
+): PreviewAutomationUnavailableError => {
+  const fields = {
+    environmentId: invocation.environmentId,
+    ...(invocation.thread === undefined
+      ? {}
+      : {
+          threadId: invocation.thread.threadId,
+          providerSessionId: invocation.thread.providerSessionId,
+          providerInstanceId: invocation.thread.providerInstanceId,
+        }),
+  };
+  return new PreviewAutomationUnavailableError({ capability: "preview", ...fields });
+};
+
 /**
  * Preview tabs belong to the calling thread, so their capability is only ever
  * granted to thread callers. A scope that carries one without a thread is
@@ -102,12 +118,16 @@ export const requireMcpCapability = <const C extends McpCapability>(
  */
 export const requireThreadMcpCapability = <const C extends "preview">(
   capability: C,
-): Effect.Effect<McpThreadInvocationScope, McpCapabilityError<C>, McpInvocationContext> =>
+): Effect.Effect<
+  McpThreadInvocationScope,
+  PreviewAutomationUnavailableError,
+  McpInvocationContext
+> =>
   McpInvocationContext.pipe(
     Effect.filterOrFail(
       (invocation): invocation is McpThreadInvocationScope =>
         invocation.capabilities.has(capability) && invocation.thread !== undefined,
-      (invocation) => missingCapability(invocation, capability) as McpCapabilityError<C>,
+      (invocation) => missingPreviewCapability(invocation),
     ),
     Effect.withSpan("mcp.requireCapability"),
   );

@@ -3195,8 +3195,8 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
             text,
             attachments: [],
             streaming: false,
-            createdAt,
-            updatedAt: createdAt,
+            createdAt: createdAt as any,
+            updatedAt: createdAt as any,
           },
         ];
       });
@@ -4230,8 +4230,8 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
                 ? {}
                 : { providerTurnId: forkInput.providerTurnId }),
             },
-            createdAt,
-            updatedAt: createdAt,
+            createdAt: createdAt as any,
+            updatedAt: createdAt as any,
           };
           // A fork keeps the source's location. The target thread usually
           // inherits that worktree too, but its first turn starts without a

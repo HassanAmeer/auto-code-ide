@@ -545,7 +545,7 @@ export const ProjectCreateNewResult = Schema.Struct({
   projectId: ProjectId,
   workspaceRoot: TrimmedNonEmptyString,
   /** Why the first commit failed. The project and its files exist either way. */
-  commitError: Schema.optionalKey(TrimmedNonEmptyString),
+  commitError: Schema.optional(TrimmedNonEmptyString),
 });
 export type ProjectCreateNewResult = typeof ProjectCreateNewResult.Type;
 
@@ -565,7 +565,7 @@ export type ProjectImportUploadedInput = typeof ProjectImportUploadedInput.Type;
 export const ProjectImportUploadedResult = Schema.Struct({
   projectId: ProjectId,
   workspaceRoot: TrimmedNonEmptyString,
-  commitError: Schema.optionalKey(TrimmedNonEmptyString),
+  commitError: Schema.optional(TrimmedNonEmptyString),
 });
 export type ProjectImportUploadedResult = typeof ProjectImportUploadedResult.Type;
 
@@ -578,7 +578,7 @@ export type ProjectImportZipInput = typeof ProjectImportZipInput.Type;
 export const ProjectImportZipResult = Schema.Struct({
   projectId: ProjectId,
   workspaceRoot: TrimmedNonEmptyString,
-  commitError: Schema.optionalKey(TrimmedNonEmptyString),
+  commitError: Schema.optional(TrimmedNonEmptyString),
 });
 export type ProjectImportZipResult = typeof ProjectImportZipResult.Type;
 

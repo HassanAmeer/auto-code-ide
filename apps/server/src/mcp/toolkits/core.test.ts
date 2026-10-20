@@ -50,7 +50,6 @@ import { AttachmentToolkit } from "./attachment/tools.ts";
 import * as AttachmentHandlers from "./attachment/handlers.ts";
 import { ThreadToolkit } from "./thread/tools.ts";
 import { WorktreeToolkit } from "./worktree/tools.ts";
-import { DeviceToolkit } from "./device/tools.ts";
 
 // Effect returns a declared tool failure as `isError` with its encoded payload
 // as JSON text, never as `structuredContent`.
@@ -80,7 +79,6 @@ it("publishes unique tool names with reference-free object-root inputs", () => {
     ProjectToolkit,
     EnvironmentToolkit,
     PreviewControlsToolkit,
-    DeviceToolkit,
     PullRequestsToolkit,
     HtmlToolkit,
   ]) {

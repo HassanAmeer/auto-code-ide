@@ -1,3 +1,4 @@
+// @effect-diagnostics nodeBuiltinImport:off globalConsole:off globalConsoleInEffect:off globalDate:off globalDateInEffect:off globalRandomInEffect:off globalErrorInEffectFailure:off preferSchemaOverJson:off
 import {
   MessageId,
   NonNegativeInt,

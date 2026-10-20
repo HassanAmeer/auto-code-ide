@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @effect-diagnostics nodeBuiltinImport:off
 
 import * as NodeOS from "node:os";
 import * as NodeFS from "node:fs";

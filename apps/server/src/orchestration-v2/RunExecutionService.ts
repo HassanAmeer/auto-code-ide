@@ -1293,13 +1293,8 @@ export const layer: Layer.Layer<
             ),
             Effect.catchCause((cause) =>
               Ref.get(rootRunFinalized).pipe(
-                Effect.flatMap((finalized) => {
-                  try {
-                    console.error("EXACT INGESTION CAUSE:", Cause.pretty(cause));
-                  } catch (e) {
-                    console.error("EXACT INGESTION CAUSE (raw):", cause);
-                  }
-                  return Effect.logWarning("orchestration V2 provider event ingestion failed", {
+                Effect.flatMap((finalized) =>
+                  Effect.logWarning("orchestration V2 provider event ingestion failed", {
                     runId: input.run.id,
                     cause,
                   }).pipe(
@@ -1361,8 +1356,8 @@ export const layer: Layer.Layer<
                           cause: { ingest: cause, write: writeCause },
                         }),
                     ),
-                  );
-                }),
+                  ),
+                ),
               ),
             ),
             Effect.ensuring(eventSubscription.close),

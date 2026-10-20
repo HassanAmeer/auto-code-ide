@@ -22,6 +22,7 @@
       {
         "name": "@effect/language-service",
         "namespaceImportPackages": ["@effect/platform-node", "effect"],
+        "allowedDuplicatedPackages": ["effect"],
         "diagnosticSeverity": {
           "anyUnknownInErrorContext": "error",
           "unsafeEffectTypeAssertion": "error",

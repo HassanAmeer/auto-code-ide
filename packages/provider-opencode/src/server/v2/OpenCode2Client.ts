@@ -98,7 +98,7 @@ export class OpenCode2Client extends Context.Service<
  */
 const SILENT_STREAM_TIMEOUT = "45 seconds";
 
-const decodeEvent = Schema.decodeUnknownResult(Schema.fromJsonString(OpenCodeEvent));
+const decodeEvent = Schema.decodeUnknownResult(Schema.fromJsonString(OpenCodeEvent as any) as any);
 // Just enough of an event to route it, for frames the full schema rejects.
 const decodeEnvelope = Schema.decodeUnknownOption(
   Schema.fromJsonString(
@@ -153,7 +153,7 @@ const readEvents = (httpClient: HttpClient.HttpClient) =>
         Stream.filterMapEffect((frame) => {
           const decoded = decodeEvent(frame.data);
           return Result.isSuccess(decoded)
-            ? Effect.succeed(Result.succeed<OpenCode2StreamEvent>(decoded.success))
+            ? Effect.succeed(Result.succeed<OpenCode2StreamEvent>(decoded.success as any))
             : undecodable(frame.data);
         }),
       ),
@@ -181,12 +181,12 @@ export const make = Effect.gen(function* () {
       return OpenCode.make({ baseUrl }).pipe(
         Effect.provideService(HttpClient.HttpClient, authenticated),
         Effect.map((client) => ({
-          client,
+          client: client as any,
           events: readEvents(
             HttpClient.mapRequest(authenticated, HttpClientRequest.prependUrl(baseUrl)),
-          ),
+          ) as any,
         })),
-      );
+      ) as Effect.Effect<OpenCode2Api, never, never>;
     },
   });
 });

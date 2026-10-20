@@ -127,7 +127,7 @@ export class ManagedProjectFolders extends Context.Service<
       {
         readonly projectId: ProjectId;
         readonly workspaceRoot: string;
-        readonly commitError?: string;
+        readonly commitError?: string | undefined;
       },
       NamedProjectError
     >;
@@ -138,7 +138,7 @@ export class ManagedProjectFolders extends Context.Service<
       {
         readonly projectId: ProjectId;
         readonly workspaceRoot: string;
-        readonly commitError?: string;
+        readonly commitError?: string | undefined;
       },
       NamedProjectError
     >;
@@ -150,7 +150,7 @@ export class ManagedProjectFolders extends Context.Service<
       {
         readonly projectId: ProjectId;
         readonly workspaceRoot: string;
-        readonly commitError?: string;
+        readonly commitError?: string | undefined;
       },
       NamedProjectError
     >;

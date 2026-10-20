@@ -123,7 +123,7 @@ describe("CustomDriver", () => {
       if (session.injectHistory) {
         yield* session.injectHistory({
           providerThread: th,
-          messages: [{ itemId: "item-1" as any, role: "user", text: "hello" }],
+          messages: [{ itemId: "item-1" as any, role: "user", text: "hello" } as any],
           context: "system instruction",
         });
       }
