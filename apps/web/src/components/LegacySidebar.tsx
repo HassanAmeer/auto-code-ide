@@ -768,7 +768,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
   return (
     <SidebarMenuSubItem
       ref={rowRef}
-      className="group/thread-row relative w-full"
+      className="group/thread-row relative w-full [content-visibility:auto] [contain-intrinsic-size:auto_32px]"
       data-thread-item
       {...fileDropHandlers}
       onMouseLeave={handleMouseLeave}

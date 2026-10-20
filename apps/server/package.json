@@ -1,6 +1,6 @@
 {
   "name": "t3",
-  "version": "1.0",
+  "version": "1.0.0",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -44,6 +44,7 @@
     "@t3tools/provider-grok": "workspace:*",
     "@t3tools/provider-muse": "workspace:*",
     "@t3tools/provider-opencode": "workspace:*",
+    "@t3tools/provider-opencodebypasssetup": "workspace:*",
     "@t3tools/provider-pi": "workspace:*",
     "diff": "8.0.3",
     "effect": "catalog:",
