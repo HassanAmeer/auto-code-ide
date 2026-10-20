@@ -7,8 +7,35 @@ export interface FormattedCompactError {
   readonly shortModel: string | null;
   readonly fullModel: string | null;
   readonly shortReason: string;
+  readonly singleLineDetail: string;
   readonly fullDetails: string;
   readonly isRetryOrModelError: boolean;
+}
+
+/**
+ * Extract a concise, single-line error summary suitable for subtitles.
+ */
+export function extractSingleLineDetail(rawText: string | null | undefined): string {
+  if (!rawText) return "An unexpected error occurred.";
+  const firstNonEmpty =
+    rawText
+      .split("\n")
+      .map((s) => s.trim())
+      .find((s) => s.length > 0 && !s.startsWith("```")) || rawText;
+
+  let clean = firstNonEmpty.trim();
+
+  // If there's a repeated "provider — Bad gateway..." or colon-chain pattern, extract the most specific part
+  const parts = clean.split(/(?::\s*|—\s*)/);
+  if (parts.length > 2) {
+    const lastPart = parts[parts.length - 1]?.trim();
+    if (lastPart && lastPart.length > 12) {
+      return lastPart;
+    }
+  }
+
+  clean = clean.replace(/^(error:\s*)+/i, "");
+  return clean;
 }
 
 /**
@@ -103,11 +130,14 @@ export function parseErrorDetails(
     statusCode || shortModel || /retry|rate limit|timeout|provider/i.test(text),
   );
 
+  const singleLineDetail = extractSingleLineDetail(text);
+
   return {
     statusCode,
     shortModel,
     fullModel: detectedModel,
     shortReason,
+    singleLineDetail,
     fullDetails: text,
     isRetryOrModelError,
   };

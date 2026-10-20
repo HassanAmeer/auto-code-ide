@@ -3084,6 +3084,209 @@ function v2EventPresentation(item: OrchestrationV2TurnItem): {
   }
 }
 
+function CupertinoTimelineErrorCard({
+  rawError,
+  errorType,
+  explicitModel,
+  isWarning,
+  timestamp,
+  visibility,
+  sourceThreadId,
+  retryAction,
+  onContinue,
+  isInterrupted,
+  inspectorContent,
+}: {
+  rawError: string;
+  errorType?: string | undefined;
+  explicitModel?: string | null | undefined;
+  isWarning?: boolean | undefined;
+  timestamp?: ReactNode | undefined;
+  visibility?: "local" | "inherited" | "synthetic" | undefined;
+  sourceThreadId?: string | null | undefined;
+  retryAction?: { label: string; onRetry: () => void } | null | undefined;
+  onContinue?: (() => void) | undefined;
+  isInterrupted?: boolean | undefined;
+  inspectorContent?: ReactNode | undefined;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const errorInfo = parseErrorDetails(rawError, explicitModel);
+
+  const displayStatusCode = errorInfo.statusCode
+    ? errorInfo.statusCode.startsWith("HTTP") || errorInfo.statusCode === "Timeout"
+      ? errorInfo.statusCode
+      : `HTTP ${errorInfo.statusCode}`
+    : "Error";
+
+  const resolvedType =
+    errorType || (isWarning ? "Usage limit reached" : errorInfo.shortReason || "Provider error");
+
+  const subtitle = errorInfo.singleLineDetail || errorInfo.shortReason || "An error occurred";
+
+  const handleCopy = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard?.writeText(errorInfo.fullDetails || rawError);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div
+      className={cn(
+        "group my-1.5 overflow-hidden rounded-lg border text-xs transition-all duration-150 backdrop-blur-xs select-none",
+        isWarning
+          ? "border-amber-500/25 bg-amber-500/[0.04]"
+          : "border-rose-500/25 bg-rose-500/[0.04] dark:bg-rose-950/20",
+      )}
+      data-v2-item-type="error"
+      data-v2-item-visibility={visibility}
+    >
+      {/* Title Bar: Status Code, Error Type, Model Badge, Timestamp, Arrow button */}
+      <div
+        className="flex min-w-0 items-center justify-between gap-2 px-3 pt-2 pb-1 cursor-pointer select-none hover:bg-rose-500/[0.03] transition-colors"
+        onClick={() => setExpanded((v) => !v)}
+      >
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
+          <CircleAlertIcon
+            className={cn(
+              "size-4 shrink-0",
+              isWarning ? "text-amber-500" : "text-rose-500 dark:text-rose-400",
+            )}
+          />
+          <span
+            className={cn(
+              "shrink-0 font-mono text-3xs font-semibold px-1.5 py-0.5 rounded border leading-tight",
+              isWarning
+                ? "bg-amber-500/15 border-amber-500/30 text-amber-500"
+                : "bg-rose-500/15 border-rose-500/30 text-rose-500 dark:text-rose-400",
+            )}
+          >
+            {displayStatusCode}
+          </span>
+          <span className="shrink-0 font-semibold text-xs text-foreground/90 truncate">
+            {resolvedType}
+          </span>
+          {errorInfo.shortModel ? (
+            <span
+              className="shrink-0 font-mono text-3xs px-1.5 py-0.5 rounded bg-muted/60 border border-border/40 text-muted-foreground truncate max-w-[120px]"
+              title={errorInfo.fullModel || errorInfo.shortModel}
+            >
+              {errorInfo.shortModel}
+            </span>
+          ) : null}
+        </div>
+
+        {/* Right side controls: Timestamp & Arrow Button */}
+        <div className="flex shrink-0 items-center gap-1.5">
+          {timestamp ? (
+            <span className="text-3xs text-muted-foreground/70 font-mono">{timestamp}</span>
+          ) : null}
+
+          {onContinue && isInterrupted ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onContinue();
+              }}
+              className="shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded text-3xs font-medium bg-primary/10 hover:bg-primary/20 text-primary border border-primary/25 transition-colors cursor-pointer"
+              title="Resume / continue generation where it stopped"
+            >
+              <ChevronRightIcon className="size-2.5" />
+              <span>Continue</span>
+            </button>
+          ) : null}
+
+          {visibility && visibility !== "local" ? (
+            <span className="shrink-0 rounded bg-muted px-1 py-0.2 text-3xs text-muted-foreground">
+              {visibility === "inherited" ? "Inherited" : "Synthetic"}
+            </span>
+          ) : null}
+
+          {/* Right side arrow icon button: default collapsed, click to toggle */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setExpanded((v) => !v);
+            }}
+            className="shrink-0 inline-flex size-6 items-center justify-center rounded-md text-muted-foreground/80 hover:text-foreground hover:bg-muted/40 transition-colors cursor-pointer"
+            title={expanded ? "Collapse details" : "Expand error details"}
+            aria-expanded={expanded}
+          >
+            <ChevronDownIcon
+              className={cn("size-4 transition-transform duration-200", expanded && "rotate-180")}
+            />
+          </button>
+        </div>
+      </div>
+
+      {/* Subtitle: 1 Line Details */}
+      <div
+        className="px-3 pb-2 pt-0 -mt-0.5 min-w-0 cursor-pointer"
+        onClick={() => setExpanded((v) => !v)}
+      >
+        <p
+          className="text-2xs text-muted-foreground/80 truncate font-normal ps-5.5 select-text"
+          title={subtitle}
+        >
+          {subtitle}
+        </p>
+      </div>
+
+      {/* Uncollapsed / Expanded details section */}
+      {expanded ? (
+        <div className="border-t border-rose-500/15 bg-muted/20 px-3.5 py-2.5 ps-8.5 animate-in fade-in duration-150 select-text">
+          {errorInfo.fullModel ? (
+            <div className="font-mono text-3xs text-muted-foreground mb-1.5">
+              Model: <span className="text-foreground font-medium">{errorInfo.fullModel}</span>
+            </div>
+          ) : null}
+
+          <div className="relative group/err-details">
+            <div className="text-2xs leading-relaxed text-muted-foreground font-mono bg-muted/40 dark:bg-muted/20 p-2.5 rounded-md border border-border/30 whitespace-pre-wrap break-all max-h-56 overflow-y-auto">
+              {rawError}
+            </div>
+            <button
+              type="button"
+              onClick={handleCopy}
+              className="absolute top-1.5 right-1.5 opacity-0 group-hover/err-details:opacity-100 transition-opacity px-1.5 py-0.5 rounded bg-background/90 border border-border/60 text-3xs text-muted-foreground hover:text-foreground cursor-pointer shadow-xs"
+              title="Copy error details"
+            >
+              {copied ? "Copied" : "Copy"}
+            </button>
+          </div>
+
+          {retryAction ? (
+            <div className="mt-2">
+              <Button
+                type="button"
+                size="xs"
+                variant="outline"
+                onClick={retryAction.onRetry}
+                className="gap-1 text-xs"
+              >
+                <RotateCcwIcon className="size-3" />
+                {retryAction.label}
+              </Button>
+            </div>
+          ) : null}
+
+          {sourceThreadId && visibility === "inherited" ? (
+            <p className="mt-1.5 font-mono text-3xs text-muted-foreground/60">
+              From {sourceThreadId}
+            </p>
+          ) : null}
+
+          {inspectorContent ? <div className="mt-2">{inspectorContent}</div> : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function CupertinoErrorRow({
   item,
   presentation,
@@ -3099,17 +3302,9 @@ function CupertinoErrorRow({
   row: Extract<TimelineRow, { kind: "event" }>;
   ctx: TimelineRowSharedState;
 }) {
-  const [dismissed, setDismissed] = useState(false);
-  const [expanded, setExpanded] = useState(false);
-
-  if (dismissed) return null;
-
-  const errorInfo = parseErrorDetails(presentation.detail || item.failure.message);
-  const Icon = presentation.icon;
-
-  const isInterrupted =
-    errorInfo.statusCode === "Timeout" ||
-    /timeout|timed out|stalled|interrupted/i.test(presentation.detail || item.failure.message);
+  const isInterrupted = /timeout|timed out|stalled|interrupted/i.test(
+    presentation.detail || item.failure.message,
+  );
 
   const handleResume = () => {
     if (ctx.threadRef) {
@@ -3123,125 +3318,27 @@ function CupertinoErrorRow({
   };
 
   return (
-    <div
-      className={cn(
-        "group my-1 overflow-hidden rounded-md border text-xs transition-all duration-150 backdrop-blur-xs",
-        presentation.tone === "warning" && "border-amber-500/25 bg-amber-500/[0.04]",
-        presentation.tone === "danger" &&
-          "border-rose-500/25 bg-rose-500/[0.04] dark:bg-rose-950/20",
-        presentation.tone === "success" && "border-emerald-500/25 bg-emerald-500/[0.04]",
-      )}
-      data-v2-item-type={item.type}
-      data-v2-item-visibility={visibility}
-    >
-      <div className="flex min-w-0 items-center gap-1.5 px-2.5 py-1 text-xs select-none">
-        <Icon
-          className={cn(
-            "size-3.5 shrink-0",
-            presentation.tone === "warning" && "text-amber-500",
-            presentation.tone === "danger" && "text-rose-500 dark:text-rose-400",
-            presentation.tone === "success" && "text-emerald-500",
-          )}
+    <CupertinoTimelineErrorCard
+      rawError={presentation.detail || item.failure.message}
+      errorType={presentation.label}
+      isWarning={presentation.tone === "warning"}
+      visibility={visibility}
+      sourceThreadId={sourceThreadId}
+      isInterrupted={isInterrupted}
+      onContinue={handleResume}
+      inspectorContent={
+        <V2ItemInspector
+          projectedItem={row.projectedItem}
+          environmentId={ctx.activeThreadEnvironmentId}
+          cwd={ctx.markdownCwd}
+          workspaceRoot={ctx.workspaceRoot}
+          onOpenThread={ctx.onOpenThread}
+          onOpenTurnDiff={ctx.onOpenTurnDiff}
+          onRollbackCheckpoint={ctx.onRollbackCheckpoint}
+          onImageExpand={ctx.onImageExpand}
         />
-        {errorInfo.statusCode ? (
-          <span className="shrink-0 font-mono text-3xs font-semibold px-1 py-0.2 rounded bg-rose-500/15 border border-rose-500/30 text-rose-500 dark:text-rose-400">
-            {errorInfo.statusCode}
-          </span>
-        ) : null}
-        {errorInfo.shortModel ? (
-          <span
-            className="shrink-0 font-mono font-medium text-foreground/90 text-2xs px-1 py-0.2 rounded bg-muted/40 border border-border/40"
-            title={errorInfo.fullModel || undefined}
-          >
-            {errorInfo.shortModel}
-          </span>
-        ) : (
-          <span className="shrink-0 font-medium text-foreground/90 text-2xs">
-            {presentation.label}
-          </span>
-        )}
-        <span className="text-muted-foreground/40 text-3xs">•</span>
-        <span className="min-w-0 flex-1 truncate text-muted-foreground/75 text-3xs font-normal">
-          {errorInfo.shortReason || presentation.detail}
-        </span>
-
-        {isInterrupted ? (
-          <button
-            type="button"
-            onClick={handleResume}
-            className="shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded text-3xs font-medium bg-primary/10 hover:bg-primary/20 text-primary border border-primary/25 transition-colors cursor-pointer"
-            title="Resume / continue generation where it stopped"
-          >
-            <ChevronRightIcon className="size-2.5" />
-            <span>Continue</span>
-          </button>
-        ) : null}
-
-        {visibility !== "local" ? (
-          <span className="shrink-0 rounded bg-muted px-1 py-0.2 text-3xs text-muted-foreground">
-            {visibility === "inherited" ? "Inherited" : "Synthetic"}
-          </span>
-        ) : null}
-
-        <button
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
-          className="shrink-0 inline-flex size-5 items-center justify-center rounded text-muted-foreground/70 hover:text-foreground hover:bg-muted/40 transition-colors cursor-pointer"
-          title={expanded ? "Collapse details" : "Expand error details"}
-        >
-          <ChevronDownIcon
-            className={cn("size-3.5 transition-transform duration-200", expanded && "rotate-180")}
-          />
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setDismissed(true)}
-          className="shrink-0 inline-flex size-5 items-center justify-center rounded text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer ml-0.5"
-          title="Dismiss error"
-        >
-          <XIcon className="size-3" />
-        </button>
-      </div>
-
-      {expanded ? (
-        <div className="border-t border-border/30 bg-muted/10 px-3 py-2 ps-6 animate-in fade-in duration-150">
-          {errorInfo.fullModel ? (
-            <div className="font-mono text-3xs text-muted-foreground mb-1">
-              Model: <span className="text-foreground">{errorInfo.fullModel}</span>
-            </div>
-          ) : null}
-          {presentation.detail ? (
-            <div className="text-2xs leading-relaxed text-muted-foreground font-mono bg-muted/20 p-2 rounded border border-border/30 whitespace-pre-wrap break-all max-h-48 overflow-y-auto">
-              <ChatMarkdown
-                text={presentation.detail}
-                cwd={ctx.markdownCwd}
-                threadRef={ctx.threadRef ?? undefined}
-                skills={ctx.skills}
-                lineBreaks
-              />
-            </div>
-          ) : null}
-          {visibility === "inherited" ? (
-            <p className="mt-1 font-mono text-3xs text-muted-foreground/65">
-              From {sourceThreadId}
-            </p>
-          ) : null}
-          <div className={presentation.detail ? "mt-2" : undefined}>
-            <V2ItemInspector
-              projectedItem={row.projectedItem}
-              environmentId={ctx.activeThreadEnvironmentId}
-              cwd={ctx.markdownCwd}
-              workspaceRoot={ctx.workspaceRoot}
-              onOpenThread={ctx.onOpenThread}
-              onOpenTurnDiff={ctx.onOpenTurnDiff}
-              onRollbackCheckpoint={ctx.onRollbackCheckpoint}
-              onImageExpand={ctx.onImageExpand}
-            />
-          </div>
-        </div>
-      ) : null}
-    </div>
+      }
+    />
   );
 }
 
@@ -5525,50 +5622,31 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
       failureItem.failure.code === ORCHESTRATION_V2_WORKSPACE_PREPARATION_FAILURE_CODE
         ? failureItem.runId
         : null;
+
+    const retryAction =
+      retryRunId !== null && onRetryWorkspacePreparation
+        ? {
+            label: "Retry",
+            onRetry: () => onRetryWorkspacePreparation(retryRunId),
+          }
+        : null;
+
     return (
-      <WorkLogRow
-        data-v2-item-type="error"
-        data-v2-item-visibility={workEntry.projectedItem?.visibility}
-        wrapLabel
-        icon={
-          <CircleAlertIcon
-            className={cn("size-4", warning ? "text-warning" : "text-destructive")}
-          />
-        }
-        label={
-          <span
-            className={cn("text-sm font-medium", warning ? "text-warning" : "text-destructive")}
-          >
-            {label}
-          </span>
-        }
-        trailing={
+      <CupertinoTimelineErrorCard
+        rawError={failureItem.failure.message}
+        errorType={label}
+        isWarning={warning}
+        timestamp={
           <TimelineRowTimestamp
             createdAt={workEntry.createdAt}
             timestampFormat={timestampFormat}
             alwaysVisible
           />
         }
-      >
-        {!warning ? (
-          <p className="ms-7 whitespace-pre-wrap break-words py-1 text-sm leading-relaxed text-foreground/80">
-            {failureItem.failure.message}
-          </p>
-        ) : null}
-        {retryRunId !== null && onRetryWorkspacePreparation ? (
-          <div className="ms-7 pb-1">
-            <Button
-              type="button"
-              size="xs"
-              variant="outline"
-              onClick={() => onRetryWorkspacePreparation(retryRunId)}
-            >
-              <RotateCcwIcon aria-hidden />
-              Retry
-            </Button>
-          </div>
-        ) : null}
-      </WorkLogRow>
+        visibility={workEntry.projectedItem?.visibility}
+        sourceThreadId={workEntry.projectedItem?.sourceThreadId}
+        retryAction={retryAction}
+      />
     );
   }
   const iconConfig = workToneIcon(workEntry.tone);

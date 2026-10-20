@@ -1935,10 +1935,16 @@ function ExecutionEngineSection({
         useComposerDraftStore.setState((state) => {
           const nextDrafts = { ...state.draftsByThreadKey };
           for (const k of Object.keys(nextDrafts)) {
-            nextDrafts[k] = {
-              ...nextDrafts[k],
-              modelSelection: selection,
-            };
+            const current = nextDrafts[k];
+            if (current) {
+              nextDrafts[k] = {
+                ...current,
+                modelSelectionByProvider: {
+                  ...current.modelSelectionByProvider,
+                  [selection.instanceId]: selection,
+                },
+              };
+            }
           }
           return {
             draftsByThreadKey: nextDrafts,
@@ -1965,10 +1971,16 @@ function ExecutionEngineSection({
         useComposerDraftStore.setState((state) => {
           const nextDrafts = { ...state.draftsByThreadKey };
           for (const k of Object.keys(nextDrafts)) {
-            nextDrafts[k] = {
-              ...nextDrafts[k],
-              modelSelection: selection,
-            };
+            const current = nextDrafts[k];
+            if (current) {
+              nextDrafts[k] = {
+                ...current,
+                modelSelectionByProvider: {
+                  ...current.modelSelectionByProvider,
+                  [selection.instanceId]: selection,
+                },
+              };
+            }
           }
           return {
             draftsByThreadKey: nextDrafts,
