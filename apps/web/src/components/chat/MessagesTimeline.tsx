@@ -3144,42 +3144,46 @@ function CupertinoTimelineErrorCard({
   return (
     <div
       className={cn(
-        "group my-1.5 overflow-hidden rounded-lg border text-xs transition-all duration-150 backdrop-blur-xs select-none",
+        "group my-1 overflow-hidden rounded-md border text-xs transition-all duration-150 select-none",
         isWarning
-          ? "border-amber-500/25 bg-amber-500/[0.04]"
-          : "border-rose-500/25 bg-rose-500/[0.04] dark:bg-rose-950/20",
+          ? expanded
+            ? "border-amber-500/25 bg-amber-500/[0.03]"
+            : "border-amber-500/10 bg-amber-500/[0.015]"
+          : expanded
+            ? "border-rose-500/20 bg-rose-500/[0.025] dark:border-rose-500/25 dark:bg-rose-950/15"
+            : "border-rose-500/10 bg-rose-500/[0.015] dark:border-rose-500/10 dark:bg-rose-950/10",
       )}
       data-v2-item-type="error"
       data-v2-item-visibility={visibility}
     >
       {/* Title Bar: Status Code, Error Type, Model Badge, Timestamp, Arrow button */}
       <div
-        className="flex min-w-0 items-center justify-between gap-2 px-3 pt-2 pb-1 cursor-pointer select-none hover:bg-rose-500/[0.03] transition-colors"
+        className="flex min-w-0 items-center justify-between gap-1.5 px-2.5 py-1.5 cursor-pointer select-none hover:bg-rose-500/[0.02] transition-colors"
         onClick={() => setExpanded((v) => !v)}
       >
         <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
           <CircleAlertIcon
             className={cn(
-              "size-4 shrink-0",
-              isWarning ? "text-amber-500" : "text-rose-500 dark:text-rose-400",
+              "size-3.5 shrink-0",
+              isWarning ? "text-amber-500/80" : "text-rose-500/70 dark:text-rose-400/70",
             )}
           />
           <span
             className={cn(
-              "shrink-0 font-mono text-3xs font-semibold px-1.5 py-0.5 rounded border leading-tight",
+              "shrink-0 font-mono text-[10px] font-medium px-1 py-0.2 rounded border leading-tight",
               isWarning
-                ? "bg-amber-500/15 border-amber-500/30 text-amber-500"
-                : "bg-rose-500/15 border-rose-500/30 text-rose-500 dark:text-rose-400",
+                ? "bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400"
+                : "bg-rose-500/[0.06] border-rose-500/15 text-rose-600/90 dark:text-rose-300/85",
             )}
           >
             {displayStatusCode}
           </span>
-          <span className="shrink-0 font-semibold text-xs text-foreground/90 truncate">
+          <span className="shrink-0 font-medium text-xs text-foreground/85 truncate">
             {resolvedType}
           </span>
           {errorInfo.shortModel ? (
             <span
-              className="shrink-0 font-mono text-3xs px-1.5 py-0.5 rounded bg-muted/60 border border-border/40 text-muted-foreground truncate max-w-[120px]"
+              className="shrink-0 font-mono text-[10px] px-1 py-0.2 rounded bg-muted/40 border border-border/30 text-muted-foreground/75 truncate max-w-[110px]"
               title={errorInfo.fullModel || errorInfo.shortModel}
             >
               {errorInfo.shortModel}
@@ -3188,9 +3192,9 @@ function CupertinoTimelineErrorCard({
         </div>
 
         {/* Right side controls: Timestamp & Arrow Button */}
-        <div className="flex shrink-0 items-center gap-1.5">
+        <div className="flex shrink-0 items-center gap-1">
           {timestamp ? (
-            <span className="text-3xs text-muted-foreground/70 font-mono">{timestamp}</span>
+            <span className="text-[10px] text-muted-foreground/60 font-mono">{timestamp}</span>
           ) : null}
 
           {onContinue && isInterrupted ? (
@@ -3200,7 +3204,7 @@ function CupertinoTimelineErrorCard({
                 e.stopPropagation();
                 onContinue();
               }}
-              className="shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded text-3xs font-medium bg-primary/10 hover:bg-primary/20 text-primary border border-primary/25 transition-colors cursor-pointer"
+              className="shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary/10 hover:bg-primary/20 text-primary border border-primary/25 transition-colors cursor-pointer"
               title="Resume / continue generation where it stopped"
             >
               <ChevronRightIcon className="size-2.5" />
@@ -3209,7 +3213,7 @@ function CupertinoTimelineErrorCard({
           ) : null}
 
           {visibility && visibility !== "local" ? (
-            <span className="shrink-0 rounded bg-muted px-1 py-0.2 text-3xs text-muted-foreground">
+            <span className="shrink-0 rounded bg-muted px-1 py-0.2 text-[10px] text-muted-foreground/70">
               {visibility === "inherited" ? "Inherited" : "Synthetic"}
             </span>
           ) : null}
@@ -3221,12 +3225,12 @@ function CupertinoTimelineErrorCard({
               e.stopPropagation();
               setExpanded((v) => !v);
             }}
-            className="shrink-0 inline-flex size-6 items-center justify-center rounded-md text-muted-foreground/80 hover:text-foreground hover:bg-muted/40 transition-colors cursor-pointer"
+            className="shrink-0 inline-flex size-5 items-center justify-center rounded text-muted-foreground/70 hover:text-foreground hover:bg-muted/40 transition-colors cursor-pointer"
             title={expanded ? "Collapse details" : "Expand error details"}
             aria-expanded={expanded}
           >
             <ChevronDownIcon
-              className={cn("size-4 transition-transform duration-200", expanded && "rotate-180")}
+              className={cn("size-3.5 transition-transform duration-200", expanded && "rotate-180")}
             />
           </button>
         </div>
@@ -3234,11 +3238,11 @@ function CupertinoTimelineErrorCard({
 
       {/* Subtitle: 1 Line Details */}
       <div
-        className="px-3 pb-1.5 pt-0 -mt-0.5 min-w-0 cursor-pointer"
+        className="px-2.5 pb-1 pt-0 -mt-0.5 min-w-0 cursor-pointer"
         onClick={() => setExpanded((v) => !v)}
       >
         <p
-          className="text-2xs text-muted-foreground/80 truncate font-normal ps-5.5 select-text"
+          className="text-[11px] text-muted-foreground/75 truncate font-normal ps-5 select-text"
           title={subtitle}
         >
           {subtitle}
@@ -3247,7 +3251,7 @@ function CupertinoTimelineErrorCard({
 
       {/* Action / Retry Button Row: Prominent retry button directly below subtitle */}
       {onRetryTurn || retryAction ? (
-        <div className="px-3 pb-2 pt-0.5 ps-8.5 flex items-center gap-2">
+        <div className="px-2.5 pb-2 pt-0.5 ps-5 flex items-center gap-1.5">
           <Button
             type="button"
             size="xs"
@@ -3262,15 +3266,15 @@ function CupertinoTimelineErrorCard({
               }
             }}
             className={cn(
-              "h-6 px-2.5 gap-1.5 text-xs font-medium rounded-md shadow-xs transition-colors cursor-pointer",
+              "h-5.5 px-2 gap-1 text-[11px] font-medium rounded shadow-none transition-colors cursor-pointer",
               isWarning
-                ? "border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300"
-                : "border-rose-500/40 bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 dark:text-rose-300",
+                ? "border-amber-500/25 bg-amber-500/[0.04] hover:bg-amber-500/[0.08] text-amber-700 dark:text-amber-300"
+                : "border-rose-500/20 bg-rose-500/[0.04] hover:bg-rose-500/[0.08] text-rose-600/90 dark:text-rose-300/90",
               isWorking && "opacity-60 cursor-not-allowed",
             )}
             title="Retry response in this chat"
           >
-            <RotateCcwIcon className={cn("size-3", isWorking && "animate-spin")} />
+            <RotateCcwIcon className={cn("size-2.5", isWorking && "animate-spin")} />
             <span>{isWorking ? "Retrying..." : retryAction?.label || "Retry Response"}</span>
           </Button>
         </div>
@@ -3278,21 +3282,21 @@ function CupertinoTimelineErrorCard({
 
       {/* Uncollapsed / Expanded details section */}
       {expanded ? (
-        <div className="border-t border-rose-500/15 bg-muted/20 px-3.5 py-2.5 ps-8.5 animate-in fade-in duration-150 select-text">
+        <div className="border-t border-rose-500/10 bg-muted/15 px-3 py-2 ps-7.5 animate-in fade-in duration-150 select-text">
           {errorInfo.fullModel ? (
-            <div className="font-mono text-3xs text-muted-foreground mb-1.5">
+            <div className="font-mono text-[10px] text-muted-foreground/80 mb-1">
               Model: <span className="text-foreground font-medium">{errorInfo.fullModel}</span>
             </div>
           ) : null}
 
           <div className="relative group/err-details">
-            <div className="text-2xs leading-relaxed text-muted-foreground font-mono bg-muted/40 dark:bg-muted/20 p-2.5 rounded-md border border-border/30 whitespace-pre-wrap break-all max-h-56 overflow-y-auto">
+            <div className="text-[11px] leading-relaxed text-muted-foreground font-mono bg-muted/30 dark:bg-muted/15 p-2 rounded border border-border/25 whitespace-pre-wrap break-all max-h-48 overflow-y-auto">
               {rawError}
             </div>
             <button
               type="button"
               onClick={handleCopy}
-              className="absolute top-1.5 right-1.5 opacity-0 group-hover/err-details:opacity-100 transition-opacity px-1.5 py-0.5 rounded bg-background/90 border border-border/60 text-3xs text-muted-foreground hover:text-foreground cursor-pointer shadow-xs"
+              className="absolute top-1 right-1 opacity-0 group-hover/err-details:opacity-100 transition-opacity px-1 py-0.2 rounded bg-background/90 border border-border/50 text-[10px] text-muted-foreground hover:text-foreground cursor-pointer shadow-xs"
               title="Copy error details"
             >
               {copied ? "Copied" : "Copy"}
@@ -3300,12 +3304,12 @@ function CupertinoTimelineErrorCard({
           </div>
 
           {sourceThreadId && visibility === "inherited" ? (
-            <p className="mt-1.5 font-mono text-3xs text-muted-foreground/60">
+            <p className="mt-1 font-mono text-[10px] text-muted-foreground/50">
               From {sourceThreadId}
             </p>
           ) : null}
 
-          {inspectorContent ? <div className="mt-2">{inspectorContent}</div> : null}
+          {inspectorContent ? <div className="mt-1.5">{inspectorContent}</div> : null}
         </div>
       ) : null}
     </div>
