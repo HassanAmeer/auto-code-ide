@@ -363,7 +363,7 @@ interface TimelineRowSharedState {
   onRetryWorkspacePreparation: ((runId: RunId) => void) | null;
   onWorktreeSetupWorkLocally: (() => void) | null;
   onOpenWorktreeSetupTerminal: ((terminalId: string) => void) | null;
-  onRetryTurn?: (() => void) | null | undefined;
+  onRetryTurn?: ((runId?: RunId) => void) | null | undefined;
   workGroupViewState: WorkGroupViewState;
 }
 
@@ -540,7 +540,7 @@ interface MessagesTimelineProps {
   historyControls?: MessagesTimelineHistoryControls | undefined;
   /** Non-null when older turns exist beyond the loaded window. */
   loadEarlier?: CitationHistoryPage | null;
-  onRetryTurn?: (() => void) | null | undefined;
+  onRetryTurn?: ((runId?: RunId) => void) | null | undefined;
   findPositionReaderRef?: React.RefObject<ThreadFindPositionReader | null>;
   findExpanded?: boolean;
   findQuery?: string;
@@ -3111,7 +3111,7 @@ function CupertinoTimelineErrorCard({
   visibility?: "local" | "inherited" | "synthetic" | undefined;
   sourceThreadId?: string | null | undefined;
   retryAction?: { label: string; onRetry: () => void } | null | undefined;
-  onRetryTurn?: (() => void) | null | undefined;
+  onRetryTurn?: ((runId?: RunId) => void) | null | undefined;
   onContinue?: (() => void) | undefined;
   isInterrupted?: boolean | undefined;
   inspectorContent?: ReactNode | undefined;
@@ -3355,7 +3355,7 @@ function CupertinoErrorRow({
       sourceThreadId={sourceThreadId}
       isInterrupted={isInterrupted}
       onContinue={handleResume}
-      onRetryTurn={ctx.onRetryTurn}
+      onRetryTurn={ctx.onRetryTurn ? () => ctx.onRetryTurn?.(item.runId ?? undefined) : undefined}
       inspectorContent={
         <V2ItemInspector
           projectedItem={row.projectedItem}
@@ -5676,7 +5676,9 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
         visibility={workEntry.projectedItem?.visibility}
         sourceThreadId={workEntry.projectedItem?.sourceThreadId}
         retryAction={retryAction}
-        onRetryTurn={ctx.onRetryTurn}
+        onRetryTurn={
+          ctx.onRetryTurn ? () => ctx.onRetryTurn?.(failureItem.runId ?? undefined) : undefined
+        }
       />
     );
   }

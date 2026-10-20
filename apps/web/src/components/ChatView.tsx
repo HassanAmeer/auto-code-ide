@@ -200,6 +200,7 @@ import {
   findLatestProposedPlan,
   hasActionableProposedPlan,
   isLatestRunSettled,
+  RETRY_PREVIOUS_RESPONSE_PROMPT,
 } from "../session-logic";
 import { type LegendListRef } from "@legendapp/list/react";
 import {
@@ -2227,6 +2228,7 @@ export default function ChatView(props: ChatViewProps) {
   const [autoRetryCancelledBannerKey, setAutoRetryCancelledBannerKey] = useState<string | null>(
     null,
   );
+  const [retryingRunId, setRetryingRunId] = useState<RunId | null>(null);
   const defaultRuntimeMode = resolveProjectSettings(settings, activeThread?.projectId ?? null)
     .settings.defaultRuntimeMode;
   // Implicit drafts follow their current project/environment, including retargets.
@@ -3658,6 +3660,13 @@ export default function ChatView(props: ChatViewProps) {
     activePendingUserInput: activePendingUserInput?.requestId ?? null,
     threadError,
   });
+
+  useEffect(() => {
+    if (phase !== "running" && !isSendBusy && !isResuming) {
+      setRetryingRunId(null);
+    }
+  }, [phase, isSendBusy, isResuming]);
+
   const optimisticCompactionMessage = optimisticUserMessages.at(-1);
   const latestServerUserItem = serverVisibleTurnItems.findLast(
     (row) => row.item.type === "user_message",
@@ -3987,6 +3996,7 @@ export default function ChatView(props: ChatViewProps) {
         optimisticMessages: optimisticUserMessages,
         anchoredMessages: anchoredTimelineMessages,
         attachmentUrlById: timelineAttachmentUrlById,
+        retryingRunId,
         ...(serverProjection === null
           ? {}
           : {
@@ -4003,6 +4013,7 @@ export default function ChatView(props: ChatViewProps) {
     activeThreadKey,
     anchoredTimelineMessages,
     optimisticUserMessages,
+    retryingRunId,
     serverVisibleTurnItems,
     serverProjection,
     timelineAttachmentUrlById,
@@ -11091,6 +11102,10 @@ export default function ChatView(props: ChatViewProps) {
       sendInFlightRef.current = true;
       setResumingThreadKeys((current) => new Set(current).add(routeThreadKey));
       setThreadError(threadId, null);
+      const lastFailedRun = latestExecutedRun(serverProjection?.runs ?? []);
+      if (lastFailedRun?.id) {
+        setRetryingRunId(lastFailedRun.id);
+      }
       if (threadErrorBannerKey) {
         dismissThreadErrorBannerForSession(threadErrorBannerKey);
         setThreadErrorBannerDismissTick((tick) => tick + 1);
@@ -11147,7 +11162,7 @@ export default function ChatView(props: ChatViewProps) {
             message: {
               messageId: newMessageId(),
               role: "user",
-              text: "Please retry the previous response.",
+              text: RETRY_PREVIOUS_RESPONSE_PROMPT,
               attachments: [],
             },
             ...(retryModelSelection ? { modelSelection: retryModelSelection } : {}),
@@ -11200,9 +11215,15 @@ export default function ChatView(props: ChatViewProps) {
   const handleAutoRetryNowRef = useRef(handleAutoRetryNow);
   handleAutoRetryNowRef.current = handleAutoRetryNow;
 
-  const handleRetryFailedTurn = useCallback(() => {
-    void handleAutoRetryNow({ forceRetryMessage: true });
-  }, [handleAutoRetryNow]);
+  const handleRetryFailedTurn = useCallback(
+    (failedRunId?: RunId) => {
+      if (failedRunId) {
+        setRetryingRunId(failedRunId);
+      }
+      void handleAutoRetryNow({ forceRetryMessage: true });
+    },
+    [handleAutoRetryNow],
+  );
 
   const handleSwitchToNextModel = useCallback(() => {
     if (!nextFallbackCandidate) return;

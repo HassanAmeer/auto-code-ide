@@ -567,6 +567,18 @@ function projectedWorkEntry(row: OrchestrationV2ProjectedTurnItem): WorkLogEntry
   }
 }
 
+export const RETRY_PREVIOUS_RESPONSE_PROMPT = "Please retry the previous response.";
+
+export function isInternalRetryPrompt(text: string | null | undefined): boolean {
+  if (!text) return false;
+  const trimmed = text.trim();
+  return (
+    trimmed === RETRY_PREVIOUS_RESPONSE_PROMPT ||
+    trimmed === "Continue where you left off." ||
+    trimmed.startsWith("[INTERNAL_RETRY]")
+  );
+}
+
 /**
  * Builds the web timeline in the exact order committed by `visibleTurnItems`.
  * Committed rows are presented directly from their projected item. Queued
@@ -582,6 +594,7 @@ export interface TimelineEntriesInput {
   readonly attempts?: ReadonlyArray<OrchestrationV2RunAttempt>;
   readonly nodes?: ReadonlyArray<OrchestrationV2ExecutionNode>;
   readonly plans?: ReadonlyArray<OrchestrationV2PlanArtifact>;
+  readonly retryingRunId?: RunId | null;
 }
 
 export interface TimelineEntriesProjection {
@@ -624,12 +637,51 @@ export function deriveTimelineEntriesFromVisibleTurnItems(
         : [],
     ),
   );
+
+  const orderedRunIds: RunId[] = [];
+  const seenRunIds = new Set<RunId>();
+  for (const { item } of input.visibleTurnItems) {
+    if (item.runId && !seenRunIds.has(item.runId)) {
+      seenRunIds.add(item.runId);
+      orderedRunIds.push(item.runId);
+    }
+  }
+
+  const retriedRunIds = new Set<RunId>();
+  if (input.retryingRunId) {
+    retriedRunIds.add(input.retryingRunId);
+  }
+
+  for (let i = 0; i < orderedRunIds.length; i++) {
+    const runId = orderedRunIds[i];
+    const hasRetryPrompt = input.visibleTurnItems.some(
+      ({ item }) =>
+        item.runId === runId && item.type === "user_message" && isInternalRetryPrompt(item.text),
+    );
+    if (hasRetryPrompt && i > 0) {
+      const preceding = orderedRunIds[i - 1];
+      if (preceding) {
+        retriedRunIds.add(preceding);
+      }
+    }
+  }
+
   for (const row of input.visibleTurnItems) {
     const { item } = row;
     if (turnItemIsWorkspacePreparation(item)) continue;
     // Task progress belongs in the composer, not between conversation entries.
     if (item.type === "todo_list" || item.type === "checkpoint") continue;
     if (item.type === "user_message" && foldedAnswerMessageIds.has(item.messageId)) continue;
+    // Suppress internal retry user prompts - never render them as visible user bubbles
+    if (item.type === "user_message" && isInternalRetryPrompt(item.text)) continue;
+
+    // When a turn is retried, suppress its error card, partial assistant message, and failed reasoning
+    // so the retried response starts and generates in-place
+    if (item.runId && retriedRunIds.has(item.runId)) {
+      if (item.type === "error" || item.type === "assistant_message" || item.type === "reasoning") {
+        continue;
+      }
+    }
     const createdAt = projectedItemCreatedAt(row);
     const attempt = resolveAttempt(item);
     const attemptMetadata = attempt === undefined ? {} : { attempt };
@@ -790,6 +842,7 @@ export function deriveTimelineEntriesFromVisibleTurnItems(
   }
 
   for (const message of input.optimisticMessages) {
+    if (isInternalRetryPrompt(message.text)) continue;
     if (message.inputIntent !== "queued_turn" && !retainedMessageIds.has(message.id)) {
       retainedMessageIds.add(message.id);
       entries.push({
@@ -940,11 +993,23 @@ function reuseTimelineEntries(
     !shallow(input.attachmentUrlById, before.attachmentUrlById) ||
     !shallow(input.attempts, before.attempts) ||
     !shallow(input.nodes, before.nodes) ||
-    !shallow(input.plans, before.plans)
+    !shallow(input.plans, before.plans) ||
+    input.retryingRunId !== before.retryingRunId ||
+    input.retryingRunId != null ||
+    before.retryingRunId != null
   ) {
     return null;
   }
   const appended = input.visibleTurnItems.length > before.visibleTurnItems.length;
+  // Retrying or internal retry prompts modify the retained prefix (suppressing failed errors/messages).
+  if (
+    appended &&
+    input.visibleTurnItems
+      .slice(before.visibleTurnItems.length)
+      .some(({ item }) => item.type === "user_message" && isInternalRetryPrompt(item.text))
+  ) {
+    return null;
+  }
   // Anchored and optimistic messages need to be interleaved/deduplicated when
   // committed items arrive. Keep the full projection for that transition.
   if (
