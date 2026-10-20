@@ -1,6 +1,12 @@
 import { useAutoRetrySettings } from "~/lib/autoRetrySettings";
 import { useShowLogFloatingButton } from "~/lib/floatingLogButtonSettings";
 import { useBackgroundModeStore } from "~/lib/backgroundModeStore";
+import {
+  useExecutionEngineSettings,
+  fetchCodexCliStatus,
+  type CodexCliStatus,
+} from "~/lib/executionEngineSettings";
+import { useComposerDraftStore } from "../../composerDraftStore";
 import { SettingsGroup } from "./SettingsGroup";
 import { useScopedSettingsWriteAllowed } from "./useScopedSettings";
 import { Spinner } from "~/components/ui/spinner";
@@ -22,6 +28,7 @@ import {
   type ProviderInstanceId,
   type ScopedThreadRef,
   type SidebarProjectGroupingMode,
+  type ServerProvider,
 } from "@t3tools/contracts";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { presentThreadShell } from "@t3tools/client-runtime/state/shell";
@@ -1883,6 +1890,288 @@ function LegacyFeaturesSection() {
   );
 }
 
+function ExecutionEngineSection({
+  serverProviders,
+  updateSettings,
+}: {
+  serverProviders: ReadonlyArray<ServerProvider>;
+  updateSettings: (patch: any) => void;
+}) {
+  const [engineSettings, updateEngineSettings] = useExecutionEngineSettings();
+  const [codexStatus, setCodexStatus] = useState<CodexCliStatus | null>(null);
+  const [testingPath, setTestingPath] = useState(false);
+  const [pathInput, setPathInput] = useState(engineSettings.codexBinaryPath);
+  const [testResult, setTestResult] = useState<string | null>(null);
+
+  const isCustom = engineSettings.mode === "custom";
+
+  useEffect(() => {
+    setPathInput(engineSettings.codexBinaryPath);
+  }, [engineSettings.codexBinaryPath]);
+
+  const loadStatus = useCallback((customPath?: string) => {
+    fetchCodexCliStatus(customPath).then((st) => {
+      setCodexStatus(st);
+    });
+  }, []);
+
+  useEffect(() => {
+    loadStatus();
+  }, [loadStatus]);
+
+  const handleToggle = (checked: boolean) => {
+    const nextMode = checked ? "custom" : "codex";
+    updateEngineSettings({ mode: nextMode });
+
+    if (nextMode === "codex") {
+      const codexProvider = serverProviders.find(
+        (p) => p.driver === "codex" || p.instanceId === "codex",
+      );
+      const codexModel = codexProvider?.models?.[0]?.slug ?? "gpt-6.1-sol";
+      const selection = createModelSelection("codex" as ProviderInstanceId, codexModel);
+      updateSettings({ defaultModelSelection: selection });
+      try {
+        useComposerDraftStore.getState().setStickyModelSelection(selection);
+      } catch {
+        // ignore
+      }
+      toastManager.add({
+        type: "success",
+        title: "Codex CLI Engine Active",
+        description: `Switched execution to native OpenAI Codex CLI (${codexModel}). Native diffs and ~/.codex memories active.`,
+      });
+    } else {
+      const customProvider = serverProviders.find(
+        (p) => p.driver === "custom" || p.instanceId === "custom",
+      );
+      const customModel = customProvider?.models?.[0]?.slug ?? "claude-sonnet-4-5";
+      const selection = createModelSelection("custom" as ProviderInstanceId, customModel);
+      updateSettings({ defaultModelSelection: selection });
+      try {
+        useComposerDraftStore.getState().setStickyModelSelection(selection);
+      } catch {
+        // ignore
+      }
+      toastManager.add({
+        type: "success",
+        title: "Custom Engine Active",
+        description: `Switched execution to Custom Engine (${customModel}). Agent Memory, Code Graph & Live Preview sync active.`,
+      });
+    }
+  };
+
+  const handleTestPath = async () => {
+    setTestingPath(true);
+    setTestResult(null);
+    try {
+      const res = await fetchCodexCliStatus(pathInput);
+      setCodexStatus(res);
+      if (res.available) {
+        setTestResult(`Success: ${res.version} at ${res.path}`);
+        updateEngineSettings({ codexBinaryPath: pathInput });
+        toastManager.add({
+          type: "success",
+          title: "Codex CLI Verified",
+          description: `${res.version} is ready for execution.`,
+        });
+      } else {
+        setTestResult(`Error: ${res.message || "Binary not executable"}`);
+        toastManager.add({
+          type: "error",
+          title: "Codex CLI Test Failed",
+          description: res.message || "Could not execute binary at specified path.",
+        });
+      }
+    } catch (e: any) {
+      setTestResult(`Error: ${e?.message || "Check failed"}`);
+    } finally {
+      setTestingPath(false);
+    }
+  };
+
+  return (
+    <SettingsSection
+      id="execution-engine"
+      title="AI Agent Execution Engine (سوئچ ٹو کسٹم / کوڈیکس سی ایل ائی)"
+    >
+      <SettingsRow
+        id="engine-mode-toggle"
+        title="Switch to Custom / Codex CLI"
+        description={
+          isCustom
+            ? "Custom Engine is ON: Uses Custom Agent Memory (.autocode), Code Graph, and Live Preview error auto-fix."
+            : "Codex CLI is ACTIVE (OFF): Uses native OpenAI Codex CLI (`codex app-server`), native diff checking, code rewriting, and memories in ~/.codex."
+        }
+        control={
+          <div className="flex items-center gap-2.5">
+            <span
+              className={`text-xs font-semibold px-2.5 py-1 rounded-md transition-colors ${
+                !isCustom
+                  ? "bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30"
+                  : "text-muted-foreground"
+              }`}
+            >
+              Codex CLI
+            </span>
+            <Switch
+              checked={isCustom}
+              onCheckedChange={handleToggle}
+              aria-label="Switch to Custom / Codex CLI"
+            />
+            <span
+              className={`text-xs font-semibold px-2.5 py-1 rounded-md transition-colors ${
+                isCustom
+                  ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
+                  : "text-muted-foreground"
+              }`}
+            >
+              Custom Engine
+            </span>
+          </div>
+        }
+      />
+
+      <div className="rounded-xl border border-border/70 bg-muted/20 p-4 flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <span
+              className={`size-2.5 rounded-full ${
+                isCustom
+                  ? "bg-emerald-500 ring-4 ring-emerald-500/20"
+                  : codexStatus?.available
+                    ? "bg-amber-500 ring-4 ring-amber-500/20"
+                    : "bg-red-500 ring-4 ring-red-500/20"
+              }`}
+            />
+            <span className="text-sm font-semibold text-foreground">
+              {isCustom ? "Custom AI Engine (Active)" : "OpenAI Codex CLI Engine (Active)"}
+            </span>
+          </div>
+          <span className="text-xs font-mono px-2 py-0.5 rounded bg-background border border-border/60 text-muted-foreground">
+            {isCustom ? "Mode: Custom" : (codexStatus?.version ?? "Codex CLI")}
+          </span>
+        </div>
+
+        <div className="flex flex-wrap gap-1.5 pt-0.5">
+          {isCustom ? (
+            <>
+              <span className="inline-flex items-center gap-1 text-2xs font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                ✓ Custom Agent Memory (.autocode)
+              </span>
+              <span className="inline-flex items-center gap-1 text-2xs font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                ✓ Workspace Code Graph Context
+              </span>
+              <span className="inline-flex items-center gap-1 text-2xs font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                ✓ Live Preview Logs Error Sync
+              </span>
+              <span className="inline-flex items-center gap-1 text-2xs font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                ✓ Multi-Language Unified Patcher
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="inline-flex items-center gap-1 text-2xs font-medium px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                ✓ Native Codex CLI Daemon (`app-server`)
+              </span>
+              <span className="inline-flex items-center gap-1 text-2xs font-medium px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                ✓ Native Diff Checking & Tool Approvals
+              </span>
+              <span className="inline-flex items-center gap-1 text-2xs font-medium px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                ✓ Native ~/.codex Memory & Goals Store
+              </span>
+              <span className="inline-flex items-center gap-1 text-2xs font-medium px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                ✓ Full Stdio JSON-RPC Protocol
+              </span>
+            </>
+          )}
+        </div>
+
+        <div className="mt-1 pt-3 border-t border-border/40 flex flex-col gap-2.5 text-xs">
+          <div className="flex items-center justify-between text-muted-foreground">
+            <span className="font-medium text-foreground">Codex CLI Binary Path</span>
+            <span className="font-mono text-3xs select-all">
+              {codexStatus?.available ? (
+                <span className="text-emerald-500 font-semibold">● Found: {codexStatus.path}</span>
+              ) : (
+                <span className="text-amber-500">Not detected automatically</span>
+              )}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Input
+              value={pathInput}
+              onChange={(e) => setPathInput(e.target.value)}
+              placeholder="/home/hasan/.local/bin/codex or ~/all-ai-clis/codex"
+              className="h-8 text-xs font-mono flex-1 bg-background"
+            />
+            <Button
+              size="xs"
+              variant="outline"
+              disabled={testingPath}
+              onClick={handleTestPath}
+              className="h-8 px-3 shrink-0"
+            >
+              {testingPath ? "Testing..." : "Test CLI Path"}
+            </Button>
+            <Button
+              size="xs"
+              variant="ghost"
+              onClick={() => {
+                const defaultPath = "/home/hasan/.local/bin/codex";
+                setPathInput(defaultPath);
+                updateEngineSettings({ codexBinaryPath: defaultPath });
+                loadStatus(defaultPath);
+              }}
+              title="Reset to default path"
+              className="h-8 px-2 text-3xs text-muted-foreground"
+            >
+              Reset
+            </Button>
+          </div>
+
+          {testResult && (
+            <div
+              className={`p-2 rounded text-2xs font-mono ${
+                testResult.startsWith("Success")
+                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+                  : "bg-destructive/10 text-destructive border border-destructive/20"
+              }`}
+            >
+              {testResult}
+            </div>
+          )}
+
+          <div className="rounded-lg bg-background/60 border border-border/50 p-2.5 text-2xs text-muted-foreground leading-relaxed flex flex-col gap-1">
+            <div className="font-semibold text-foreground flex items-center gap-1.5">
+              <span>💡 Codex CLI Location & Storage Advice:</span>
+            </div>
+            <p>
+              Your Codex CLI is currently installed at{" "}
+              <code className="text-foreground font-mono bg-muted px-1 py-0.5 rounded">
+                /home/hasan/.local/bin/codex
+              </code>{" "}
+              (v0.163.0) and uses{" "}
+              <code className="text-foreground font-mono bg-muted px-1 py-0.5 rounded">
+                ~/.codex
+              </code>{" "}
+              for its configuration, authentication, and memory database.
+            </p>
+            <p>
+              اگر آپ تمام CLIs کو اپنے فولڈر{" "}
+              <code className="text-foreground font-mono bg-muted px-1 py-0.5 rounded">
+                ~/all-ai-clis/codex
+              </code>{" "}
+              یا روٹ میں رکھنا چاہتے ہیں، تو آپ بائنری وہاں رکھ کر اوپر والے ان پٹ میں اس کا پاتھ
+              درج کر سکتے ہیں—سسٹم خود بخود اسے ڈیٹیکٹ کر کے چلائے گا۔
+            </p>
+          </div>
+        </div>
+      </div>
+    </SettingsSection>
+  );
+}
+
 export function GeneralSettingsPanel() {
   const [autoRetrySettings, updateAutoRetrySettings] = useAutoRetrySettings();
   const [showLogFloatingButton, setShowLogFloatingButton] = useShowLogFloatingButton();
@@ -2004,6 +2293,7 @@ export function GeneralSettingsPanel() {
 
   return (
     <SettingsPageContainer>
+      <ExecutionEngineSection serverProviders={serverProviders} updateSettings={updateSettings} />
       <SettingsSection id="auto-retry" title="Auto Retry & Model Failover">
         <SettingsRow
           id="auto-retry-enabled"

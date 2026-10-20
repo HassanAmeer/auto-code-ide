@@ -685,6 +685,7 @@ const layerMakeRoutes = Layer.mergeAll(
     ServerHttp.layerCustomProviderSyncRoute,
     ServerHttp.layerAppSettingsGetRoute,
     ServerHttp.layerAppSettingsSaveRoute,
+    ServerHttp.layerCodexCliStatusRoute,
     ServerHttp.layerAiModelLogsRoute,
     ServerHttp.layerAiModelLogsClearRoute,
     ServerHttp.layerDirectProjectCreateRoute,

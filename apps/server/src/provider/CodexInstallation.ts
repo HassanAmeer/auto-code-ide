@@ -334,11 +334,31 @@ export const makeCodexInstallation = Effect.fn("makeCodexInstallation")(function
   const localCache = new Map<string, { fingerprint: string; executable: CodexExecutable | null }>();
   const resolveLocal = Effect.fn("CodexInstallation.resolveLocal")(
     function* () {
-      const executablePath = yield* resolveCommandPath("codex", { env: environment }).pipe(
+      const fromPath = yield* resolveCommandPath("codex", { env: environment }).pipe(
         Effect.provideService(HostProcessPlatform, platform),
         Effect.provideService(FileSystem.FileSystem, fs),
         Effect.provideService(Path.Path, path),
+        Effect.option,
       );
+      let resolvedPath: string | null = Option.getOrNull(fromPath);
+      if (!resolvedPath) {
+        const home = environment.HOME || process.env.HOME || "/home/hasan";
+        const candidatePaths = [
+          path.join(home, ".local", "bin", "codex"),
+          path.join(home, "all-ai-clis", "codex"),
+          "/usr/local/bin/codex",
+          "/usr/bin/codex",
+        ];
+        for (const candidate of candidatePaths) {
+          const exists = yield* fs.exists(candidate).pipe(Effect.orElseSucceed(() => false));
+          if (exists) {
+            resolvedPath = candidate;
+            break;
+          }
+        }
+      }
+      if (!resolvedPath) return null;
+      const executablePath = resolvedPath;
       // Keep launcher symlinks intact: version-manager shims dispatch by their invoked name.
       const realExecutablePath = yield* fs.realPath(executablePath);
       // A PATH entry pointing into T3's download remains a managed installation.

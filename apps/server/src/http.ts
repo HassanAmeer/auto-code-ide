@@ -1,6 +1,7 @@
 // @effect-diagnostics globalDateInEffect:off globalRandomInEffect:off nodeBuiltinImport:off globalTimers:off
 import * as NodeOs from "node:os";
 import * as NodeFs from "node:fs";
+import * as NodeChildProcess from "node:child_process";
 import {
   runBashCommandOnHost,
   createTerminalEventStream,
@@ -951,6 +952,147 @@ export const layerAppSettingsSaveRoute = HttpRouter.add(
     }
 
     return HttpServerResponse.jsonUnsafe({ ok: true });
+  }),
+);
+
+export const layerCodexCliStatusRoute = HttpRouter.add(
+  "GET",
+  "/api/codex-cli/status",
+  Effect.gen(function* () {
+    const config = yield* ServerConfig.ServerConfig;
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const url = new URL(request.url, "http://localhost");
+    const requestedPath = url.searchParams.get("path")?.trim();
+
+    const homeDir = NodeOs.homedir();
+    const codexHome = process.env.CODEX_HOME || `${homeDir}/.codex`;
+    const codexHomeExists = NodeFs.existsSync(codexHome);
+    const authFileExists = NodeFs.existsSync(`${codexHome}/auth.json`);
+    const configFileExists = NodeFs.existsSync(`${codexHome}/config.toml`);
+
+    // If an explicit path was requested, test that exact path
+    if (requestedPath) {
+      try {
+        if (!NodeFs.existsSync(requestedPath)) {
+          return HttpServerResponse.jsonUnsafe({
+            ok: false,
+            available: false,
+            path: requestedPath,
+            version: null,
+            codexHome,
+            codexHomeExists,
+            authFileExists,
+            configFileExists,
+            status: "not_found",
+            message: `Binary not found at specified path: ${requestedPath}`,
+          });
+        }
+        const out = NodeChildProcess.execSync(`${requestedPath} --version`, {
+          encoding: "utf-8",
+          timeout: 4000,
+          env: {
+            ...process.env,
+            PATH: `${homeDir}/.local/bin:${homeDir}/all-ai-clis:${process.env.PATH || ""}`,
+          },
+        }).trim();
+        return HttpServerResponse.jsonUnsafe({
+          ok: true,
+          available: true,
+          path: requestedPath,
+          version: out,
+          codexHome,
+          codexHomeExists,
+          authFileExists,
+          configFileExists,
+          status: "ready",
+        });
+      } catch (err: any) {
+        return HttpServerResponse.jsonUnsafe({
+          ok: false,
+          available: false,
+          path: requestedPath,
+          version: null,
+          codexHome,
+          codexHomeExists,
+          authFileExists,
+          configFileExists,
+          status: "error",
+          message: err?.message || `Execution error testing binary at ${requestedPath}`,
+        });
+      }
+    }
+
+    // Otherwise, auto-probe candidate paths
+    const allSettings = getAllAppSettings(config.dbPath);
+    const storedPath =
+      typeof allSettings?.codex_cli_binary_path === "string"
+        ? allSettings.codex_cli_binary_path.trim()
+        : "";
+
+    const candidatePaths: string[] = [];
+    if (storedPath) {
+      candidatePaths.push(storedPath);
+    }
+    candidatePaths.push(
+      `${homeDir}/.local/bin/codex`,
+      `${homeDir}/all-ai-clis/codex`,
+      "/usr/local/bin/codex",
+      "/usr/bin/codex",
+      "codex",
+    );
+
+    let resolvedBinary: string | null = null;
+    let versionOutput = "";
+
+    for (const bin of candidatePaths) {
+      try {
+        if (bin !== "codex" && !NodeFs.existsSync(bin)) {
+          continue;
+        }
+        const out = NodeChildProcess.execSync(`${bin} --version`, {
+          encoding: "utf-8",
+          timeout: 4000,
+          env: {
+            ...process.env,
+            PATH: `${homeDir}/.local/bin:${homeDir}/all-ai-clis:${process.env.PATH || ""}`,
+          },
+        }).trim();
+        if (out) {
+          resolvedBinary = bin;
+          versionOutput = out;
+          break;
+        }
+      } catch {
+        // try next candidate
+      }
+    }
+
+    if (resolvedBinary) {
+      return HttpServerResponse.jsonUnsafe({
+        ok: true,
+        available: true,
+        path: resolvedBinary,
+        version: versionOutput,
+        codexHome,
+        codexHomeExists,
+        authFileExists,
+        configFileExists,
+        status: "ready",
+      });
+    }
+
+    return HttpServerResponse.jsonUnsafe({
+      ok: true,
+      available: false,
+      path: null,
+      version: null,
+      codexHome,
+      codexHomeExists,
+      authFileExists,
+      configFileExists,
+      status: "not_found",
+      message: "Codex CLI was not found in candidate paths. Specify custom binary path.",
+    });
   }),
 );
 
