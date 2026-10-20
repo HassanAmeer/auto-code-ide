@@ -55,13 +55,13 @@ export function saveTinyFishConfig(config: TinyFishConfig): void {
 }
 
 export function isComposerWebSearchEnabled(): boolean {
-  if (typeof window === "undefined") return true;
+  if (typeof window === "undefined") return false;
   try {
     const raw = localStorage.getItem(COMPOSER_WEB_SEARCH_KEY);
-    if (raw === null) return true; // Default ON
+    if (raw === null) return false; // Default OFF so web search does not intercept regular chat or continue
     return raw === "true";
   } catch {
-    return true;
+    return false;
   }
 }
 
@@ -217,6 +217,47 @@ export async function fetchTinyFishUrl(
  * Resolves live data based on TinyFish and Web Research configs.
  */
 export async function performLiveWebSearchOrFetch(promptText: string): Promise<string | null> {
+  if (!promptText || !promptText.trim()) return null;
+
+  const trimmed = promptText.trim();
+  const lower = trimmed.toLowerCase();
+
+  // Guard against conversational, workflow, control, or continuation commands
+  const NON_SEARCH_COMMANDS = new Set([
+    "continue",
+    "next",
+    "go on",
+    "proceed",
+    "more",
+    "retry",
+    "ok",
+    "okay",
+    "yes",
+    "no",
+    "y",
+    "n",
+    "run",
+    "start",
+    "stop",
+    "done",
+    "thanks",
+    "thank you",
+    "shukriya",
+    "help",
+    "hi",
+    "hello",
+    "hey",
+  ]);
+
+  if (NON_SEARCH_COMMANDS.has(lower)) {
+    return null;
+  }
+
+  // If prompt is very short (<= 2 words) without question mark or url, do not trigger web search
+  if (trimmed.split(/\s+/).length <= 2 && !trimmed.includes("?") && !trimmed.startsWith("http")) {
+    return null;
+  }
+
   const tinyfish = getTinyFishConfig();
 
   // 1. Detect if the prompt contains a direct web URL

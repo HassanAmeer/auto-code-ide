@@ -1336,7 +1336,11 @@ export function makeCustomAdapterV2(
                 }
 
                 let previewErrorBanner = "";
-                if (allPreviewErrors.length > 0) {
+                const isExplicitErrorFixPrompt =
+                  /\b(error|errors|bug|bugs|fix|fixed|broken|fail|failed|fails|crash|crashes|crashed|issue|issues|debug|not working|theek karo|masla|kharaab|sahi karo)\b/i.test(
+                    userPrompt,
+                  );
+                if (allPreviewErrors.length > 0 && isExplicitErrorFixPrompt) {
                   previewErrorBanner = `\n================================================================================
 CRITICAL LIVE PREVIEW DEBUG CONSOLE - RUNTIME ERRORS DETECTED:
 The live preview environment reported the following runtime errors:

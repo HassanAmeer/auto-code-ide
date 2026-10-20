@@ -45,13 +45,13 @@ describe("webSearchService", () => {
     expect(loaded.apiKey).toBe("tf_test_key_123");
   });
 
-  it("defaults composer web search toggle to true and persists changes", () => {
-    expect(isComposerWebSearchEnabled()).toBe(true);
-
-    setComposerWebSearchEnabled(false);
+  it("defaults composer web search toggle to false and persists changes", () => {
     expect(isComposerWebSearchEnabled()).toBe(false);
 
     setComposerWebSearchEnabled(true);
     expect(isComposerWebSearchEnabled()).toBe(true);
+
+    setComposerWebSearchEnabled(false);
+    expect(isComposerWebSearchEnabled()).toBe(false);
   });
 });

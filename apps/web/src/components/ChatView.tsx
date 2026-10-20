@@ -9353,28 +9353,8 @@ export default function ChatView(props: ChatViewProps) {
       }
     }
 
-    const previewErrorsForSend = browserLogsStore.getFormattedErrorsForAi();
-    if (previewErrorsForSend && messageTextForSend && !messageTextForSend.startsWith("/")) {
-      messageTextForSend = `${messageTextForSend}\n\n[LIVE PREVIEW DEBUG CONSOLE - RUNTIME ERRORS DETECTED]\nThe following runtime errors/warnings occurred in the live preview:\n${previewErrorsForSend}\n[Please diagnose and fix these errors in the code]`;
-
-      try {
-        const rawErrors = browserLogsStore.getRawErrorsForSync();
-        if (rawErrors.length > 0) {
-          const effectiveCwd = activeThread?.worktreePath || projectForSend?.workspaceRoot;
-          fetch("/api/preview/sync-logs", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              threadId: threadIdForSend,
-              projectCwd: effectiveCwd,
-              errors: rawErrors,
-            }),
-          }).catch(() => {});
-        }
-      } catch {
-        // ignore
-      }
-    }
+    // Do NOT attach runtime preview errors or debug logs to the user message.
+    // Messages must remain clean as typed so prompts like "continue" or new tasks are not hijacked.
 
     if (
       isVoiceCallActive(threadIdForSend) &&
