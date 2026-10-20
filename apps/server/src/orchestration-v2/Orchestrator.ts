@@ -863,7 +863,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
   }) =>
     input.adapter.getCapabilities().pipe(
       Effect.flatMap((capabilities) =>
-        capabilities.sessions.supportsMultipleProviderThreadsPerSession
+        Boolean(capabilities?.sessions?.supportsMultipleProviderThreadsPerSession)
           ? Effect.succeed(
               idAllocator.derive.providerSession({
                 providerInstanceId: input.providerInstanceId,
@@ -3326,7 +3326,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           : command.type === "thread.runtime-mode.set"
             ? (providerContext?.providerSessions ?? [])
                 .filter(
-                  (session) => !session.capabilities.sessions.supportsRuntimeModeSwitchInSession,
+                  (session) => !session.capabilities?.sessions?.supportsRuntimeModeSwitchInSession,
                 )
                 .map((session) => session.id)
             : (providerSwitchPlan?.releaseProviderSessionIds ?? []),
@@ -4747,8 +4747,9 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
             .pipe(Effect.orElseSucceed(() => Option.none()));
           if (
             Option.isSome(session) &&
-            session.value.providerSession.capabilities.turns.supportsActiveSteering &&
-            session.value.providerSession.capabilities.turns.activeSteeringInterruptsTools !== true
+            session.value.providerSession.capabilities?.turns?.supportsActiveSteering &&
+            session.value.providerSession.capabilities?.turns?.activeSteeringInterruptsTools !==
+              true
           ) {
             dispatchMode = { type: "steer_active", targetRunId: active.id };
           }
@@ -7247,7 +7248,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
             );
           if (
             Option.isSome(activeSession) &&
-            activeSession.value.providerSession.capabilities.turns.supportsActiveSteering
+            activeSession.value.providerSession.capabilities?.turns?.supportsActiveSteering
           ) {
             dispatchMode = { type: "steer_active", targetRunId: activeRun.id };
           }

@@ -236,7 +236,7 @@ function unsupported(
 }
 
 const ensureQueuedMessages: CommandPolicyV2Shape["ensureQueuedMessages"] = (input) =>
-  input.capabilities.turns.supportsQueuedMessages
+  Boolean(input.capabilities?.turns?.supportsQueuedMessages)
     ? Effect.void
     : Effect.fail(
         unsupported(
@@ -247,19 +247,19 @@ const ensureQueuedMessages: CommandPolicyV2Shape["ensureQueuedMessages"] = (inpu
       );
 
 const decideSteeringExecution: CommandPolicyV2Shape["decideSteeringExecution"] = (input) => {
-  if (!input.forceRestart && input.capabilities.turns.supportsActiveSteering) {
+  if (!input.forceRestart && input.capabilities?.turns?.supportsActiveSteering) {
     return Effect.succeed("active_steering");
   }
   if (
-    input.capabilities.turns.supportsInterrupt &&
-    input.capabilities.turns.supportsSteeringByInterruptRestart
+    input.capabilities?.turns?.supportsInterrupt &&
+    input.capabilities?.turns?.supportsSteeringByInterruptRestart
   ) {
     return Effect.succeed("interrupt_restart");
   }
   return Effect.fail(
     unsupported(
       input,
-      input.forceRestart || input.capabilities.turns.supportsInterrupt
+      input.forceRestart || input.capabilities?.turns?.supportsInterrupt
         ? "interrupt_restart_steering"
         : "active_steering",
       input.forceRestart
@@ -270,19 +270,19 @@ const decideSteeringExecution: CommandPolicyV2Shape["decideSteeringExecution"] =
 };
 
 const ensureInterrupt: CommandPolicyV2Shape["ensureInterrupt"] = (input) =>
-  input.capabilities.turns.supportsInterrupt
+  input.capabilities?.turns?.supportsInterrupt
     ? Effect.void
     : Effect.fail(
         unsupported(input, "interrupt", "providerInstanceId does not support turn interrupts"),
       );
 
 const ensureNativeFork: CommandPolicyV2Shape["ensureNativeFork"] = (input) => {
-  if (!input.capabilities.threads.canForkThread) {
+  if (!input.capabilities?.threads?.canForkThread) {
     return Effect.fail(
       unsupported(input, "native_fork", "providerInstanceId does not support native thread forks"),
     );
   }
-  if (input.fromSpecificTurn && !input.capabilities.threads.canForkFromTurn) {
+  if (input.fromSpecificTurn && !input.capabilities?.threads?.canForkFromTurn) {
     return Effect.fail(
       unsupported(
         input,
@@ -291,7 +291,7 @@ const ensureNativeFork: CommandPolicyV2Shape["ensureNativeFork"] = (input) => {
       ),
     );
   }
-  if (input.capabilities.identity.nativeThreadIds !== "strong") {
+  if (input.capabilities?.identity?.nativeThreadIds !== "strong") {
     return Effect.fail(
       unsupported(
         input,
@@ -305,14 +305,14 @@ const ensureNativeFork: CommandPolicyV2Shape["ensureNativeFork"] = (input) => {
 
 const ensureRollback: CommandPolicyV2Shape["ensureRollback"] = (input) => {
   if (
-    !input.capabilities.threads.canRollbackThread ||
-    !input.capabilities.checkpointing.providerCanRollbackConversation
+    !input.capabilities?.threads?.canRollbackThread ||
+    !input.capabilities?.checkpointing?.providerCanRollbackConversation
   ) {
     return Effect.fail(
       unsupported(input, "rollback", "providerInstanceId conversation rollback is unavailable"),
     );
   }
-  if (!input.capabilities.checkpointing.providerRollbackReturnsSnapshot) {
+  if (!input.capabilities?.checkpointing?.providerRollbackReturnsSnapshot) {
     return Effect.fail(
       unsupported(
         input,
@@ -325,12 +325,12 @@ const ensureRollback: CommandPolicyV2Shape["ensureRollback"] = (input) => {
 };
 
 const ensureContextHandoff: CommandPolicyV2Shape["ensureContextHandoff"] = (input) => {
-  if (!input.capabilities.context.canConsumeHandoffSummaries) {
+  if (!input.capabilities?.context?.canConsumeHandoffSummaries) {
     return Effect.fail(
       unsupported(input, "context_handoff", "providerInstanceId cannot consume handoff summaries"),
     );
   }
-  if (!input.capabilities.context.acceptsSyntheticUserContext) {
+  if (!input.capabilities?.context?.acceptsSyntheticUserContext) {
     return Effect.fail(
       unsupported(
         input,
@@ -341,7 +341,7 @@ const ensureContextHandoff: CommandPolicyV2Shape["ensureContextHandoff"] = (inpu
   }
   if (
     (input.strategy === "fork_delta_context" || input.strategy === "delta_context") &&
-    !input.capabilities.context.supportsDeltaHandoff
+    !input.capabilities?.context?.supportsDeltaHandoff
   ) {
     return Effect.fail(
       unsupported(input, "context_handoff", "providerInstanceId does not support delta handoff"),
@@ -349,7 +349,7 @@ const ensureContextHandoff: CommandPolicyV2Shape["ensureContextHandoff"] = (inpu
   }
   if (
     input.strategy === "full_thread_summary" &&
-    !input.capabilities.context.supportsFullThreadHandoff
+    !input.capabilities?.context?.supportsFullThreadHandoff
   ) {
     return Effect.fail(
       unsupported(
@@ -369,9 +369,9 @@ const decideForkExecution: CommandPolicyV2Shape["decideForkExecution"] = (input)
     (input.sourceRunStatus === "completed" || input.sourceRunStatus === "waiting") &&
     input.sameProvider &&
     input.hasStrongNativeSource &&
-    input.capabilities.threads.canForkThread &&
-    (!input.fromSpecificTurn || input.capabilities.threads.canForkFromTurn) &&
-    input.capabilities.identity.nativeThreadIds === "strong";
+    input.capabilities?.threads?.canForkThread &&
+    (!input.fromSpecificTurn || input.capabilities?.threads?.canForkFromTurn) &&
+    input.capabilities?.identity?.nativeThreadIds === "strong";
 
   if (canForkNatively) {
     return Effect.succeed("native_fork");

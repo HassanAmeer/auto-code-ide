@@ -2141,9 +2141,10 @@ export const layerWithOptions = (
                   mcpCredentialId === undefined
                     ? new Map()
                     : new Map([[input.threadId, mcpCredentialId]]),
-                supportsMultipleProviderThreads:
-                  runtime.providerSession.capabilities.sessions
-                    .supportsMultipleProviderThreadsPerSession,
+                supportsMultipleProviderThreads: Boolean(
+                  runtime.providerSession.capabilities?.sessions
+                    ?.supportsMultipleProviderThreadsPerSession,
+                ),
                 runtime,
                 exposedRuntime,
                 eventSubscribers,
