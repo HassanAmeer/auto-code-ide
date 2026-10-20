@@ -28,24 +28,33 @@ export function unlockAudioContext(): void {
   }
 }
 
+let lastResponseDoneAt = 0;
+let lastNotificationAt = 0;
+let lastErrorAt = 0;
+
 /**
  * 1. Response Done Sound (Chime)
  * Pleasant 3-note harmonic chime (C5 -> E5 -> G5)
  */
 export function playResponseDoneSound(force = false): void {
+  const now = Date.now();
+  if (!force && now - lastResponseDoneAt < 1200) return;
+
   const settings = loadSoundSettings();
   if (!force && (!settings.masterSoundEnabled || !settings.responseDoneSound)) return;
 
   const ctx = getAudioContext();
   if (!ctx) return;
 
-  const now = ctx.currentTime;
+  lastResponseDoneAt = now;
+
+  const ctxTime = ctx.currentTime;
   const masterVolume = settings.soundVolume * 0.45;
 
   const notes = [
-    { freq: 523.25, time: now }, // C5
-    { freq: 659.25, time: now + 0.12 }, // E5
-    { freq: 783.99, time: now + 0.24 }, // G5
+    { freq: 523.25, time: ctxTime }, // C5
+    { freq: 659.25, time: ctxTime + 0.12 }, // E5
+    { freq: 783.99, time: ctxTime + 0.24 }, // G5
   ];
 
   notes.forEach(({ freq, time }) => {
@@ -72,18 +81,23 @@ export function playResponseDoneSound(force = false): void {
  * Snappy pleasant dual-tone ping (D5 -> A5)
  */
 export function playNotificationSound(force = false): void {
+  const now = Date.now();
+  if (!force && now - lastNotificationAt < 1200) return;
+
   const settings = loadSoundSettings();
   if (!force && (!settings.masterSoundEnabled || !settings.notificationSound)) return;
 
   const ctx = getAudioContext();
   if (!ctx) return;
 
-  const now = ctx.currentTime;
+  lastNotificationAt = now;
+
+  const ctxTime = ctx.currentTime;
   const masterVolume = settings.soundVolume * 0.4;
 
   const notes = [
-    { freq: 587.33, time: now }, // D5
-    { freq: 880.0, time: now + 0.09 }, // A5
+    { freq: 587.33, time: ctxTime }, // D5
+    { freq: 880.0, time: ctxTime + 0.09 }, // A5
   ];
 
   notes.forEach(({ freq, time }) => {
@@ -110,18 +124,23 @@ export function playNotificationSound(force = false): void {
  * Gentle subtle warning tone (E4 -> C4 warm triangle/sine)
  */
 export function playErrorSound(force = false): void {
+  const now = Date.now();
+  if (!force && now - lastErrorAt < 1200) return;
+
   const settings = loadSoundSettings();
   if (!force && (!settings.masterSoundEnabled || !settings.errorSound)) return;
 
   const ctx = getAudioContext();
   if (!ctx) return;
 
-  const now = ctx.currentTime;
+  lastErrorAt = now;
+
+  const ctxTime = ctx.currentTime;
   const masterVolume = settings.soundVolume * 0.38;
 
   const notes = [
-    { freq: 329.63, time: now }, // E4
-    { freq: 261.63, time: now + 0.14 }, // C4
+    { freq: 329.63, time: ctxTime }, // E4
+    { freq: 261.63, time: ctxTime + 0.14 }, // C4
   ];
 
   notes.forEach(({ freq, time }) => {

@@ -184,13 +184,9 @@ function EnvironmentNotifications({
         notifSettings.soundEnabled &&
         !isVoiceCallActive(thread.id)
       ) {
-        if (status === "failed" && soundSettings.errorSound) {
-          playErrorSound();
-        } else {
-          void playNotificationSound(kind, () =>
-            hasNotificationSound(getClientSettings().notificationMode),
-          );
-        }
+        void playNotificationSound(kind, () =>
+          hasNotificationSound(getClientSettings().notificationMode),
+        );
       }
       if (
         inAppNotificationsEnabled &&

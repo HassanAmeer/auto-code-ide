@@ -290,7 +290,7 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
     <div className="flex flex-col w-full">
       {/* ── EXPANDED UNCOLLAPSED POPUP DRAWER (ABOVE BOTTOM ROW) ── */}
       {isExpanded && !isOnUtilityPage && (
-        <div className="mb-2 flex flex-col gap-1.5 rounded-xl border border-border/50 bg-sidebar-muted/40 p-2 shadow-xs backdrop-blur-sm animate-in fade-in slide-in-from-bottom-2 duration-150">
+        <div className="mb-2 mx-1.5 flex flex-col gap-1.5 rounded-xl border border-border/50 bg-sidebar-muted/40 p-2 shadow-xs backdrop-blur-sm animate-in fade-in slide-in-from-bottom-2 duration-150">
           <div className="flex items-center justify-between px-1 pb-1 border-b border-border/30 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
             <span>Extra Tools</span>
             <button
@@ -459,7 +459,7 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
       {!isOnUtilityPage && <SidebarResourceStats />}
 
       {/* ── SINGLE BOTTOM ROW (EK HI PATTI) ── */}
-      <SidebarMenu className="flex-row items-center justify-between w-full">
+      <SidebarMenu className="flex-row items-center justify-between w-full px-1.5 py-1">
         {isOnUtilityPage ? (
           <SidebarMenuItem className="min-w-0 flex-1">
             <SidebarMenuButton onClick={handleBackClick}>
@@ -518,12 +518,6 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
                 label="File Explorer"
                 onClick={handleFileExplorerClick}
                 isActive={isFileExplorerOpen}
-              />
-              <SidebarUtilityItem
-                icon={<FileCheckIcon />}
-                label="Notes & Reminders"
-                onClick={handleNotesClick}
-                isActive={isNotesOpen}
               />
               <SidebarUtilityItem
                 icon={
@@ -737,10 +731,12 @@ export const SidebarNotesItem = memo(function SidebarNotesItem() {
 
 export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
   return (
-    <SidebarFooter className="p-1.5 pt-0">
-      <SidebarThreadUndoNotice />
-      <SidebarProviderUpdatePill />
-      <SidebarUpdateArchitectureWarning />
+    <SidebarFooter className="p-0 gap-0">
+      <div className="px-1.5 pt-0 flex flex-col gap-1 w-full">
+        <SidebarThreadUndoNotice />
+        <SidebarProviderUpdatePill />
+        <SidebarUpdateArchitectureWarning />
+      </div>
       <SidebarUtilityMenu />
     </SidebarFooter>
   );

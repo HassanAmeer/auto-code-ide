@@ -83,22 +83,22 @@ export const SidebarResourceStats = memo(function SidebarResourceStats() {
     if (!stats) return null;
     return (
       <div
-        className="w-full flex justify-center py-1 select-none"
+        className="w-full flex justify-center py-1.5 border-y border-border/40 bg-muted/20 select-none"
         title={`Server Resources: CPU: ${stats.cpuPercent}% | RAM: ${stats.memUsedGb}/${stats.memTotalGb}GB (${stats.memPercent}%) | ROM: ${stats.diskFreeGb}GB free (${stats.diskPercent}%)`}
       >
-        <div className="flex items-center justify-center px-1.5 py-0.5 rounded-[5px] text-[9px] font-mono font-bold bg-zinc-900 border border-zinc-800 text-zinc-300 shadow-2xs">
-          ⚡ {stats.cpuPercent}%
+        <div className="flex items-center justify-center font-mono font-bold text-[9px] text-zinc-300">
+          ⚡{stats.cpuPercent}%
         </div>
       </div>
     );
   }
 
   return (
-    <div className="w-full px-2 py-1 select-none">
+    <div className="w-full border-y border-border/40 bg-muted/20 select-none">
       <div
         className={cn(
-          "flex items-center gap-2 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden",
-          "py-1 px-2.5 rounded-lg bg-zinc-900/60 dark:bg-zinc-950/60 border border-zinc-800/60 shadow-2xs backdrop-blur-xs",
+          "flex items-center gap-2.5 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden",
+          "py-1.5 px-3",
         )}
       >
         {isLoading && !stats ? (

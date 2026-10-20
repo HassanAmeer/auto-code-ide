@@ -818,7 +818,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
         onContextMenu={handleRowContextMenu}
       >
         <div className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
-          {prStatus && pr && (
+          {renamingThreadKey !== threadKey && prStatus && pr && (
             <Tooltip>
               <TooltipTrigger
                 render={
@@ -844,7 +844,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
               </TooltipPopup>
             </Tooltip>
           )}
-          {!pr && currentLinkedPr ? (
+          {renamingThreadKey !== threadKey && !pr && currentLinkedPr ? (
             <a
               href={currentLinkedPr.url}
               target="_blank"
@@ -857,16 +857,18 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
               <PullRequestGlyph.pullRequest className="size-3" />
             </a>
           ) : null}
-          {threadStatus && <ThreadStatusLabel status={threadStatus} />}
+          {renamingThreadKey !== threadKey && threadStatus && (
+            <ThreadStatusLabel status={threadStatus} />
+          )}
           {canOperateThread && renamingThreadKey === threadKey ? (
             <div
-              className="flex min-w-0 flex-1 items-center gap-1"
+              className="relative flex min-w-0 flex-1 items-center w-full"
               onClick={(e) => e.stopPropagation()}
               onDoubleClick={(e) => e.stopPropagation()}
             >
               <input
                 ref={handleRenameInputRef}
-                className="min-w-0 flex-1 truncate rounded border border-ring bg-background px-1.5 py-0.5 text-xs text-foreground outline-none shadow-xs"
+                className="w-full min-w-0 truncate rounded border border-ring bg-background pl-2 pr-12 py-0.5 text-xs text-foreground outline-none shadow-xs"
                 value={renamingTitle}
                 onChange={handleRenameInputChange}
                 onKeyDown={handleRenameInputKeyDown}
@@ -874,36 +876,38 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                 onClick={handleRenameInputClick}
                 onDoubleClick={handleRenameInputClick}
               />
-              <button
-                type="button"
-                title="Save (Enter)"
-                aria-label="Save rename"
-                className="inline-flex size-5 shrink-0 items-center justify-center rounded text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/15 active:scale-95 transition-all cursor-pointer"
-                onPointerDown={(e) => e.preventDefault()}
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  renamingCommittedRef.current = true;
-                  void commitRename(threadRef, renamingTitle, thread.title);
-                }}
-              >
-                <CheckIcon className="size-3.5" />
-              </button>
-              <button
-                type="button"
-                title="Cancel (Esc)"
-                aria-label="Cancel rename"
-                className="inline-flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted active:scale-95 transition-all cursor-pointer"
-                onPointerDown={(e) => e.preventDefault()}
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  renamingCommittedRef.current = true;
-                  cancelRename();
-                }}
-              >
-                <XIcon className="size-3.5" />
-              </button>
+              <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 z-10 pointer-events-auto">
+                <button
+                  type="button"
+                  title="Save (Enter)"
+                  aria-label="Save rename"
+                  className="inline-flex size-4.5 shrink-0 items-center justify-center rounded text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/20 active:scale-95 transition-all cursor-pointer"
+                  onPointerDown={(e) => e.preventDefault()}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    renamingCommittedRef.current = true;
+                    void commitRename(threadRef, renamingTitle, thread.title);
+                  }}
+                >
+                  <CheckIcon className="size-3.5" />
+                </button>
+                <button
+                  type="button"
+                  title="Cancel (Esc)"
+                  aria-label="Cancel rename"
+                  className="inline-flex size-4.5 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted active:scale-95 transition-all cursor-pointer"
+                  onPointerDown={(e) => e.preventDefault()}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    renamingCommittedRef.current = true;
+                    cancelRename();
+                  }}
+                >
+                  <XIcon className="size-3.5" />
+                </button>
+              </div>
             </div>
           ) : (
             <Tooltip>
@@ -921,150 +925,152 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
             </Tooltip>
           )}
         </div>
-        <div className="ml-auto flex shrink-0 items-center gap-1.5">
-          {canOperatePreview && discoveredPorts.length > 0 && (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <button
-                    type="button"
-                    aria-label={`Open localhost:${discoveredPorts[0]?.port ?? ""}`}
-                    className="inline-flex cursor-pointer items-center justify-center text-success-foreground outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
-                    onClick={handleOpenDiscoveredPort}
+        {renamingThreadKey !== threadKey && (
+          <div className="ml-auto flex shrink-0 items-center gap-1.5">
+            {canOperatePreview && discoveredPorts.length > 0 && (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <button
+                      type="button"
+                      aria-label={`Open localhost:${discoveredPorts[0]?.port ?? ""}`}
+                      className="inline-flex cursor-pointer items-center justify-center text-success-foreground outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
+                      onClick={handleOpenDiscoveredPort}
+                    />
+                  }
+                >
+                  <Globe2Icon className="size-3" />
+                </TooltipTrigger>
+                <TooltipPopup side="top">
+                  Open localhost:{discoveredPorts[0]?.port}
+                  {discoveredPorts.length > 1 ? ` (+${discoveredPorts.length - 1})` : ""}
+                </TooltipPopup>
+              </Tooltip>
+            )}
+            <ThreadWorktreeIndicator thread={thread} />
+            {terminalStatus && (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <span
+                      role="img"
+                      aria-label={terminalStatus.label}
+                      className={`inline-flex items-center justify-center ${terminalStatus.colorClass}`}
+                    />
+                  }
+                >
+                  <TerminalIcon
+                    className={`size-3 ${terminalStatus.pulse ? "motion-safe:animate-status-pulse" : ""}`}
+                    onAnimationStart={synchronizeTerminalPulse}
                   />
-                }
-              >
-                <Globe2Icon className="size-3" />
-              </TooltipTrigger>
-              <TooltipPopup side="top">
-                Open localhost:{discoveredPorts[0]?.port}
-                {discoveredPorts.length > 1 ? ` (+${discoveredPorts.length - 1})` : ""}
-              </TooltipPopup>
-            </Tooltip>
-          )}
-          <ThreadWorktreeIndicator thread={thread} />
-          {terminalStatus && (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <span
-                    role="img"
-                    aria-label={terminalStatus.label}
-                    className={`inline-flex items-center justify-center ${terminalStatus.colorClass}`}
-                  />
-                }
-              >
-                <TerminalIcon
-                  className={`size-3 ${terminalStatus.pulse ? "motion-safe:animate-status-pulse" : ""}`}
-                  onAnimationStart={synchronizeTerminalPulse}
-                />
-              </TooltipTrigger>
-              <TooltipPopup side="top">{terminalStatus.label}</TooltipPopup>
-            </Tooltip>
-          )}
-          <div
-            className={`flex min-w-12 justify-end ${
-              isRemoteThread ? "max-sm:min-w-24" : "max-sm:min-w-20"
-            }`}
-          >
-            {isConfirmingArchive ? (
-              <button
-                ref={handleConfirmArchiveRef}
-                type="button"
-                data-thread-selection-safe
-                data-testid={`thread-archive-confirm-${thread.id}`}
-                aria-label={`Confirm archive ${thread.title}`}
-                className="absolute top-1/2 right-1 inline-flex h-5 -translate-y-1/2 cursor-pointer items-center rounded-md bg-destructive/12 px-2 text-3xs font-medium text-destructive transition-colors hover:bg-destructive/18 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-destructive/40"
-                onPointerDown={stopPropagationOnPointerDown}
-                onClick={handleConfirmArchiveClick}
-              >
-                Confirm
-              </button>
-            ) : canOperateThread && !isThreadRunning && renamingThreadKey !== threadKey ? (
-              <div className="pointer-events-none absolute top-1/2 right-0.5 -translate-y-1/2 flex items-center gap-0.5 opacity-0 transition-opacity duration-150 max-sm:pointer-events-auto max-sm:opacity-100 group-hover/menu-sub-item:pointer-events-auto group-hover/menu-sub-item:opacity-100 group-focus-within/menu-sub-item:pointer-events-auto group-focus-within/menu-sub-item:opacity-100 bg-sidebar/90 dark:bg-zinc-900/90 backdrop-blur-xs rounded px-0.5 shadow-xs">
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <button
-                        type="button"
-                        data-thread-selection-safe
-                        data-testid={`thread-rename-${thread.id}`}
-                        aria-label={`Rename ${thread.title}`}
-                        className={SIDEBAR_ICON_ACTION_BUTTON_CLASS}
-                        onPointerDown={stopPropagationOnPointerDown}
-                        onClick={handleStartRename}
-                      >
-                        <SquarePenIcon className="size-3.5" />
-                      </button>
-                    }
-                  />
-                  <TooltipPopup side="top">Rename chat</TooltipPopup>
-                </Tooltip>
-                {appSettingsConfirmThreadArchive ? (
-                  <button
-                    type="button"
-                    data-thread-selection-safe
-                    data-testid={`thread-archive-${thread.id}`}
-                    aria-label={`Archive ${thread.title}`}
-                    className={SIDEBAR_ICON_ACTION_BUTTON_CLASS}
-                    onPointerDown={stopPropagationOnPointerDown}
-                    onClick={handleStartArchiveConfirmation}
-                  >
-                    <ArchiveIcon className="size-3.5" />
-                  </button>
-                ) : (
+                </TooltipTrigger>
+                <TooltipPopup side="top">{terminalStatus.label}</TooltipPopup>
+              </Tooltip>
+            )}
+            <div
+              className={`flex min-w-12 justify-end ${
+                isRemoteThread ? "max-sm:min-w-24" : "max-sm:min-w-20"
+              }`}
+            >
+              {isConfirmingArchive ? (
+                <button
+                  ref={handleConfirmArchiveRef}
+                  type="button"
+                  data-thread-selection-safe
+                  data-testid={`thread-archive-confirm-${thread.id}`}
+                  aria-label={`Confirm archive ${thread.title}`}
+                  className="absolute top-1/2 right-1 inline-flex h-5 -translate-y-1/2 cursor-pointer items-center rounded-md bg-destructive/12 px-2 text-3xs font-medium text-destructive transition-colors hover:bg-destructive/18 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-destructive/40"
+                  onPointerDown={stopPropagationOnPointerDown}
+                  onClick={handleConfirmArchiveClick}
+                >
+                  Confirm
+                </button>
+              ) : canOperateThread && !isThreadRunning && renamingThreadKey !== threadKey ? (
+                <div className="pointer-events-none absolute top-1/2 right-0.5 -translate-y-1/2 flex items-center gap-0.5 opacity-0 transition-opacity duration-150 max-sm:pointer-events-auto max-sm:opacity-100 group-hover/menu-sub-item:pointer-events-auto group-hover/menu-sub-item:opacity-100 group-focus-within/menu-sub-item:pointer-events-auto group-focus-within/menu-sub-item:opacity-100 bg-sidebar/90 dark:bg-zinc-900/90 backdrop-blur-xs rounded px-0.5 shadow-xs">
                   <Tooltip>
                     <TooltipTrigger
                       render={
                         <button
                           type="button"
                           data-thread-selection-safe
-                          data-testid={`thread-archive-${thread.id}`}
-                          aria-label={`Archive ${thread.title}`}
+                          data-testid={`thread-rename-${thread.id}`}
+                          aria-label={`Rename ${thread.title}`}
                           className={SIDEBAR_ICON_ACTION_BUTTON_CLASS}
                           onPointerDown={stopPropagationOnPointerDown}
-                          onClick={handleArchiveImmediateClick}
+                          onClick={handleStartRename}
                         >
-                          <ArchiveIcon className="size-3.5" />
+                          <SquarePenIcon className="size-3.5" />
                         </button>
                       }
                     />
-                    <TooltipPopup side="top">Archive</TooltipPopup>
+                    <TooltipPopup side="top">Rename chat</TooltipPopup>
                   </Tooltip>
-                )}
-              </div>
-            ) : null}
-            <span className={threadMetaClassName}>
-              <span className="inline-flex items-center gap-1">
-                {jumpLabel ? (
-                  <Tooltip>
-                    <TooltipTrigger
-                      render={
-                        <span
-                          aria-label={jumpLabel}
-                          className="inline-flex h-5 items-center rounded-full border border-border/80 bg-background/90 px-1.5 font-mono text-3xs font-medium tracking-tight text-foreground shadow-sm"
-                        />
-                      }
+                  {appSettingsConfirmThreadArchive ? (
+                    <button
+                      type="button"
+                      data-thread-selection-safe
+                      data-testid={`thread-archive-${thread.id}`}
+                      aria-label={`Archive ${thread.title}`}
+                      className={SIDEBAR_ICON_ACTION_BUTTON_CLASS}
+                      onPointerDown={stopPropagationOnPointerDown}
+                      onClick={handleStartArchiveConfirmation}
                     >
-                      {jumpLabel}
-                    </TooltipTrigger>
-                    <TooltipPopup side="top">{jumpLabel}</TooltipPopup>
-                  </Tooltip>
-                ) : (
-                  <span
-                    className={`text-3xs tabular-nums ${
-                      isHighlighted ? "text-foreground" : "text-secondary-label"
-                    }`}
-                  >
-                    {formatRelativeTimeLabel(
-                      thread.latestUserMessageAt ?? thread.updatedAt ?? thread.createdAt,
-                    )}
-                  </span>
-                )}
+                      <ArchiveIcon className="size-3.5" />
+                    </button>
+                  ) : (
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <button
+                            type="button"
+                            data-thread-selection-safe
+                            data-testid={`thread-archive-${thread.id}`}
+                            aria-label={`Archive ${thread.title}`}
+                            className={SIDEBAR_ICON_ACTION_BUTTON_CLASS}
+                            onPointerDown={stopPropagationOnPointerDown}
+                            onClick={handleArchiveImmediateClick}
+                          >
+                            <ArchiveIcon className="size-3.5" />
+                          </button>
+                        }
+                      />
+                      <TooltipPopup side="top">Archive</TooltipPopup>
+                    </Tooltip>
+                  )}
+                </div>
+              ) : null}
+              <span className={threadMetaClassName}>
+                <span className="inline-flex items-center gap-1">
+                  {jumpLabel ? (
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <span
+                            aria-label={jumpLabel}
+                            className="inline-flex h-5 items-center rounded-full border border-border/80 bg-background/90 px-1.5 font-mono text-3xs font-medium tracking-tight text-foreground shadow-sm"
+                          />
+                        }
+                      >
+                        {jumpLabel}
+                      </TooltipTrigger>
+                      <TooltipPopup side="top">{jumpLabel}</TooltipPopup>
+                    </Tooltip>
+                  ) : (
+                    <span
+                      className={`text-3xs tabular-nums ${
+                        isHighlighted ? "text-foreground" : "text-secondary-label"
+                      }`}
+                    >
+                      {formatRelativeTimeLabel(
+                        thread.latestUserMessageAt ?? thread.updatedAt ?? thread.createdAt,
+                      )}
+                    </span>
+                  )}
+                </span>
               </span>
-            </span>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </SidebarMenuSubItem>
   );

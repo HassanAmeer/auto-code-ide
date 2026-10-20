@@ -68,6 +68,7 @@ export function setNotificationBadge(count: number) {
 
 let audioContext: AudioContext | undefined;
 const buffers = new Map<string, Promise<AudioBuffer>>();
+let lastNotificationSoundAt = { completion: 0, input: 0 };
 
 /** Called from a gesture so browsers allow later background playback. */
 export function unlockNotificationAudio() {
@@ -79,11 +80,16 @@ export async function playNotificationSound(
   kind: "completion" | "input",
   shouldPlay: () => boolean,
 ) {
+  const now = Date.now();
+  if (now - lastNotificationSoundAt[kind] < 1200) return;
+
   const soundSettings = loadSoundSettings();
   if (!soundSettings.masterSoundEnabled) return;
   if (kind === "completion" && !soundSettings.responseDoneSound && !soundSettings.notificationSound)
     return;
   if (kind === "input" && !soundSettings.notificationSound) return;
+
+  lastNotificationSoundAt[kind] = now;
 
   if (kind === "completion" && soundSettings.responseDoneSound) {
     playResponseDoneSound();
