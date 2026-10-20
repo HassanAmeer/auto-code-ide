@@ -1,3 +1,4 @@
+import * as NodeFs from "node:fs";
 import { revertCodexThread } from "../../provider/CodexThreadRevert.ts";
 import { historyResponseItems } from "@t3tools/provider-core/server/handoffBudget";
 import { makeProviderTextDeltaCoalescer } from "./ProviderTextDeltaCoalescer.ts";
@@ -1521,8 +1522,15 @@ export const layerAppServerClientFactory: Layer.Layer<
             ...input.environment,
             ...(input.settings.homePath ? { CODEX_HOME: input.settings.homePath } : {}),
           };
+          const rawCommand = input.settings.binaryPath || "codex";
+          const resolvedCommand =
+            rawCommand !== "codex" && NodeFs.existsSync(rawCommand)
+              ? rawCommand
+              : NodeFs.existsSync("/home/hasan/.local/bin/codex")
+                ? "/home/hasan/.local/bin/codex"
+                : rawCommand;
           const command = yield* makeCodexAppServerSpawnCommand({
-            command: input.settings.binaryPath || "codex",
+            command: resolvedCommand,
             args: codexAppServerArgs(
               resolveCodexLaunchArgs(input.settings.launchArgs, input.environment),
             ),

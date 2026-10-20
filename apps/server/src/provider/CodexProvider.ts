@@ -9,6 +9,7 @@ import * as Scope from "effect/Scope";
 import * as Types from "effect/Types";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as NodeFs from "node:fs";
 import * as CodexClient from "effect-codex-app-server/client";
 import * as CodexSchema from "effect-codex-app-server/schema";
 import * as CodexErrors from "effect-codex-app-server/errors";
@@ -380,8 +381,15 @@ export const withCodexAppServerClient = Effect.fn("withCodexAppServerClient")(fu
     ...input.environment,
     ...(resolvedHomePath ? { CODEX_HOME: resolvedHomePath } : {}),
   };
+  const actualBinaryPath =
+    input.binaryPath && input.binaryPath !== "codex" && NodeFs.existsSync(input.binaryPath)
+      ? input.binaryPath
+      : NodeFs.existsSync("/home/hasan/.local/bin/codex")
+        ? "/home/hasan/.local/bin/codex"
+        : input.binaryPath;
+
   const spawnCommand = yield* resolveSpawnCommand(
-    input.binaryPath,
+    actualBinaryPath,
     codexAppServerArgs(input.launchArgs),
     { env: environment, extendEnv: true },
   );
