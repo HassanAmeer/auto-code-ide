@@ -20,7 +20,7 @@ export const DEFAULT_AUTO_RETRY_SETTINGS: AutoRetrySettings = {
   maxRetries: 3,
   autoSwitchModel: true,
   retryOnRateLimit: true,
-  timeoutSeconds: 90,
+  timeoutSeconds: 300,
 };
 
 export function loadAutoRetrySettings(): AutoRetrySettings {
@@ -50,7 +50,9 @@ export function loadAutoRetrySettings(): AutoRetrySettings {
           : DEFAULT_AUTO_RETRY_SETTINGS.retryOnRateLimit,
       timeoutSeconds:
         typeof parsed.timeoutSeconds === "number" && parsed.timeoutSeconds > 0
-          ? parsed.timeoutSeconds
+          ? parsed.timeoutSeconds === 90
+            ? DEFAULT_AUTO_RETRY_SETTINGS.timeoutSeconds
+            : parsed.timeoutSeconds
           : DEFAULT_AUTO_RETRY_SETTINGS.timeoutSeconds,
     };
   } catch {

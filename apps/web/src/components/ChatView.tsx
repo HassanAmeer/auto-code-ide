@@ -11298,44 +11298,90 @@ export default function ChatView(props: ChatViewProps) {
     visibleThreadError,
   ]);
 
+  const serverVisibleTurnItemsRef = useRef(serverVisibleTurnItems);
+  serverVisibleTurnItemsRef.current = serverVisibleTurnItems;
+
   const currentTurnItemCount = serverVisibleTurnItems?.length ?? 0;
   const currentTurnTokenCount =
     (activeThreadLiveTokenUsage?.inputTokens ?? 0) +
     (activeThreadLiveTokenUsage?.outputTokens ?? 0);
+  const currentTurnContentLength = useMemo(() => {
+    if (!serverVisibleTurnItems || serverVisibleTurnItems.length === 0) return 0;
+    let len = 0;
+    for (const row of serverVisibleTurnItems) {
+      const item = row.item as Record<string, unknown>;
+      if (typeof item.text === "string") len += item.text.length;
+      if (typeof item.markdown === "string") len += item.markdown.length;
+      if (typeof item.result === "string") len += item.result.length;
+      if (typeof item.progress === "string") len += item.progress.length;
+      if (typeof item.output === "string") len += item.output.length;
+      if (Array.isArray(item.steps)) len += item.steps.length;
+    }
+    return len;
+  }, [serverVisibleTurnItems]);
+
+  const hasActiveTurnWork = useMemo(() => {
+    if (!serverVisibleTurnItems || serverVisibleTurnItems.length === 0) return false;
+    return serverVisibleTurnItems.some((row) => {
+      const status = row.item.status;
+      const isStreaming = Boolean((row.item as { streaming?: boolean }).streaming);
+      return status === "running" || status === "pending" || status === "waiting" || isStreaming;
+    });
+  }, [serverVisibleTurnItems]);
+
   const lastActiveProgressRef = useRef<{
     timestamp: number;
     itemCount: number;
     tokenCount: number;
+    contentLength: number;
   }>({
     timestamp: Date.now(),
     itemCount: 0,
     tokenCount: 0,
+    contentLength: 0,
   });
 
   useEffect(() => {
-    if (!isWorking) {
+    if (!autoRetrySettings.enabled || !isWorking) {
       lastActiveProgressRef.current = {
         timestamp: Date.now(),
         itemCount: currentTurnItemCount,
         tokenCount: currentTurnTokenCount,
+        contentLength: currentTurnContentLength,
       };
       return;
     }
 
     if (
+      hasActiveTurnWork ||
       currentTurnItemCount > lastActiveProgressRef.current.itemCount ||
-      currentTurnTokenCount > lastActiveProgressRef.current.tokenCount
+      currentTurnTokenCount > lastActiveProgressRef.current.tokenCount ||
+      currentTurnContentLength > lastActiveProgressRef.current.contentLength
     ) {
       lastActiveProgressRef.current = {
         timestamp: Date.now(),
         itemCount: currentTurnItemCount,
         tokenCount: currentTurnTokenCount,
+        contentLength: currentTurnContentLength,
       };
     }
 
     const checkInterval = setInterval(() => {
-      if (!isWorking || !activeThread) return;
-      const timeoutLimitMs = (autoRetrySettings.timeoutSeconds ?? 90) * 1000;
+      if (!autoRetrySettings.enabled || !isWorking || !activeThread) return;
+
+      const activeItems = serverVisibleTurnItemsRef.current;
+      const isBusy = activeItems?.some((row) => {
+        const status = row.item.status;
+        const isStreaming = Boolean((row.item as { streaming?: boolean }).streaming);
+        return status === "running" || status === "pending" || status === "waiting" || isStreaming;
+      });
+
+      if (isBusy) {
+        lastActiveProgressRef.current.timestamp = Date.now();
+        return;
+      }
+
+      const timeoutLimitMs = (autoRetrySettings.timeoutSeconds ?? 300) * 1000;
       const elapsed = Date.now() - lastActiveProgressRef.current.timestamp;
       if (elapsed >= timeoutLimitMs) {
         lastActiveProgressRef.current.timestamp = Date.now();
@@ -11343,7 +11389,7 @@ export default function ChatView(props: ChatViewProps) {
           environmentId,
           input: { threadId: activeThread.id },
         });
-        const timeoutMsg = `Model response timed out (no stream response for ${autoRetrySettings.timeoutSeconds ?? 90}s). Connection dropped or model stalled (HTTP 429 / Stream Timeout).`;
+        const timeoutMsg = `Model response timed out (no stream response or progress for ${autoRetrySettings.timeoutSeconds ?? 300}s). Connection dropped or model stalled (HTTP 429 / Stream Timeout).`;
         setThreadError(activeThread.id, timeoutMsg);
         toastManager.add({
           type: "error",
@@ -11356,10 +11402,13 @@ export default function ChatView(props: ChatViewProps) {
     return () => clearInterval(checkInterval);
   }, [
     activeThread,
+    autoRetrySettings.enabled,
     autoRetrySettings.timeoutSeconds,
+    currentTurnContentLength,
     currentTurnItemCount,
     currentTurnTokenCount,
     environmentId,
+    hasActiveTurnWork,
     interruptThreadTurn,
     isWorking,
     setThreadError,

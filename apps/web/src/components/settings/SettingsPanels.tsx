@@ -2439,11 +2439,11 @@ export function GeneralSettingsPanel() {
             <SettingsRow
               id="auto-retry-timeout"
               title="Response & stream timeout (seconds)"
-              description="Maximum seconds to wait without response or tokens before timing out and retrying (Default: 90s)."
+              description="Maximum seconds to wait without response or tokens before timing out and retrying (Default: 300s)."
               control={
                 <div className="flex items-center gap-2">
                   <AutoRetryNumberInput
-                    value={autoRetrySettings.timeoutSeconds ?? 90}
+                    value={autoRetrySettings.timeoutSeconds ?? 300}
                     min={15}
                     max={600}
                     onCommit={(seconds) => updateAutoRetrySettings({ timeoutSeconds: seconds })}
@@ -2473,7 +2473,7 @@ export function GeneralSettingsPanel() {
                 Active Failover Workflow
               </div>
               <p>
-                Run model ➜ if stalled ({autoRetrySettings.timeoutSeconds ?? 90}s) or error (429) ➜
+                Run model ➜ if stalled ({autoRetrySettings.timeoutSeconds ?? 300}s) or error (429) ➜
                 wait{" "}
                 <span className="font-semibold text-foreground">
                   {autoRetrySettings.delaySeconds}s
