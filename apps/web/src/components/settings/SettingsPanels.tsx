@@ -1932,6 +1932,19 @@ function ExecutionEngineSection({
       updateSettings({ defaultModelSelection: selection });
       try {
         useComposerDraftStore.getState().setStickyModelSelection(selection);
+        useComposerDraftStore.setState((state) => {
+          const nextDrafts = { ...state.draftsByThreadKey };
+          for (const k of Object.keys(nextDrafts)) {
+            nextDrafts[k] = {
+              ...nextDrafts[k],
+              modelSelection: selection,
+            };
+          }
+          return {
+            draftsByThreadKey: nextDrafts,
+            stickyModelSelection: selection,
+          };
+        });
       } catch {
         // ignore
       }
@@ -1949,6 +1962,19 @@ function ExecutionEngineSection({
       updateSettings({ defaultModelSelection: selection });
       try {
         useComposerDraftStore.getState().setStickyModelSelection(selection);
+        useComposerDraftStore.setState((state) => {
+          const nextDrafts = { ...state.draftsByThreadKey };
+          for (const k of Object.keys(nextDrafts)) {
+            nextDrafts[k] = {
+              ...nextDrafts[k],
+              modelSelection: selection,
+            };
+          }
+          return {
+            draftsByThreadKey: nextDrafts,
+            stickyModelSelection: selection,
+          };
+        });
       } catch {
         // ignore
       }
