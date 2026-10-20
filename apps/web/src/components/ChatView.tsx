@@ -11071,7 +11071,7 @@ export default function ChatView(props: ChatViewProps) {
   }, []);
 
   const handleAutoRetryNow = useCallback(
-    async (options?: { overrideModel?: ModelSelection }) => {
+    async (options?: { overrideModel?: ModelSelection; forceRetryMessage?: boolean }) => {
       setAutoRetryCountdown(null);
       if (!activeThread || isWorking || isSendBusy || isResuming || sendInFlightRef.current) {
         return;
@@ -11082,7 +11082,7 @@ export default function ChatView(props: ChatViewProps) {
         return;
       }
 
-      if (promptRef.current && promptRef.current.trim().length > 0) {
+      if (!options?.forceRetryMessage && promptRef.current && promptRef.current.trim().length > 0) {
         await onSend();
         return;
       }
@@ -11199,6 +11199,10 @@ export default function ChatView(props: ChatViewProps) {
 
   const handleAutoRetryNowRef = useRef(handleAutoRetryNow);
   handleAutoRetryNowRef.current = handleAutoRetryNow;
+
+  const handleRetryFailedTurn = useCallback(() => {
+    void handleAutoRetryNow({ forceRetryMessage: true });
+  }, [handleAutoRetryNow]);
 
   const handleSwitchToNextModel = useCallback(() => {
     if (!nextFallbackCandidate) return;
@@ -11830,6 +11834,7 @@ export default function ChatView(props: ChatViewProps) {
                 activeTurnStartedAt={paintOnlyDisplayedTimeline ? null : activeWorkStartedAt}
                 worktreeSetup={paintOnlyDisplayedTimeline ? null : worktreeSetup}
                 onCancelWorktreeSetup={onCancelWorktreeSetup}
+                onRetryTurn={paintOnlyDisplayedTimeline ? undefined : handleRetryFailedTurn}
                 {...(paintOnlyDisplayedTimeline
                   ? {}
                   : { retryableWorkspacePreparationRunIds, onRetryWorkspacePreparation })}

@@ -363,6 +363,7 @@ interface TimelineRowSharedState {
   onRetryWorkspacePreparation: ((runId: RunId) => void) | null;
   onWorktreeSetupWorkLocally: (() => void) | null;
   onOpenWorktreeSetupTerminal: ((terminalId: string) => void) | null;
+  onRetryTurn?: (() => void) | null | undefined;
   workGroupViewState: WorkGroupViewState;
 }
 
@@ -539,6 +540,7 @@ interface MessagesTimelineProps {
   historyControls?: MessagesTimelineHistoryControls | undefined;
   /** Non-null when older turns exist beyond the loaded window. */
   loadEarlier?: CitationHistoryPage | null;
+  onRetryTurn?: (() => void) | null | undefined;
   findPositionReaderRef?: React.RefObject<ThreadFindPositionReader | null>;
   findExpanded?: boolean;
   findQuery?: string;
@@ -632,6 +634,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
   topFadeEnabled = false,
   historyControls,
   loadEarlier = null,
+  onRetryTurn = null,
 }: MessagesTimelineProps) {
   const listIdentityKey = displayThreadKey ?? routeThreadKey;
   const rememberedPosition = useMemo(
@@ -1337,6 +1340,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
       onRetryWorkspacePreparation: onRetryWorkspacePreparation ?? null,
       onWorktreeSetupWorkLocally: onWorktreeSetupWorkLocally ?? null,
       onOpenWorktreeSetupTerminal: onOpenWorktreeSetupTerminal ?? null,
+      onRetryTurn: onRetryTurn ?? null,
       workGroupViewState,
     }),
     [
@@ -1375,6 +1379,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
       onRetryWorkspacePreparation,
       onWorktreeSetupWorkLocally,
       onOpenWorktreeSetupTerminal,
+      onRetryTurn,
       workGroupViewState,
     ],
   );
@@ -3093,6 +3098,7 @@ function CupertinoTimelineErrorCard({
   visibility,
   sourceThreadId,
   retryAction,
+  onRetryTurn,
   onContinue,
   isInterrupted,
   inspectorContent,
@@ -3105,12 +3111,15 @@ function CupertinoTimelineErrorCard({
   visibility?: "local" | "inherited" | "synthetic" | undefined;
   sourceThreadId?: string | null | undefined;
   retryAction?: { label: string; onRetry: () => void } | null | undefined;
+  onRetryTurn?: (() => void) | null | undefined;
   onContinue?: (() => void) | undefined;
   isInterrupted?: boolean | undefined;
   inspectorContent?: ReactNode | undefined;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
+  const activity = useContext(TimelineRowActivityCtx);
+  const isWorking = activity?.isWorking ?? false;
 
   const errorInfo = parseErrorDetails(rawError, explicitModel);
 
@@ -3225,7 +3234,7 @@ function CupertinoTimelineErrorCard({
 
       {/* Subtitle: 1 Line Details */}
       <div
-        className="px-3 pb-2 pt-0 -mt-0.5 min-w-0 cursor-pointer"
+        className="px-3 pb-1.5 pt-0 -mt-0.5 min-w-0 cursor-pointer"
         onClick={() => setExpanded((v) => !v)}
       >
         <p
@@ -3235,6 +3244,37 @@ function CupertinoTimelineErrorCard({
           {subtitle}
         </p>
       </div>
+
+      {/* Action / Retry Button Row: Prominent retry button directly below subtitle */}
+      {onRetryTurn || retryAction ? (
+        <div className="px-3 pb-2 pt-0.5 ps-8.5 flex items-center gap-2">
+          <Button
+            type="button"
+            size="xs"
+            variant="outline"
+            disabled={isWorking}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (onRetryTurn) {
+                onRetryTurn();
+              } else if (retryAction) {
+                retryAction.onRetry();
+              }
+            }}
+            className={cn(
+              "h-6 px-2.5 gap-1.5 text-xs font-medium rounded-md shadow-xs transition-colors cursor-pointer",
+              isWarning
+                ? "border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300"
+                : "border-rose-500/40 bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 dark:text-rose-300",
+              isWorking && "opacity-60 cursor-not-allowed",
+            )}
+            title="Retry response in this chat"
+          >
+            <RotateCcwIcon className={cn("size-3", isWorking && "animate-spin")} />
+            <span>{isWorking ? "Retrying..." : retryAction?.label || "Retry Response"}</span>
+          </Button>
+        </div>
+      ) : null}
 
       {/* Uncollapsed / Expanded details section */}
       {expanded ? (
@@ -3258,21 +3298,6 @@ function CupertinoTimelineErrorCard({
               {copied ? "Copied" : "Copy"}
             </button>
           </div>
-
-          {retryAction ? (
-            <div className="mt-2">
-              <Button
-                type="button"
-                size="xs"
-                variant="outline"
-                onClick={retryAction.onRetry}
-                className="gap-1 text-xs"
-              >
-                <RotateCcwIcon className="size-3" />
-                {retryAction.label}
-              </Button>
-            </div>
-          ) : null}
 
           {sourceThreadId && visibility === "inherited" ? (
             <p className="mt-1.5 font-mono text-3xs text-muted-foreground/60">
@@ -3326,6 +3351,7 @@ function CupertinoErrorRow({
       sourceThreadId={sourceThreadId}
       isInterrupted={isInterrupted}
       onContinue={handleResume}
+      onRetryTurn={ctx.onRetryTurn}
       inspectorContent={
         <V2ItemInspector
           projectedItem={row.projectedItem}
@@ -5646,6 +5672,7 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
         visibility={workEntry.projectedItem?.visibility}
         sourceThreadId={workEntry.projectedItem?.sourceThreadId}
         retryAction={retryAction}
+        onRetryTurn={ctx.onRetryTurn}
       />
     );
   }
