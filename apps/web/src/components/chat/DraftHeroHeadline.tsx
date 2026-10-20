@@ -14,6 +14,7 @@ import { primaryServerKeybindingsAtom } from "~/state/server";
 import { useScratchProject } from "~/hooks/useScratchProject";
 import { useClientSettings } from "~/hooks/useSettings";
 import { hasExplicitComposerModelSelection } from "~/lib/chatThreadActions";
+import { getSavedLastSelectedModel } from "~/lib/lastSelectedModel";
 import {
   deriveLogicalProjectKeyFromSettings,
   selectProjectGroupingSettings,
@@ -195,10 +196,11 @@ export function DraftHeroHeadline({
       const environmentSettings = environments.find(
         (environment) => environment.environmentId === project.environmentId,
       )?.serverConfig?.settings;
-      const defaultModelSelection = environmentSettings
-        ? resolveProjectSettings(environmentSettings, project.id, project).settings
-            .defaultModelSelection
-        : project.defaultModelSelection;
+      const defaultModelSelection =
+        (environmentSettings
+          ? resolveProjectSettings(environmentSettings, project.id, project).settings
+              .defaultModelSelection
+          : project.defaultModelSelection) ?? getSavedLastSelectedModel();
       if (defaultModelSelection) {
         setModelSelection(draftId, defaultModelSelection, {
           replaceOptions: true,

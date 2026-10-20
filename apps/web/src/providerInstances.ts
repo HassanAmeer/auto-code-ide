@@ -30,6 +30,7 @@ import {
   resolveProviderInstanceDisplayName,
   shouldShowInstanceBadge,
 } from "@t3tools/client-runtime/state/provider-instance-display";
+import { getSavedLastSelectedModel } from "./lib/lastSelectedModel";
 
 export { normalizeProviderAccentColor, shouldShowInstanceBadge };
 
@@ -338,9 +339,10 @@ export function resolveDefaultProviderModelSelection(
   providers: ReadonlyArray<ServerProvider>,
   selection: ModelSelection | null | undefined,
 ): ModelSelection | null {
-  const instanceId = resolveSelectableProviderInstance(providers, selection?.instanceId);
+  const effectiveSelection = selection ?? getSavedLastSelectedModel();
+  const instanceId = resolveSelectableProviderInstance(providers, effectiveSelection?.instanceId);
   if (instanceId === undefined) return null;
-  if (selection?.instanceId === instanceId) return selection;
+  if (effectiveSelection?.instanceId === instanceId) return effectiveSelection;
   const model = getDefaultProviderInstanceModel(providers, instanceId);
   return model ? { instanceId, model } : null;
 }

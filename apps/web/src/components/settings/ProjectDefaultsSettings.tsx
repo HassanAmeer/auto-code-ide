@@ -36,6 +36,7 @@ import { TraitsPicker } from "../chat/TraitsPicker";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { toastManager } from "../ui/toast";
 import { Switch } from "../ui/switch";
+import { saveLastSelectedModel } from "~/lib/lastSelectedModel";
 import type { ProjectSettingsCategory } from "./ProjectSettingsPanel";
 import { searchableSetting } from "./settingsSearch";
 import { useSettingsScope } from "./SettingsScopeContext";
@@ -177,6 +178,7 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
       toastManager.add({ type: "error", title: "Default model not saved", description: reason });
       return;
     }
+    saveLastSelectedModel(value);
     updateSettings({ defaultModelSelection: value });
   };
 

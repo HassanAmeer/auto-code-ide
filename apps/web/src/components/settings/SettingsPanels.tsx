@@ -123,6 +123,7 @@ import {
 } from "../../providerInstances";
 import { ensureLocalApi, readLocalApi } from "../../localApi";
 import { isMacPlatform } from "../../lib/utils";
+import { saveLastSelectedModel } from "~/lib/lastSelectedModel";
 import { EMPTY_SERVER_PROVIDERS } from "../../state/server";
 import { useArchivedThreadSnapshots } from "../../lib/archivedThreadsState";
 import { formatRelativeTimeLabel } from "../../timestampFormat";
@@ -1929,6 +1930,7 @@ function ExecutionEngineSection({
       );
       const codexModel = codexProvider?.models?.[0]?.slug ?? "gpt-6.1-sol";
       const selection = createModelSelection("codex" as ProviderInstanceId, codexModel);
+      saveLastSelectedModel(selection);
       updateSettings({ defaultModelSelection: selection });
       try {
         useComposerDraftStore.getState().setStickyModelSelection(selection);
@@ -1965,6 +1967,7 @@ function ExecutionEngineSection({
       );
       const customModel = customProvider?.models?.[0]?.slug ?? "claude-sonnet-4-5";
       const selection = createModelSelection("custom" as ProviderInstanceId, customModel);
+      saveLastSelectedModel(selection);
       updateSettings({ defaultModelSelection: selection });
       try {
         useComposerDraftStore.getState().setStickyModelSelection(selection);

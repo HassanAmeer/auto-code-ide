@@ -343,6 +343,7 @@ import {
   shouldShowInstanceBadge,
   sortProviderInstanceEntries,
 } from "../providerInstances";
+import { getSavedLastSelectedModel, saveLastSelectedModel } from "~/lib/lastSelectedModel";
 import {
   useClientSettings,
   useClientSettingsHydrated,
@@ -2121,21 +2122,17 @@ export default function ChatView(props: ChatViewProps) {
       };
     });
   }, [draftId, localDraftErrorsByDraftId, routeThreadKey, serverThread]);
-  const localDraftThread = useMemo(
-    () =>
-      draftThread
-        ? buildLocalDraftThread(
-            threadId,
-            draftThread,
-            resolveProjectSettings(
-              settings,
-              fallbackDraftProject?.id ?? null,
-              fallbackDraftProject ?? undefined,
-            ).settings.defaultModelSelection ?? NO_PROVIDER_MODEL_SELECTION,
-          )
-        : undefined,
-    [draftThread, fallbackDraftProject, settings, threadId],
-  );
+  const localDraftThread = useMemo(() => {
+    if (!draftThread) return undefined;
+    const lastSaved = getSavedLastSelectedModel();
+    const projectDefault = resolveProjectSettings(
+      settings,
+      fallbackDraftProject?.id ?? null,
+      fallbackDraftProject ?? undefined,
+    ).settings.defaultModelSelection;
+    const fallbackModel = lastSaved ?? projectDefault ?? NO_PROVIDER_MODEL_SELECTION;
+    return buildLocalDraftThread(threadId, draftThread, fallbackModel);
+  }, [draftThread, fallbackDraftProject, settings, threadId]);
   const isServerThread = serverThread !== null;
   const activeThread = isServerThread ? serverThread : localDraftThread;
   const serverLatestRun = useMemo(
@@ -10892,6 +10889,19 @@ export default function ChatView(props: ChatViewProps) {
         if (options?.focusComposer !== false) scheduleComposerFocus();
         return;
       }
+      // Save permanently to localStorage so it survives page reloads
+      saveLastSelectedModel(nextModelSelection);
+
+      // Persist to server settings as default model
+      void updateProjectScriptSettings({
+        environmentId,
+        input: {
+          patch: {
+            defaultModelSelection: nextModelSelection,
+          },
+        },
+      });
+
       setComposerDraftModelSelection(
         scopeThreadRef(activeThread.environmentId, activeThread.id),
         nextModelSelection,
@@ -10905,11 +10915,13 @@ export default function ChatView(props: ChatViewProps) {
     [
       activeThread,
       activeRuntime,
+      environmentId,
       lockedProvider,
       supportsProviderSwitchingViaHandoff,
       scheduleComposerFocus,
       setComposerDraftModelSelection,
       setStickyComposerModelSelection,
+      updateProjectScriptSettings,
       providerStatuses,
       settings,
     ],
@@ -12103,9 +12115,15 @@ export default function ChatView(props: ChatViewProps) {
                               providerStatuses={providerStatuses as ServerProvider[]}
                               providerCatalogKnown={serverConfig !== null}
                               activeProjectDefaultModelSelection={
-                                activeProjectDefaultModelSelection
+                                activeProjectDefaultModelSelection ??
+                                getSavedLastSelectedModel() ??
+                                undefined
                               }
-                              activeThreadModelSelection={activeThread?.modelSelection}
+                              activeThreadModelSelection={
+                                activeThread?.modelSelection ??
+                                getSavedLastSelectedModel() ??
+                                undefined
+                              }
                               activeContextWindow={activeContextWindow}
                               activeTasksProgress={activeComposerTasksProgress}
                               activeTaskSteps={activeComposerTaskSteps}

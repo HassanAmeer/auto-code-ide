@@ -41,6 +41,7 @@ import { createModelSelection, normalizeModelSlug } from "@t3tools/shared/model"
 import { useMemo } from "react";
 import { getLocalStorageItem } from "./hooks/useLocalStorage";
 import { resolveAppModelSelection, resolveAppModelSelectionForInstance } from "./modelSelection";
+import { getSavedLastSelectedModel, saveLastSelectedModel } from "./lib/lastSelectedModel";
 import {
   DEFAULT_INTERACTION_MODE,
   DEFAULT_RUNTIME_MODE,
@@ -1264,8 +1265,13 @@ export function deriveEffectiveComposerModelState(input: {
   projectModelSelection: ModelSelection | null | undefined;
   settings: UnifiedSettings;
 }): EffectiveComposerModelState {
+  const lastSaved = getSavedLastSelectedModel();
   const baseModelCandidate =
-    input.threadModelSelection?.model ?? input.projectModelSelection?.model ?? null;
+    input.threadModelSelection?.model ??
+    input.projectModelSelection?.model ??
+    (lastSaved && lastSaved.instanceId === input.selectedInstanceId ? lastSaved.model : null) ??
+    lastSaved?.model ??
+    null;
   const preserveThreadModel =
     input.selectedInstanceId !== null &&
     input.selectedInstanceId !== undefined &&
@@ -2367,6 +2373,19 @@ function normalizeCurrentPersistedComposerDraftStoreState(
     stickyActiveProvider = normalizeProviderInstanceId(normalizedPersistedState.stickyProvider);
   }
 
+  const lastSavedModel = getSavedLastSelectedModel();
+  if (lastSavedModel) {
+    if (!stickyActiveProvider) {
+      stickyActiveProvider = lastSavedModel.instanceId;
+    }
+    if (!stickyModelSelectionByProvider[lastSavedModel.instanceId]) {
+      stickyModelSelectionByProvider = {
+        ...stickyModelSelectionByProvider,
+        [lastSavedModel.instanceId]: lastSavedModel,
+      };
+    }
+  }
+
   return {
     draftsByThreadKey: normalizePersistedDraftsByThreadId(
       normalizedPersistedState.draftsByThreadKey ?? normalizedPersistedState.draftsByThreadId,
@@ -3028,6 +3047,7 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
               normalized.options !== undefined
                 ? normalized
                 : createModelSelection(normalized.instanceId, normalized.model, current?.options);
+            saveLastSelectedModel(nextSelection);
             const nextMap: Partial<Record<ProviderInstanceId, ModelSelection>> = {
               ...state.stickyModelSelectionByProvider,
               [normalized.instanceId]: nextSelection,
@@ -3178,6 +3198,9 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
               activeProvider: nextActiveProvider,
               ...(opts?.explicit === true ? { modelSelectionExplicit: true as const } : {}),
             };
+            if (opts?.explicit === true && normalized) {
+              saveLastSelectedModel(nextMap[normalized.instanceId]);
+            }
             const nextDraftsByThreadKey = { ...state.draftsByThreadKey };
             if (shouldRemoveDraft(nextDraft)) {
               delete nextDraftsByThreadKey[threadKey];

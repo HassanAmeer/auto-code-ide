@@ -1102,6 +1102,7 @@ import {
   type ProviderInstanceEntry,
 } from "../../providerInstances";
 import { type AppModelOption, getAppModelOptionsForInstance } from "../../modelSelection";
+import { getSavedLastSelectedModel } from "~/lib/lastSelectedModel";
 import type { UnifiedSettings } from "@t3tools/contracts/settings";
 import {
   isVideoAttachment,
@@ -2132,6 +2133,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           activeThread?.runtime?.providerInstanceId,
           activeThreadModelSelection?.instanceId,
           activeProjectDefaultModelSelection?.instanceId,
+          getSavedLastSelectedModel()?.instanceId,
         ],
         lockedProvider,
         lockedInstanceId:
@@ -2187,8 +2189,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     providers: providerStatuses,
     selectedProvider,
     selectedInstanceId,
-    threadModelSelection: activeThreadModelSelection,
-    projectModelSelection: activeProjectDefaultModelSelection,
+    threadModelSelection: activeThreadModelSelection ?? getSavedLastSelectedModel(),
+    projectModelSelection: activeProjectDefaultModelSelection ?? getSavedLastSelectedModel(),
     settings,
   });
   const providerSendBlockReason = getAntigravitySendBlockReason(
