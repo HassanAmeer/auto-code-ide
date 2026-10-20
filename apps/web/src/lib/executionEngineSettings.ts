@@ -26,7 +26,7 @@ const EVENT_NAME = "t3:execution-engine-changed";
 
 export const DEFAULT_EXECUTION_ENGINE_SETTINGS: ExecutionEngineSettings = {
   mode: "custom",
-  codexBinaryPath: "/home/hasan/.local/bin/codex",
+  codexBinaryPath: "codex",
 };
 
 export function loadExecutionEngineSettings(): ExecutionEngineSettings {
@@ -37,12 +37,16 @@ export function loadExecutionEngineSettings(): ExecutionEngineSettings {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
+      const rawPath =
+        typeof parsed?.codexBinaryPath === "string" ? parsed.codexBinaryPath.trim() : "";
+      const sanitizedPath =
+        rawPath && !rawPath.startsWith("/home/hasan")
+          ? rawPath
+          : DEFAULT_EXECUTION_ENGINE_SETTINGS.codexBinaryPath;
+
       return {
         mode: parsed?.mode === "codex" ? "codex" : "custom",
-        codexBinaryPath:
-          typeof parsed?.codexBinaryPath === "string" && parsed.codexBinaryPath.trim()
-            ? parsed.codexBinaryPath.trim()
-            : DEFAULT_EXECUTION_ENGINE_SETTINGS.codexBinaryPath,
+        codexBinaryPath: sanitizedPath || DEFAULT_EXECUTION_ENGINE_SETTINGS.codexBinaryPath,
       };
     }
   } catch (err) {
@@ -94,14 +98,17 @@ export function useExecutionEngineSettings(): [
     void fetchServerAppSettings().then((appSettings) => {
       if (appSettings?.execution_engine && typeof appSettings.execution_engine === "object") {
         const serverEngine = appSettings.execution_engine;
+        const rawServerPath =
+          typeof serverEngine.codexBinaryPath === "string"
+            ? serverEngine.codexBinaryPath.trim()
+            : "";
+        const cleanServerPath =
+          rawServerPath && !rawServerPath.startsWith("/home/hasan") ? rawServerPath : "";
+
         setSettings((prev) => {
           const updated: ExecutionEngineSettings = {
             mode: serverEngine.mode === "codex" ? "codex" : "custom",
-            codexBinaryPath:
-              typeof serverEngine.codexBinaryPath === "string" &&
-              serverEngine.codexBinaryPath.trim()
-                ? serverEngine.codexBinaryPath.trim()
-                : prev.codexBinaryPath,
+            codexBinaryPath: cleanServerPath || prev.codexBinaryPath,
           };
           try {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
@@ -109,6 +116,32 @@ export function useExecutionEngineSettings(): [
             // ignore
           }
           return updated;
+        });
+      }
+    });
+
+    // Auto-probe server codex status to discover the actual installed binary path
+    void fetchCodexCliStatus().then((status) => {
+      if (status.available && typeof status.path === "string" && status.path) {
+        const resolvedPath = status.path;
+        setSettings((prev) => {
+          if (
+            !prev.codexBinaryPath ||
+            prev.codexBinaryPath === "codex" ||
+            prev.codexBinaryPath.startsWith("/home/hasan")
+          ) {
+            const updated: ExecutionEngineSettings = {
+              ...prev,
+              codexBinaryPath: resolvedPath,
+            };
+            try {
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+            } catch {
+              // ignore
+            }
+            return updated;
+          }
+          return prev;
         });
       }
     });

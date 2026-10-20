@@ -2,6 +2,7 @@
 import * as NodeOs from "node:os";
 import * as NodeFs from "node:fs";
 import * as NodeChildProcess from "node:child_process";
+import * as NodePath from "node:path";
 import {
   runBashCommandOnHost,
   createTerminalEventStream,
@@ -964,11 +965,21 @@ export const layerCodexCliStatusRoute = HttpRouter.add(
     const url = new URL(request.url, "http://localhost");
     const requestedPath = url.searchParams.get("path")?.trim();
 
-    const homeDir = NodeOs.homedir();
-    const codexHome = process.env.CODEX_HOME || `${homeDir}/.codex`;
+    const homeDir = NodeOs.homedir() || process.env.HOME || "/root";
+    const codexHome = process.env.CODEX_HOME || NodePath.join(homeDir, ".codex");
     const codexHomeExists = NodeFs.existsSync(codexHome);
-    const authFileExists = NodeFs.existsSync(`${codexHome}/auth.json`);
-    const configFileExists = NodeFs.existsSync(`${codexHome}/config.toml`);
+    const authFileExists = NodeFs.existsSync(NodePath.join(codexHome, "auth.json"));
+    const configFileExists = NodeFs.existsSync(NodePath.join(codexHome, "config.toml"));
+    const extendedPath = [
+      NodePath.join(homeDir, ".local", "bin"),
+      NodePath.join(homeDir, "all-ai-clis"),
+      "/usr/local/bin",
+      "/usr/bin",
+      "/bin",
+      process.env.PATH || "",
+    ]
+      .filter(Boolean)
+      .join(":");
 
     // If an explicit path was requested, test that exact path
     if (requestedPath) {
@@ -992,7 +1003,7 @@ export const layerCodexCliStatusRoute = HttpRouter.add(
           timeout: 4000,
           env: {
             ...process.env,
-            PATH: `${homeDir}/.local/bin:${homeDir}/all-ai-clis:${process.env.PATH || ""}`,
+            PATH: extendedPath,
           },
         }).trim();
         return HttpServerResponse.jsonUnsafe({
@@ -1034,8 +1045,8 @@ export const layerCodexCliStatusRoute = HttpRouter.add(
       candidatePaths.push(storedPath);
     }
     candidatePaths.push(
-      `${homeDir}/.local/bin/codex`,
-      `${homeDir}/all-ai-clis/codex`,
+      NodePath.join(homeDir, ".local", "bin", "codex"),
+      NodePath.join(homeDir, "all-ai-clis", "codex"),
       "/usr/local/bin/codex",
       "/usr/bin/codex",
       "codex",
@@ -1054,11 +1065,24 @@ export const layerCodexCliStatusRoute = HttpRouter.add(
           timeout: 4000,
           env: {
             ...process.env,
-            PATH: `${homeDir}/.local/bin:${homeDir}/all-ai-clis:${process.env.PATH || ""}`,
+            PATH: extendedPath,
           },
         }).trim();
         if (out) {
-          resolvedBinary = bin;
+          if (bin === "codex") {
+            try {
+              const whichPath = NodeChildProcess.execSync("which codex", {
+                encoding: "utf-8",
+                timeout: 2000,
+                env: { ...process.env, PATH: extendedPath },
+              }).trim();
+              resolvedBinary = whichPath || bin;
+            } catch {
+              resolvedBinary = bin;
+            }
+          } else {
+            resolvedBinary = bin;
+          }
           versionOutput = out;
           break;
         }

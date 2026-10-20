@@ -1,4 +1,7 @@
+// @effect-diagnostics nodeBuiltinImport:off
 import * as NodeFs from "node:fs";
+import * as NodeOs from "node:os";
+import * as NodePath from "node:path";
 import { revertCodexThread } from "../../provider/CodexThreadRevert.ts";
 import { historyResponseItems } from "@t3tools/provider-core/server/handoffBudget";
 import { makeProviderTextDeltaCoalescer } from "./ProviderTextDeltaCoalescer.ts";
@@ -1518,17 +1521,42 @@ export const layerAppServerClientFactory: Layer.Layer<
       open: (input) =>
         Effect.gen(function* () {
           const scope = yield* Scope.Scope;
+          const homeDir = NodeOs.homedir() || process.env.HOME || "/root";
+          const rawCommand = input.settings.binaryPath || "codex";
+          const candidateBinaryPaths = [
+            ...(rawCommand !== "codex" ? [rawCommand] : []),
+            NodePath.join(homeDir, ".local", "bin", "codex"),
+            NodePath.join(homeDir, "all-ai-clis", "codex"),
+            "/usr/local/bin/codex",
+            "/usr/bin/codex",
+          ];
+          let resolvedCommand = rawCommand;
+          if (rawCommand !== "codex" && NodeFs.existsSync(rawCommand)) {
+            resolvedCommand = rawCommand;
+          } else {
+            for (const candidate of candidateBinaryPaths) {
+              if (NodeFs.existsSync(candidate)) {
+                resolvedCommand = candidate;
+                break;
+              }
+            }
+          }
+
           const environment = {
+            ...process.env,
             ...input.environment,
+            PATH: [
+              NodePath.join(homeDir, ".local", "bin"),
+              NodePath.join(homeDir, "all-ai-clis"),
+              "/usr/local/bin",
+              "/usr/bin",
+              "/bin",
+              input.environment?.PATH || process.env.PATH || "",
+            ]
+              .filter(Boolean)
+              .join(":"),
             ...(input.settings.homePath ? { CODEX_HOME: input.settings.homePath } : {}),
           };
-          const rawCommand = input.settings.binaryPath || "codex";
-          const resolvedCommand =
-            rawCommand !== "codex" && NodeFs.existsSync(rawCommand)
-              ? rawCommand
-              : NodeFs.existsSync("/home/hasan/.local/bin/codex")
-                ? "/home/hasan/.local/bin/codex"
-                : rawCommand;
           const command = yield* makeCodexAppServerSpawnCommand({
             command: resolvedCommand,
             args: codexAppServerArgs(

@@ -9271,7 +9271,7 @@ export default function ChatView(props: ChatViewProps) {
             id: createData.projectId,
             environmentId: environmentId,
             title: "temp",
-            workspaceRoot: createData.workspaceRoot ?? "/home/hasan/.t3/projects/temp",
+            workspaceRoot: createData.workspaceRoot ?? "~/.t3/projects/temp",
             repositoryIdentity: null,
             faviconPath: null,
             projectIcon: null,

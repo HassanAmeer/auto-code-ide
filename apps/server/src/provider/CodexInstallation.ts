@@ -25,6 +25,7 @@ import * as SubscriptionRef from "effect/SubscriptionRef";
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as NodeCrypto from "node:crypto";
+import * as NodeOs from "node:os";
 import * as ServerConfig from "../config.ts";
 import * as ModelManifest from "./ModelManifest.ts";
 import { resolveProviderCompatibility } from "./providerCompatibility.ts";
@@ -342,7 +343,7 @@ export const makeCodexInstallation = Effect.fn("makeCodexInstallation")(function
       );
       let resolvedPath: string | null = Option.getOrNull(fromPath);
       if (!resolvedPath) {
-        const home = environment.HOME || process.env.HOME || "/home/hasan";
+        const home = environment.HOME || process.env.HOME || NodeOs.homedir() || "/root";
         const candidatePaths = [
           path.join(home, ".local", "bin", "codex"),
           path.join(home, "all-ai-clis", "codex"),

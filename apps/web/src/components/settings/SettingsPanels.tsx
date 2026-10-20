@@ -123,7 +123,7 @@ import {
 } from "../../providerInstances";
 import { ensureLocalApi, readLocalApi } from "../../localApi";
 import { isMacPlatform } from "../../lib/utils";
-import { saveLastSelectedModel } from "~/lib/lastSelectedModel";
+import { getSavedLastSelectedModel, saveLastSelectedModel } from "~/lib/lastSelectedModel";
 import { EMPTY_SERVER_PROVIDERS } from "../../state/server";
 import { useArchivedThreadSnapshots } from "../../lib/archivedThreadsState";
 import { formatRelativeTimeLabel } from "../../timestampFormat";
@@ -1928,8 +1928,25 @@ function ExecutionEngineSection({
       const codexProvider = serverProviders.find(
         (p) => p.driver === "codex" || p.instanceId === "codex",
       );
-      const codexModel = codexProvider?.models?.[0]?.slug ?? "gpt-6.1-sol";
-      const selection = createModelSelection("codex" as ProviderInstanceId, codexModel);
+      const targetInstanceId = (codexProvider?.instanceId ?? "codex") as ProviderInstanceId;
+      const draftStoreState = useComposerDraftStore.getState();
+      const preservedModel =
+        draftStoreState.stickyModelSelectionByProvider?.[targetInstanceId]?.model ??
+        (getSavedLastSelectedModel()?.instanceId === targetInstanceId
+          ? getSavedLastSelectedModel()?.model
+          : undefined);
+
+      const availableModels = codexProvider?.models ?? [];
+      const isPreservedValid =
+        preservedModel && availableModels.some((m) => m.slug === preservedModel);
+      const defaultModel = availableModels.find((m) => m.isDefault)?.slug;
+      const codexModel =
+        (isPreservedValid ? preservedModel : undefined) ||
+        defaultModel ||
+        availableModels[0]?.slug ||
+        "gpt-5";
+
+      const selection = createModelSelection(targetInstanceId, codexModel);
       saveLastSelectedModel(selection);
       updateSettings({ defaultModelSelection: selection });
       try {
@@ -1941,6 +1958,7 @@ function ExecutionEngineSection({
             if (current) {
               nextDrafts[k] = {
                 ...current,
+                activeProvider: selection.instanceId,
                 modelSelectionByProvider: {
                   ...current.modelSelectionByProvider,
                   [selection.instanceId]: selection,
@@ -1950,6 +1968,7 @@ function ExecutionEngineSection({
           }
           return {
             draftsByThreadKey: nextDrafts,
+            stickyActiveProvider: selection.instanceId,
             stickyModelSelection: selection,
           };
         });
@@ -1965,8 +1984,25 @@ function ExecutionEngineSection({
       const customProvider = serverProviders.find(
         (p) => p.driver === "custom" || p.instanceId === "custom",
       );
-      const customModel = customProvider?.models?.[0]?.slug ?? "claude-sonnet-4-5";
-      const selection = createModelSelection("custom" as ProviderInstanceId, customModel);
+      const targetInstanceId = (customProvider?.instanceId ?? "custom") as ProviderInstanceId;
+      const draftStoreState = useComposerDraftStore.getState();
+      const preservedModel =
+        draftStoreState.stickyModelSelectionByProvider?.[targetInstanceId]?.model ??
+        (getSavedLastSelectedModel()?.instanceId === targetInstanceId
+          ? getSavedLastSelectedModel()?.model
+          : undefined);
+
+      const availableModels = customProvider?.models ?? [];
+      const isPreservedValid =
+        preservedModel && availableModels.some((m) => m.slug === preservedModel);
+      const defaultModel = availableModels.find((m) => m.isDefault)?.slug;
+      const customModel =
+        (isPreservedValid ? preservedModel : undefined) ||
+        defaultModel ||
+        availableModels[0]?.slug ||
+        "claude-sonnet-4-5";
+
+      const selection = createModelSelection(targetInstanceId, customModel);
       saveLastSelectedModel(selection);
       updateSettings({ defaultModelSelection: selection });
       try {
@@ -1978,6 +2014,7 @@ function ExecutionEngineSection({
             if (current) {
               nextDrafts[k] = {
                 ...current,
+                activeProvider: selection.instanceId,
                 modelSelectionByProvider: {
                   ...current.modelSelectionByProvider,
                   [selection.instanceId]: selection,
@@ -1987,6 +2024,7 @@ function ExecutionEngineSection({
           }
           return {
             draftsByThreadKey: nextDrafts,
+            stickyActiveProvider: selection.instanceId,
             stickyModelSelection: selection,
           };
         });
@@ -2143,7 +2181,7 @@ function ExecutionEngineSection({
             <Input
               value={pathInput}
               onChange={(e) => setPathInput(e.target.value)}
-              placeholder="/home/hasan/.local/bin/codex or ~/all-ai-clis/codex"
+              placeholder="codex, ~/.local/bin/codex, or /usr/local/bin/codex"
               className="h-8 text-xs font-mono flex-1 bg-background"
             />
             <Button
@@ -2159,7 +2197,7 @@ function ExecutionEngineSection({
               size="xs"
               variant="ghost"
               onClick={() => {
-                const defaultPath = "/home/hasan/.local/bin/codex";
+                const defaultPath = codexStatus?.path || "codex";
                 setPathInput(defaultPath);
                 updateEngineSettings({ codexBinaryPath: defaultPath });
                 loadStatus(defaultPath);
@@ -2188,13 +2226,13 @@ function ExecutionEngineSection({
               <span>💡 Codex CLI Location & Storage Advice:</span>
             </div>
             <p>
-              Your Codex CLI is currently installed at{" "}
+              Codex CLI location:{" "}
               <code className="text-foreground font-mono bg-muted px-1 py-0.5 rounded">
-                /home/hasan/.local/bin/codex
+                {codexStatus?.path || "codex (in PATH)"}
               </code>{" "}
-              (v0.163.0) and uses{" "}
+              {codexStatus?.version ? `(${codexStatus.version}) ` : ""}and uses{" "}
               <code className="text-foreground font-mono bg-muted px-1 py-0.5 rounded">
-                ~/.codex
+                {codexStatus?.codexHome || "~/.codex"}
               </code>{" "}
               for its configuration, authentication, and memory database.
             </p>

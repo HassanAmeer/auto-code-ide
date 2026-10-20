@@ -1,3 +1,4 @@
+// @effect-diagnostics nodeBuiltinImport:off
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -10,6 +11,8 @@ import * as Types from "effect/Types";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as NodeFs from "node:fs";
+import * as NodeOs from "node:os";
+import * as NodePath from "node:path";
 import * as CodexClient from "effect-codex-app-server/client";
 import * as CodexSchema from "effect-codex-app-server/schema";
 import * as CodexErrors from "effect-codex-app-server/errors";
@@ -377,16 +380,41 @@ export const withCodexAppServerClient = Effect.fn("withCodexAppServerClient")(fu
   // Expand here for parity with `CodexTextGeneration`.
   const resolvedHomePath = input.homePath ? expandHomePath(input.homePath) : undefined;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const homeDir = NodeOs.homedir() || process.env.HOME || "/root";
   const environment = {
+    ...process.env,
     ...input.environment,
+    PATH: [
+      NodePath.join(homeDir, ".local", "bin"),
+      NodePath.join(homeDir, "all-ai-clis"),
+      "/usr/local/bin",
+      "/usr/bin",
+      "/bin",
+      input.environment?.PATH || process.env.PATH || "",
+    ]
+      .filter(Boolean)
+      .join(":"),
     ...(resolvedHomePath ? { CODEX_HOME: resolvedHomePath } : {}),
   };
-  const actualBinaryPath =
-    input.binaryPath && input.binaryPath !== "codex" && NodeFs.existsSync(input.binaryPath)
-      ? input.binaryPath
-      : NodeFs.existsSync("/home/hasan/.local/bin/codex")
-        ? "/home/hasan/.local/bin/codex"
-        : input.binaryPath;
+
+  const candidateBinaryPaths = [
+    ...(input.binaryPath && input.binaryPath !== "codex" ? [input.binaryPath] : []),
+    NodePath.join(homeDir, ".local", "bin", "codex"),
+    NodePath.join(homeDir, "all-ai-clis", "codex"),
+    "/usr/local/bin",
+    "/usr/bin",
+  ];
+  let actualBinaryPath = input.binaryPath || "codex";
+  if (input.binaryPath && input.binaryPath !== "codex" && NodeFs.existsSync(input.binaryPath)) {
+    actualBinaryPath = input.binaryPath;
+  } else {
+    for (const candidate of candidateBinaryPaths) {
+      if (NodeFs.existsSync(candidate)) {
+        actualBinaryPath = candidate;
+        break;
+      }
+    }
+  }
 
   const spawnCommand = yield* resolveSpawnCommand(
     actualBinaryPath,
