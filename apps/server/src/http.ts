@@ -1522,8 +1522,8 @@ export const layerProjectDownloadZipRoute = HttpRouter.add(
     }
 
     const tempZipFile = `/tmp/t3_dl_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.zip`;
-    // Exclude dependencies and heavy bloat just like GitHub repository download
-    const zipCmd = `zip -r -q "${tempZipFile}" . -x "node_modules/*" "*/node_modules/*" ".git/*" "*/.git/*" "dist/*" "*/dist/*" ".next/*" "*/.next/*" "build/*" "*/build/*" ".cache/*" "*/.cache/*" ".turbo/*" "*/.turbo/*" ".venv/*" "*/.venv/*" "__pycache__/*" "*/__pycache__/*" ".t3/*" "*/.t3/*" ".autocode/*" "*/.autocode/*"`;
+    // High-performance pruning zip: skips entering heavy folders (node_modules, .git, etc.) completely
+    const zipCmd = `if [ -z "$(find . -mindepth 1 -maxdepth 1 2>/dev/null)" ]; then touch .t3_empty && zip -q "${tempZipFile}" .t3_empty && rm -f .t3_empty; else find . -mindepth 1 -type d \\( -name "node_modules" -o -name ".git" -o -name "dist" -o -name ".next" -o -name "build" -o -name ".cache" -o -name ".turbo" -o -name ".venv" -o -name "__pycache__" -o -name ".t3" -o -name ".autocode" \\) -prune -o -print | zip -q "${tempZipFile}" -@ || ( [ $? -eq 12 ] && touch .t3_empty && zip -q "${tempZipFile}" .t3_empty && rm -f .t3_empty ); fi`;
 
     const zipResult = yield* Effect.promise(() =>
       runBashCommandOnHost(zipCmd, workspaceRoot, 120_000),
