@@ -2286,6 +2286,55 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     [project.displayName, project.memberProjects, project.workspaceRoot],
   );
 
+  const handleOpenFileManager = useCallback(
+    async (targetMember?: SidebarProjectGroupMember) => {
+      const member = targetMember ?? project.memberProjects[0];
+      if (!member) return;
+      const workspaceRoot = member.workspaceRoot ?? project.workspaceRoot;
+      const projectId = member.id;
+      const title = member.title ?? project.displayName;
+
+      if (!workspaceRoot) {
+        toastManager.add({
+          type: "error",
+          title: "File Manager failed",
+          description: "No workspace root found for this project.",
+        });
+        return;
+      }
+
+      setProjectExpanded(projectPreferenceKeys, true);
+      if (isMobile) {
+        setOpenMobile(false);
+      }
+
+      const matchingThread =
+        projectThreads.find(
+          (t) => t.environmentId === member.environmentId && t.projectId === member.id,
+        ) ?? projectThreads[0];
+
+      if (matchingThread) {
+        const threadRef = scopeThreadRef(matchingThread.environmentId, matchingThread.id);
+        await navigateToThread(threadRef);
+      }
+
+      terminalStore.setSelectedProject(projectId, title, workspaceRoot);
+      terminalStore.setActiveCwd(workspaceRoot);
+      terminalStore.setFileExplorerOpen(true);
+    },
+    [
+      isMobile,
+      navigateToThread,
+      project.displayName,
+      project.memberProjects,
+      project.workspaceRoot,
+      projectPreferenceKeys,
+      projectThreads,
+      setOpenMobile,
+      setProjectExpanded,
+    ],
+  );
+
   const handleProjectButtonContextMenu = useCallback(
     (event: React.MouseEvent<HTMLButtonElement>) => {
       event.preventDefault();
@@ -2320,9 +2369,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
                 openProjectRenameDialog(member);
                 return;
               case "file-manager":
-                terminalStore.setSelectedProject(member.id, member.title, member.workspaceRoot);
-                terminalStore.setActiveCwd(member.workspaceRoot);
-                terminalStore.setFileExplorerOpen(true);
+                void handleOpenFileManager(member);
                 return;
               case "open-terminal":
                 void handleOpenInTerminal(member);
@@ -2424,11 +2471,11 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
               isDisabled: (member) =>
                 !readEnvironmentScope(member.environmentId, AuthOrchestrationOperateScope),
             }),
-            buildTargetedItem("file-manager", "File Manager", { icon: "folder" }),
             buildTargetedItem("open-terminal", "Open in Terminal", { icon: "terminal" }),
             buildTargetedItem("download-zip", "Download ZIP", { icon: "archive" }),
             buildTargetedItem("push-github", "Push to GitHub", { icon: "upload" }),
             buildTargetedItem("git-pull", "Git Pull", { icon: "download" }),
+            buildTargetedItem("file-manager", "File Manager", { icon: "folder" }),
             buildTargetedItem("git-fetch", "Git Fetch", { icon: "refresh-cw" }),
             buildTargetedItem("git-force-pull", "Force Pull (Reset Hard)", {
               destructive: true,
@@ -2461,6 +2508,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       handleForcePull,
       handleGitFetch,
       handleGitPull,
+      handleOpenFileManager,
       handleOpenInTerminal,
       handlePushToGithub,
       handleRemoveProject,
@@ -3329,6 +3377,14 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
                 >
                   <DownloadCloudIcon className="size-4" />
                   <MenuItemLabel>Git Pull</MenuItemLabel>
+                </MenuItem>
+                <MenuItem
+                  onClick={() => {
+                    void handleOpenFileManager();
+                  }}
+                >
+                  <FolderIcon className="size-4" />
+                  <MenuItemLabel>File Manager</MenuItemLabel>
                 </MenuItem>
                 <MenuItem
                   onClick={() => {
