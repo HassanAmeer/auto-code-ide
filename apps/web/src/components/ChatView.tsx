@@ -308,8 +308,13 @@ import {
   CheckCircle2Icon,
   PaperclipIcon,
   ChevronDownIcon,
+  ChevronRightIcon,
   DownloadIcon,
+  FileCodeIcon,
   GitBranchIcon,
+  HistoryIcon,
+  MessageSquareReplyIcon,
+  RotateCcwIcon,
   TargetIcon,
   WifiOffIcon,
 } from "lucide-react";
@@ -12437,17 +12442,26 @@ export default function ChatView(props: ChatViewProps) {
           if (!open) setPendingRevert(null);
         }}
       >
-        <AlertDialogPopup className="max-w-md">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Revert Options</AlertDialogTitle>
-            <AlertDialogDescription>
-              Choose which changes you want to revert:
+        <AlertDialogPopup className="max-w-md sm:max-w-lg p-5 sm:p-6">
+          <AlertDialogHeader className="space-y-1.5 pb-2">
+            <div className="flex items-center gap-2.5">
+              <div className="size-8 rounded-lg bg-rose-500/10 text-rose-500 flex items-center justify-center shrink-0 border border-rose-500/20">
+                <RotateCcwIcon className="size-4" />
+              </div>
+              <AlertDialogTitle className="text-base font-semibold">
+                Revert Options
+              </AlertDialogTitle>
+            </div>
+            <AlertDialogDescription className="text-xs text-muted-foreground pt-0.5">
+              Choose which changes you want to revert for this turn:
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <div className="flex flex-col gap-2 py-2">
-            <Button
-              variant="destructive"
-              className="w-full justify-start text-left h-auto py-2.5 px-3 flex flex-col items-start gap-0.5"
+
+          <div className="flex flex-col gap-2.5 py-3">
+            {/* Option 1: All Changes */}
+            <button
+              type="button"
+              className="group relative flex items-start gap-3.5 rounded-xl border border-rose-500/30 bg-rose-500/5 hover:bg-rose-500/10 hover:border-rose-500/50 p-3.5 text-left transition-all outline-none focus-visible:ring-2 focus-visible:ring-rose-500/40 cursor-pointer"
               onClick={() => {
                 if (!pendingRevert || pendingRevert.routeThreadKey !== routeThreadKey) return;
                 const { turnCount, messageId } = pendingRevert;
@@ -12455,15 +12469,29 @@ export default function ChatView(props: ChatViewProps) {
                 void onRevertToTurnCount(turnCount, messageId, true, false);
               }}
             >
-              <span className="font-semibold text-sm">All Changes (Files & Response)</span>
-              <span className="text-xs opacity-90 font-normal">
-                Revert both workspace file changes and conversation back to this turn.
-              </span>
-            </Button>
+              <div className="size-9 rounded-lg bg-rose-500/15 text-rose-500 flex items-center justify-center shrink-0 border border-rose-500/20 mt-0.5 group-hover:scale-105 transition-transform">
+                <HistoryIcon className="size-4.5" />
+              </div>
+              <div className="flex-1 min-w-0 pr-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-sm text-foreground group-hover:text-rose-500 transition-colors">
+                    All Changes (Files & Response)
+                  </span>
+                  <span className="text-3xs font-medium px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-500 border border-rose-500/20">
+                    Full Rollback
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground font-normal leading-relaxed mt-1">
+                  Revert both workspace file changes and conversation back to this turn.
+                </p>
+              </div>
+              <ChevronRightIcon className="size-4 text-muted-foreground/50 group-hover:text-rose-500 group-hover:translate-x-0.5 transition-all shrink-0 self-center" />
+            </button>
 
-            <Button
-              variant="secondary"
-              className="w-full justify-start text-left h-auto py-2.5 px-3 flex flex-col items-start gap-0.5"
+            {/* Option 2: File Changes Only */}
+            <button
+              type="button"
+              className="group relative flex items-start gap-3.5 rounded-xl border border-border/80 bg-card hover:bg-accent/40 hover:border-accent-foreground/20 p-3.5 text-left transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
               onClick={() => {
                 if (!pendingRevert || pendingRevert.routeThreadKey !== routeThreadKey) return;
                 const { turnCount, messageId } = pendingRevert;
@@ -12471,15 +12499,30 @@ export default function ChatView(props: ChatViewProps) {
                 void onRevertToTurnCount(turnCount, messageId, true, true);
               }}
             >
-              <span className="font-semibold text-sm">File Changes Only</span>
-              <span className="text-xs text-muted-foreground font-normal">
-                Revert only workspace files to checkpoint commit. Keep conversation history.
-              </span>
-            </Button>
+              <div className="size-9 rounded-lg bg-amber-500/15 text-amber-500 flex items-center justify-center shrink-0 border border-amber-500/20 mt-0.5 group-hover:scale-105 transition-transform">
+                <FileCodeIcon className="size-4.5" />
+              </div>
+              <div className="flex-1 min-w-0 pr-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-sm text-foreground group-hover:text-amber-500 transition-colors">
+                    File Changes Only
+                  </span>
+                  <span className="text-3xs font-medium px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-500 border border-amber-500/20">
+                    Keep Chat
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground font-normal leading-relaxed mt-1">
+                  Revert only workspace files to checkpoint commit. Keep conversation history
+                  intact.
+                </p>
+              </div>
+              <ChevronRightIcon className="size-4 text-muted-foreground/50 group-hover:text-amber-500 group-hover:translate-x-0.5 transition-all shrink-0 self-center" />
+            </button>
 
-            <Button
-              variant="outline"
-              className="w-full justify-start text-left h-auto py-2.5 px-3 flex flex-col items-start gap-0.5"
+            {/* Option 3: Response Only */}
+            <button
+              type="button"
+              className="group relative flex items-start gap-3.5 rounded-xl border border-border/80 bg-card hover:bg-accent/40 hover:border-accent-foreground/20 p-3.5 text-left transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
               onClick={() => {
                 if (!pendingRevert || pendingRevert.routeThreadKey !== routeThreadKey) return;
                 const { turnCount, messageId } = pendingRevert;
@@ -12487,14 +12530,32 @@ export default function ChatView(props: ChatViewProps) {
                 void onRevertToTurnCount(turnCount, messageId, false, false);
               }}
             >
-              <span className="font-semibold text-sm">Response Only (Keep Files)</span>
-              <span className="text-xs text-muted-foreground font-normal">
-                Rewind chat response and return prompt to composer. Keep current files.
-              </span>
-            </Button>
+              <div className="size-9 rounded-lg bg-sky-500/15 text-sky-500 flex items-center justify-center shrink-0 border border-sky-500/20 mt-0.5 group-hover:scale-105 transition-transform">
+                <MessageSquareReplyIcon className="size-4.5" />
+              </div>
+              <div className="flex-1 min-w-0 pr-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-sm text-foreground group-hover:text-sky-500 transition-colors">
+                    Response Only (Keep Files)
+                  </span>
+                  <span className="text-3xs font-medium px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-500 border border-sky-500/20">
+                    Keep Code
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground font-normal leading-relaxed mt-1">
+                  Rewind chat response and return prompt to composer. Keep current workspace files.
+                </p>
+              </div>
+              <ChevronRightIcon className="size-4 text-muted-foreground/50 group-hover:text-sky-500 group-hover:translate-x-0.5 transition-all shrink-0 self-center" />
+            </button>
           </div>
-          <AlertDialogFooter>
-            <AlertDialogClose render={<Button variant="ghost" />}>Cancel</AlertDialogClose>
+
+          <AlertDialogFooter className="pt-2 border-t border-border/40 sm:justify-end">
+            <AlertDialogClose
+              render={<Button variant="outline" size="sm" className="px-4 text-xs" />}
+            >
+              Cancel
+            </AlertDialogClose>
           </AlertDialogFooter>
         </AlertDialogPopup>
       </AlertDialog>
