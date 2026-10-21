@@ -27,6 +27,7 @@ import * as Socket from "effect/socket/Socket";
 
 import {
   AVAILABLE_CONNECTION_STATE,
+  BearerConnectionTarget,
   ConnectionBlockedError,
   ConnectionTransientError,
   PrimaryConnectionTarget,
@@ -116,6 +117,17 @@ const PREPARED: PreparedConnection = {
   socketUrl: "wss://environment.example.test/ws?wsTicket=test",
   httpAuthorization: null,
   target: TARGET,
+};
+
+const BEARER_TARGET = new BearerConnectionTarget({
+  environmentId: TARGET.environmentId,
+  label: TARGET.label,
+  connectionId: "connection-1",
+});
+
+const PREPARED_BEARER: PreparedConnection = {
+  ...PREPARED,
+  target: BEARER_TARGET,
 };
 
 const SERVER_CONFIG: ServerConfigType = {
@@ -1057,7 +1069,7 @@ describe("RpcSessionFactory", () => {
   it.effect("rejects a server config for a different environment", () =>
     Effect.gen(function* () {
       const { factory, sockets } = yield* makeFactory();
-      const session = yield* factory.connect(PREPARED);
+      const session = yield* factory.connect(PREPARED_BEARER);
       const readyFiber = yield* Effect.forkChild(Effect.flip(session.ready));
       const configFiber = yield* session
         .subscribeServerConfig({})
@@ -1097,11 +1109,9 @@ describe("RpcSessionFactory", () => {
       yield* completeInitialConfig(socket);
       yield* Fiber.join(readyFiber);
 
-      yield* TestClock.adjust("15 seconds");
+      yield* TestClock.adjust("5 seconds");
       expect(closedFiber.pollUnsafe()).toBeUndefined();
       expect(socket.sent.map((message) => decodeJson(message)).filter(isPing)).toEqual([
-        { _tag: "Ping" },
-        { _tag: "Ping" },
         { _tag: "Ping" },
       ]);
 
@@ -1110,7 +1120,7 @@ describe("RpcSessionFactory", () => {
       expect(error).toBeInstanceOf(ConnectionTransientError);
       expect(error).toMatchObject({
         reason: "transport",
-        detail: "Test environment stopped responding.",
+        detail: "Test environment disconnected.",
       });
     }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
   );
