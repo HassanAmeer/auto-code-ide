@@ -69,17 +69,17 @@ it("does not split a surrogate pair at the truncation boundary", () => {
   assert.notMatch(failure.message.slice(0, -1), /[\uD800-\uDBFF]$/u);
 });
 
-it("does not expose arbitrary cause messages and preserves explicit messages", () => {
+it("surfaces cause messages when no explicit message is supplied", () => {
   const cause = new Error("Adapter failed", {
     cause: new Error("Session expired. Sign in again."),
   });
-  for (const value of [
-    cause,
-    Cause.fail(cause),
-    "Session expired. Sign in again.",
-    { message: "Session expired. Sign in again." },
-  ]) {
-    assert.equal(makeProviderFailure({ cause: value }).message, "Provider turn failed.");
+  for (const [value, expectedMessage] of [
+    [cause, "Adapter failed"],
+    [Cause.fail(cause), "Adapter failed"],
+    ["Session expired. Sign in again.", "Session expired. Sign in again."],
+    [{ message: "Session expired. Sign in again." }, "Session expired. Sign in again."],
+  ] as const) {
+    assert.equal(makeProviderFailure({ cause: value }).message, expectedMessage);
     assert.equal(
       makeProviderFailure({ cause: value, message: "Provider connection closed." }).message,
       "Provider connection closed.",
@@ -123,7 +123,10 @@ it("handles cyclic causes and throwing accessors", () => {
     message: "Provider disconnected. Retry the turn.",
   };
   cyclic.cause = cyclic;
-  assert.equal(makeProviderFailure({ cause: cyclic }).message, "Provider turn failed.");
+  assert.equal(
+    makeProviderFailure({ cause: cyclic }).message,
+    "Provider disconnected. Retry the turn.",
+  );
   assert.equal(
     makeProviderFailure({
       cause: {
