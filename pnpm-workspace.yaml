@@ -65,3 +65,8 @@ catalog:
   remark-parse: 11.0.0
   remark-rehype: 11.1.2
   unified: 11.0.5
+
+minimumReleaseAgeExclude:
+  - "@opencode/client@2.1.2"
+  - "@opencode/protocol@2.1.2"
+  - "@opencode/schema@2.1.2"

@@ -61,6 +61,11 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    server: {
+      deps: {
+        inline: ["@effect/vitest"],
+      },
+    },
     exclude: [
       "**/.repos/**",
       "**/.t3/**",
