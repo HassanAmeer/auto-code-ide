@@ -2071,11 +2071,19 @@ export const makeOpenCodeAdapterV2 = Effect.fn("makeOpenCodeAdapterV2")(function
           turn.finalized = true;
           const completedAt = yield* DateTime.now;
           if (turn.aiLogIds.length > 0) {
-            const responseText = Array.from(turn.parts.values())
+            const textResponse = Array.from(turn.parts.values())
               .filter((part) => part.type === "text")
               .map((part) => part.text)
               .join("\n\n")
               .trim();
+            const responseText =
+              textResponse.length > 0
+                ? textResponse
+                : Array.from(turn.parts.values())
+                    .filter((part) => part.type === "reasoning")
+                    .map((part) => part.text)
+                    .join("\n\n")
+                    .trim();
             const failure = terminal?.failure ?? null;
             const completedAtMillis = DateTime.toEpochMillis(completedAt);
             for (const id of turn.aiLogIds) {

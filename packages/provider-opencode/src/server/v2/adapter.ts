@@ -225,6 +225,8 @@ interface ActiveTurn {
   readonly texts: Map<string, OpenBlock>;
   /** Latest assistant text per block, kept after the block closes for AI logs. */
   readonly aiLogTexts: Map<string, string>;
+  /** Latest reasoning text per block, used when a turn emits no assistant text. */
+  readonly aiLogReasoningTexts: Map<string, string>;
   /** Entries recorded for every prompt/command submitted on this turn. */
   readonly aiLogIds: string[];
   aiLogStartedAt: number | null;
@@ -1121,6 +1123,7 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
       };
       entry.text = update(entry.text);
       if (kind === "text") turn.aiLogTexts.set(nativeId, entry.text);
+      else turn.aiLogReasoningTexts.set(nativeId, entry.text);
       if (completed) turn.texts.delete(nativeId);
       else turn.texts.set(nativeId, entry);
       if (entry.text.length === 0) return;
@@ -1262,6 +1265,7 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
       providerTurn,
       texts: new Map(),
       aiLogTexts: new Map(),
+      aiLogReasoningTexts: new Map(),
       aiLogIds: [],
       aiLogStartedAt: null,
       tools: new Map(),
@@ -1712,7 +1716,9 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
       }
       const completedAt = yield* DateTime.now;
       if (turn.aiLogIds.length > 0) {
-        const responseText = Array.from(turn.aiLogTexts.values()).join("\n\n").trim();
+        const responseText =
+          Array.from(turn.aiLogTexts.values()).join("\n\n").trim() ||
+          Array.from(turn.aiLogReasoningTexts.values()).join("\n\n").trim();
         const completedAtMillis = DateTime.toEpochMillis(completedAt);
         for (const id of turn.aiLogIds) {
           updateAiModelLog(id, {

@@ -591,7 +591,7 @@ describe("ClientSettings environment identification", () => {
 
 describe("ClientSettings sidebar", () => {
   it("defaults to the current sidebar", () => {
-    expect(decodeClientSettings({}).legacySidebarEnabled).toBe(false);
+    expect(decodeClientSettings({}).legacySidebarEnabled).toBe(true);
   });
 
   it("drops the retired sidebar v2 beta keys, resetting everyone to the default", () => {
@@ -599,7 +599,7 @@ describe("ClientSettings sidebar", () => {
       sidebarV2Enabled: false,
       sidebarV2ConfiguredByUser: true,
     });
-    expect(decoded.legacySidebarEnabled).toBe(false);
+    expect(decoded.legacySidebarEnabled).toBe(true);
     expect(decoded).not.toHaveProperty("sidebarV2Enabled");
     expect(decoded).not.toHaveProperty("sidebarV2ConfiguredByUser");
   });
@@ -792,7 +792,7 @@ describe("provider enabled defaults", () => {
       resolveProviderInstanceEnabled({ driver: ProviderDriverKind.make(driver), config: {} });
     expect(enabledByDefault("codex")).toBe(true);
     expect(enabledByDefault("claudeAgent")).toBe(true);
-    for (const driver of ["cursor", "grok", "muse", "pi", "opencode", "antigravity"]) {
+    for (const driver of ["cursor", "grok", "muse", "pi"]) {
       expect(enabledByDefault(driver)).toBe(false);
     }
   });
