@@ -69,6 +69,13 @@ import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import { makeProviderFailure } from "@t3tools/provider-core/server/failure";
 import { turnScopedSelectionTransition } from "@t3tools/provider-core/server/selectionTransition";
 import { providerMessageTextWithAttachmentPaths } from "@t3tools/provider-core/server/attachmentPrompt";
+import {
+  createAiModelLogId,
+  formatAiModelLogTime,
+  maskAiApiKey,
+  recordAiModelLog,
+  updateAiModelLog,
+} from "@t3tools/provider-core/server/aiModelLog";
 import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import {
   ProviderAdapterDriverCreateError,
@@ -288,6 +295,9 @@ interface ActiveOpenCodeTurn {
   readonly itemOrdinals: Map<string, number>;
   readonly parts: Map<string, Exclude<OpenCodePart, ToolPart>>;
   readonly partIdsByMessage: Map<string, Set<string>>;
+  /** Entries recorded for every prompt/steer submitted on this turn. */
+  readonly aiLogIds: string[];
+  aiLogStartedAt: number | null;
   readonly toolNamesByCallId: Map<string, string>;
   mcpServerNames?: ReadonlyArray<string>;
   readonly providerTurn: OrchestrationV2ProviderTurn;
@@ -2060,6 +2070,32 @@ export const makeOpenCodeAdapterV2 = Effect.fn("makeOpenCodeAdapterV2")(function
           }
           turn.finalized = true;
           const completedAt = yield* DateTime.now;
+          if (turn.aiLogIds.length > 0) {
+            const responseText = Array.from(turn.parts.values())
+              .filter((part) => part.type === "text")
+              .map((part) => part.text)
+              .join("\n\n")
+              .trim();
+            const failure = terminal?.failure ?? null;
+            const completedAtMillis = DateTime.toEpochMillis(completedAt);
+            for (const id of turn.aiLogIds) {
+              updateAiModelLog(id, {
+                status: status === "failed" ? 500 : 200,
+                statusText: status,
+                ...(turn.aiLogStartedAt === null
+                  ? {}
+                  : { durationMs: Math.max(0, completedAtMillis - turn.aiLogStartedAt) }),
+                state: status === "failed" ? "error" : "completed",
+                ...(responseText.length > 0 ? { responseBody: responseText } : {}),
+                ...(failure === null
+                  ? {}
+                  : {
+                      error: failure.message,
+                      errorType: failure.class,
+                    }),
+              });
+            }
+          }
           for (const part of turn.parts.values()) {
             if (part.type === "text" || part.type === "reasoning") {
               yield* emitTextPart(state, turn, part, true);
@@ -2266,6 +2302,8 @@ export const makeOpenCodeAdapterV2 = Effect.fn("makeOpenCodeAdapterV2")(function
             usage: makeOpenCodeTurnTokenUsageAccumulator(),
             parts: new Map(),
             partIdsByMessage: new Map(),
+            aiLogIds: [],
+            aiLogStartedAt: null,
             toolNamesByCallId: new Map(),
             providerTurn,
             nextItemOrdinal: 1,
@@ -2960,6 +2998,37 @@ export const makeOpenCodeAdapterV2 = Effect.fn("makeOpenCodeAdapterV2")(function
                 Effect.orElseSucceed(() => []),
               )).find((entry) => entry.name === match[1])
             : undefined;
+          const aiLogId = createAiModelLogId();
+          const aiLogStartedAt = DateTime.toEpochMillis(yield* DateTime.now);
+          turn.aiLogIds.push(aiLogId);
+          if (turn.aiLogStartedAt === null) turn.aiLogStartedAt = aiLogStartedAt;
+          recordAiModelLog({
+            id: aiLogId,
+            timestamp: aiLogStartedAt,
+            timeFormatted: formatAiModelLogTime(aiLogStartedAt),
+            threadId: turn.threadId,
+            ...(turn.runId === null ? {} : { runId: turn.runId }),
+            provider: "OpenCode",
+            providerInstanceId: options.instanceId,
+            model:
+              payload.model === undefined
+                ? turn.modelSelection.model
+                : `${payload.model.providerID}/${payload.model.modelID}`,
+            baseUrl: connection.url,
+            endpoint: `${connection.url.replace(/\/+$/, "")}/session/${payload.sessionID}/prompt_async`,
+            requestHeaders: { "Content-Type": "application/json" },
+            apiKeyMasked: options.settings.serverPassword
+              ? maskAiApiKey(options.settings.serverPassword)
+              : "(local server)",
+            userPrompt: text !== undefined && text.length > 0 ? text : "(Empty message)",
+            messages: [
+              ...(payload.system === undefined
+                ? []
+                : [{ role: "system", content: payload.system }]),
+              { role: "user", content: text ?? "" },
+            ],
+            state: "pending",
+          });
           if (!command) {
             return yield* sdkCall("session.promptAsync", payload, (signal) =>
               client.session.promptAsync(payload, {
@@ -3202,6 +3271,8 @@ export const makeOpenCodeAdapterV2 = Effect.fn("makeOpenCodeAdapterV2")(function
                 usage: makeOpenCodeTurnTokenUsageAccumulator(),
                 parts: new Map(),
                 partIdsByMessage: new Map(),
+                aiLogIds: [],
+                aiLogStartedAt: null,
                 toolNamesByCallId: new Map(),
                 providerTurn,
                 nextItemOrdinal: turnInput.providerTurnOrdinal * 100 + 1,

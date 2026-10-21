@@ -151,6 +151,7 @@ const MUSE_DRIVER_KIND = ProviderDriverKind.make("muse");
 const PI_DRIVER_KIND = ProviderDriverKind.make("pi");
 const ACP_REGISTRY_DRIVER_KIND = ProviderDriverKind.make("acpRegistry");
 const OPENCODE_DRIVER_KIND = ProviderDriverKind.make("opencode");
+const OPENCODE_BYPASS_DRIVER_KIND = ProviderDriverKind.make("opencodebypasssetup");
 
 export const DEFAULT_MODEL = "gpt-6-astra";
 
@@ -183,6 +184,7 @@ export const DEFAULT_MODEL_BY_PROVIDER: Partial<Record<ProviderDriverKind, strin
   // "default" defers to the user's own Pi settings.json model selection.
   [PI_DRIVER_KIND]: "default",
   [OPENCODE_DRIVER_KIND]: "openai/gpt-5",
+  [OPENCODE_BYPASS_DRIVER_KIND]: "deepseek-v4.1-flash-free",
   [ProviderDriverKind.make("antigravity")]: ANTIGRAVITY_DEFAULT_MODEL,
 };
 
@@ -195,6 +197,7 @@ export const DEFAULT_TEXT_GENERATION_MODEL_BY_PROVIDER: Partial<
   [CLAUDE_DRIVER_KIND]: "claude-haiku-4-5",
   [CURSOR_DRIVER_KIND]: "composer-2",
   [OPENCODE_DRIVER_KIND]: "openai/gpt-5",
+  [OPENCODE_BYPASS_DRIVER_KIND]: "deepseek-v4.1-flash-free",
 };
 
 export const MODEL_SLUG_ALIASES_BY_PROVIDER: Partial<
@@ -235,4 +238,5 @@ export const PROVIDER_DISPLAY_NAMES: Partial<Record<ProviderDriverKind, string>>
   [ACP_REGISTRY_DRIVER_KIND]: "ACP Registry",
   [PI_DRIVER_KIND]: "Pi",
   [OPENCODE_DRIVER_KIND]: "OpenCode",
+  [OPENCODE_BYPASS_DRIVER_KIND]: "OpenCode Bypass Setup",
 };

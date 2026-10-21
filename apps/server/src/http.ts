@@ -1,6 +1,6 @@
 // @effect-diagnostics globalDateInEffect:off globalRandomInEffect:off nodeBuiltinImport:off globalTimers:off preferSchemaOverJson:off globalDate:off
-import * as NodeOs from "node:os";
-import * as NodeFs from "node:fs";
+import * as NodeOS from "node:os";
+import * as NodeFS from "node:fs";
 import * as NodeChildProcess from "node:child_process";
 import * as NodePath from "node:path";
 import {
@@ -18,6 +18,7 @@ import {
   EnvironmentHttpApi,
   ProjectId,
 } from "@t3tools/contracts";
+import { GLOBAL_AI_MODEL_LOGS, clearAiModelLogs } from "@t3tools/provider-core/server/aiModelLog";
 import { isDevProxiedPath } from "@t3tools/shared/devProxy";
 import { decodeOtlpTraceRecords } from "@t3tools/shared/observability";
 import * as Cause from "effect/Cause";
@@ -48,8 +49,6 @@ import * as ServerBrowser from "./preview/ServerBrowser.ts";
 import {
   registerFallbackCustomProvider,
   unregisterFallbackCustomProvider,
-  GLOBAL_AI_MODEL_LOGS,
-  clearAiModelLogs,
 } from "./provider/Drivers/CustomDriver.ts";
 import {
   getAllAppSettings,
@@ -965,11 +964,11 @@ export const layerCodexCliStatusRoute = HttpRouter.add(
     const url = new URL(request.url, "http://localhost");
     const requestedPath = url.searchParams.get("path")?.trim();
 
-    const homeDir = NodeOs.homedir() || process.env.HOME || "/root";
+    const homeDir = NodeOS.homedir() || process.env.HOME || "/root";
     const codexHome = process.env.CODEX_HOME || NodePath.join(homeDir, ".codex");
-    const codexHomeExists = NodeFs.existsSync(codexHome);
-    const authFileExists = NodeFs.existsSync(NodePath.join(codexHome, "auth.json"));
-    const configFileExists = NodeFs.existsSync(NodePath.join(codexHome, "config.toml"));
+    const codexHomeExists = NodeFS.existsSync(codexHome);
+    const authFileExists = NodeFS.existsSync(NodePath.join(codexHome, "auth.json"));
+    const configFileExists = NodeFS.existsSync(NodePath.join(codexHome, "config.toml"));
     const extendedPath = [
       NodePath.join(homeDir, ".local", "bin"),
       NodePath.join(homeDir, "all-ai-clis"),
@@ -984,7 +983,7 @@ export const layerCodexCliStatusRoute = HttpRouter.add(
     // If an explicit path was requested, test that exact path
     if (requestedPath) {
       try {
-        if (!NodeFs.existsSync(requestedPath)) {
+        if (!NodeFS.existsSync(requestedPath)) {
           return HttpServerResponse.jsonUnsafe({
             ok: false,
             available: false,
@@ -1057,7 +1056,7 @@ export const layerCodexCliStatusRoute = HttpRouter.add(
 
     for (const bin of candidatePaths) {
       try {
-        if (bin !== "codex" && !NodeFs.existsSync(bin)) {
+        if (bin !== "codex" && !NodeFS.existsSync(bin)) {
           continue;
         }
         const out = NodeChildProcess.execSync(`${bin} --version`, {
@@ -1468,14 +1467,14 @@ export const layerPreviewLogsSyncRoute = HttpRouter.add(
 
     if (bodyJson?.projectCwd && Array.isArray(bodyJson.errors) && bodyJson.errors.length > 0) {
       try {
-        const autocodeDir = NodeFs.existsSync(bodyJson.projectCwd)
+        const autocodeDir = NodeFS.existsSync(bodyJson.projectCwd)
           ? `${bodyJson.projectCwd}/.autocode`
           : null;
         if (autocodeDir) {
-          if (!NodeFs.existsSync(autocodeDir)) {
-            NodeFs.mkdirSync(autocodeDir, { recursive: true });
+          if (!NodeFS.existsSync(autocodeDir)) {
+            NodeFS.mkdirSync(autocodeDir, { recursive: true });
           }
-          NodeFs.writeFileSync(
+          NodeFS.writeFileSync(
             `${autocodeDir}/preview_logs.json`,
             JSON.stringify(bodyJson.errors, null, 2),
             "utf-8",
@@ -1645,7 +1644,7 @@ export const layerProjectExtractZipRoute = HttpRouter.add(
     // Case A: zipPath on server disk (Instant unzip without re-upload)
     if (bodyJson?.zipPath) {
       const resolvedZip = pathService.resolve(bodyJson.zipPath.trim());
-      if (!NodeFs.existsSync(resolvedZip)) {
+      if (!NodeFS.existsSync(resolvedZip)) {
         return HttpServerResponse.jsonUnsafe(
           { ok: false, error: `File not found: ${resolvedZip}` },
           { status: 404 },
@@ -1820,10 +1819,10 @@ export const layerFsPeekRoute = HttpRouter.add(
         { status: 403 },
       );
     }
-    if (!NodeFs.existsSync(resolved)) {
+    if (!NodeFS.existsSync(resolved)) {
       return HttpServerResponse.jsonUnsafe({ ok: false, error: "File not found" }, { status: 404 });
     }
-    const stat = NodeFs.statSync(resolved);
+    const stat = NodeFS.statSync(resolved);
     if (!stat.isFile()) {
       return HttpServerResponse.jsonUnsafe(
         { ok: false, error: "Path is not a file" },
@@ -1836,13 +1835,13 @@ export const layerFsPeekRoute = HttpRouter.add(
     let content = "";
     try {
       if (isLarge) {
-        const fd = NodeFs.openSync(resolved, "r");
+        const fd = NodeFS.openSync(resolved, "r");
         const buf = Buffer.alloc(maxBytes);
-        const bytesRead = NodeFs.readSync(fd, buf, 0, maxBytes, 0);
-        NodeFs.closeSync(fd);
+        const bytesRead = NodeFS.readSync(fd, buf, 0, maxBytes, 0);
+        NodeFS.closeSync(fd);
         content = buf.subarray(0, bytesRead).toString("utf-8");
       } else {
-        content = NodeFs.readFileSync(resolved, "utf-8");
+        content = NodeFS.readFileSync(resolved, "utf-8");
       }
     } catch (readErr: any) {
       content = `[Unable to read file: ${readErr?.message || String(readErr)}]`;
@@ -1902,7 +1901,7 @@ export const layerFsDownloadRoute = HttpRouter.add(
 
 let prevCpuTimes = { idle: 0, total: 0 };
 function getLiveCpuPercent(): number {
-  const cpus = NodeOs.cpus();
+  const cpus = NodeOS.cpus();
   let idle = 0;
   let total = 0;
   for (const cpu of cpus) {
@@ -1913,7 +1912,7 @@ function getLiveCpuPercent(): number {
   }
   if (prevCpuTimes.total === 0) {
     prevCpuTimes = { idle, total };
-    const load1m = NodeOs.loadavg()[0] || 0;
+    const load1m = NodeOS.loadavg()[0] || 0;
     return Math.min(100, Math.max(1, Math.round((load1m / (cpus.length || 1)) * 100)));
   }
   const diffIdle = idle - prevCpuTimes.idle;
@@ -1927,8 +1926,8 @@ export const layerTerminalQuickStatsRoute = HttpRouter.add(
   "GET",
   "/api/terminal/quick-stats",
   Effect.gen(function* () {
-    const totalMem = NodeOs.totalmem();
-    const freeMem = NodeOs.freemem();
+    const totalMem = NodeOS.totalmem();
+    const freeMem = NodeOS.freemem();
     const usedMem = totalMem - freeMem;
     const memPercent = Math.round((usedMem / totalMem) * 100);
 
@@ -1936,7 +1935,7 @@ export const layerTerminalQuickStatsRoute = HttpRouter.add(
     let diskTotalGb = "0";
     let diskPercent = 0;
     try {
-      const stat = NodeFs.statfsSync("/");
+      const stat = NodeFS.statfsSync("/");
       const totalBytes = stat.blocks * stat.bsize;
       const freeBytes = stat.bavail * stat.bsize;
       const usedBytes = totalBytes - freeBytes;
@@ -1947,7 +1946,7 @@ export const layerTerminalQuickStatsRoute = HttpRouter.add(
       // ignore
     }
 
-    const uptimeSec = NodeOs.uptime();
+    const uptimeSec = NodeOS.uptime();
     const uptimeDays = Math.floor(uptimeSec / 86400);
     const uptimeHours = Math.floor((uptimeSec % 86400) / 3600);
     const uptimeStr = uptimeDays > 0 ? `${uptimeDays}d ${uptimeHours}h` : `${uptimeHours}h`;
@@ -1964,8 +1963,8 @@ export const layerTerminalQuickStatsRoute = HttpRouter.add(
       diskFreeGb,
       diskTotalGb,
       uptimeStr,
-      cpuCount: NodeOs.cpus().length,
-      loadAvg: NodeOs.loadavg()
+      cpuCount: NodeOS.cpus().length,
+      loadAvg: NodeOS.loadavg()
         .map((n) => n.toFixed(2))
         .join(", "),
     });
@@ -2046,7 +2045,7 @@ export const layerFsSaveRoute = HttpRouter.add(
     }
     const content = bodyJson.content ?? "";
     try {
-      NodeFs.writeFileSync(resolved, content, "utf-8");
+      NodeFS.writeFileSync(resolved, content, "utf-8");
       return HttpServerResponse.jsonUnsafe({ ok: true, path: resolved });
     } catch (err: any) {
       return HttpServerResponse.jsonUnsafe(
@@ -2098,8 +2097,8 @@ export const layerFsDeleteRoute = HttpRouter.add(
       );
     }
     try {
-      if (NodeFs.existsSync(resolved)) {
-        NodeFs.rmSync(resolved, { recursive: true, force: true });
+      if (NodeFS.existsSync(resolved)) {
+        NodeFS.rmSync(resolved, { recursive: true, force: true });
       }
       return HttpServerResponse.jsonUnsafe({ ok: true, path: resolved });
     } catch (err: any) {
@@ -2138,9 +2137,9 @@ export const layerFsCreateRoute = HttpRouter.add(
     const resolved = pathService.join(pathService.resolve(parent), name);
     try {
       if (type === "directory") {
-        NodeFs.mkdirSync(resolved, { recursive: true });
+        NodeFS.mkdirSync(resolved, { recursive: true });
       } else {
-        NodeFs.writeFileSync(resolved, "");
+        NodeFS.writeFileSync(resolved, "");
       }
       return HttpServerResponse.jsonUnsafe({ ok: true, path: resolved });
     } catch (err: any) {
@@ -2185,11 +2184,11 @@ export const layerFsUploadRoute = HttpRouter.add(
     }
     try {
       const parentDir = pathService.dirname(resolvedFile);
-      if (!NodeFs.existsSync(parentDir)) {
-        NodeFs.mkdirSync(parentDir, { recursive: true });
+      if (!NodeFS.existsSync(parentDir)) {
+        NodeFS.mkdirSync(parentDir, { recursive: true });
       }
       const buffer = Buffer.from(bodyJson.base64, "base64");
-      NodeFs.writeFileSync(resolvedFile, buffer);
+      NodeFS.writeFileSync(resolvedFile, buffer);
       return HttpServerResponse.jsonUnsafe({
         ok: true,
         path: resolvedFile,

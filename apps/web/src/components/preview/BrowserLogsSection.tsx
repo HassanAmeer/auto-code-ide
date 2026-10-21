@@ -222,14 +222,21 @@ export const BrowserLogsSection = memo(function BrowserLogsSection({
       return;
     }
 
-    const fixPrompt = `Fix the following runtime errors and issues found in the live preview debug console:\n\n${errorDetails}\n\nPlease diagnose the root cause and provide the complete working code to fix it.`;
+    const fixPrompt = `Fix the following runtime errors and issues found in the live preview debug console:\n\n${errorDetails}\n\nPlease diagnose the root cause across the project files and provide the complete solution to fix it.`;
 
     try {
       await navigator.clipboard.writeText(fixPrompt);
     } catch {}
 
+    const draftStore = useComposerDraftStore.getState();
     if (threadRef) {
-      useComposerDraftStore.getState().setPrompt(threadRef, fixPrompt);
+      draftStore.setPrompt(threadRef, fixPrompt);
+    } else {
+      toastManager.add({
+        type: "info",
+        title: "Prompt copied",
+        description: "Open a thread to insert the fix prompt directly.",
+      });
     }
 
     const rawErrors = store.getRawErrorsForSync(tabId);
@@ -247,7 +254,7 @@ export const BrowserLogsSection = memo(function BrowserLogsSection({
     toastManager.add({
       type: "success",
       title: "Loaded into AI Prompt",
-      description: "Debug console errors copied & populated into chat prompt.",
+      description: "Console errors and fix instructions inserted into input field.",
     });
   };
 
@@ -380,7 +387,7 @@ export const BrowserLogsSection = memo(function BrowserLogsSection({
             )}
           </div>
 
-          {/* Fix with AI Button */}
+          {/* Send to AI Button */}
           <Tooltip>
             <TooltipTrigger
               render={
@@ -388,16 +395,18 @@ export const BrowserLogsSection = memo(function BrowserLogsSection({
                   variant="outline"
                   size="xs"
                   onClick={handleFixWithAi}
-                  aria-label="Fix with AI"
+                  aria-label="Send to AI"
                   type="button"
-                  className="h-6 px-2 gap-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border-amber-500/30 text-3xs font-medium cursor-pointer shadow-xs"
+                  className="h-6 px-2.5 gap-1.5 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/40 text-3xs font-semibold cursor-pointer shadow-xs rounded-[4px]"
                 >
                   <Sparkles className="size-3 text-amber-400" />
-                  <span>Fix with AI</span>
+                  <span>Send to AI</span>
                 </Button>
               }
             />
-            <TooltipPopup>Load captured errors into AI chat prompt</TooltipPopup>
+            <TooltipPopup>
+              Insert console errors and diagnostic prompt into the chat input field
+            </TooltipPopup>
           </Tooltip>
 
           {/* Copy All Button */}

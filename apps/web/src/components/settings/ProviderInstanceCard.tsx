@@ -9,6 +9,7 @@ import {
   DownloadIcon,
   ExternalLinkIcon,
   PlusIcon,
+  RefreshCwIcon,
   Trash2Icon,
   XIcon,
 } from "lucide-react";
@@ -40,10 +41,12 @@ import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { normalizeProviderAccentColor } from "../../providerInstances";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
+import { Input } from "../ui/input";
 import { MorphIcon } from "~/components/MorphIcon";
 import { DraftInput } from "../ui/draft-input";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { Switch } from "../ui/switch";
+import { Textarea } from "../ui/textarea";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import type {
@@ -619,6 +622,10 @@ export function ProviderInstanceCard({
   const displayName =
     instance.displayName?.trim() || driverOption?.label || String(instance.driver);
   const accentColor = normalizeProviderAccentColor(instance.accentColor);
+
+  const [isLoadingModels, setIsLoadingModels] = useState(false);
+  const [loadedModelsText, setLoadedModelsText] = useState("");
+  const [customModelInput, setCustomModelInput] = useState("");
   const { copyToClipboard } = useCopyToClipboard<{ providerName: string }>({
     onCopy: ({ providerName }) => {
       toastManager.add({
@@ -1028,73 +1035,126 @@ export function ProviderInstanceCard({
 
   return (
     <>
-      <SettingsSection title={displayName} icon={titleIconNode} headerAction={editorHeaderAction}>
-        <SettingsRow
-          title="Display name"
-          status={
-            <>
-              <ProviderStatusDiagnostic detail={statusDiagnostic}>
-                <div
-                  tabIndex={statusDiagnostic ? 0 : undefined}
-                  className="flex min-w-0 flex-wrap items-baseline gap-x-1.5"
-                >
-                  {editorStatusNode}
-                </div>
-              </ProviderStatusDiagnostic>
-              {urlAuthAction && onAcceptUrlAuth ? (
-                <div className="grid max-w-xl gap-1.5 pt-1 text-xs">
-                  <p>{urlAuthAction.message}</p>
-                  <code className="break-all text-2xs">{urlAuthAction.url}</code>
-                  <Button
-                    render={
-                      <a
-                        href={urlAuthAction.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={() => onAcceptUrlAuth(urlAuthAction)}
-                      />
-                    }
-                    size="xs"
-                    variant="outline"
-                    className="w-fit"
-                    disabled={readOnly}
-                  >
-                    <ExternalLinkIcon />
-                    Continue authentication
-                  </Button>
-                </div>
-              ) : null}
-            </>
-          }
-          control={
-            <div
-              inert={readOnly}
-              aria-disabled={readOnly || undefined}
-              className={cn(
-                "flex w-full min-w-0 items-center justify-end gap-2 @min-[32rem]/settings-row:w-auto",
-                readOnly && "opacity-50 select-none",
-              )}
-            >
-              <ProviderAccentColorPicker
-                layout="inline"
-                displayName={displayName}
-                value={accentColor}
-                onCommit={updateAccentColor}
-                commitDelayMs={120}
-              />
-              <DraftInput
-                id={`provider-instance-${instanceId}-display-name`}
-                size="sm"
-                className="min-w-0 flex-1 @min-[32rem]/settings-row:w-56"
-                value={instance.displayName ?? ""}
-                onCommit={updateDisplayName}
-                placeholder={driverOption?.label ?? "Instance label"}
-                spellCheck={false}
-              />
+      {instance.driver === "opencodebypasssetup" ? (
+        <>
+          <div className="mb-4 rounded-lg border border-primary/20 bg-primary/5 p-3.5 text-xs text-muted-foreground">
+            <div className="font-semibold text-foreground flex items-center gap-1.5 mb-1">
+              ⚡ Minimum RAM / Zero Overhead Mode
             </div>
-          }
-        />
-      </SettingsSection>
+            <p>Connect to OpenCode free plan directly via API base URL without heavy CLI.</p>
+          </div>
+          <SettingsSection title={displayName} icon={titleIconNode}>
+            <SettingsRow
+              title="Provider Status"
+              description={
+                enabled ? "Provider is active and free models are loaded." : "Provider is disabled."
+              }
+              control={
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    {enabled ? "ON" : "OFF"}
+                  </span>
+                  <Switch
+                    checked={enabled}
+                    disabled={readOnly}
+                    onCheckedChange={(checked) => updateEnabled(Boolean(checked))}
+                    aria-label={`Toggle ${displayName}`}
+                  />
+                </div>
+              }
+            />
+            <SettingsRow
+              title="Base URL"
+              control={
+                <DraftInput
+                  id={`provider-instance-${instanceId}-base-url`}
+                  size="sm"
+                  className="w-full min-w-[280px] sm:w-[450px]"
+                  value={
+                    readConfigString(instance.config, "baseUrl") ??
+                    "https://opencode.ai/inference/v1"
+                  }
+                  onCommit={(next) => {
+                    const nextConfig = nextConfigBlobWithValue(instance.config, "baseUrl", next);
+                    const { config: _omit, ...rest } = instance;
+                    onUpdate({ ...rest, config: nextConfig } as ProviderInstanceConfig);
+                  }}
+                  placeholder="https://opencode.ai/inference/v1"
+                  spellCheck={false}
+                />
+              }
+            />
+          </SettingsSection>
+        </>
+      ) : (
+        <SettingsSection title={displayName} icon={titleIconNode} headerAction={editorHeaderAction}>
+          <SettingsRow
+            title="Display name"
+            status={
+              <>
+                <ProviderStatusDiagnostic detail={statusDiagnostic}>
+                  <div
+                    tabIndex={statusDiagnostic ? 0 : undefined}
+                    className="flex min-w-0 flex-wrap items-baseline gap-x-1.5"
+                  >
+                    {editorStatusNode}
+                  </div>
+                </ProviderStatusDiagnostic>
+                {urlAuthAction && onAcceptUrlAuth ? (
+                  <div className="grid max-w-xl gap-1.5 pt-1 text-xs">
+                    <p>{urlAuthAction.message}</p>
+                    <code className="break-all text-2xs">{urlAuthAction.url}</code>
+                    <Button
+                      render={
+                        <a
+                          href={urlAuthAction.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={() => onAcceptUrlAuth(urlAuthAction)}
+                        />
+                      }
+                      size="xs"
+                      variant="outline"
+                      className="w-fit"
+                      disabled={readOnly}
+                    >
+                      <ExternalLinkIcon />
+                      Continue authentication
+                    </Button>
+                  </div>
+                ) : null}
+              </>
+            }
+            control={
+              <div
+                inert={readOnly}
+                aria-disabled={readOnly || undefined}
+                className={cn(
+                  "flex w-full min-w-0 items-center justify-end gap-2 @min-[32rem]/settings-row:w-auto",
+                  readOnly && "opacity-50 select-none",
+                )}
+              >
+                <ProviderAccentColorPicker
+                  layout="inline"
+                  displayName={displayName}
+                  value={accentColor}
+                  onCommit={updateAccentColor}
+                  commitDelayMs={120}
+                />
+                <DraftInput
+                  id={`provider-instance-${instanceId}-display-name`}
+                  size="sm"
+                  className="min-w-0 flex-1 @min-[32rem]/settings-row:w-56"
+                  value={instance.displayName ?? ""}
+                  onCommit={updateDisplayName}
+                  placeholder={driverOption?.label ?? "Instance label"}
+                  spellCheck={false}
+                />
+              </div>
+            }
+          />
+        </SettingsSection>
+      )}
 
       {setup || environmentFields.length > 0 ? (
         <SettingsSection title="Setup">
@@ -1137,7 +1197,8 @@ export function ProviderInstanceCard({
             {runtime ?? runtimeFields}
           </FoldedSettingsSection>
         </div>
-      ) : !driverOption || deriveProviderSettingsFields(driverOption).length > 0 ? (
+      ) : instance.driver !== "opencodebypasssetup" &&
+        (!driverOption || deriveProviderSettingsFields(driverOption).length > 0) ? (
         <SettingsSection
           title="Runtime"
           inert={readOnly}
@@ -1148,17 +1209,19 @@ export function ProviderInstanceCard({
         </SettingsSection>
       ) : null}
 
-      <SettingsSection
-        title="Environment"
-        inert={readOnly}
-        aria-disabled={readOnly || undefined}
-        className={readOnly ? "opacity-50 select-none" : undefined}
-      >
-        <ProviderEnvironmentSection
-          environment={genericEnvironment}
-          onChange={updateGenericEnvironment}
-        />
-      </SettingsSection>
+      {instance.driver !== "opencodebypasssetup" ? (
+        <SettingsSection
+          title="Environment"
+          inert={readOnly}
+          aria-disabled={readOnly || undefined}
+          className={readOnly ? "opacity-50 select-none" : undefined}
+        >
+          <ProviderEnvironmentSection
+            environment={genericEnvironment}
+            onChange={updateGenericEnvironment}
+          />
+        </SettingsSection>
+      ) : null}
       {environmentId !== undefined && liveProvider?.driver === "acpRegistry" ? (
         <AcpSessionManagementSection
           environmentId={environmentId}
@@ -1172,25 +1235,176 @@ export function ProviderInstanceCard({
       {driverOption !== undefined ? (
         <SettingsSection title="Models">
           <div className="px-3 py-3 sm:px-4">
-            <p className="mb-3 text-xs text-muted-foreground">
-              Favorites, visibility, and ordering are saved on this device. Custom models are saved
-              on the selected environment.
-            </p>
-            <ProviderModelsSection
-              canManageCustomModels={!readOnly}
-              canWritePreferences={canWriteSettings}
-              instanceId={instanceId}
-              driverKind={driverKind}
-              models={modelsForDisplay}
-              customModels={customModels}
-              hiddenModels={hiddenModels}
-              favoriteModels={favoriteModels}
-              modelOrder={modelOrder}
-              onChange={updateCustomModels}
-              onHiddenModelsChange={onHiddenModelsChange}
-              onFavoriteModelsChange={onFavoriteModelsChange}
-              onModelOrderChange={onModelOrderChange}
-            />
+            {instance.driver === "opencodebypasssetup" ? (
+              <div className="space-y-4">
+                {/* Single Row: Left Input + Right Buttons */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex-1 min-w-[220px]">
+                    <Input
+                      size="sm"
+                      value={customModelInput}
+                      onChange={(e) => setCustomModelInput(e.target.value)}
+                      placeholder="e.g. deepseek-v4.1-flash-free"
+                      className="w-full text-xs"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && customModelInput.trim()) {
+                          const slug = customModelInput.trim();
+                          if (!customModels.some((m) => m.slug === slug)) {
+                            updateCustomModels([
+                              ...customModels,
+                              { slug, name: slug, capabilities: null },
+                            ]);
+                            setCustomModelInput("");
+                            toastManager.add({
+                              type: "success",
+                              title: "Custom model added",
+                              description: slug,
+                            });
+                          }
+                        }
+                      }}
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="border-red-600 text-red-600 hover:bg-red-600/10 font-medium"
+                      onClick={() => {
+                        const slug = customModelInput.trim();
+                        if (!slug) {
+                          toastManager.add({
+                            type: "warning",
+                            title: "Model name required",
+                            description:
+                              "Please enter model name or select from loaded models below.",
+                          });
+                          return;
+                        }
+                        if (!customModels.some((m) => m.slug === slug)) {
+                          updateCustomModels([
+                            ...customModels,
+                            { slug, name: slug, capabilities: null },
+                          ]);
+                          setCustomModelInput("");
+                          toastManager.add({
+                            type: "success",
+                            title: "Custom model added",
+                            description: slug,
+                          });
+                        }
+                      }}
+                    >
+                      <PlusIcon className="mr-1.5 size-3.5" />
+                      Add Custom Model
+                    </Button>
+
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={isLoadingModels}
+                      onClick={async () => {
+                        setIsLoadingModels(true);
+                        try {
+                          const rawUrl =
+                            readConfigString(instance.config, "baseUrl") ??
+                            "https://opencode.ai/inference/v1";
+                          const endpoint = `${rawUrl.replace(/\/+$/, "")}/models`;
+                          const res = await fetch(endpoint, {
+                            headers: { "User-Agent": "opencode/latest/2.0.26/cli" },
+                          });
+                          if (!res.ok) {
+                            throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+                          }
+                          const json = (await res.json()) as {
+                            data?: Array<{ id: string }>;
+                          };
+                          const list = (json.data ?? []).map((m) => m.id);
+                          setLoadedModelsText(list.join("\n"));
+                          toastManager.add({
+                            type: "success",
+                            title: "Models loaded successfully",
+                            description: `${list.length} models fetched`,
+                          });
+                        } catch (err) {
+                          toastManager.add({
+                            type: "error",
+                            title: "Failed to load models",
+                            description: err instanceof Error ? err.message : String(err),
+                          });
+                        } finally {
+                          setIsLoadingModels(false);
+                        }
+                      }}
+                    >
+                      {isLoadingModels ? (
+                        <Spinner className="mr-1.5 size-3.5" />
+                      ) : (
+                        <RefreshCwIcon className="mr-1.5 size-3.5" />
+                      )}
+                      Load Models
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Chota Textarea for Loaded Models */}
+                {loadedModelsText ? (
+                  <div>
+                    <label className="mb-1 block text-2xs font-medium text-muted-foreground">
+                      Loaded Models ({loadedModelsText.split("\n").filter(Boolean).length}):
+                    </label>
+                    <Textarea
+                      rows={4}
+                      readOnly
+                      value={loadedModelsText}
+                      className="font-mono text-2xs w-full bg-muted/30"
+                    />
+                  </div>
+                ) : null}
+
+                {/* Models List */}
+                <ProviderModelsSection
+                  canManageCustomModels={!readOnly}
+                  canWritePreferences={canWriteSettings}
+                  instanceId={instanceId}
+                  driverKind={driverKind}
+                  models={modelsForDisplay}
+                  customModels={customModels}
+                  hiddenModels={hiddenModels}
+                  favoriteModels={favoriteModels}
+                  modelOrder={modelOrder}
+                  onChange={updateCustomModels}
+                  onHiddenModelsChange={onHiddenModelsChange}
+                  onFavoriteModelsChange={onFavoriteModelsChange}
+                  onModelOrderChange={onModelOrderChange}
+                />
+              </div>
+            ) : (
+              <>
+                <p className="mb-3 text-xs text-muted-foreground">
+                  Favorites, visibility, and ordering are saved on this device. Custom models are
+                  saved on the selected environment.
+                </p>
+                <ProviderModelsSection
+                  canManageCustomModels={!readOnly}
+                  canWritePreferences={canWriteSettings}
+                  instanceId={instanceId}
+                  driverKind={driverKind}
+                  models={modelsForDisplay}
+                  customModels={customModels}
+                  hiddenModels={hiddenModels}
+                  favoriteModels={favoriteModels}
+                  modelOrder={modelOrder}
+                  onChange={updateCustomModels}
+                  onHiddenModelsChange={onHiddenModelsChange}
+                  onFavoriteModelsChange={onFavoriteModelsChange}
+                  onModelOrderChange={onModelOrderChange}
+                />
+              </>
+            )}
           </div>
         </SettingsSection>
       ) : null}

@@ -11,6 +11,10 @@
       "types": "./src/server/adapterDriver.ts",
       "import": "./src/server/adapterDriver.ts"
     },
+    "./server/aiModelLog": {
+      "types": "./src/server/aiModelLog.ts",
+      "import": "./src/server/aiModelLog.ts"
+    },
     "./server/attachmentPrompt": {
       "types": "./src/server/attachmentPrompt.ts",
       "import": "./src/server/attachmentPrompt.ts"

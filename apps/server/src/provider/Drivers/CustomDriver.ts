@@ -17,7 +17,7 @@ import {
   TurnItemId,
   TextGenerationError,
 } from "@t3tools/contracts";
-import * as child_process from "node:child_process";
+import * as NodeChildProcess from "node:child_process";
 import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
@@ -32,6 +32,13 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 
+import {
+  clearAiModelLogs,
+  GLOBAL_AI_MODEL_LOGS,
+  recordAiModelLog,
+  updateAiModelLog,
+  type AiModelLogEntry,
+} from "@t3tools/provider-core/server/aiModelLog";
 import { makeProviderFailure } from "@t3tools/provider-core/server/failure";
 import { turnScopedSelectionTransition } from "@t3tools/provider-core/server/selectionTransition";
 import type {
@@ -70,54 +77,13 @@ export interface CustomModelConfig {
   readonly name?: string | undefined;
 }
 
-export interface AiModelLogEntry {
-  readonly id: string;
-  readonly timestamp: number;
-  readonly timeFormatted: string;
-  readonly threadId?: string;
-  readonly runId?: string;
-  readonly provider: string;
-  readonly providerInstanceId: string;
-  readonly model: string;
-  readonly baseUrl: string;
-  readonly endpoint: string;
-  readonly requestHeaders: Record<string, string>;
-  readonly apiKeyMasked: string;
-  readonly userPrompt: string;
-  readonly messages: Array<{ role: string; content: string }>;
-  status?: number;
-  statusText?: string;
-  durationMs?: number;
-  state: "pending" | "streaming" | "completed" | "error";
-  responseBody?: string;
-  error?: string;
-  errorType?: string;
-}
-
-export const GLOBAL_AI_MODEL_LOGS: AiModelLogEntry[] = [];
-
-export function recordAiModelLog(entry: AiModelLogEntry): void {
-  const existingIdx = GLOBAL_AI_MODEL_LOGS.findIndex((l) => l.id === entry.id);
-  if (existingIdx !== -1) {
-    GLOBAL_AI_MODEL_LOGS[existingIdx] = entry;
-  } else {
-    GLOBAL_AI_MODEL_LOGS.unshift(entry);
-    if (GLOBAL_AI_MODEL_LOGS.length > 300) {
-      GLOBAL_AI_MODEL_LOGS.pop();
-    }
-  }
-}
-
-export function updateAiModelLog(id: string, updates: Partial<AiModelLogEntry>): void {
-  const existing = GLOBAL_AI_MODEL_LOGS.find((l) => l.id === id);
-  if (existing) {
-    Object.assign(existing, updates);
-  }
-}
-
-export function clearAiModelLogs(): void {
-  GLOBAL_AI_MODEL_LOGS.length = 0;
-}
+export {
+  clearAiModelLogs,
+  GLOBAL_AI_MODEL_LOGS,
+  recordAiModelLog,
+  updateAiModelLog,
+  type AiModelLogEntry,
+};
 
 export const CustomDriverSettingsSchema = Schema.Struct({
   baseUrl: Schema.String.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
@@ -1945,11 +1911,11 @@ ${userPrompt || "Continue generating from where you were interrupted"}`;
                   try {
                     const gitDir = NodePath.join(projectCwd, ".git");
                     if (!NodeFS.existsSync(gitDir)) {
-                      child_process.execSync("git init", { cwd: projectCwd, stdio: "ignore" });
+                      NodeChildProcess.execSync("git init", { cwd: projectCwd, stdio: "ignore" });
                     }
-                    child_process.execSync("git add -A", { cwd: projectCwd, stdio: "ignore" });
+                    NodeChildProcess.execSync("git add -A", { cwd: projectCwd, stdio: "ignore" });
                     const commitMsg = `AI generation: ${savedFiles.slice(0, 3).join(", ")}${savedFiles.length > 3 ? "..." : ""}`;
-                    child_process.execSync(
+                    NodeChildProcess.execSync(
                       `git -c user.name="AutoCode AI" -c user.email="autocode@t3.tools" commit -m "${commitMsg.replace(/"/g, '\\"')}" --allow-empty`,
                       { cwd: projectCwd, stdio: "ignore" },
                     );

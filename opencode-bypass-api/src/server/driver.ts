@@ -10,8 +10,10 @@ import {
   MessageId,
   PositiveInt,
   NonNegativeInt,
+  type OrchestrationV2ProviderCapabilities,
   type OrchestrationV2ProviderSession,
   type OrchestrationV2ProviderThread,
+  type OrchestrationV2ProviderTurn,
 } from "@t3tools/contracts";
 import { OpenCodeBypassSetupSettings } from "../settings.ts";
 import * as DateTime from "effect/DateTime";
@@ -29,9 +31,16 @@ import {
   type ProviderInstance,
 } from "@t3tools/provider-core/server/driver";
 import { makeManualOnlyProviderMaintenanceCapabilities } from "@t3tools/provider-core/server/maintenanceResolver";
+import { turnScopedSelectionTransition } from "@t3tools/provider-core/server/selectionTransition";
 import type * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import type { ProviderTextGeneration } from "@t3tools/provider-core/server/textGeneration";
-import { bypassChatStream, type BypassChatMessage } from "./bypass/client.ts";
+import {
+  createAiModelLogId,
+  formatAiModelLogTime,
+  recordAiModelLog,
+  updateAiModelLog,
+} from "@t3tools/provider-core/server/aiModelLog";
+import { bypassChatStream, resolveChatEndpoint, type BypassChatMessage } from "./bypass/client.ts";
 
 const DRIVER_KIND = ProviderDriverKind.make("opencodebypasssetup");
 const decodeSettings = Schema.decodeSync(OpenCodeBypassSetupSettings);
@@ -39,6 +48,113 @@ const decodeSettings = Schema.decodeSync(OpenCodeBypassSetupSettings);
 const PRESENTATION = {
   displayName: "OpenCode Bypass Setup",
 } as const;
+
+/**
+ * The bypass provider talks to a plain OpenAI-compatible chat completions
+ * endpoint. It has no native thread/turn/item identities, no tool loop, and no
+ * approval channel, so every capability below reports what the driver can
+ * actually do rather than what a full provider runtime would expose.
+ */
+const OpenCodeBypassCapabilitiesV2 = {
+  sessions: {
+    // One driver instance owns a single provider thread at a time.
+    supportsMultipleProviderThreadsPerSession: false,
+    // The model is read from the turn's selection, so it can change per turn.
+    supportsModelSwitchInSession: true,
+    supportsProviderSwitchingViaHandoff: false,
+    supportsRuntimeModeSwitchInSession: false,
+    pendingRequestsSurviveRestart: false,
+  },
+  threads: {
+    canCreateEmptyThread: true,
+    canReadThreadSnapshot: true,
+    // Rollback and fork are not implemented by the bypass driver; reporting
+    // them would let the orchestrator plan a continuation it cannot honour.
+    canRollbackThread: false,
+    canForkThread: false,
+    canForkFromTurn: false,
+    canForkFromSubagentThread: false,
+    exposesNativeThreadId: true,
+  },
+  turns: {
+    exposesNativeTurnId: false,
+    emitsTurnStarted: true,
+    emitsTurnCompleted: true,
+    supportsInterrupt: true,
+    // steerTurn is a no-op, so a steered message would be silently dropped.
+    supportsActiveSteering: false,
+    supportsSteeringByInterruptRestart: false,
+    supportsQueuedMessages: false,
+    terminalStatusQuality: "strong",
+  },
+  streaming: {
+    streamsAssistantText: true,
+    streamsReasoning: false,
+    streamsToolOutput: false,
+    streamsPlanText: false,
+    emitsMessageCompleted: true,
+  },
+  tools: {
+    exposesToolItemIds: false,
+    emitsToolStarted: false,
+    emitsToolCompleted: false,
+    emitsToolOutput: false,
+    supportsMcpTools: false,
+    supportsDynamicToolCallbacks: false,
+  },
+  approvals: {
+    supportsCommandApproval: false,
+    supportsFileReadApproval: false,
+    supportsFileChangeApproval: false,
+    supportsApplyPatchApproval: false,
+    approvalsHaveNativeRequestIds: false,
+    approvalCallbacksAreLiveOnly: false,
+    approvalsCanOriginateFromSubagents: false,
+  },
+  planning: {
+    emitsPlanUpdated: false,
+    emitsTodoList: false,
+    emitsProposedPlan: false,
+    supportsStructuredQuestions: false,
+    planDeltasHaveItemIds: false,
+  },
+  subagents: {
+    supportsSubagents: false,
+    exposesSubagentThreadIds: false,
+    emitsSubagentLifecycle: false,
+    canWaitForSubagents: false,
+    canCloseSubagents: false,
+    canForkSubagentThread: false,
+  },
+  context: {
+    acceptsSystemContext: false,
+    acceptsDeveloperContext: false,
+    acceptsSyntheticUserContext: false,
+    canGenerateSummaries: false,
+    canConsumeHandoffSummaries: false,
+    supportsDeltaHandoff: false,
+    supportsFullThreadHandoff: false,
+    maxRecommendedHandoffChars: null,
+  },
+  checkpointing: {
+    appCanCheckpointFilesystem: true,
+    supportsNestedCheckpointScopes: false,
+    providerCanRollbackConversation: false,
+    providerRollbackReturnsSnapshot: false,
+    providerCanReadConversationSnapshot: false,
+  },
+  identity: {
+    nativeThreadIds: "strong",
+    nativeTurnIds: "none",
+    nativeItemIds: "none",
+    nativeRequestIds: "none",
+  },
+  // The bypass runs no sandboxed work of its own; runtime policy is applied
+  // only where T3 mediates it.
+  runtimePolicy: {
+    enforcement: "client-boundary",
+  },
+} satisfies OrchestrationV2ProviderCapabilities;
 
 /** Fallback free models strictly adhering to ServerProviderModel */
 export const FALLBACK_FREE_MODELS: ReadonlyArray<ServerProviderModel> = [
@@ -231,16 +347,8 @@ export const OpenCodeBypassSetupDriver: ProviderDriver<
       const orchestrationAdapter: ProviderAdapter.ProviderAdapterV2Shape = {
         instanceId,
         driver: DRIVER_KIND,
-        getCapabilities: () =>
-          Effect.succeed({
-            interactionModes: ["chat"],
-            supportsStreaming: true,
-            supportsPlanMode: false,
-          } as any),
-        planSelectionTransition: () =>
-          Effect.succeed({
-            plan: "none",
-          } as any),
+        getCapabilities: () => Effect.succeed(OpenCodeBypassCapabilitiesV2),
+        planSelectionTransition: () => Effect.succeed(turnScopedSelectionTransition()),
         openSession: (openInput: ProviderAdapter.ProviderAdapterV2OpenSessionInput) =>
           Effect.gen(function* () {
             const sessionId = openInput.providerSessionId;
@@ -252,11 +360,7 @@ export const OpenCodeBypassSetupDriver: ProviderDriver<
               status: "ready",
               cwd: openInput.runtimePolicy?.cwd ?? "/",
               model: null,
-              capabilities: {
-                interactionModes: ["chat"],
-                supportsStreaming: true,
-                supportsPlanMode: false,
-              } as any,
+              capabilities: OpenCodeBypassCapabilitiesV2,
               createdAt,
               updatedAt: createdAt,
               lastError: null,
@@ -375,23 +479,41 @@ export const OpenCodeBypassSetupDriver: ProviderDriver<
                             : config.customModels[0].slug
                           : "deepseek-v4.1-flash-free";
 
-                    const rawMessages: any[] = (turnInput as any).messages ?? [];
-                    const chatMessages: BypassChatMessage[] = rawMessages.map((m: any) => ({
-                      role: (m.role === "assistant" ? "assistant" : "user") as
-                        | "user"
-                        | "assistant"
-                        | "system",
-                      content: m.text || "",
-                    }));
+                    const promptText = turnInput.message.text || "Hello";
+                    const chatMessages: BypassChatMessage[] = [
+                      { role: "user", content: promptText },
+                    ];
 
-                    if (chatMessages.length === 0) {
-                      chatMessages.push({ role: "user", content: "Hello" });
-                    }
+                    const aiLogId = createAiModelLogId();
+                    const aiLogStartedAt = Date.now();
+                    let aiLogError: string | null = null;
+                    recordAiModelLog({
+                      id: aiLogId,
+                      timestamp: aiLogStartedAt,
+                      timeFormatted: formatAiModelLogTime(new Date(aiLogStartedAt)),
+                      threadId: turnInput.threadId,
+                      runId: turnInput.runId,
+                      provider: "OpenCode Bypass",
+                      providerInstanceId: instanceId,
+                      model: selectedModel,
+                      baseUrl: config.baseUrl ?? "",
+                      endpoint: resolveChatEndpoint(config.baseUrl),
+                      requestHeaders: { "Content-Type": "application/json" },
+                      apiKeyMasked: "(free lane)",
+                      userPrompt: promptText,
+                      messages: chatMessages,
+                      state: "pending",
+                    });
+
+                    console.log(
+                      `[OpenCodeBypass] 🚀 startTurn running: model=${selectedModel}, prompt="${promptText}"`,
+                    );
 
                     let lastEmitted = Date.now();
 
                     yield* Effect.promise(async () => {
                       try {
+                        console.log(`[OpenCodeBypass] Calling bypassChatStream...`);
                         await bypassChatStream(
                           {
                             model: selectedModel,
@@ -449,10 +571,26 @@ export const OpenCodeBypassSetupDriver: ProviderDriver<
                             }
                           },
                         );
+                        console.log(
+                          `[OpenCodeBypass] ✅ bypassChatStream done, length=${accumulatedText.length}`,
+                        );
                       } catch (err) {
                         const errorMsg = err instanceof Error ? err.message : String(err);
+                        aiLogError = errorMsg;
+                        console.error(`[OpenCodeBypass] ❌ bypassChatStream error:`, errorMsg);
                         accumulatedText += `\n[Error: ${errorMsg}]`;
                       }
+                    });
+
+                    updateAiModelLog(aiLogId, {
+                      status: aiLogError === null ? 200 : 500,
+                      statusText: aiLogError === null ? "completed" : "error",
+                      durationMs: Date.now() - aiLogStartedAt,
+                      state: aiLogError === null ? "completed" : "error",
+                      responseBody: accumulatedText,
+                      ...(aiLogError === null
+                        ? {}
+                        : { error: aiLogError, errorType: "stream_error" }),
                     });
 
                     const finishedTime = yield* DateTime.now;
@@ -530,6 +668,18 @@ export const OpenCodeBypassSetupDriver: ProviderDriver<
                   });
 
                   currentTurnFiber = yield* Effect.forkDetach(runTurn);
+                  const providerTurn: OrchestrationV2ProviderTurn = {
+                    id: providerTurnId,
+                    providerThreadId: turnInput.providerThread.id,
+                    nodeId: turnInput.rootNodeId,
+                    runAttemptId: turnInput.attemptId,
+                    nativeTurnRef: null,
+                    ordinal: turnOrdinal,
+                    status: "running",
+                    startedAt: turnStartedAt,
+                    completedAt: null,
+                  };
+                  return providerTurn;
                 }),
               steerTurn: () => Effect.void,
               interruptTurn: () =>

@@ -122,14 +122,18 @@ export const useBrowserLogsStore = create<BrowserLogsStore>((set, get) => ({
 
     const errorLines: string[] = [];
     for (const [, tab] of tabs) {
-      const consoleErrors = tab.consoleEntries.filter((c) => c.level === "error");
-      for (const ce of consoleErrors.slice(-10)) {
-        errorLines.push(`- [CONSOLE ERROR]: ${ce.text}`);
+      const consoleErrors = tab.consoleEntries.filter(
+        (c) => c.level === "error" || c.level === "warn",
+      );
+      for (const ce of consoleErrors.slice(-15)) {
+        const prefix = ce.level === "error" ? "CONSOLE ERROR" : "CONSOLE WARNING";
+        const src = ce.source ? ` (${ce.source})` : "";
+        errorLines.push(`- [${prefix}]${src}: ${ce.text}`);
       }
       const netErrors = tab.networkEntries.filter(
         (n) => n.failed || (n.status !== null && n.status >= 400),
       );
-      for (const ne of netErrors.slice(-5)) {
+      for (const ne of netErrors.slice(-10)) {
         errorLines.push(
           `- [NETWORK FAILED]: ${ne.method} ${ne.url} (${ne.status ?? "Failed"}${ne.errorText ? `: ${ne.errorText}` : ""})`,
         );

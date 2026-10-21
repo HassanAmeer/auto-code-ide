@@ -83,6 +83,12 @@ import { getModelSelectionStringOptionValue, modelSelectionsEqual } from "@t3too
 import { causeErrorTag } from "@t3tools/shared/observability";
 
 import { providerMessageTextWithAttachmentPaths } from "@t3tools/provider-core/server/attachmentPrompt";
+import {
+  createAiModelLogId,
+  formatAiModelLogTime,
+  recordAiModelLog,
+  updateAiModelLog,
+} from "@t3tools/provider-core/server/aiModelLog";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import {
   backgroundWorkNotification,
@@ -217,6 +223,11 @@ interface ActiveTurn {
   providerTurn: OrchestrationV2ProviderTurn;
   /** Open text and reasoning blocks, keyed `<assistantMessageID>:<kind>:<ordinal>`. */
   readonly texts: Map<string, OpenBlock>;
+  /** Latest assistant text per block, kept after the block closes for AI logs. */
+  readonly aiLogTexts: Map<string, string>;
+  /** Entries recorded for every prompt/command submitted on this turn. */
+  readonly aiLogIds: string[];
+  aiLogStartedAt: number | null;
   readonly tools: Map<string, { readonly name: string; input: Record<string, unknown> }>;
   readonly startedAt: Map<string, DateTime.Utc>;
   readonly ordinals: Map<string, number>;
@@ -1109,6 +1120,7 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
         text: "",
       };
       entry.text = update(entry.text);
+      if (kind === "text") turn.aiLogTexts.set(nativeId, entry.text);
       if (completed) turn.texts.delete(nativeId);
       else turn.texts.set(nativeId, entry);
       if (entry.text.length === 0) return;
@@ -1249,6 +1261,9 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
       input: owner,
       providerTurn,
       texts: new Map(),
+      aiLogTexts: new Map(),
+      aiLogIds: [],
+      aiLogStartedAt: null,
       tools: new Map(),
       startedAt: new Map(),
       ordinals: new Map(),
@@ -1696,6 +1711,24 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
         }
       }
       const completedAt = yield* DateTime.now;
+      if (turn.aiLogIds.length > 0) {
+        const responseText = Array.from(turn.aiLogTexts.values()).join("\n\n").trim();
+        const completedAtMillis = DateTime.toEpochMillis(completedAt);
+        for (const id of turn.aiLogIds) {
+          updateAiModelLog(id, {
+            status: terminal.status === "failed" ? 500 : 200,
+            statusText: terminal.status,
+            ...(turn.aiLogStartedAt === null
+              ? {}
+              : { durationMs: Math.max(0, completedAtMillis - turn.aiLogStartedAt) }),
+            state: terminal.status === "failed" ? "error" : "completed",
+            ...(responseText.length > 0 ? { responseBody: responseText } : {}),
+            ...(terminal.status === "failed"
+              ? { error: terminal.failure.message, errorType: terminal.failure.class }
+              : {}),
+          });
+        }
+      }
       // Blocks still open when the execution ends are final as they stand.
       for (const open of turn.texts.values()) {
         yield* emitText(state, turn, open.block, open.kind, (text) => text, true);
@@ -3505,6 +3538,35 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
      * directory only when the text could use them. A turn stopped meanwhile
      * sends nothing.
      */
+    /** Records one outbound model request for the Request Logs panel. */
+    const logModelRequest = (
+      turn: ActiveTurn,
+      input: { readonly endpointPath: string; readonly text: string },
+    ) =>
+      Effect.gen(function* () {
+        const startedAt = DateTime.toEpochMillis(yield* DateTime.now);
+        const aiLogId = createAiModelLogId();
+        turn.aiLogIds.push(aiLogId);
+        if (turn.aiLogStartedAt === null) turn.aiLogStartedAt = startedAt;
+        recordAiModelLog({
+          id: aiLogId,
+          timestamp: startedAt,
+          timeFormatted: formatAiModelLogTime(startedAt),
+          threadId: turn.input.threadId,
+          ...(turn.input.runId === null ? {} : { runId: turn.input.runId }),
+          provider: "OpenCode",
+          providerInstanceId: instanceId,
+          model: turn.input.modelSelection.model,
+          baseUrl: connection.url,
+          endpoint: `${connection.url.replace(/\/+$/, "")}${input.endpointPath}`,
+          requestHeaders: { "Content-Type": "application/json" },
+          apiKeyMasked: "(local server)",
+          userPrompt: input.text.length > 0 ? input.text : "(Empty message)",
+          messages: [{ role: "user", content: input.text }],
+          state: "pending",
+        });
+      });
+
     const submit = Effect.fnUntraced(function* (
       sessionId: string,
       turnInput: ProviderAdapter.ProviderAdapterV2TurnInput,
@@ -3526,6 +3588,7 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
         if (!sending()) return;
         return yield* client.session.compact({ sessionID, id }).pipe(Effect.asVoid);
       }
+      const requestText = promptText(turnInput);
       const location = { directory: turnInput.runtimePolicy.cwd ?? host.paths.cwd };
       const command = bare ? commandOf(text) : undefined;
       if (command !== undefined) {
@@ -3540,6 +3603,10 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
           const newest = yield* client.message.list({ sessionID, order: "desc", limit: 1 });
           yield* markBefore(sessionId, newest.data[0]?.id ?? null);
           if (!sending()) return;
+          yield* logModelRequest(turn, {
+            endpointPath: `/session/${sessionId}/command`,
+            text: requestText,
+          });
           return yield* client.session.command({ sessionID, ...command });
         }
       }
@@ -3554,11 +3621,15 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
           )
         : [];
       if (!sending()) return;
+      yield* logModelRequest(turn, {
+        endpointPath: `/session/${sessionId}/prompt`,
+        text: requestText,
+      });
       return yield* client.session
         .prompt({
           sessionID,
           id,
-          text: promptText(turnInput),
+          text: requestText,
           ...(skills.length === 0
             ? {}
             : { skills: skills.map((id) => ({ id: Skill.ID.make(id) })) }),
@@ -3892,17 +3963,22 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
           const inboxID = steerPromptId(sessionId, steerInput.message.messageId);
           // A retried steer that already reached the model is not sent again.
           if (turn.settledInbox.has(inboxID)) return;
+          const steerText = providerMessageTextWithAttachmentPaths({
+            text: steerInput.message.text,
+            attachments: steerInput.message.attachments,
+            resolveAttachmentPath: host.resolveAttachmentPath,
+          }).trim();
           turn.steers.add(inboxID);
           state.strandedSteers.delete(inboxID);
+          yield* logModelRequest(turn, {
+            endpointPath: `/session/${sessionId}/prompt`,
+            text: steerText,
+          });
           yield* client.session
             .prompt({
               sessionID: Session.ID.make(sessionId),
               id: inboxID,
-              text: providerMessageTextWithAttachmentPaths({
-                text: steerInput.message.text,
-                attachments: steerInput.message.attachments,
-                resolveAttachmentPath: host.resolveAttachmentPath,
-              }).trim(),
+              text: steerText,
               delivery: "steer",
             })
             .pipe(

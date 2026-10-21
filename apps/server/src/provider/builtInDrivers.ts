@@ -30,6 +30,10 @@ import { CodexDriver, type CodexDriverEnv } from "./Drivers/CodexDriver.ts";
 import { CursorDriver, type CursorDriverEnv } from "@t3tools/provider-cursor/server";
 import { GrokDriver, type GrokDriverEnv } from "@t3tools/provider-grok/server";
 import { OpenCodeDriver, type OpenCodeDriverEnv } from "@t3tools/provider-opencode/server";
+import {
+  OpenCodeBypassSetupDriver,
+  type OpenCodeBypassSetupDriverEnv,
+} from "@t3tools/provider-opencodebypasssetup/server";
 import { MuseDriver, type MuseDriverEnv } from "@t3tools/provider-muse/server";
 import { PiDriver, type PiDriverEnv } from "@t3tools/provider-pi/server";
 import { CustomDriver } from "./Drivers/CustomDriver.ts";
@@ -48,6 +52,7 @@ export type BuiltInDriversEnv =
   | CursorDriverEnv
   | GrokDriverEnv
   | OpenCodeDriverEnv
+  | OpenCodeBypassSetupDriverEnv
   | PiDriverEnv
   | MuseDriverEnv;
 
@@ -62,6 +67,7 @@ export const BUILT_IN_DRIVERS: ReadonlyArray<AnyProviderDriver<BuiltInDriversEnv
   CursorDriver,
   GrokDriver,
   OpenCodeDriver,
+  OpenCodeBypassSetupDriver,
   AntigravityDriver,
   PiDriver,
   MuseDriver,
