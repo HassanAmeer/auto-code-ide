@@ -57,6 +57,7 @@ import { useAtomCommand } from "~/state/use-atom-command";
 import { useTheme } from "./useTheme";
 import { environmentSession, readEnvironmentScope, useEnvironmentScope } from "~/state/session";
 import { appAtomRegistry } from "~/rpc/atomRegistry";
+import { saveSharedClientSettings } from "~/lib/serverSettingsSync";
 
 const CLIENT_SETTINGS_PERSISTENCE_ERROR_SCOPE = "[CLIENT_SETTINGS]";
 
@@ -207,6 +208,10 @@ export function persistClientSettingsPatch(
       }
     }
     await persist(getClientSettingsSnapshot());
+    // The shared subset also lives in the server's live database, so the same
+    // favourites, model preferences and behaviour settings follow the user to
+    // any other machine that opens this environment.
+    void saveSharedClientSettings(getClientSettingsSnapshot());
   }).catch((error) => {
     console.error(`${CLIENT_SETTINGS_PERSISTENCE_ERROR_SCOPE} persist failed`, {
       operation: "persist",
