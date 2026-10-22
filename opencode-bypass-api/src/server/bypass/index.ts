@@ -24,3 +24,6 @@ export {
   buildBypassHeaders,
   injectFingerprintTools,
 } from "./fingerprint.ts";
+
+export { getCurrentSession, rotateSession } from "./session.ts";
+export { rotateWarpIp, getWarpProxyIp } from "./proxy.ts";

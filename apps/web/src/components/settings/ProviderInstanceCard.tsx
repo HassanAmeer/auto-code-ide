@@ -37,6 +37,7 @@ import {
   toCustomModelSetting,
 } from "@t3tools/shared/model";
 import { cn } from "../../lib/utils";
+import { OpenCodeBypassWarpControl } from "./OpenCodeBypassWarpControl";
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { normalizeProviderAccentColor } from "../../providerInstances";
 import { Badge } from "../ui/badge";
@@ -1037,6 +1038,9 @@ export function ProviderInstanceCard({
     <>
       {instance.driver === "opencodebypasssetup" ? (
         <>
+          <div className="mb-4">
+            <OpenCodeBypassWarpControl readOnly={readOnly} />
+          </div>
           <div className="mb-4 rounded-lg border border-primary/20 bg-primary/5 p-3.5 text-xs text-muted-foreground">
             <div className="font-semibold text-foreground flex items-center gap-1.5 mb-1">
               ⚡ Minimum RAM / Zero Overhead Mode

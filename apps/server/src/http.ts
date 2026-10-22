@@ -2399,3 +2399,39 @@ export const layerStaticAndDevRoute = Layer.unwrap(
     Effect.map((assets) => HttpRouter.add("GET", "*", handleStaticAndDevRequest(assets))),
   ),
 );
+
+export const layerOpenCodeBypassStatusRoute = HttpRouter.add(
+  "GET",
+  "/api/opencode-bypass/status",
+  Effect.gen(function* () {
+    const { getWarpProxyIp, getCurrentSession } = yield* Effect.promise(
+      () => import("@t3tools/provider-opencodebypasssetup/server"),
+    );
+    const ip = yield* Effect.promise(() => getWarpProxyIp());
+    const session = getCurrentSession();
+    return HttpServerResponse.jsonUnsafe({
+      ok: true,
+      ip,
+      session,
+    });
+  }),
+);
+
+export const layerOpenCodeBypassRotateRoute = HttpRouter.add(
+  "POST",
+  "/api/opencode-bypass/rotate",
+  Effect.gen(function* () {
+    const { rotateWarpIp, rotateSession } = yield* Effect.promise(
+      () => import("@t3tools/provider-opencodebypasssetup/server"),
+    );
+    const result = yield* Effect.promise(() => rotateWarpIp());
+    const newSession = rotateSession();
+    return HttpServerResponse.jsonUnsafe({
+      ok: true,
+      success: result.success,
+      ip: result.newIp,
+      session: newSession,
+      message: result.message,
+    });
+  }),
+);

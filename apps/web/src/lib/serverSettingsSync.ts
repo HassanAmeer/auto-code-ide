@@ -78,6 +78,94 @@ export function loadServerSetting<T>(key: string, fallback: T): T {
   }
 }
 
+/**
+ * Client settings that follow the user to every machine: the ones that
+ * describe how the assistant should behave, not how this particular screen
+ * looks. They are stored in the server's live database (the same
+ * `app_user_settings` table the other settings use) and read back on boot.
+ */
+export const SHARED_CLIENT_SETTINGS_KEY = "t3code:client-settings-shared:v1";
+
+export const SHARED_CLIENT_SETTING_KEYS = [
+  "favorites",
+  "providerModelPreferences",
+  "pullRequestMergeMethodOverrides",
+  "sidebarProjectGroupingMode",
+  "sidebarProjectGroupingOverrides",
+  "sidebarProjectSortOrder",
+  "sidebarThreadSortOrder",
+  "sidebarThreadPreviewCount",
+  "sidebarWorkingShelfEnabled",
+  "legacySidebarEnabled",
+  "showSkillsInSlashMenu",
+  "followUpBehavior",
+  "planModeEnabled",
+  "composerRichTextEnabled",
+  "composerCollapseOnScroll",
+  "sendShortcut",
+  "diffLayout",
+  "diffIgnoreWhitespace",
+  "diffFilesCollapsed",
+  "diffColorScheme",
+  "timestampFormat",
+  "wordWrap",
+  "fontSizeInterface",
+  "fontSizePrompt",
+  "fontSizeCode",
+  "fontSizeTerminal",
+  "fontFamilyCode",
+  "fontFamilyComposer",
+  "fontFamilySans",
+  "fontFamilyTerminal",
+  "fontSmoothing",
+  "appearanceContrast",
+  "glassOpacity",
+  "panelAnimationDurationMs",
+  "chatWidth",
+  "loadBalancingEnabled",
+  "loadBalancingWeights",
+  "contextWindowMeterEnabled",
+  "proactivePanelsEnabled",
+  "persistComposerContextStrip",
+  "notificationMode",
+  "inAppNotificationsEnabled",
+  "dismissedProviderUpdateNotificationKeys",
+  "confirmQuit",
+  "confirmThreadArchive",
+  "confirmThreadDelete",
+  "confirmThreadUnpin",
+  "environmentIdentificationMode",
+] as const;
+
+export type SharedClientSettingKey = (typeof SHARED_CLIENT_SETTING_KEYS)[number];
+
+/** The shared subset of the client settings, ready for the server. */
+export function pickSharedClientSettings(
+  settings: Record<string, unknown>,
+): Record<string, unknown> {
+  const shared: Record<string, unknown> = {};
+  for (const key of SHARED_CLIENT_SETTING_KEYS) {
+    const value = settings[key];
+    if (value !== undefined) shared[key] = value;
+  }
+  return shared;
+}
+
+/** Mirror the shared client settings into the server's live database. */
+export async function saveSharedClientSettings(settings: Record<string, unknown>): Promise<void> {
+  const shared = pickSharedClientSettings(settings);
+  if (Object.keys(shared).length === 0) return;
+  await saveServerSetting(SHARED_CLIENT_SETTINGS_KEY, shared);
+}
+
+/** The shared client settings the server holds, or null when it has none. */
+export async function fetchSharedClientSettings(): Promise<Record<string, unknown> | null> {
+  const serverSettings = await fetchServerAppSettings();
+  const shared = serverSettings?.[SHARED_CLIENT_SETTINGS_KEY];
+  if (!shared || typeof shared !== "object") return null;
+  return shared as Record<string, unknown>;
+}
+
 export async function initServerSettingsSync(): Promise<void> {
   if (typeof window === "undefined" || isSyncing) return;
   isSyncing = true;
@@ -126,11 +214,18 @@ export async function initServerSettingsSync(): Promise<void> {
     } else {
       // Seed server database with any existing local settings
       const seedKeys = [
-        "t3_tinyfish_config",
-        "t3_stt_settings_v1",
-        "t3_autoretry_settings_v1",
-        "t3_terminal_ssh",
-        "t3_terminal_keys",
+        "t3_tinyfish_config_v1",
+        "t3code:speech:stt-settings:v1",
+        "t3code:auto-retry-settings:v2",
+        "adc_terminal_ssh_profiles",
+        "adc_terminal_access_keys",
+        "t3_execution_engine_settings",
+        "t3_composer_web_search_enabled",
+        "t3code:speech:tts-settings:v1",
+        "t3_app_sound_settings",
+        "t3_app_notification_settings",
+        "t3code:speech:voice-call-settings:v1",
+        "t3:last_selected_model",
       ];
       const initialSettings: Record<string, any> = {};
       for (const k of seedKeys) {

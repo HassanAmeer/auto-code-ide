@@ -4,3 +4,9 @@
  * @module provider-opencodebypasssetup/server
  */
 export { OpenCodeBypassSetupDriver, type OpenCodeBypassSetupDriverEnv } from "./server/driver.ts";
+export {
+  getWarpProxyIp,
+  rotateWarpIp,
+  getCurrentSession,
+  rotateSession,
+} from "./server/bypass/index.ts";
