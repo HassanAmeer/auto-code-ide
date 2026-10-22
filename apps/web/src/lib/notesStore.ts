@@ -1,3 +1,4 @@
+import { saveServerSetting } from "./serverSettingsSync";
 import { useState, useEffect } from "react";
 
 export interface NoteItem {
@@ -33,6 +34,9 @@ export function saveNotes(notes: NoteItem[]): void {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
+    // Notes are user content: the live database keeps the copy that follows
+    // the user to another machine.
+    void saveServerSetting(STORAGE_KEY, notes);
     window.dispatchEvent(new CustomEvent("t3-notes-changed", { detail: notes }));
   } catch (err) {
     console.warn("Failed to save user notes:", err);

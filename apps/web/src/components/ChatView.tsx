@@ -8452,7 +8452,8 @@ export default function ChatView(props: ChatViewProps) {
         return;
       }
       if (restoreFiles === undefined) {
-        setPendingRevert({ turnCount, messageId, routeThreadKey });
+        // Direct full revert (both files and conversation) without showing popup modal
+        void onRevertToTurnCount(turnCount, messageId, true, false);
         return;
       }
 

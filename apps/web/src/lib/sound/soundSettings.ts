@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { saveServerSetting } from "../serverSettingsSync";
 
 export interface AppSoundSettings {
   readonly masterSoundEnabled: boolean;
@@ -54,6 +55,7 @@ export function saveSoundSettings(settings: Partial<AppSoundSettings>): AppSound
   if (typeof window !== "undefined") {
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      void saveServerSetting(STORAGE_KEY, next);
     } catch {
       // Storage error ignored
     }

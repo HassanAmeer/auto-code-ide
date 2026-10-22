@@ -2,6 +2,8 @@
  * Browser Text-to-Speech (TTS) Engine using Web Speech API (window.speechSynthesis)
  */
 
+import { saveServerSetting } from "../serverSettingsSync";
+
 export type TtsLanguageMode =
   | "auto-male"
   | "auto-female"
@@ -222,6 +224,9 @@ export function saveTtsSettings(settings: TtsSettings): void {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(TTS_STORAGE_KEY, JSON.stringify(settings));
+    // The server keeps the live copy so the voice follows the user to any
+    // other machine.
+    void saveServerSetting(TTS_STORAGE_KEY, settings);
     window.dispatchEvent(new CustomEvent("t3-tts-settings-changed", { detail: settings }));
   } catch (err) {
     console.warn("Failed to persist TTS settings:", err);

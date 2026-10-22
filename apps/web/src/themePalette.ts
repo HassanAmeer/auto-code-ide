@@ -1,3 +1,4 @@
+import { saveServerSetting } from "~/lib/serverSettingsSync";
 import * as Equal from "effect/Equal";
 import * as Schema from "effect/Schema";
 import "culori/css";
@@ -1173,6 +1174,8 @@ function saveCustomThemes(
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(CUSTOM_THEMES_STORAGE_KEY, JSON.stringify(storedThemes));
+    // Custom themes travel with the user: the server keeps the live copy.
+    void saveServerSetting(CUSTOM_THEMES_STORAGE_KEY, storedThemes);
     customThemeLibrarySnapshot = { status: "ready", storedThemes, themes };
   } catch (cause) {
     throw new ThemeLibraryStorageError({

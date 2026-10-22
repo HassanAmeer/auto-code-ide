@@ -1,6 +1,9 @@
 // @effect-diagnostics nodeBuiltinImport:off globalConsole:off globalDate:off
 import * as NodeFS from "node:fs";
+import { createRequire } from "node:module";
 import * as NodePath from "node:path";
+
+const nodeRequire = createRequire(import.meta.url);
 
 export interface CustomHeaderConfig {
   key: string;
@@ -26,8 +29,10 @@ export interface StoredCustomProvider {
 
 function getNodeSqlite() {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    return require("node:sqlite") as typeof import("node:sqlite");
+    // The server runs as ESM, where a bare `require` is undefined. Without
+    // createRequire the store silently fell back to the JSON mirror and the
+    // settings never reached the live database.
+    return nodeRequire("node:sqlite") as typeof import("node:sqlite");
   } catch {
     return null;
   }
@@ -124,11 +129,12 @@ export function getAllAppSettings(dbPath: string): Record<string, any> {
         dbSettings[row.key] = row.value;
       }
     }
-    if (rows.length === 0 && Object.keys(fileSettings).length > 0) {
-      for (const [k, v] of Object.entries(fileSettings)) {
-        setAppSetting(dbPath, k, v);
-      }
-      return fileSettings;
+    // Settings that only ever lived in the JSON mirror (written before the
+    // store could reach SQLite) move into the live database on first read.
+    for (const [key, value] of Object.entries(fileSettings)) {
+      if (key in dbSettings) continue;
+      setAppSetting(dbPath, key, value);
+      dbSettings[key] = value;
     }
     return { ...fileSettings, ...dbSettings };
   } catch (err) {

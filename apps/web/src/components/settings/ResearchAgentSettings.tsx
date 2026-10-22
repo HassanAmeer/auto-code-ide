@@ -1,3 +1,4 @@
+import { saveServerSetting } from "~/lib/serverSettingsSync";
 import { useState, useEffect } from "react";
 import {
   GlobeIcon,
@@ -135,6 +136,9 @@ export function saveResearchAgentConfig(config: ResearchAgentConfig): void {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+    // The live database keeps the copy that follows the user to another
+    // machine.
+    void saveServerSetting(STORAGE_KEY, config);
   } catch (error) {
     console.error("Failed to save research agent config:", error);
   }

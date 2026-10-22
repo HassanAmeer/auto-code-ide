@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { saveServerSetting } from "../serverSettingsSync";
 
 export interface AppNotificationSettings {
   readonly masterEnabled: boolean;
@@ -59,6 +60,7 @@ export function saveNotificationSettings(
   if (typeof window !== "undefined") {
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      void saveServerSetting(STORAGE_KEY, next);
     } catch {
       // Storage error ignored
     }

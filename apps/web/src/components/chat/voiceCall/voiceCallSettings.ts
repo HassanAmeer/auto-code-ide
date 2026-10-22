@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { saveServerSetting } from "~/lib/serverSettingsSync";
 
 export interface VoiceCallSettings {
   thinkingWaveSound: boolean;
@@ -27,6 +28,7 @@ export function saveVoiceCallSettings(settings: Partial<VoiceCallSettings>): voi
     const current = loadVoiceCallSettings();
     const updated = { ...current, ...settings };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    void saveServerSetting(STORAGE_KEY, updated);
     window.dispatchEvent(new CustomEvent("t3-voice-call-settings-changed", { detail: updated }));
   } catch (err) {
     console.warn("Failed to save voice call settings:", err);

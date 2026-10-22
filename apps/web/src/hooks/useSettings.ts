@@ -118,6 +118,8 @@ function getClientSettingsHydrationStatusSnapshot(): ClientSettingsHydrationStat
   return clientSettingsHydrationStatus;
 }
 
+applySharedClientSettingsFromServer();
+
 function subscribeClientSettingsHydration(listener: () => void): () => void {
   clientSettingsHydrationListeners.add(listener);
   void hydrateClientSettings().catch(() => undefined);
@@ -182,6 +184,20 @@ function enqueueClientSettingsPersistence<A>(work: () => Promise<A>): Promise<A>
     () => undefined,
   );
   return result;
+}
+
+/**
+ * Adopt the shared client settings the server holds. The server copy wins so a
+ * second machine sees the same favourites, model preferences and behaviour
+ * settings as the first one.
+ */
+function applySharedClientSettingsFromServer(): void {
+  const handler = (event: Event) => {
+    const detail = (event as CustomEvent<Record<string, unknown>>).detail;
+    if (!detail || typeof detail !== "object") return;
+    void persistClientSettingsPatch(detail as ClientSettingsPatch);
+  };
+  window.addEventListener("t3_shared_client_settings_received", handler);
 }
 
 export function persistClientSettingsPatch(

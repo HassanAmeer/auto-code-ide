@@ -198,6 +198,19 @@ export async function initServerSettingsSync(): Promise<void> {
 
     // 2. Sync general app settings (TinyFish API key, STT settings, auto-retry, etc.)
     const serverSettings = await fetchServerAppSettings();
+
+    // The shared client settings the server holds win over this device's copy:
+    // that is what makes another machine pick up the same favourites, model
+    // preferences and behaviour settings.
+    const sharedClientSettings = serverSettings?.[SHARED_CLIENT_SETTINGS_KEY];
+    if (sharedClientSettings && typeof sharedClientSettings === "object") {
+      window.dispatchEvent(
+        new CustomEvent("t3_shared_client_settings_received", {
+          detail: sharedClientSettings as Record<string, unknown>,
+        }),
+      );
+    }
+
     if (serverSettings && Object.keys(serverSettings).length > 0) {
       for (const [key, val] of Object.entries(serverSettings)) {
         if (val !== undefined && val !== null) {

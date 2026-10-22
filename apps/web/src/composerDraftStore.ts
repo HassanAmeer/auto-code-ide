@@ -1,3 +1,4 @@
+import { saveServerSetting } from "./lib/serverSettingsSync";
 import { stripInlineContextReferences } from "./lib/composerContextReferences";
 import { elementContextToPreviewAnnotation } from "./lib/elementContext";
 import {
@@ -126,8 +127,16 @@ const composerPersistStorage: PersistStorage<ComposerPersistState> = {
     // so the cast mirrors the one zustand's createJSONStorage performs.
     return JSON.parse(raw) as StorageValue<ComposerPersistState>;
   },
-  setItem: (name, value) => composerDebouncedStorage.setItem(name, value),
-  removeItem: (name) => composerDebouncedStorage.removeItem(name),
+  setItem: (name, value) => {
+    composerDebouncedStorage.setItem(name, value);
+    // Drafts are user content: the live database keeps the copy that follows
+    // the user to another machine.
+    void saveServerSetting(COMPOSER_DRAFT_STORAGE_KEY, value);
+  },
+  removeItem: (name) => {
+    composerDebouncedStorage.removeItem(name);
+    void saveServerSetting(COMPOSER_DRAFT_STORAGE_KEY, null);
+  },
 };
 
 // Flush pending composer draft writes before page unload to prevent data loss.
