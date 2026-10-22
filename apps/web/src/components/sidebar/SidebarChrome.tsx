@@ -347,8 +347,8 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
                 <ArchiveIcon className="size-3.5" />
               </div>
               <div className="flex flex-col min-w-0">
-                <span className="font-semibold text-[11px] truncate">Archive</span>
-                <span className="text-[9px] text-muted-foreground truncate">Threads</span>
+                <span className="font-semibold text-[11px] truncate">Archived Chats</span>
+                <span className="text-[9px] text-muted-foreground truncate">Restore or delete</span>
               </div>
             </button>
 

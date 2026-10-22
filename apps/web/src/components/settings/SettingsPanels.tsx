@@ -14,6 +14,7 @@ import { Spinner } from "~/components/ui/spinner";
 import { NotificationSettings } from "./NotificationSettings";
 import {
   ArchiveIcon,
+  RefreshCwIcon,
   ArchiveX,
   CheckIcon,
   ChevronRightIcon,
@@ -29,7 +30,9 @@ import {
   type DesktopUpdateChannel,
   ProviderDriverKind,
   type ProviderInstanceId,
+  type EnvironmentId,
   type ScopedThreadRef,
+  type ThreadId,
   type SidebarProjectGroupingMode,
   type ServerProvider,
 } from "@t3tools/contracts";
@@ -3518,6 +3521,12 @@ export function GeneralSettingsPanel() {
 export function ArchivedThreadsPanel() {
   const { scope } = useSettingsScope();
   const { unarchiveThread, confirmAndDeleteThread, deleteThread } = useThreadActions();
+  const [threadToDelete, setThreadToDelete] = useState<{
+    id: ThreadId;
+    title: string;
+    environmentId: EnvironmentId;
+  } | null>(null);
+  const [isDeletingThread, setIsDeletingThread] = useState(false);
   const {
     snapshots: archivedSnapshots,
     error: archiveError,
@@ -3621,8 +3630,29 @@ export function ArchivedThreadsPanel() {
     [confirmAndDeleteThread, refreshArchivedThreads, unarchiveThread],
   );
 
+  // The archived list is a snapshot: refresh it when the tab regains focus so
+  // chats archived a moment ago show up without a reload.
+  useEffect(() => {
+    const handleFocus = () => refreshArchivedThreads();
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
+  }, [refreshArchivedThreads]);
+
   return (
     <SettingsPageContainer>
+      {archivedGroups.length > 0 ? (
+        <div className="flex items-center justify-end gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => refreshArchivedThreads()}
+            disabled={isLoadingArchive}
+          >
+            <RefreshCwIcon className={cn("size-3.5", isLoadingArchive && "animate-spin")} />
+            <span>Refresh</span>
+          </Button>
+        </div>
+      ) : null}
       {archivedGroups.length === 0 ? (
         <SettingsSection
           id={isLoadingArchive ? undefined : searchableSetting("archive").id}
@@ -3729,33 +3759,19 @@ export function ArchivedThreadsPanel() {
                     <Button
                       type="button"
                       variant="ghost-destructive"
-                      size="icon-xs"
+                      size="xs"
                       aria-label="Delete thread"
                       title="Delete thread"
-                      onClick={() => {
-                        void (async () => {
-                          const result = await deleteThread(
-                            scopeThreadRef(thread.environmentId, thread.id),
-                          );
-                          if (result._tag === "Success") {
-                            refreshArchivedThreads();
-                            return;
-                          }
-                          if (!isAtomCommandInterrupted(result)) {
-                            const error = squashAtomCommandFailure(result);
-                            toastManager.add(
-                              stackedThreadToast({
-                                type: "error",
-                                title: "Failed to delete thread",
-                                description:
-                                  error instanceof Error ? error.message : "An error occurred.",
-                              }),
-                            );
-                          }
-                        })();
-                      }}
+                      onClick={() =>
+                        setThreadToDelete({
+                          id: thread.id as ThreadId,
+                          title: thread.title,
+                          environmentId: thread.environmentId,
+                        })
+                      }
                     >
-                      <Trash2Icon />
+                      <Trash2Icon className="size-3.5" />
+                      <span>Delete</span>
                     </Button>
                   </div>
                 }
@@ -3764,6 +3780,64 @@ export function ArchivedThreadsPanel() {
           </SettingsSection>
         ))
       )}
+
+      <Dialog
+        open={threadToDelete !== null}
+        onOpenChange={(open) => !open && setThreadToDelete(null)}
+      >
+        <DialogPopup className="w-full sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-destructive">Delete Archived Thread?</DialogTitle>
+            <DialogDescription>
+              <strong className="text-foreground">{threadToDelete?.title}</strong> will be
+              permanently deleted with its whole conversation history. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setThreadToDelete(null)}
+              disabled={isDeletingThread}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              disabled={isDeletingThread || !threadToDelete}
+              onClick={() => {
+                const target = threadToDelete;
+                if (!target) return;
+                setIsDeletingThread(true);
+                void (async () => {
+                  const result = await deleteThread(
+                    scopeThreadRef(target.environmentId, target.id),
+                  );
+                  setIsDeletingThread(false);
+                  if (result._tag === "Success") {
+                    setThreadToDelete(null);
+                    refreshArchivedThreads();
+                    return;
+                  }
+                  if (!isAtomCommandInterrupted(result)) {
+                    const error = squashAtomCommandFailure(result);
+                    toastManager.add(
+                      stackedThreadToast({
+                        type: "error",
+                        title: "Failed to delete thread",
+                        description: error instanceof Error ? error.message : "An error occurred.",
+                      }),
+                    );
+                  }
+                })();
+              }}
+            >
+              {isDeletingThread ? "Deleting..." : "Delete Thread"}
+            </Button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
     </SettingsPageContainer>
   );
 }
