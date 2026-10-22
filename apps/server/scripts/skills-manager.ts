@@ -221,6 +221,60 @@ function mirrorProjectSkills(projectRoot: string): void {
   }
 }
 
+/**
+ * The pristine copy of a skill, kept the first time the skill is edited so a
+ * revert can put the original back.
+ */
+function originalPath(root: string, dirName: string): string {
+  return NodePath.join(root, ".t3-skill-originals", `${dirName}.md`);
+}
+
+function keepOriginal(root: string, dirName: string): void {
+  const target = NodePath.join(root, ".agents", "skills", dirName, "SKILL.md");
+  if (NodeFS.existsSync(originalPath(root, dirName))) return;
+  if (!NodeFS.existsSync(target)) return;
+  const backup = originalPath(root, dirName);
+  NodeFS.mkdirSync(NodePath.dirname(backup), { recursive: true });
+  NodeFS.copyFileSync(target, backup);
+}
+
+/**
+ * Reinstall a skill from the source the skills CLI recorded in the project's
+ * lock file, so a revert restores the published skill instead of a guess.
+ */
+function reinstallFromLock(projectRoot: string, dirName: string): boolean {
+  const lockPath = NodePath.join(projectRoot, "skills-lock.json");
+  if (!NodeFS.existsSync(lockPath)) return false;
+  let lock: { skills?: Record<string, { source?: string; sourceUrl?: string }> };
+  try {
+    lock = JSON.parse(NodeFS.readFileSync(lockPath, "utf-8")) as typeof lock;
+  } catch {
+    return false;
+  }
+  const entry = lock.skills?.[dirName];
+  const source = entry?.source ?? entry?.sourceUrl;
+  if (!source) return false;
+
+  const result = spawnSync(`npx --yes skills add ${source} --skill ${dirName} -y --agent codex`, {
+    cwd: projectRoot,
+    shell: true,
+    encoding: "utf-8",
+    timeout: 240_000,
+  });
+  if (result.status !== 0) return false;
+
+  // The CLI writes the universal tree; keep the other engines in step.
+  const installed = NodePath.join(projectRoot, ".agents", "skills", dirName);
+  if (!NodeFS.existsSync(installed)) return false;
+  for (const root of PROJECT_SKILL_ROOTS) {
+    if (root === ".agents/skills") continue;
+    const target = NodePath.join(projectRoot, root, dirName);
+    NodeFS.rmSync(target, { recursive: true, force: true });
+    copyDirectory(installed, target);
+  }
+  return true;
+}
+
 function copyDirectory(from: string, to: string): void {
   NodeFS.mkdirSync(to, { recursive: true });
   for (const entry of NodeFS.readdirSync(from, { withFileTypes: true })) {
@@ -263,6 +317,7 @@ function main(argv: ReadonlyArray<string>): void {
       const contents = Buffer.from(encoded, "base64").toString("utf-8");
       const directory = NodePath.join(SKILLS_DIR, slug);
       NodeFS.mkdirSync(directory, { recursive: true });
+      keepOriginal(resolveWorkspaceRoot(), slug);
       NodeFS.writeFileSync(NodePath.join(directory, "SKILL.md"), contents, "utf-8");
       process.stdout.write(`${JSON.stringify({ ok: true })}\n`);
       return;
@@ -273,6 +328,7 @@ function main(argv: ReadonlyArray<string>): void {
       const contents = Buffer.from(encoded, "base64").toString("utf-8");
       const directory = NodePath.join(GLOBAL_SKILLS_DIR, slug);
       NodeFS.mkdirSync(directory, { recursive: true });
+      keepOriginal(NodeOS.homedir(), slug);
       NodeFS.writeFileSync(NodePath.join(directory, "SKILL.md"), contents, "utf-8");
       process.stdout.write(`${JSON.stringify({ ok: true, dirName: slug })}\n`);
       return;
@@ -460,7 +516,50 @@ function main(argv: ReadonlyArray<string>): void {
       return;
     }
     case "reset": {
-      fail("no built-in skills are bundled with this installation");
+      const [dirName, encodedCwd] = args;
+      if (!dirName) fail("reset needs a skill name");
+      const projectRoot = resolveProjectRoot(encodedCwd);
+      const projectCopy = NodePath.join(projectRoot, ".agents", "skills", dirName, "SKILL.md");
+      const globalCopy = NodePath.join(GLOBAL_SKILLS_DIR, dirName, "SKILL.md");
+
+      // The project copy reverts to the pristine global copy.
+      if (NodeFS.existsSync(projectCopy) && NodeFS.existsSync(globalCopy)) {
+        NodeFS.copyFileSync(globalCopy, projectCopy);
+        for (const root of PROJECT_SKILL_ROOTS) {
+          if (root === ".agents/skills") continue;
+          const mirror = NodePath.join(projectRoot, root, dirName, "SKILL.md");
+          if (NodeFS.existsSync(mirror)) {
+            NodeFS.mkdirSync(NodePath.dirname(mirror), { recursive: true });
+            NodeFS.copyFileSync(globalCopy, mirror);
+          }
+        }
+        process.stdout.write(`${JSON.stringify({ ok: true, reverted: dirName })}\n`);
+        return;
+      }
+
+      // A skill that was edited in place reverts to the copy kept when it was
+      // first written.
+      for (const root of [projectRoot, NodeOS.homedir()]) {
+        const original = originalPath(root, dirName);
+        if (!NodeFS.existsSync(original)) continue;
+        const target = NodeFS.existsSync(globalCopy)
+          ? globalCopy
+          : NodePath.join(root, ".agents", "skills", dirName, "SKILL.md");
+        NodeFS.mkdirSync(NodePath.dirname(target), { recursive: true });
+        NodeFS.copyFileSync(original, target);
+        NodeFS.rmSync(original, { force: true });
+        process.stdout.write(`${JSON.stringify({ ok: true, reverted: dirName })}\n`);
+        return;
+      }
+
+      // A skill the skills CLI installed knows its source: reinstall it.
+      const restored = reinstallFromLock(projectRoot, dirName);
+      if (restored) {
+        process.stdout.write(`${JSON.stringify({ ok: true, reverted: dirName })}\n`);
+        return;
+      }
+
+      fail(`no pristine copy is available for ${dirName}`);
     }
     default:
       fail(`unknown command: ${command ?? "(none)"}`);

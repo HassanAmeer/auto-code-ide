@@ -16,6 +16,7 @@ import {
   LayersIcon,
   CheckCircle2Icon,
   TerminalIcon,
+  RotateCcwIcon,
   XIcon,
 } from "lucide-react";
 
@@ -730,6 +731,41 @@ ${editorBody.trim()}
     [loadGlobalSkills, loadProjectGlobalSkills],
   );
 
+  // Put a skill back the way it was: the project copy returns to the
+  // pristine global copy, or an edited skill returns to the copy kept when it
+  // was first written.
+  const handleRevertSkill = useCallback(
+    async (skill: SkillItem) => {
+      try {
+        const res = await fetch("/api/terminal/exec", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            command: `node --experimental-strip-types scripts/skills-manager.ts reset ${JSON.stringify(skill.dirName)} ${JSON.stringify(encodeProjectRoot())}`,
+            timeoutMs: 20_000,
+          }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = (await res.json()) as { stdout: string };
+        const parsed = JSON.parse(data.stdout || "{}") as { ok: boolean; error?: string };
+        if (!parsed.ok) throw new Error(parsed.error ?? "The revert did not finish");
+        toastManager.add({
+          type: "success",
+          title: "Skill reverted",
+          description: `${skill.name} is back to its original content.`,
+        });
+        await Promise.all([loadSkills(), loadGlobalSkills()]);
+      } catch (err) {
+        toastManager.add({
+          type: "error",
+          title: "Could not revert the skill",
+          description: err instanceof Error ? err.message : String(err),
+        });
+      }
+    },
+    [encodeProjectRoot, loadGlobalSkills, loadSkills],
+  );
+
   // Remove a skill from the global store. The project copy is left alone.
   const handleDeleteGlobalSkill = useCallback(async () => {
     const skill = globalSkillToDelete;
@@ -1223,6 +1259,11 @@ ${raw}
                         label: "Export",
                         icon: <DownloadIcon className="size-3.5" />,
                         onClick: () => void handleExportSkill(skill),
+                      },
+                      {
+                        label: "Revert",
+                        icon: <RotateCcwIcon className="size-3.5" />,
+                        onClick: () => void handleRevertSkill(skill),
                       },
                       {
                         label: "Delete",
