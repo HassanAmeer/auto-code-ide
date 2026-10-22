@@ -42,6 +42,7 @@ import {
   updateAiModelLog,
 } from "@t3tools/provider-core/server/aiModelLog";
 import { buildInvokedSkillInstructions, discoverCustomSkills } from "@t3tools/shared/agentSkills";
+import { providerMessageTextWithAttachmentPaths } from "@t3tools/provider-core/server/attachmentPrompt";
 import {
   bypassChat,
   bypassChatStream,
@@ -490,7 +491,29 @@ export const OpenCodeBypassSetupDriver: ProviderDriver<
                             : config.customModels[0].slug
                           : "deepseek-v4.1-flash-free";
 
-                    const promptText = turnInput.message.text || "Hello";
+                    let promptText = turnInput.message.text || "Hello";
+
+                    // If user attached files/images, include their paths and details in the prompt
+                    if (turnInput.message.attachments && turnInput.message.attachments.length > 0) {
+                      promptText = providerMessageTextWithAttachmentPaths({
+                        text: promptText,
+                        attachments: turnInput.message.attachments,
+                        resolveAttachmentPath: (att) => {
+                          // Try resolving from attachment store or relative path
+                          const attId = att.id;
+                          return attId ? `(attachment: ${att.name || attId})` : null;
+                        },
+                      });
+
+                      // Also append a helpful summary of attached files
+                      const attSummary = turnInput.message.attachments
+                        .map(
+                          (a) => `[File Attached: ${a.name} (${a.mimeType}, ${a.sizeBytes} bytes)]`,
+                        )
+                        .join("\n");
+                      promptText = `${promptText}\n\n${attSummary}`;
+                    }
+
                     // A `$skill` mention has no native expansion on this lane,
                     // so the skill body rides along as an instruction block.
                     const skillInstructions = buildInvokedSkillInstructions(

@@ -1,6 +1,14 @@
 import { type ProviderDriverKind, type ProviderInstanceId } from "@t3tools/contracts";
 import { memo } from "react";
-import { CheckIcon, StarIcon } from "lucide-react";
+import {
+  BrainIcon,
+  CheckIcon,
+  CodeIcon,
+  EyeIcon,
+  StarIcon,
+  WrenchIcon,
+  ZapIcon,
+} from "lucide-react";
 import {
   getDisplayModelName,
   getTriggerDisplayModelLabel,
@@ -14,6 +22,76 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { cn } from "~/lib/utils";
 import { modelPickerModelKey } from "./modelPickerKeys";
 import { ProviderInstanceIcon } from "./ProviderInstanceIcon";
+
+interface ModelCapabilityBadge {
+  id: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+}
+
+function resolveModelCapabilities(slug: string): ModelCapabilityBadge[] {
+  const s = slug.toLowerCase();
+  const caps: ModelCapabilityBadge[] = [];
+
+  // Vision
+  if (
+    s.includes("vision") ||
+    s.includes("4o") ||
+    s.includes("sonnet") ||
+    s.includes("opus") ||
+    s.includes("flash") ||
+    s.includes("pro") ||
+    s.includes("gemini") ||
+    s.includes("vl") ||
+    s.includes("multimodal") ||
+    s.includes("omni")
+  ) {
+    caps.push({ id: "vision", label: "Vision / Image support", icon: EyeIcon });
+  }
+
+  // Reasoning / Thinking
+  if (
+    s.includes("deepseek") ||
+    s.includes("r1") ||
+    s.includes("o1") ||
+    s.includes("o3") ||
+    s.includes("thinking") ||
+    s.includes("reason") ||
+    s.includes("qwq")
+  ) {
+    caps.push({ id: "reasoning", label: "Deep Reasoning / Thinking", icon: BrainIcon });
+  }
+
+  // Speed / Fast
+  if (
+    s.includes("flash") ||
+    s.includes("fast") ||
+    s.includes("mini") ||
+    s.includes("haiku") ||
+    s.includes("turbo") ||
+    s.includes("instant") ||
+    s.includes("beam")
+  ) {
+    caps.push({ id: "fast", label: "Fast Response / Low Latency", icon: ZapIcon });
+  }
+
+  // Coding
+  if (
+    s.includes("coder") ||
+    s.includes("code") ||
+    s.includes("claude") ||
+    s.includes("deepseek") ||
+    s.includes("gpt") ||
+    s.includes("glm")
+  ) {
+    caps.push({ id: "code", label: "Specialized Code Generation", icon: CodeIcon });
+  }
+
+  // Tools & Function calling
+  caps.push({ id: "tools", label: "Tool Use & Function Calling", icon: WrenchIcon });
+
+  return caps;
+}
 
 export const ModelListRow = memo(function ModelListRow(props: {
   index: number;
@@ -98,6 +176,26 @@ export const ModelListRow = memo(function ModelListRow(props: {
             </span>
           </div>
         )}
+        {/* Model capabilities badges with tooltip */}
+        <div className="mt-1.5 flex items-center gap-1 text-muted-foreground/60">
+          {resolveModelCapabilities(props.model.slug).map((cap) => {
+            const Icon = cap.icon;
+            return (
+              <Tooltip key={cap.id}>
+                <TooltipTrigger
+                  render={
+                    <span className="inline-flex size-4 items-center justify-center rounded hover:bg-muted/80 hover:text-muted-foreground transition-colors cursor-help">
+                      <Icon className="size-3" />
+                    </span>
+                  }
+                />
+                <TooltipPopup side="top" align="center">
+                  {cap.label}
+                </TooltipPopup>
+              </Tooltip>
+            );
+          })}
+        </div>
       </div>
 
       <div className="flex shrink-0 items-center gap-1.5">
