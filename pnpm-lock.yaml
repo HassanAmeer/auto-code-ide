@@ -200,6 +200,9 @@ importers:
       stream-json:
         specifier: 3.6.0
         version: 3.6.0
+      undici:
+        specifier: 'catalog:'
+        version: 8.11.2
       yaml:
         specifier: 'catalog:'
         version: 2.9.0
