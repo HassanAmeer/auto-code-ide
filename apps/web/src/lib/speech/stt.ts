@@ -50,19 +50,19 @@ export function isSpeechRecognitionSupported(): boolean {
   return "webkitSpeechRecognition" in window || "SpeechRecognition" in window;
 }
 
-export function getRecognitionLanguageCode(mode: SttLanguageMode): string {
+export function getRecognitionLanguageCodes(mode: SttLanguageMode): string[] {
   switch (mode) {
     case "natural-urdu":
-      return "ur-PK";
+      return ["ur-PK"];
     case "roman-urdu":
-      return "ur-PK";
+      return ["ur-PK", "hi-IN", "en-IN", "en-US"];
     case "hindi":
-      return "hi-IN";
+      return ["hi-IN", "en-IN"];
     case "english":
-      return "en-US";
+      return ["en-US", "en-IN"];
     case "auto":
     default:
-      return "ur-PK";
+      return ["ur-PK", "hi-IN", "en-IN", "en-US"];
   }
 }
 
@@ -115,6 +115,51 @@ export function removeConsecutiveDuplicateWords(text: string): string {
  * E.g. if existing is "hello world" and incoming is "world how are you", returns "how are you".
  * E.g. if existing is "hello" and incoming is "hello", returns "".
  */
+export function isRomanUrduSttMode(mode: SttLanguageMode): boolean {
+  return mode === "roman-urdu" || mode === "auto";
+}
+
+/**
+ * The cleanup mode that matches the dictation language, or null when the
+ * language needs no script-aware cleanup.
+ */
+export function getSttCleanupMode(
+  mode: SttLanguageMode,
+): "roman-urdu" | "natural-urdu" | "hindi" | null {
+  switch (mode) {
+    case "roman-urdu":
+    case "auto":
+      return "roman-urdu";
+    case "natural-urdu":
+      return "natural-urdu";
+    case "hindi":
+      return "hindi";
+    case "english":
+      return null;
+  }
+}
+
+/**
+ * Normalizes recognizer output into the user-facing transcript.
+ * Roman Urdu modes convert Urdu/Hindi script to phonetic Roman Urdu and
+ * replace Urdu punctuation with its Latin equivalent.
+ */
+export function formatSttTranscript(raw: string, mode: SttLanguageMode): string {
+  if (!raw) return "";
+  let text = removeConsecutiveDuplicateWords(raw.trim());
+  if (isRomanUrduSttMode(mode)) {
+    text = transliterateUrduToRoman(text);
+    text = text.replace(/؟/g, "?").replace(/۔/g, ".").replace(/،/g, ",").replace(/؛/g, ";");
+  }
+  return removeConsecutiveDuplicateWords(
+    text
+      .replace(/\s+([,.!?;:])/g, "$1")
+      .replace(/([,.!?;:])(?=[^\s\d.,!?;:])/g, "$1 ")
+      .replace(/\s{2,}/g, " ")
+      .trim(),
+  );
+}
+
 export function deduplicateOverlap(existingText: string, incomingText: string): string {
   if (!existingText || !incomingText) return incomingText.trim();
   const existingWords = existingText.trim().split(/\s+/).filter(Boolean);
@@ -160,7 +205,9 @@ export function createSttSession({
 
   const settings = loadSttSettings();
   const selectedMode = mode || settings.language;
-  const langCode = getRecognitionLanguageCode(selectedMode);
+  const langCodes = getRecognitionLanguageCodes(selectedMode);
+  let langCode = langCodes[0] ?? "en-US";
+  let langFallbackIndex = 0;
 
   let isRunning = false;
   let recognition: any = null;
@@ -171,12 +218,21 @@ export function createSttSession({
   let lastFinalizedPhrase = "";
   let lastFinalizedTimestamp = 0;
 
-  const processTranscript = (raw: string) => {
-    if (!raw) return "";
-    if (selectedMode === "roman-urdu" || selectedMode === "auto") {
-      return transliterateUrduToRoman(raw);
+  const processTranscript = (raw: string) => formatSttTranscript(raw, selectedMode);
+
+  const advanceLanguageFallback = () => {
+    if (langFallbackIndex < langCodes.length - 1) {
+      langFallbackIndex += 1;
+      langCode = langCodes[langFallbackIndex] ?? "en-US";
+      return true;
     }
-    return raw;
+    const navigatorLanguage =
+      typeof navigator !== "undefined" && navigator.language ? navigator.language : null;
+    if (navigatorLanguage && navigatorLanguage !== langCode) {
+      langCode = navigatorLanguage;
+      return true;
+    }
+    return false;
   };
 
   const cleanupInstance = () => {
@@ -294,6 +350,12 @@ export function createSttSession({
 
         // Standard silence or pause events: keep listening continuously!
         if (error === "no-speech" || error === "aborted") {
+          return;
+        }
+
+        // The browser/engine lacks the selected locale: retry with a related fallback.
+        if (error === "language-not-supported") {
+          advanceLanguageFallback();
           return;
         }
 

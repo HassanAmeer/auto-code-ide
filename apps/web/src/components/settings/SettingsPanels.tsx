@@ -1,6 +1,7 @@
 import { useAutoRetrySettings } from "~/lib/autoRetrySettings";
 import { useShowLogFloatingButton } from "~/lib/floatingLogButtonSettings";
 import { useBackgroundModeStore } from "~/lib/backgroundModeStore";
+import { useBackgroundModeServerState } from "~/lib/backgroundModeServer";
 import {
   useExecutionEngineSettings,
   fetchCodexCliStatus,
@@ -16,7 +17,9 @@ import {
   ArchiveX,
   CheckIcon,
   ChevronRightIcon,
+  CpuIcon,
   SettingsIcon,
+  SparklesIcon,
   Trash2Icon,
 } from "lucide-react";
 import { Link, useNavigate } from "@tanstack/react-router";
@@ -122,7 +125,7 @@ import {
   sortProviderInstanceEntries,
 } from "../../providerInstances";
 import { ensureLocalApi, readLocalApi } from "../../localApi";
-import { isMacPlatform } from "../../lib/utils";
+import { cn, isMacPlatform } from "../../lib/utils";
 import { getSavedLastSelectedModel, saveLastSelectedModel } from "~/lib/lastSelectedModel";
 import { EMPTY_SERVER_PROVIDERS } from "../../state/server";
 import { useArchivedThreadSnapshots } from "../../lib/archivedThreadsState";
@@ -2068,183 +2071,228 @@ function ExecutionEngineSection({
     }
   };
 
-  return (
-    <SettingsSection
-      id="execution-engine"
-      title="AI Agent Execution Engine (سوئچ ٹو کسٹم / کوڈیکس سی ایل ائی)"
-    >
-      <SettingsRow
-        id="engine-mode-toggle"
-        title="Switch to Custom / Codex CLI"
-        description={
-          isCustom
-            ? "Custom Engine is ON: Uses Custom Agent Memory (.autocode), Code Graph, and Live Preview error auto-fix."
-            : "Codex CLI is ACTIVE (OFF): Uses native OpenAI Codex CLI (`codex app-server`), native diff checking, code rewriting, and memories in ~/.codex."
-        }
-        control={
-          <div className="flex items-center gap-2.5">
-            <span
-              className={`text-xs font-semibold px-2.5 py-1 rounded-md transition-colors ${
-                !isCustom
-                  ? "bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30"
-                  : "text-muted-foreground"
-              }`}
-            >
-              Codex CLI
-            </span>
-            <Switch
-              checked={isCustom}
-              onCheckedChange={handleToggle}
-              aria-label="Switch to Custom / Codex CLI"
-            />
-            <span
-              className={`text-xs font-semibold px-2.5 py-1 rounded-md transition-colors ${
-                isCustom
-                  ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
-                  : "text-muted-foreground"
-              }`}
-            >
-              Custom Engine
-            </span>
-          </div>
-        }
-      />
+  const codexProvider = serverProviders.find(
+    (provider) => provider.driver === "codex" || provider.instanceId === "codex",
+  );
+  const customProvider = serverProviders.find(
+    (provider) => provider.driver === "custom" || provider.instanceId === "custom",
+  );
 
-      <div className="rounded-xl border border-border/70 bg-muted/20 p-4 flex flex-col gap-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <span
-              className={`size-2.5 rounded-full ${
-                isCustom
-                  ? "bg-emerald-500 ring-4 ring-emerald-500/20"
-                  : codexStatus?.available
-                    ? "bg-amber-500 ring-4 ring-amber-500/20"
-                    : "bg-red-500 ring-4 ring-red-500/20"
-              }`}
-            />
-            <span className="text-sm font-semibold text-foreground">
-              {isCustom ? "Custom AI Engine (Active)" : "OpenAI Codex CLI Engine (Active)"}
-            </span>
+  const codexFeatures = [
+    "Native Codex CLI Daemon (`app-server`)",
+    "Native Diff Checking & Tool Approvals",
+    "Native ~/.codex Memory & Goals Store",
+    "Full Stdio JSON-RPC Protocol",
+  ];
+  const customFeatures = [
+    "Custom Agent Memory (.autocode)",
+    "Workspace Code Graph Context",
+    "Live Preview Logs Error Sync",
+    "Multi-Language Unified Patcher",
+  ];
+
+  return (
+    <SettingsSection id="execution-engine" title="AI Agent Execution Engine">
+      <div className="overflow-hidden rounded-3xl border border-border/60 bg-card/40 shadow-xs">
+        <div className="flex items-center gap-3 border-b border-border/50 bg-background/60 px-4 py-3.5">
+          <div
+            className={cn(
+              "grid size-10 shrink-0 place-items-center rounded-2xl border transition-colors",
+              isCustom
+                ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                : codexStatus?.available
+                  ? "border-amber-500/30 bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                  : "border-destructive/30 bg-destructive/15 text-destructive",
+            )}
+          >
+            {isCustom ? (
+              <SparklesIcon className="size-5" aria-hidden="true" />
+            ) : (
+              <CpuIcon className="size-5" aria-hidden="true" />
+            )}
           </div>
-          <span className="text-xs font-mono px-2 py-0.5 rounded bg-background border border-border/60 text-muted-foreground">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold text-foreground">
+              {isCustom ? "Custom AI Engine" : "OpenAI Codex CLI Engine"}
+            </p>
+            <p className="truncate text-xs text-muted-foreground">
+              {isCustom
+                ? "Custom Agent Memory, Code Graph and Live Preview sync"
+                : "Native Codex CLI app-server with ~/.codex memory"}
+            </p>
+          </div>
+          <span
+            className={cn(
+              "shrink-0 rounded-full border px-2.5 py-1 text-2xs font-semibold",
+              isCustom
+                ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                : "border-amber-500/30 bg-amber-500/15 text-amber-600 dark:text-amber-400",
+            )}
+          >
             {isCustom ? "Mode: Custom" : (codexStatus?.version ?? "Codex CLI")}
           </span>
         </div>
 
-        <div className="flex flex-wrap gap-1.5 pt-0.5">
-          {isCustom ? (
-            <>
-              <span className="inline-flex items-center gap-1 text-2xs font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                ✓ Custom Agent Memory (.autocode)
-              </span>
-              <span className="inline-flex items-center gap-1 text-2xs font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                ✓ Workspace Code Graph Context
-              </span>
-              <span className="inline-flex items-center gap-1 text-2xs font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                ✓ Live Preview Logs Error Sync
-              </span>
-              <span className="inline-flex items-center gap-1 text-2xs font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                ✓ Multi-Language Unified Patcher
-              </span>
-            </>
-          ) : (
-            <>
-              <span className="inline-flex items-center gap-1 text-2xs font-medium px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                ✓ Native Codex CLI Daemon (`app-server`)
-              </span>
-              <span className="inline-flex items-center gap-1 text-2xs font-medium px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                ✓ Native Diff Checking & Tool Approvals
-              </span>
-              <span className="inline-flex items-center gap-1 text-2xs font-medium px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                ✓ Native ~/.codex Memory & Goals Store
-              </span>
-              <span className="inline-flex items-center gap-1 text-2xs font-medium px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                ✓ Full Stdio JSON-RPC Protocol
-              </span>
-            </>
-          )}
+        <div className="px-4 pt-4">
+          <div
+            role="tablist"
+            aria-label="Execution engine"
+            className="grid grid-cols-2 gap-1 rounded-2xl bg-muted/70 p-1"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={!isCustom}
+              onClick={() => {
+                if (isCustom) handleToggle(false);
+              }}
+              className={cn(
+                "cursor-pointer rounded-xl px-3 py-2 text-xs font-semibold transition-all duration-200",
+                !isCustom
+                  ? "bg-background text-foreground shadow-xs"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              Codex CLI
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={isCustom}
+              onClick={() => {
+                if (!isCustom) handleToggle(true);
+              }}
+              className={cn(
+                "cursor-pointer rounded-xl px-3 py-2 text-xs font-semibold transition-all duration-200",
+                isCustom
+                  ? "bg-background text-foreground shadow-xs"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              Custom Engine
+            </button>
+          </div>
+          <p className="mt-2.5 text-xs leading-relaxed text-muted-foreground">
+            {isCustom
+              ? "Custom Engine is ON: uses Custom Agent Memory (.autocode), Code Graph, and Live Preview error auto-fix."
+              : "Codex CLI is ACTIVE: uses native OpenAI Codex CLI (`codex app-server`), native diff checking, code rewriting, and memories in ~/.codex."}
+          </p>
         </div>
 
-        <div className="mt-1 pt-3 border-t border-border/40 flex flex-col gap-2.5 text-xs">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="font-medium text-foreground">Codex CLI Binary Path</span>
-            <span className="font-mono text-3xs select-all">
-              {codexStatus?.available ? (
-                <span className="text-emerald-500 font-semibold">● Found: {codexStatus.path}</span>
-              ) : (
-                <span className="text-amber-500">Not detected automatically</span>
+        <div className="flex flex-col gap-3 px-4 py-4">
+          <div className="flex flex-wrap gap-1.5">
+            {(isCustom ? customFeatures : codexFeatures).map((feature) => (
+              <span
+                key={feature}
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-2xs font-medium",
+                  isCustom
+                    ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                    : "border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400",
+                )}
+              >
+                ✓ {feature}
+              </span>
+            ))}
+          </div>
+
+          {isCustom ? (
+            <div className="flex flex-col divide-y divide-border/40 overflow-hidden rounded-2xl border border-border/50 bg-background/60">
+              <div className="flex items-center justify-between gap-3 px-3 py-2.5 text-xs">
+                <span className="font-medium text-foreground">Provider instance</span>
+                <span className="truncate font-mono text-3xs text-muted-foreground">
+                  {customProvider?.instanceId ?? "custom"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3 px-3 py-2.5 text-xs">
+                <span className="font-medium text-foreground">Agent memory store</span>
+                <span className="truncate font-mono text-3xs text-muted-foreground">
+                  {customProvider?.runtimePaths?.homePath ?? ".autocode"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3 px-3 py-2.5 text-xs">
+                <span className="font-medium text-foreground">Code graph & preview sync</span>
+                <span className="truncate font-mono text-3xs text-muted-foreground">enabled</span>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2.5 rounded-2xl border border-border/50 bg-background/60 p-3">
+              <div className="flex items-center justify-between gap-3 text-xs">
+                <span className="font-medium text-foreground">Codex CLI Binary Path</span>
+                <span className="truncate font-mono text-3xs select-all">
+                  {codexStatus?.available ? (
+                    <span className="font-semibold text-emerald-500">
+                      ● Found: {codexStatus.path}
+                    </span>
+                  ) : (
+                    <span className="text-amber-500">Not detected automatically</span>
+                  )}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Input
+                  value={pathInput}
+                  onChange={(e) => setPathInput(e.target.value)}
+                  placeholder="codex, ~/.local/bin/codex, or /usr/local/bin/codex"
+                  className="h-8 flex-1 bg-background font-mono text-xs"
+                />
+                <Button
+                  size="xs"
+                  variant="outline"
+                  disabled={testingPath}
+                  onClick={handleTestPath}
+                  className="h-8 shrink-0 px-3"
+                >
+                  {testingPath ? "Testing..." : "Test CLI Path"}
+                </Button>
+                <Button
+                  size="xs"
+                  variant="ghost"
+                  onClick={() => {
+                    const defaultPath = codexStatus?.path || "codex";
+                    setPathInput(defaultPath);
+                    updateEngineSettings({ codexBinaryPath: defaultPath });
+                    loadStatus(defaultPath);
+                  }}
+                  title="Reset to default path"
+                  className="h-8 shrink-0 px-2 text-3xs text-muted-foreground"
+                >
+                  Reset
+                </Button>
+              </div>
+
+              {testResult && (
+                <div
+                  className={cn(
+                    "rounded-lg p-2 font-mono text-2xs",
+                    testResult.startsWith("Success")
+                      ? "border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                      : "border border-destructive/20 bg-destructive/10 text-destructive",
+                  )}
+                >
+                  {testResult}
+                </div>
               )}
-            </span>
-          </div>
 
-          <div className="flex items-center gap-2">
-            <Input
-              value={pathInput}
-              onChange={(e) => setPathInput(e.target.value)}
-              placeholder="codex, ~/.local/bin/codex, or /usr/local/bin/codex"
-              className="h-8 text-xs font-mono flex-1 bg-background"
-            />
-            <Button
-              size="xs"
-              variant="outline"
-              disabled={testingPath}
-              onClick={handleTestPath}
-              className="h-8 px-3 shrink-0"
-            >
-              {testingPath ? "Testing..." : "Test CLI Path"}
-            </Button>
-            <Button
-              size="xs"
-              variant="ghost"
-              onClick={() => {
-                const defaultPath = codexStatus?.path || "codex";
-                setPathInput(defaultPath);
-                updateEngineSettings({ codexBinaryPath: defaultPath });
-                loadStatus(defaultPath);
-              }}
-              title="Reset to default path"
-              className="h-8 px-2 text-3xs text-muted-foreground"
-            >
-              Reset
-            </Button>
-          </div>
-
-          {testResult && (
-            <div
-              className={`p-2 rounded text-2xs font-mono ${
-                testResult.startsWith("Success")
-                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
-                  : "bg-destructive/10 text-destructive border border-destructive/20"
-              }`}
-            >
-              {testResult}
+              <div className="flex flex-col gap-1 rounded-xl border border-border/50 bg-background/60 p-2.5 text-2xs leading-relaxed text-muted-foreground">
+                <div className="flex items-center gap-1.5 font-semibold text-foreground">
+                  <span>💡 Codex CLI Location & Storage Advice:</span>
+                </div>
+                <p>
+                  Codex CLI location:{" "}
+                  <code className="rounded bg-muted px-1 py-0.5 font-mono text-foreground">
+                    {codexStatus?.path || "codex (in PATH)"}
+                  </code>{" "}
+                  {codexStatus?.version ? `(${codexStatus.version}) ` : ""}and uses{" "}
+                  <code className="rounded bg-muted px-1 py-0.5 font-mono text-foreground">
+                    {codexStatus?.codexHome || "~/.codex"}
+                  </code>{" "}
+                  for its configuration, authentication, and memory database.
+                </p>
+              </div>
             </div>
           )}
-
-          <div className="rounded-lg bg-background/60 border border-border/50 p-2.5 text-2xs text-muted-foreground leading-relaxed flex flex-col gap-1">
-            <div className="font-semibold text-foreground flex items-center gap-1.5">
-              <span>💡 Codex CLI Location & Storage Advice:</span>
-            </div>
-            <p>
-              Codex CLI location:{" "}
-              <code className="text-foreground font-mono bg-muted px-1 py-0.5 rounded">
-                {codexStatus?.path || "codex (in PATH)"}
-              </code>{" "}
-              {codexStatus?.version ? `(${codexStatus.version}) ` : ""}and uses{" "}
-              <code className="text-foreground font-mono bg-muted px-1 py-0.5 rounded">
-                {codexStatus?.codexHome || "~/.codex"}
-              </code>{" "}
-              for its configuration, authentication, and memory database.
-            </p>
-            <p>
-              اگر آپ تمام CLIs کو اپنے فولڈر{" "}
-              <code className="text-foreground font-mono bg-muted px-1 py-0.5 rounded">
-                ~/all-ai-clis/codex
-              </code>{" "}
-              یا روٹ میں رکھنا چاہتے ہیں، تو آپ بائنری وہاں رکھ کر اوپر والے ان پٹ میں اس کا پاتھ
-              درج کر سکتے ہیں—سسٹم خود بخود اسے ڈیٹیکٹ کر کے چلائے گا۔
-            </p>
-          </div>
         </div>
       </div>
     </SettingsSection>
@@ -2254,13 +2302,8 @@ function ExecutionEngineSection({
 export function GeneralSettingsPanel() {
   const [autoRetrySettings, updateAutoRetrySettings] = useAutoRetrySettings();
   const [showLogFloatingButton, setShowLogFloatingButton] = useShowLogFloatingButton();
-  const {
-    isBgEnabled,
-    setBgEnabled,
-    keepTabAwake,
-    setKeepTabAwake,
-    setModalOpen: setBgModalOpen,
-  } = useBackgroundModeStore();
+  const { keepTabAwake, setKeepTabAwake, setModalOpen: setBgModalOpen } = useBackgroundModeStore();
+  const { isBgEnabled, setBgEnabled } = useBackgroundModeServerState();
   const modifierLabel = isMacPlatform(navigator.platform) ? "⌘" : "Ctrl";
   const sendShortcutOptions = [
     { value: "enter", label: "Enter" },
@@ -2495,7 +2538,7 @@ export function GeneralSettingsPanel() {
         <SettingsRow
           id="vps-bg-enabled"
           title="24/7 VPS Background Execution"
-          description="Continuous task and agent execution on the remote VPS server even when browser tab or computer is closed."
+          description="Continuous task and agent execution on the remote VPS server even when browser tab or computer is closed. Keeps unfinished turns alive across a server restart, and keeps host-side polling running with no client attached."
           control={
             <Switch
               checked={isBgEnabled}

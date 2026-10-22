@@ -337,6 +337,10 @@ function createTextGeneration(
       Effect.succeed({
         title: "Update workflow",
       }),
+    polishPrompt: () =>
+      Effect.succeed({
+        prompt: "Corrected prompt",
+      }),
     ...overrides,
   };
 
@@ -380,6 +384,17 @@ function createTextGeneration(
           (cause) =>
             new TextGenerationError({
               operation: "generateThreadTitle",
+              detail: "fake text generation failed",
+              ...(cause !== undefined ? { cause } : {}),
+            }),
+        ),
+      ),
+    polishPrompt: (input) =>
+      implementation.polishPrompt(input).pipe(
+        Effect.mapError(
+          (cause) =>
+            new TextGenerationError({
+              operation: "polishPrompt",
               detail: "fake text generation failed",
               ...(cause !== undefined ? { cause } : {}),
             }),

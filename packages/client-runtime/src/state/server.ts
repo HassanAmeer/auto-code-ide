@@ -1160,6 +1160,15 @@ export function createServerEnvironmentAtoms<R, E>(
         key: ({ environmentId, input }) => JSON.stringify([environmentId, input]),
       },
     }),
+    polishPrompt: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:polish-prompt",
+      tag: WS_METHODS.serverPolishPrompt,
+      concurrency: {
+        mode: "singleFlight",
+        key: ({ environmentId, input }) =>
+          JSON.stringify([environmentId, input.cwd, input.prompt, input.mode ?? "polish"]),
+      },
+    }),
     refreshProviders: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:refresh-providers",
       tag: WS_METHODS.serverRefreshProviders,

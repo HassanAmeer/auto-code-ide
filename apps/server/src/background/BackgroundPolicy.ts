@@ -202,7 +202,8 @@ function computeSnapshot(input: {
     activeForegroundLeaseCount: foregroundLeases.length,
     activeScopeKeys: [...activeScopeKeys].toSorted(),
     shouldRunOpportunisticWork:
-      foregroundLeases.some((lease) => !isClientConstrained(lease, input.settings)) &&
+      (input.settings.runWithoutClient ||
+        foregroundLeases.some((lease) => !isClientConstrained(lease, input.settings))) &&
       !isHostConstrained(input.hostPower, input.settings),
     updatedAt: input.updatedAt,
   };
@@ -294,6 +295,11 @@ export const make = Effect.fn("background.policy.make")(function* () {
       const [current, settings] = yield* Effect.all([snapshot, backgroundActivitySettings]);
       if (isHostConstrained(current.hostPower, settings)) {
         return false;
+      }
+      // The host keeps polling on its own when the owner asked for always-on
+      // background work, so a closed browser does not stop host-side upkeep.
+      if (settings.runWithoutClient) {
+        return true;
       }
       return current.leases.some((lease) =>
         leaseMayRunScopedWork(lease, scope, current.updatedAt, settings),

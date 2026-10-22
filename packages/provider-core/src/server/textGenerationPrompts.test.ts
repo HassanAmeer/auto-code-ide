@@ -4,6 +4,7 @@ import {
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
   buildPrContentPrompt,
+  buildPromptPolishPrompt,
   buildThreadTitlePrompt,
 } from "./textGenerationPrompts.ts";
 import {
@@ -361,5 +362,54 @@ describe("normalizeCliError", () => {
 
     expect(result.detail).toBe("Failed to generate a commit message");
     expect(result.message).not.toContain("secret-token");
+  });
+});
+
+describe("buildPromptPolishPrompt", () => {
+  it("asks for a corrected prompt and preserves the original message", () => {
+    const result = buildPromptPolishPrompt({
+      prompt: "plese fix thees speling in src/app.ts",
+    });
+
+    expect(result.prompt).toContain("Fix misspellings, typos, grammar, punctuation");
+    expect(result.prompt).toContain("Keep code blocks, file paths, identifiers");
+    expect(result.prompt).toContain("Do not answer, execute, or add requirements");
+    expect(result.prompt).toContain("User message:");
+    expect(result.prompt).toContain("plese fix thees speling in src/app.ts");
+    expect(result.outputSchema).toBeDefined();
+  });
+
+  it("keeps dictated Urdu in the Urdu script", () => {
+    const result = buildPromptPolishPrompt({
+      prompt: "کیا اپ کو میری اواز ارہی ہے",
+      mode: "natural-urdu",
+    });
+
+    expect(result.prompt).toContain("Keep the text in Urdu script");
+    expect(result.prompt).toContain("Never convert it to Roman Urdu or English");
+    expect(result.prompt).toContain("کیا اپ کو میری اواز ارہی ہے");
+  });
+
+  it("keeps dictated Hindi in the Devanagari script", () => {
+    const result = buildPromptPolishPrompt({
+      prompt: "क्या आप को मेरी आवाज़ आ रही है",
+      mode: "hindi",
+    });
+
+    expect(result.prompt).toContain("Keep the text in Devanagari script");
+    expect(result.prompt).toContain("क्या आप को मेरी आवाज़ आ रही है");
+  });
+
+  it("uses transcript cleanup rules for dictated Roman Urdu", () => {
+    const result = buildPromptPolishPrompt({
+      prompt: "hilo kya ap ko meri aoaz arhi hai aik sint theek nahi hai",
+      mode: "roman-urdu",
+    });
+
+    expect(result.prompt).toContain("dictated message");
+    expect(result.prompt).toContain("Roman Urdu");
+    expect(result.prompt).toContain('"aiksnt" / "aik sint" -> "accent"');
+    expect(result.prompt).toContain("Never answer the speaker");
+    expect(result.prompt).toContain("hilo kya ap ko meri aoaz arhi hai aik sint theek nahi hai");
   });
 });

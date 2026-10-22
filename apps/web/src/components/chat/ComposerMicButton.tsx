@@ -24,6 +24,7 @@ export const ComposerMicButton = memo(function ComposerMicButton({
     if (listening) {
       sessionRef.current?.stop();
       setListening(false);
+      window.dispatchEvent(new CustomEvent("t3:speech-stream", { detail: { finalize: true } }));
       window.dispatchEvent(new CustomEvent("t3:speech-stream", { detail: { reset: true } }));
     } else {
       const session = createSttSession({

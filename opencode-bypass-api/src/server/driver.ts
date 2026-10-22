@@ -33,14 +33,20 @@ import {
 import { makeManualOnlyProviderMaintenanceCapabilities } from "@t3tools/provider-core/server/maintenanceResolver";
 import { turnScopedSelectionTransition } from "@t3tools/provider-core/server/selectionTransition";
 import type * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
-import type { ProviderTextGeneration } from "@t3tools/provider-core/server/textGeneration";
+import * as TextGenerationOperations from "@t3tools/provider-core/server/textGenerationOperations";
+import { TextGenerationError } from "@t3tools/contracts";
 import {
   createAiModelLogId,
   formatAiModelLogTime,
   recordAiModelLog,
   updateAiModelLog,
 } from "@t3tools/provider-core/server/aiModelLog";
-import { bypassChatStream, resolveChatEndpoint, type BypassChatMessage } from "./bypass/client.ts";
+import {
+  bypassChat,
+  bypassChatStream,
+  resolveChatEndpoint,
+  type BypassChatMessage,
+} from "./bypass/client.ts";
 
 const DRIVER_KIND = ProviderDriverKind.make("opencodebypasssetup");
 const decodeSettings = Schema.decodeSync(OpenCodeBypassSetupSettings);
@@ -711,32 +717,35 @@ export const OpenCodeBypassSetupDriver: ProviderDriver<
           }),
       };
 
-      const textGeneration: ProviderTextGeneration = {
-        generateCommitMessage: () =>
-          Effect.fail({
-            _tag: "TextGenerationError" as const,
-            operation: "generateCommitMessage",
-            detail: "Not implemented",
-          } as any),
-        generatePrContent: () =>
-          Effect.fail({
-            _tag: "TextGenerationError" as const,
-            operation: "generatePrContent",
-            detail: "Not implemented",
-          } as any),
-        generateBranchName: () =>
-          Effect.fail({
-            _tag: "TextGenerationError" as const,
-            operation: "generateBranchName",
-            detail: "Not implemented",
-          } as any),
-        generateThreadTitle: () =>
-          Effect.fail({
-            _tag: "TextGenerationError" as const,
-            operation: "generateThreadTitle",
-            detail: "Not implemented",
-          } as any),
-      };
+      const runBypassJson: TextGenerationOperations.Runner = (request) =>
+        Effect.tryPromise({
+          try: () =>
+            bypassChat({
+              model: request.modelSelection.model,
+              baseUrl: config.baseUrl,
+              messages: [
+                {
+                  role: "system",
+                  content: "Return only the requested JSON object, with no prose or markdown.",
+                },
+                { role: "user", content: request.prompt },
+              ],
+            }),
+          catch: (cause) =>
+            new TextGenerationError({
+              operation: request.operation,
+              detail: "OpenCode bypass text generation failed.",
+              cause,
+            }),
+        }).pipe(
+          Effect.flatMap((response) =>
+            TextGenerationOperations.decodeJsonReply(request, "OpenCode Bypass", response.content),
+          ),
+        );
+      const textGeneration = TextGenerationOperations.fromRunner(
+        "OpenCodeBypassTextGeneration",
+        runBypassJson,
+      );
 
       const instance: ProviderInstance = {
         instanceId,

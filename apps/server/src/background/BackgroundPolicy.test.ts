@@ -98,6 +98,28 @@ describe("BackgroundPolicy", () => {
     }).pipe(Effect.provide(layerFor(nominalHostPower))),
   );
 
+  it.effect("keeps host background work running with no client when always-on is enabled", () =>
+    Effect.gen(function* () {
+      const policy = yield* BackgroundPolicy.BackgroundPolicy;
+
+      const snapshot = yield* policy.snapshot;
+      assert.equal(snapshot.activeForegroundLeaseCount, 0);
+      assert.equal(snapshot.shouldRunOpportunisticWork, true);
+      assert.equal(yield* policy.shouldRunScopeWork({ type: "vcs-status", cwd: "/repo" }), true);
+    }).pipe(
+      Effect.provide(
+        layerFor(nominalHostPower, {
+          backgroundActivity: {
+            schemaVersion: 1,
+            profile: "custom",
+            baseProfile: "performance",
+            overrides: { runWithoutClient: true },
+          },
+        }),
+      ),
+    ),
+  );
+
   it.effect("removes all leases for a disconnected websocket connection", () =>
     Effect.gen(function* () {
       const policy = yield* BackgroundPolicy.BackgroundPolicy;

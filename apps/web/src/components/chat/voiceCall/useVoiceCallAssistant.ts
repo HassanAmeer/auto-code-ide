@@ -1,11 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import {
   isSpeechRecognitionSupported,
-  getRecognitionLanguageCode,
+  getRecognitionLanguageCodes,
+  formatSttTranscript,
   loadSttSettings,
   isMobileDevice,
 } from "~/lib/speech/stt";
-import { transliterateUrduToRoman } from "~/lib/speech/romanUrduTransliterate";
 import {
   speakText,
   stopSpeaking,
@@ -189,6 +189,7 @@ export function useVoiceCallAssistant({
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const recognitionRef = useRef<any>(null);
+  const recognitionLanguageIndexRef = useRef(0);
   const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ttsCooldownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const levelCheckIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -364,7 +365,10 @@ export function useVoiceCallAssistant({
 
       const recognition = new SpeechRecognitionClass();
       const sttSettings = loadSttSettings();
-      recognition.lang = getRecognitionLanguageCode(sttSettings.language);
+      const languageCodes = getRecognitionLanguageCodes(sttSettings.language);
+      recognition.lang =
+        languageCodes[Math.min(recognitionLanguageIndexRef.current, languageCodes.length - 1)] ??
+        "en-US";
       // On mobile devices (Android/iOS), continuous=true frequently fails or drops audio.
       recognition.continuous = !isMobileDevice;
       recognition.interimResults = true;
@@ -400,19 +404,15 @@ export function useVoiceCallAssistant({
         const rawSpeech = (accumulatedFinal + (currentInterim ? " " + currentInterim : "")).trim();
         if (!rawSpeech) return;
 
-        const lower = rawSpeech.toLowerCase();
+        const processedSpeech = formatSttTranscript(rawSpeech, sttSettings.language);
 
-        // 1. Check for end call triggers
+        // 1. Check for end call triggers in both the formatted and raw transcript
+        const endCallCandidates = [processedSpeech.toLowerCase(), rawSpeech.toLowerCase()];
         for (const trigger of END_CALL_TRIGGERS) {
-          if (lower.includes(trigger)) {
+          if (endCallCandidates.some((candidate) => candidate.includes(trigger))) {
             endCall();
             return;
           }
-        }
-
-        let processedSpeech = rawSpeech;
-        if (sttSettings.language === "roman-urdu" || sttSettings.language === "auto") {
-          processedSpeech = transliterateUrduToRoman(rawSpeech);
         }
 
         const currentStatus = callStatusRef.current;
@@ -531,10 +531,13 @@ export function useVoiceCallAssistant({
           if (typeof document === "undefined" || document.visibilityState === "visible") {
             scheduleRestartRecognition(120);
           }
-        } else if (event.error === "language-not-supported" || event.error === "network") {
-          if (recognition.lang !== "en-US") {
-            recognition.lang = navigator.language || "en-US";
+        } else if (event.error === "language-not-supported") {
+          const languageCodes = getRecognitionLanguageCodes(loadSttSettings().language);
+          if (recognitionLanguageIndexRef.current < languageCodes.length - 1) {
+            recognitionLanguageIndexRef.current += 1;
           }
+          scheduleRestartRecognition(200);
+        } else if (event.error === "network") {
           scheduleRestartRecognition(200);
         } else {
           if (isCallActiveRef.current) {
@@ -815,6 +818,7 @@ export function useVoiceCallAssistant({
       waitingForAssistantResponseRef.current = false;
       activeAssistantMessageIdRef.current = null;
       processedTextOffsetRef.current = 0;
+      recognitionLanguageIndexRef.current = 0;
       isCallActiveRef.current = true;
       isTtsActiveRef.current = false;
       isAutoSendingRef.current = false;

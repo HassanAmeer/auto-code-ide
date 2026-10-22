@@ -26,6 +26,7 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 
 import { useBackgroundModeStore } from "../../lib/backgroundModeStore";
+import { useBackgroundModeServerState } from "../../lib/backgroundModeServer";
 import { cn } from "../../lib/utils";
 import { useEnvironmentQuery } from "../../state/query";
 import { serverEnvironment } from "../../state/server";
@@ -81,7 +82,8 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
   const primaryEnvId = usePrimaryEnvironmentId();
   const environmentId = propEnvironmentId ?? activeEnvId ?? primaryEnvId;
 
-  const { isBgEnabled, setModalOpen } = useBackgroundModeStore();
+  const { setModalOpen } = useBackgroundModeStore();
+  const { isBgEnabled } = useBackgroundModeServerState();
   const [isExpanded, setIsExpanded] = useState(initialExpanded);
   const [expandedItemIds, setExpandedItemIds] = useState<Set<string>>(() => new Set());
   const [busyTaskId, setBusyTaskId] = useState<string | null>(null);

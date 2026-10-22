@@ -9361,7 +9361,7 @@ export default function ChatView(props: ChatViewProps) {
       messageTextForSend &&
       !messageTextForSend.startsWith("/")
     ) {
-      messageTextForSend = `${messageTextForSend}\n\n[Voice Call Mode: You are in an interactive real-time voice call. Reply in the same language as the user. Keep your spoken response concise, conversational, and direct (1 to 3 short sentences max). Do NOT output code blocks or raw code lines unless explicitly requested.]`;
+      messageTextForSend = `${messageTextForSend}\n\n[Voice Call Mode: You are in an interactive real-time voice call. Reply in the roman urdu  language. Keep your spoken response concise, conversational, and direct (1 to 3 short sentences max). Do NOT output code blocks or raw code lines unless explicitly requested.]`;
     }
     // Records bind attachments by the id each side knows: the local id for the optimistic
     // row, the upload id (or local id on the data-URL path) on the wire; the server

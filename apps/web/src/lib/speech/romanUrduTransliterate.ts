@@ -319,6 +319,171 @@ const URDU_TO_ROMAN_DICT: Record<string, string> = {
   ڈبل: "double",
   لوکل: "local",
   پرفارمنس: "performance",
+
+  // High-frequency grammar words that the phonetic fallback gets wrong
+  کہ: "keh",
+  نے: "ne",
+  مجھ: "mujh",
+  مجھے: "mujhe",
+  مجھکو: "mujhko",
+  تجھ: "tujh",
+  تجھے: "tujhe",
+  ہمیں: "humein",
+  تمہیں: "tumhein",
+  جنہیں: "jinhein",
+  کنہیں: "kinhein",
+  براہ: "barah",
+  کرم: "karam",
+  ذرا: "zara",
+  صرف: "sirf",
+  ہاں: "haan",
+  جی: "ji",
+  بھائی: "bhai",
+  یار: "yaar",
+  اوکے: "okay",
+
+  // Very common verb forms
+  ہوا: "hua",
+  ہوئی: "hui",
+  ہوئے: "hue",
+  ہونے: "hone",
+  گیا: "gaya",
+  گئی: "gayi",
+  گئے: "gaye",
+  رہنا: "rehna",
+  رہو: "raho",
+  رہیں: "rahein",
+  رکھ: "rakh",
+  رکھو: "rakho",
+  رکھیں: "rakhein",
+  رکھنا: "rakhna",
+  رکھا: "rakha",
+  رکھی: "rakhi",
+  رکھے: "rakhe",
+  لگا: "laga",
+  لگی: "lagi",
+  لگے: "lage",
+  لگتا: "lagta",
+  لگتی: "lagti",
+  لگتے: "lagte",
+  پڑا: "para",
+  پڑی: "pari",
+  پڑے: "pare",
+  ملا: "mila",
+  ملی: "mili",
+  ملے: "mile",
+  ملتا: "milta",
+  ملتی: "milti",
+  ملتے: "milte",
+  سنا: "suna",
+  سنی: "suni",
+  سنے: "sune",
+  دکھا: "dikha",
+  دکھائی: "dikhai",
+  دکھاؤ: "dikhao",
+  دکھانا: "dikhana",
+  بنایا: "banaya",
+  بنائی: "banai",
+  بنائے: "banaye",
+  بنانا: "banana",
+  بناؤ: "banao",
+  کھول: "khol",
+  کھولو: "kholo",
+  کھولیں: "kholain",
+  شروع: "shuru",
+  ختم: "khatam",
+  کرکے: "karke",
+  کیجیے: "kijiye",
+  دیجیے: "dijiye",
+  بتائیے: "bataiye",
+  سنیے: "suniye",
+  دیکھیے: "dekhiye",
+
+  // Common vocabulary
+  فیچر: "feature",
+  فیچرز: "features",
+  مسئلے: "masle",
+  مسائل: "masail",
+  ضروری: "zaroori",
+  ممکن: "mumkin",
+  آسان: "asaan",
+  مشکل: "mushkil",
+  بہتر: "behtar",
+  بہترین: "behtareen",
+  تیار: "tayyar",
+  واضح: "wazeh",
+  اصل: "asal",
+  بار: "baar",
+  بارے: "bare",
+  متعلق: "mutalliq",
+  مطلب: "matlab",
+  یعنی: "yani",
+  مثال: "misaal",
+  طرح: "tarah",
+  قسم: "qism",
+  چیز: "cheez",
+  چیزیں: "cheezein",
+  جگہ: "jagah",
+  آدمی: "aadmi",
+  بندہ: "banda",
+  بچہ: "bacha",
+  بچے: "bache",
+  تھوڑا: "thora",
+  تھوڑی: "thori",
+  تھوڑے: "thore",
+  سوالات: "sawalat",
+  جوابات: "jawabat",
+  معلومات: "maloomat",
+  تفصیل: "tafseel",
+  وجہ: "wajah",
+  وجوہات: "wajohat",
+  نتیجہ: "nateeja",
+  نتائج: "natayij",
+  تجربہ: "tajurba",
+  موقع: "mauqa",
+  انداز: "andaz",
+  طریقہ: "tareeqa",
+  طریقے: "tareeqe",
+  پسند: "pasand",
+  پسندیدہ: "pasandeeda",
+  مکمل: "mukammal",
+  ادھورا: "adhoora",
+  تبدیلی: "tabdeeli",
+  تبدیلیاں: "tabdeeliyan",
+  ورژن: "version",
+  ڈاؤن: "down",
+  لوڈ: "load",
+  اپلوڈ: "upload",
+  ڈاؤنلوڈ: "download",
+  "ڈاؤن لوڈ": "download",
+  "اپ لوڈ": "upload",
+  "اپ ڈیٹ": "update",
+  "سکرین شاٹ": "screenshot",
+  چلانا: "chalana",
+  چلاؤ: "chalao",
+  چلائیں: "chalayein",
+  چلا: "chala",
+  چلی: "chali",
+  چلے: "chale",
+  نام: "naam",
+  کوشش: "koshish",
+  کروں: "karoon",
+  کریںگے: "karenge",
+  دیتا: "deta",
+  دیتی: "deti",
+  دیتے: "dete",
+  لیتا: "leta",
+  لیتی: "leti",
+  لیتے: "lete",
+  رکھتا: "rakhta",
+  رکھتی: "rakhti",
+  رکھتے: "rakhte",
+  پڑھتا: "parhta",
+  پڑھتی: "parhti",
+  پڑھتے: "parhte",
+  لکھتا: "likhta",
+  لکھتی: "likhti",
+  لکھتے: "likhte",
 };
 
 // Digraph / aspirate letter clusters
@@ -539,9 +704,17 @@ function transliterateHindiWord(word: string): string {
 /**
  * Phonetically transliterates a single Urdu word into Roman Urdu
  */
+function normalizeUrduWord(word: string): string {
+  return word
+    .replace(/[\u064B-\u065F\u0670\u0640]/g, "")
+    .replace(/[يكى]/g, (char) => (char === "ي" || char === "ى" ? "ی" : "ک"))
+    .replace(/[أإٱ]/g, "ا")
+    .replace(/ه/g, "ہ");
+}
+
 function transliterateUrduWord(word: string): string {
-  // 1. Remove diacritics / harkat
-  const clean = word.replace(/[\u064B-\u065F\u0670]/g, "");
+  // 1. Remove diacritics / harkat and normalize Arabic keyboard variants
+  const clean = normalizeUrduWord(word);
 
   // 2. Direct dictionary check
   if (URDU_TO_ROMAN_DICT[clean]) {
@@ -587,13 +760,23 @@ function transliterateUrduWord(word: string): string {
  *   "کیسے ہو آپ" -> "kesy ho ap"
  *   "कैसे हो आप" -> "kaise ho aap"
  */
+const URDU_MULTIWORD_PHRASES = Object.entries(URDU_TO_ROMAN_DICT)
+  .filter(([urdu]) => /\s/.test(urdu))
+  .sort((a, b) => b[0].length - a[0].length);
+
 export function transliterateUrduToRoman(text: string): string {
   if (!text || !containsUrduOrHindi(text)) {
     return text;
   }
 
+  // Replace known multi-word phrases before token-by-token transliteration.
+  let normalized = text;
+  for (const [urdu, roman] of URDU_MULTIWORD_PHRASES) {
+    normalized = normalized.split(urdu).join(roman);
+  }
+
   // Split text by tokens while keeping whitespace and punctuation intact
-  const tokens = text.split(/([\s\p{P}]+)/u);
+  const tokens = normalized.split(/([\s\p{P}]+)/u);
 
   return tokens
     .map((token) => {

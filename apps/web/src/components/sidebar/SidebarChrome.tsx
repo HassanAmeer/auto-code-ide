@@ -44,6 +44,7 @@ import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
 import { useTerminalStore, terminalStore } from "../chat/terminal/terminalStore";
 import { SidebarResourceStats } from "./SidebarResourceStats";
 import { useBackgroundModeStore } from "../../lib/backgroundModeStore";
+import { useBackgroundModeServerState } from "../../lib/backgroundModeServer";
 
 export const SidebarChromeHeader = memo(function SidebarChromeHeader({
   isElectron,
@@ -270,7 +271,8 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
     setIsNotesOpen(!isNotesOpen);
   }, [closeMobileSidebar, isNotesOpen, setIsNotesOpen]);
 
-  const { isBgEnabled, setModalOpen: setBgModalOpen } = useBackgroundModeStore();
+  const { setModalOpen: setBgModalOpen } = useBackgroundModeStore();
+  const { isBgEnabled } = useBackgroundModeServerState();
 
   const handleBgClick = useCallback(() => {
     closeMobileSidebar();

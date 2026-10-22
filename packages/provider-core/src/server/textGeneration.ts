@@ -74,7 +74,22 @@ export interface ThreadTitleGenerationResult {
   needsRefinement?: boolean | undefined;
 }
 
-/** Commit, change request, branch, and title generation backed by one provider instance. */
+export type PromptPolishMode = "polish" | "roman-urdu" | "natural-urdu" | "hindi";
+
+export interface PromptPolishInput {
+  cwd: string;
+  prompt: string;
+  /** What model and provider to use for generation. */
+  modelSelection: ModelSelection;
+  /** "roman-urdu" cleans up dictated speech instead of polishing written text. */
+  mode?: PromptPolishMode | undefined;
+}
+
+export interface PromptPolishResult {
+  prompt: string;
+}
+
+/** Commit, change request, branch, title, and prompt polishing backed by one provider instance. */
 export interface ProviderTextGeneration {
   /**
    * Generate a commit message from staged change context.
@@ -101,4 +116,9 @@ export interface ProviderTextGeneration {
   readonly generateThreadTitle: (
     input: ThreadTitleGenerationInput,
   ) => Effect.Effect<ThreadTitleGenerationResult, TextGenerationError>;
+
+  /** Correct spelling and grammar in a user prompt without changing its intent. */
+  readonly polishPrompt: (
+    input: PromptPolishInput,
+  ) => Effect.Effect<PromptPolishResult, TextGenerationError>;
 }

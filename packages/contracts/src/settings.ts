@@ -909,6 +909,12 @@ export const BackgroundActivityOverrides = Schema.Struct({
   pauseWhenHostLowPower: Schema.optionalKey(Schema.Boolean),
   pauseWhenClientLowPower: Schema.optionalKey(Schema.Boolean),
   pauseWhenOnBattery: Schema.optionalKey(Schema.Boolean),
+  /**
+   * Keep background work running on the environment host even when no client
+   * is connected. Agent turns already outlive the browser; this keeps the
+   * host-side polling (git refresh, provider health) alive too.
+   */
+  runWithoutClient: Schema.optionalKey(Schema.Boolean),
 });
 export type BackgroundActivityOverrides = typeof BackgroundActivityOverrides.Type;
 
@@ -1070,9 +1076,11 @@ export const ServerSettings = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed("paragraph" as const)),
   ),
   enableProviderUpdateChecks: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
-  // Retain the update-era key; recovery now needs an environment-owned opt-in.
+  // Recovery resumes an unfinished turn after a server restart. On by default
+  // so a task keeps going when the environment is restarted or the VPS
+  // reboots; an environment can still opt out.
   continueThreadsAfterServerUpdate: Schema.Boolean.pipe(
-    Schema.withDecodingDefault(Effect.succeed(false)),
+    Schema.withDecodingDefault(Effect.succeed(true)),
   ),
   /**
    * Whether agents may drive the in-app preview browser. Turning this off

@@ -192,6 +192,7 @@ export function makeUnsupportedTextGeneration(): ProviderTextGeneration {
     generatePrContent: () => fail("pr-content"),
     generateBranchName: () => fail("branch-name"),
     generateThreadTitle: () => fail("thread-title"),
+    polishPrompt: () => fail("prompt-polish"),
   };
 }
 

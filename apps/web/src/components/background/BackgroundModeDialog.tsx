@@ -10,12 +10,13 @@ import {
 } from "lucide-react";
 
 import { useBackgroundModeStore } from "../../lib/backgroundModeStore";
+import { useBackgroundModeServerState } from "../../lib/backgroundModeServer";
 import { cn } from "../../lib/utils";
 import { BackgroundServicesWidget } from "./BackgroundServicesWidget";
 
 export const BackgroundModeDialog = memo(function BackgroundModeDialog() {
-  const { isBgEnabled, keepTabAwake, isModalOpen, setBgEnabled, setKeepTabAwake, setModalOpen } =
-    useBackgroundModeStore();
+  const { keepTabAwake, isModalOpen, setKeepTabAwake, setModalOpen } = useBackgroundModeStore();
+  const { isBgEnabled, setBgEnabled } = useBackgroundModeServerState();
 
   useEffect(() => {
     if (!isModalOpen) return;
@@ -94,7 +95,9 @@ export const BackgroundModeDialog = memo(function BackgroundModeDialog() {
                 <span className="text-xs font-semibold text-white">24/7 VPS Background</span>
               </div>
               <p className="text-[11px] text-zinc-400 leading-tight">
-                Runs on VPS even when browser is closed
+                {isBgEnabled
+                  ? "Tasks keep running on the VPS when the browser is closed, and resume after a server restart"
+                  : "Paused — background work waits for an open client"}
               </p>
             </div>
 

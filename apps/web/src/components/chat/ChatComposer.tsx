@@ -154,7 +154,7 @@ import {
   type ComposerBannerStackItem,
 } from "./ComposerBannerStack";
 import { compressImageForStash, prepareImageForAttachment } from "../../lib/imageCompression";
-import { deduplicateOverlap } from "../../lib/speech/stt";
+import { deduplicateOverlap, getSttCleanupMode, loadSttSettings } from "../../lib/speech/stt";
 import {
   fileAttachmentTooLargeMessage,
   formatAttachmentSize,
@@ -1383,6 +1383,10 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
   alternateShortcutLabel: string | null;
   showPlanFollowUpPrompt: boolean;
   promptHasText: boolean;
+  isPolishingPrompt: boolean;
+  canUndoPolish: boolean;
+  onPolishPrompt: () => void;
+  onUndoPolish: () => void;
   isSendBusy: boolean;
   sendDisabledReason: string | null;
   isConnecting: boolean;
@@ -1426,6 +1430,10 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
         alternateShortcutLabel={props.alternateShortcutLabel}
         showPlanFollowUpPrompt={props.showPlanFollowUpPrompt}
         promptHasText={props.promptHasText}
+        isPolishingPrompt={props.isPolishingPrompt}
+        canUndoPolish={props.canUndoPolish}
+        onPolishPrompt={props.onPolishPrompt}
+        onUndoPolish={props.onUndoPolish}
         isSendBusy={props.isSendBusy}
         sendDisabledReason={props.sendDisabledReason}
         isConnecting={props.isConnecting}
@@ -2220,6 +2228,12 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const refreshProviders = useAtomCommand(serverEnvironment.refreshProviders, {
     reportFailure: false,
   });
+  const polishPrompt = useAtomCommand(serverEnvironment.polishPrompt);
+  const [isPolishingPrompt, setIsPolishingPrompt] = useState(false);
+  const [polishedPrompt, setPolishedPrompt] = useState<{
+    original: string;
+    polished: string;
+  } | null>(null);
   // The last scan this composer asked for. A request inside the TTL is not
   // repeated, so a client clock ahead of the server's cannot loop rescans.
   const workspaceRefreshKeyRef = useRef<{ key: string; requestedAt: number } | null>(null);
@@ -2956,6 +2970,66 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       setComposerTrigger,
     ],
   );
+
+  const runPromptTextGeneration = useCallback(
+    async (text: string, mode?: "polish" | "roman-urdu" | "natural-urdu" | "hindi") => {
+      if (!text.trim() || !gitCwd) return null;
+      const fallbackSelections = [
+        settings.defaultModelSelection,
+        selectedModelSelection,
+        settings.textGenerationModelSelection,
+      ];
+      const triedSelections = new Set<string>();
+      let result: Awaited<ReturnType<typeof polishPrompt>> | null = null;
+      for (const modelSelection of fallbackSelections) {
+        if (!modelSelection) continue;
+        const selectionKey = JSON.stringify(modelSelection);
+        if (triedSelections.has(selectionKey)) continue;
+        triedSelections.add(selectionKey);
+        result = await polishPrompt({
+          environmentId,
+          input: {
+            prompt: text,
+            cwd: gitCwd,
+            modelSelection,
+            ...(mode ? { mode } : {}),
+          },
+        });
+        if (result._tag === "Success") break;
+      }
+      return result?._tag === "Success" ? result.value.prompt : null;
+    },
+    [
+      environmentId,
+      gitCwd,
+      polishPrompt,
+      selectedModelSelection,
+      settings.defaultModelSelection,
+      settings.textGenerationModelSelection,
+    ],
+  );
+
+  const handlePolishPrompt = useCallback(async () => {
+    const currentPrompt = promptRef.current;
+    if (!currentPrompt.trim() || !gitCwd || isPolishingPrompt) {
+      return;
+    }
+    setIsPolishingPrompt(true);
+    const nextPrompt = await runPromptTextGeneration(currentPrompt);
+    setIsPolishingPrompt(false);
+    if (!nextPrompt || nextPrompt === currentPrompt) return;
+    setPolishedPrompt({ original: currentPrompt, polished: nextPrompt });
+    setPromptFromTraits(nextPrompt);
+  }, [gitCwd, isPolishingPrompt, promptRef, runPromptTextGeneration, setPromptFromTraits]);
+
+  const handleUndoPolish = useCallback(() => {
+    if (!polishedPrompt || promptRef.current !== polishedPrompt.polished) {
+      setPolishedPrompt(null);
+      return;
+    }
+    setPromptFromTraits(polishedPrompt.original);
+    setPolishedPrompt(null);
+  }, [polishedPrompt, promptRef, setPromptFromTraits]);
 
   const providerTraitsMenuContent = renderProviderTraitsMenuContent({
     provider: selectedProvider,
@@ -3850,6 +3924,74 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     ],
   );
 
+  const dictationCleanupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dictationCleanupSeqRef = useRef(0);
+  const lastSpokenRef = useRef("");
+  const lastCleanedSpokenRef = useRef("");
+  const lastCleanedTextRef = useRef("");
+
+  useEffect(() => {
+    return () => {
+      if (dictationCleanupTimerRef.current) {
+        clearTimeout(dictationCleanupTimerRef.current);
+        dictationCleanupTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  /**
+   * Rewrites the dictated part of the composer text into clean Roman Urdu.
+   * Only the spoken part is cleaned so text that was typed before dictation
+   * stays untouched.
+   */
+  const cleanDictatedText = useCallback(
+    async (spoken: string, base: string) => {
+      const cleanupMode = getSttCleanupMode(loadSttSettings().language);
+      if (!spoken.trim() || !gitCwd || cleanupMode === null) {
+        return;
+      }
+      const seq = ++dictationCleanupSeqRef.current;
+      const cleaned = await runPromptTextGeneration(spoken, cleanupMode);
+      if (seq !== dictationCleanupSeqRef.current) return;
+      if (!cleaned || cleaned === spoken) {
+        lastCleanedSpokenRef.current = spoken;
+        lastCleanedTextRef.current = cleaned ?? spoken;
+        return;
+      }
+      const separator = base && !base.endsWith(" ") ? " " : "";
+      const nextPrompt = base ? `${base}${separator}${cleaned}` : cleaned;
+      const rawPrompt = base ? `${base}${separator}${spoken}` : spoken;
+      const currentPrompt = promptRef.current;
+      if (currentPrompt === nextPrompt) return;
+      if (currentPrompt !== rawPrompt) return;
+      lastCleanedSpokenRef.current = spoken;
+      lastCleanedTextRef.current = cleaned;
+      onPromptChange(nextPrompt, nextPrompt.length, nextPrompt.length, false, []);
+    },
+    [gitCwd, onPromptChange, promptRef, runPromptTextGeneration],
+  );
+
+  const scheduleDictationCleanup = useCallback(
+    (spoken: string, base: string, immediate: boolean) => {
+      if (dictationCleanupTimerRef.current) {
+        clearTimeout(dictationCleanupTimerRef.current);
+        dictationCleanupTimerRef.current = null;
+      }
+      if (!spoken.trim()) return;
+      if (immediate) {
+        if (lastCleanedSpokenRef.current === spoken) return;
+        void cleanDictatedText(spoken, base);
+        return;
+      }
+      dictationCleanupTimerRef.current = setTimeout(() => {
+        dictationCleanupTimerRef.current = null;
+        if (lastCleanedSpokenRef.current === spoken) return;
+        void cleanDictatedText(spoken, base);
+      }, 900);
+    },
+    [cleanDictatedText],
+  );
+
   // ------------------------------------------------------------------
   // Callbacks: prompt replacement / menu
   // ------------------------------------------------------------------
@@ -4352,10 +4494,21 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     onTranscriptChange: useCallback(
       (text: string) => {
         onPromptChange(text, text.length, text.length, false, []);
+        lastSpokenRef.current = text;
+        scheduleDictationCleanup(text, "", false);
       },
-      [onPromptChange],
+      [onPromptChange, scheduleDictationCleanup],
     ),
-    onAutoSend: useCallback(() => {
+    onAutoSend: useCallback(async () => {
+      const currentPrompt = promptRef.current;
+      const alreadyCleaned = currentPrompt === lastCleanedTextRef.current;
+      const cleanupMode = getSttCleanupMode(loadSttSettings().language);
+      if (currentPrompt.trim() && !alreadyCleaned && cleanupMode !== null) {
+        const nextPrompt = await runPromptTextGeneration(currentPrompt, cleanupMode);
+        if (nextPrompt && promptRef.current === currentPrompt) {
+          setPromptFromTraits(nextPrompt);
+        }
+      }
       submitComposer(
         undefined,
         resolveComposerDispatchMode({
@@ -4365,7 +4518,14 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         }),
         "foreground",
       );
-    }, [phase, settings.followUpBehavior, submitComposer]),
+    }, [
+      phase,
+      promptRef,
+      runPromptTextGeneration,
+      setPromptFromTraits,
+      settings.followUpBehavior,
+      submitComposer,
+    ]),
     onInterrupt: useCallback(() => {
       void onInterrupt();
     }, [onInterrupt]),
@@ -6264,7 +6424,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   }, [composerDraftTarget, insertContextReferencesAtCaret, setContextInsertionHandler]);
 
   const speechBaselinePromptRef = useRef<string | null>(null);
-
   useEffect(() => {
     const handleSpeechStream = (e: Event) => {
       const customEvent = e as CustomEvent<{
@@ -6272,27 +6431,39 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         isFinal?: boolean;
         cumulative?: string;
         reset?: boolean;
+        finalize?: boolean;
       }>;
       const detail = customEvent.detail;
       if (!detail) return;
 
       if (detail.reset) {
         speechBaselinePromptRef.current = null;
+        lastSpokenRef.current = "";
+        return;
+      }
+
+      if (speechBaselinePromptRef.current === null) {
+        speechBaselinePromptRef.current = promptRef.current || "";
+      }
+      const base = speechBaselinePromptRef.current;
+
+      if (detail.finalize) {
+        scheduleDictationCleanup(lastSpokenRef.current, base, true);
         return;
       }
 
       const spoken = (detail.cumulative ?? detail.text ?? "").trim();
       if (!spoken) return;
 
-      if (speechBaselinePromptRef.current === null) {
-        speechBaselinePromptRef.current = promptRef.current || "";
-      }
-
-      const base = speechBaselinePromptRef.current;
       const separator = base && !base.endsWith(" ") ? " " : "";
       const nextPrompt = base ? `${base}${separator}${spoken}` : spoken;
 
       onPromptChange(nextPrompt, nextPrompt.length, nextPrompt.length, false, []);
+      lastSpokenRef.current = spoken;
+
+      if (detail.isFinal) {
+        scheduleDictationCleanup(spoken, base, false);
+      }
       if (isComposerCollapsedMobile) {
         expandMobileComposer();
       }
@@ -6323,6 +6494,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     isComposerCollapsedMobile,
     onPromptChange,
     promptRef,
+    scheduleDictationCleanup,
   ]);
 
   // File-tree drags land as mentions. Handled in the capture phase so the
@@ -7761,6 +7933,10 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       pendingUserInputs.length === 0 && showPlanFollowUpPrompt
                     }
                     promptHasText={prompt.trim().length > 0}
+                    isPolishingPrompt={isPolishingPrompt}
+                    canUndoPolish={polishedPrompt !== null && prompt === polishedPrompt.polished}
+                    onPolishPrompt={handlePolishPrompt}
+                    onUndoPolish={handleUndoPolish}
                     isSendBusy={isSendBusy}
                     sendDisabledReason={sendDisabledReason}
                     isConnecting={isConnecting}

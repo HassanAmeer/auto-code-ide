@@ -344,3 +344,107 @@ export function buildThreadTitlePrompt(input: ThreadTitlePromptInput) {
 
   return { prompt, outputSchema };
 }
+
+// ---------------------------------------------------------------------------
+// Prompt polish
+// ---------------------------------------------------------------------------
+
+export interface PromptPolishPromptInput {
+  prompt: string;
+  mode?: "polish" | "roman-urdu" | "natural-urdu" | "hindi" | undefined;
+}
+
+function buildRomanUrduTranscriptPrompt(transcript: string): string {
+  return [
+    "You clean up a dictated message for an AI coding assistant.",
+    "The speaker speaks Roman Urdu with common English technical terms.",
+    "The text came from a speech recognizer, so it contains phonetic misspellings, merged or split words, repeated words, and English terms written phonetically.",
+    "Return a JSON object with key: prompt.",
+    "Rules:",
+    "- Rewrite it as clear, natural Roman Urdu in Latin script, preserving the same Roman Urdu / English mix.",
+    '- Fix accent-mangled words using context. Examples: "hilo" -> "hello", "aoaz" -> "awaz", "aiksnt" / "aik sint" -> "accent", "thnk" -> "think", "ap" -> "aap", "kay" -> "key", "repositry" -> "repository".',
+    '- Use consistent Roman Urdu spelling such as "aap", "kya", "hai", "nahi", "awaz", "theek", "abhi", "doran", "aksar".',
+    "- Keep Roman Urdu words Roman Urdu. Never translate them into English.",
+    "- Restore the standard English spelling when a word is clearly an English or technical term that the recognizer mangled.",
+    '- Repair words that were split or merged by the recognizer (for example "a rahi" -> "aa rahi", "m eri" -> "meri").',
+    "- Remove accidental repeated words only when they are clearly recognizer duplicates.",
+    "- Preserve the exact meaning and every instruction. Never answer the speaker or add new requirements.",
+    "- Keep code, file paths, commands, identifiers, URLs, numbers, and technical terms unchanged.",
+    "- Add sensible punctuation and sentence boundaries.",
+    "- If a word is ambiguous, keep the original word instead of guessing.",
+    "- The prompt value must contain only the cleaned transcript, with no commentary.",
+    "",
+    "Raw transcript:",
+    limitSection(transcript, 20_000),
+  ].join("\n");
+}
+
+/**
+ * Clean up a dictated message that stays in its own script: Urdu (Nastaliq /
+ * Naskh) or Devanagari. The recognizer mis-hears words, so the model fixes
+ * spelling and word boundaries without changing the script or the meaning.
+ */
+function buildScriptedTranscriptPrompt(
+  transcript: string,
+  script: "natural-urdu" | "hindi",
+): string {
+  const isUrdu = script === "natural-urdu";
+  return [
+    "You clean up a dictated message for an AI coding assistant.",
+    isUrdu
+      ? "The speaker speaks Urdu; the text came from a speech recognizer, so it contains spelling mistakes, wrong word boundaries, repeated words, and missing punctuation."
+      : "The speaker speaks Hindi; the text came from a speech recognizer, so it contains spelling mistakes, wrong word boundaries, repeated words, and missing punctuation.",
+    "Return a JSON object with key: prompt.",
+    "Rules:",
+    isUrdu
+      ? "- Keep the text in Urdu script (اردو). Never convert it to Roman Urdu or English."
+      : "- Keep the text in Devanagari script (हिन्दी). Never convert it to Roman or English.",
+    "- Fix spelling, wrong or missing letters, and words the recognizer split or merged.",
+    "- Remove accidental repeated words only when they are clearly recognizer duplicates.",
+    "- Preserve the exact meaning and every instruction. Never answer the speaker or add new requirements.",
+    "- Keep code, file paths, commands, identifiers, URLs, numbers, and technical terms unchanged.",
+    isUrdu
+      ? "- Add sensible Urdu punctuation (۔ ، ؟) and sentence boundaries."
+      : "- Add sensible Devanagari punctuation (। , ?) and sentence boundaries.",
+    "- If a word is ambiguous, keep the original word instead of guessing.",
+    "- The prompt value must contain only the cleaned transcript, with no commentary.",
+    "",
+    "Raw transcript:",
+    limitSection(transcript, 20_000),
+  ].join("\n");
+}
+
+export function buildPromptPolishPrompt(input: PromptPolishPromptInput) {
+  if (input.mode === "roman-urdu") {
+    return {
+      prompt: buildRomanUrduTranscriptPrompt(input.prompt),
+      outputSchema: Schema.Struct({ prompt: Schema.String }),
+    };
+  }
+  if (input.mode === "natural-urdu" || input.mode === "hindi") {
+    return {
+      prompt: buildScriptedTranscriptPrompt(input.prompt, input.mode),
+      outputSchema: Schema.Struct({ prompt: Schema.String }),
+    };
+  }
+  const prompt = [
+    "You correct spelling, grammar, and wording in a user's message to an AI coding agent.",
+    "Return a JSON object with key: prompt.",
+    "Rules:",
+    "- Fix misspellings, typos, grammar, punctuation, and clearly broken wording.",
+    "- Preserve the user's intent, meaning, tone, and language exactly.",
+    "- Keep code blocks, file paths, identifiers, commands, URLs, and technical terms unchanged.",
+    "- Do not answer, execute, or add requirements to the message.",
+    "- Do not remove useful detail or make the message longer without a clear reason.",
+    "- If the message is already correct, return it unchanged.",
+    "- The prompt value must contain only the corrected message, with no commentary.",
+    "",
+    "User message:",
+    limitSection(input.prompt, 20_000),
+  ].join("\n");
+  const outputSchema = Schema.Struct({
+    prompt: Schema.String,
+  });
+
+  return { prompt, outputSchema };
+}

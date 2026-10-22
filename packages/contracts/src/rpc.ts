@@ -139,7 +139,9 @@ import {
   VcsStatusSubscriptionInput,
   VcsStatusResult,
   VcsStatusStreamEvent,
+  TextGenerationError,
 } from "./git.ts";
+import { ModelSelection } from "./modelSelection.ts";
 import {
   ReviewDiffFileContentsInput,
   ReviewDiffFileContentsResult,
@@ -441,6 +443,7 @@ export const WS_METHODS = {
 
   // Server meta
   serverProbe: "server.probe",
+  serverPolishPrompt: "server.polishPrompt",
   serverGetConfig: "server.getConfig",
   serverRefreshProviders: "server.refreshProviders",
   serverUpdateProvider: "server.updateProvider",
@@ -563,6 +566,22 @@ const WsServerProbeRpc = Rpc.make(WS_METHODS.serverProbe, {
   payload: Schema.Struct({}),
   success: Schema.Struct({}),
   error: EnvironmentAuthorizationError,
+});
+
+const ServerPolishPromptInput = Schema.Struct({
+  prompt: TrimmedNonEmptyString,
+  cwd: TrimmedNonEmptyString,
+  modelSelection: ModelSelection,
+  mode: Schema.optional(Schema.Literals(["polish", "roman-urdu", "natural-urdu", "hindi"])),
+});
+const ServerPolishPromptResult = Schema.Struct({
+  prompt: Schema.String,
+});
+
+const WsServerPolishPromptRpc = Rpc.make(WS_METHODS.serverPolishPrompt, {
+  payload: ServerPolishPromptInput,
+  success: ServerPolishPromptResult,
+  error: Schema.Union([TextGenerationError, EnvironmentAuthorizationError]),
 });
 
 const WsServerGetConfigRpc = Rpc.make(WS_METHODS.serverGetConfig, {
@@ -1749,6 +1768,7 @@ export class RpcScopeAuthorization extends RpcMiddleware.Service<RpcScopeAuthori
 
 export const WsRpcGroup = RpcGroup.make(
   WsServerProbeRpc,
+  WsServerPolishPromptRpc,
   WsServerGetConfigRpc,
   WsServerRefreshProvidersRpc,
   WsServerUpdateProviderRpc,

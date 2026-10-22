@@ -19,6 +19,10 @@ export interface ResolvedBackgroundActivitySettings {
   readonly pauseWhenHostLowPower: boolean;
   readonly pauseWhenClientLowPower: boolean;
   readonly pauseWhenOnBattery: boolean;
+  /**
+   * Whether background work may run on the host without a connected client.
+   */
+  readonly runWithoutClient: boolean;
 }
 
 const PRESET_SETTINGS: Record<BackgroundActivityProfile, ResolvedBackgroundActivitySettings> = {
@@ -33,6 +37,7 @@ const PRESET_SETTINGS: Record<BackgroundActivityProfile, ResolvedBackgroundActiv
     pauseWhenHostLowPower: false,
     pauseWhenClientLowPower: false,
     pauseWhenOnBattery: false,
+    runWithoutClient: false,
   },
   balanced: {
     profile: "balanced",
@@ -45,6 +50,7 @@ const PRESET_SETTINGS: Record<BackgroundActivityProfile, ResolvedBackgroundActiv
     pauseWhenHostLowPower: true,
     pauseWhenClientLowPower: true,
     pauseWhenOnBattery: false,
+    runWithoutClient: false,
   },
   "battery-saver": {
     profile: "battery-saver",
@@ -57,6 +63,7 @@ const PRESET_SETTINGS: Record<BackgroundActivityProfile, ResolvedBackgroundActiv
     pauseWhenHostLowPower: true,
     pauseWhenClientLowPower: true,
     pauseWhenOnBattery: true,
+    runWithoutClient: false,
   },
 };
 
@@ -96,6 +103,7 @@ export function resolveBackgroundActivitySettings(
     pauseWhenHostLowPower: overrides.pauseWhenHostLowPower ?? preset.pauseWhenHostLowPower,
     pauseWhenClientLowPower: overrides.pauseWhenClientLowPower ?? preset.pauseWhenClientLowPower,
     pauseWhenOnBattery: overrides.pauseWhenOnBattery ?? preset.pauseWhenOnBattery,
+    runWithoutClient: overrides.runWithoutClient ?? preset.runWithoutClient,
   };
 }
 
@@ -116,7 +124,8 @@ function resolvedSettingsEqual(
     a.pauseWhenHostLocked === b.pauseWhenHostLocked &&
     a.pauseWhenHostLowPower === b.pauseWhenHostLowPower &&
     a.pauseWhenClientLowPower === b.pauseWhenClientLowPower &&
-    a.pauseWhenOnBattery === b.pauseWhenOnBattery
+    a.pauseWhenOnBattery === b.pauseWhenOnBattery &&
+    a.runWithoutClient === b.runWithoutClient
   );
 }
 
@@ -183,6 +192,9 @@ export function normalizeBackgroundActivitySettings(
       : {}),
     ...(resolved.pauseWhenOnBattery !== preset.pauseWhenOnBattery
       ? { pauseWhenOnBattery: resolved.pauseWhenOnBattery }
+      : {}),
+    ...(resolved.runWithoutClient !== preset.runWithoutClient
+      ? { runWithoutClient: resolved.runWithoutClient }
       : {}),
   };
 
@@ -265,6 +277,7 @@ export function normalizeServerBackgroundActivitySettings(
       pauseWhenHostLowPower: resolved.pauseWhenHostLowPower,
       pauseWhenClientLowPower: resolved.pauseWhenClientLowPower,
       pauseWhenOnBattery: resolved.pauseWhenOnBattery,
+      runWithoutClient: resolved.runWithoutClient,
     },
   });
 }

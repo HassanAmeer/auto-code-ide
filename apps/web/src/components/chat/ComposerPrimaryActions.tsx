@@ -16,6 +16,8 @@ import {
   Mic,
   MicOff,
   Globe,
+  Sparkles,
+  Undo2,
   X,
 } from "lucide-react";
 import { CornerUpRight, ListPlus } from "lucide";
@@ -57,6 +59,10 @@ interface ComposerPrimaryActionsProps {
   alternateShortcutLabel?: string | null;
   showPlanFollowUpPrompt: boolean;
   promptHasText: boolean;
+  isPolishingPrompt?: boolean;
+  canUndoPolish?: boolean;
+  onPolishPrompt?: () => void;
+  onUndoPolish?: () => void;
   isSendBusy: boolean;
   sendDisabledReason: string | null;
   isConnecting: boolean;
@@ -115,6 +121,10 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
   alternateShortcutLabel = null,
   showPlanFollowUpPrompt,
   promptHasText,
+  isPolishingPrompt = false,
+  canUndoPolish = false,
+  onPolishPrompt,
+  onUndoPolish,
   isSendBusy,
   sendDisabledReason,
   isConnecting,
@@ -154,6 +164,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
     if (isDictating) {
       sttSessionRef.current?.stop();
       setIsDictating(false);
+      window.dispatchEvent(new CustomEvent("t3:speech-stream", { detail: { finalize: true } }));
       window.dispatchEvent(new CustomEvent("t3:speech-stream", { detail: { reset: true } }));
     } else {
       const session = createSttSession({
@@ -478,7 +489,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
             className={cn(
               "relative isolate flex size-8 items-center justify-center overflow-hidden rounded-full shadow-xs transition-all duration-150 cursor-pointer sm:size-8",
               isDictating
-                ? "bg-red-600 text-white hover:bg-red-700 hover:scale-105 active:scale-95 animate-pulse shadow-md shadow-red-500/40 ring-2 ring-red-400/50"
+                ? "border border-red-400/60 bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 hover:scale-105 active:scale-95"
                 : "bg-muted/70 text-muted-foreground hover:bg-muted hover:text-foreground hover:scale-105 active:scale-95",
             )}
             {...pointerFocusProps}
@@ -516,9 +527,56 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
       ? sendButtonElement
       : micButton;
 
+  const polishDisabled =
+    !canOperateThread ||
+    isEnvironmentUnavailable ||
+    isConnecting ||
+    isSendBusy ||
+    (!canUndoPolish && !promptHasText);
+
+  const polishButton = (
+    <Tooltip key="polish-prompt">
+      <TooltipTrigger
+        render={
+          <button
+            type="button"
+            className={cn(
+              "relative flex size-7 items-center justify-center rounded-full outline-none transition-all duration-200 hover:bg-muted/60 disabled:pointer-events-none disabled:opacity-48 sm:size-8",
+              canUndoPolish
+                ? "text-amber-300 hover:text-amber-200"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+            {...pointerFocusProps}
+            onClick={canUndoPolish ? onUndoPolish : onPolishPrompt}
+            disabled={polishDisabled}
+            aria-label={
+              canUndoPolish ? "Restore original prompt" : "Correct spelling and grammar with AI"
+            }
+          >
+            {isPolishingPrompt ? (
+              <Spinner size="sm" aria-hidden="true" />
+            ) : canUndoPolish ? (
+              <Undo2 className="size-4" aria-hidden="true" />
+            ) : (
+              <Sparkles className="size-4" aria-hidden="true" />
+            )}
+          </button>
+        }
+      />
+      <TooltipPopup>
+        {canUndoPolish
+          ? "Restore the prompt you started with"
+          : isPolishingPrompt
+            ? "Correcting spelling and grammar..."
+            : "Correct spelling and grammar with AI"}
+      </TooltipPopup>
+    </Tooltip>
+  );
+
   const actions = (
     <div className="flex items-center gap-1 sm:gap-1.5">
       {webSearchButton}
+      {polishButton}
       {unifiedPrimaryButton}
     </div>
   );

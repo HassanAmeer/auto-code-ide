@@ -18,6 +18,7 @@ import {
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
   buildPrContentPrompt,
+  buildPromptPolishPrompt,
   buildThreadTitlePrompt,
 } from "./textGenerationPrompts.ts";
 import {
@@ -148,10 +149,23 @@ export function fromRunner(name: string, run: Runner): ProviderTextGeneration {
     };
   });
 
+  const polishPrompt: ProviderTextGeneration["polishPrompt"] = Effect.fn(`${name}.polishPrompt`)(
+    function* (input) {
+      const generated = yield* run({
+        operation: "polishPrompt",
+        cwd: input.cwd,
+        modelSelection: input.modelSelection,
+        ...buildPromptPolishPrompt({ prompt: input.prompt, mode: input.mode }),
+      });
+      return { prompt: generated.prompt.trim() };
+    },
+  );
+
   return {
     generateCommitMessage,
     generatePrContent,
     generateBranchName,
     generateThreadTitle,
+    polishPrompt,
   } satisfies ProviderTextGeneration;
 }

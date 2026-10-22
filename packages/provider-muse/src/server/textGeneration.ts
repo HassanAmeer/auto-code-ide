@@ -21,6 +21,7 @@ import {
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
   buildPrContentPrompt,
+  buildPromptPolishPrompt,
   buildThreadTitlePrompt,
 } from "@t3tools/provider-core/server/textGenerationPrompts";
 import {
@@ -341,10 +342,21 @@ export const makeMuseTextGeneration = Effect.fn("makeMuseTextGeneration")(functi
     });
     return { title: sanitizeThreadTitle(generated.title) };
   });
+  const polishPrompt: ProviderTextGeneration["polishPrompt"] = Effect.fn(
+    "MuseTextGeneration.polishPrompt",
+  )(function* (input) {
+    const generated = yield* runMuseJson({
+      operation: "polishPrompt",
+      ...buildPromptPolishPrompt({ prompt: input.prompt }),
+      modelSelection: input.modelSelection,
+    });
+    return { prompt: generated.prompt.trim() };
+  });
   return {
     generateCommitMessage,
     generatePrContent,
     generateBranchName,
     generateThreadTitle,
+    polishPrompt,
   } satisfies ProviderTextGeneration;
 });
