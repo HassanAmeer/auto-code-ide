@@ -41,6 +41,7 @@ import {
   recordAiModelLog,
   updateAiModelLog,
 } from "@t3tools/provider-core/server/aiModelLog";
+import { buildInvokedSkillInstructions, discoverCustomSkills } from "@t3tools/shared/agentSkills";
 import {
   bypassChat,
   bypassChatStream,
@@ -486,7 +487,16 @@ export const OpenCodeBypassSetupDriver: ProviderDriver<
                           : "deepseek-v4.1-flash-free";
 
                     const promptText = turnInput.message.text || "Hello";
+                    // A `$skill` mention has no native expansion on this lane,
+                    // so the skill body rides along as an instruction block.
+                    const skillInstructions = buildInvokedSkillInstructions(
+                      promptText,
+                      turnInput.runtimePolicy?.cwd ?? undefined,
+                    );
                     const chatMessages: BypassChatMessage[] = [
+                      ...(skillInstructions
+                        ? [{ role: "system" as const, content: skillInstructions }]
+                        : []),
                       { role: "user", content: promptText },
                     ];
 
@@ -755,6 +765,19 @@ export const OpenCodeBypassSetupDriver: ProviderDriver<
         accentColor,
         enabled,
         snapshot,
+        // The free lane has no skill runtime of its own, so the workspace
+        // snapshot carries the skills T3 discovered on disk. The composer lists
+        // them and a `$name` mention dispatches through the request builder.
+        snapshotForCwd: (cwd: string) =>
+          Effect.gen(function* () {
+            const machineSnapshot = yield* buildOpenCodeBypassSnapshot(
+              instanceId,
+              displayName,
+              config,
+              enabled,
+            );
+            return { ...machineSnapshot, skills: discoverCustomSkills(cwd) };
+          }),
         orchestrationAdapter,
         textGeneration,
       };

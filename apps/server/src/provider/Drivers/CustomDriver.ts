@@ -59,6 +59,7 @@ import type { ServerProviderShape } from "@t3tools/provider-core/server/snapshot
 import type { ProviderTextGeneration } from "@t3tools/provider-core/server/textGeneration";
 import { AcpProviderCapabilitiesV2 } from "@t3tools/provider-acp/server/adapter";
 import { getThreadPreviewErrors } from "../../preview/ServerBrowser.ts";
+import { buildInvokedSkillInstructions, discoverCustomSkills } from "@t3tools/shared/agentSkills";
 
 // Allow HTTPS requests with IP addresses and self-signed certificates for custom providers
 if (typeof process !== "undefined" && process.env) {
@@ -1472,12 +1473,23 @@ ${userPrompt || "Continue generating from where you were interrupted"}`;
                   return true;
                 });
 
+                // Skills: the custom endpoint has no skill runtime, so an
+                // invoked skill's body rides along as an instruction block
+                // right before the user's message.
+                const skillInstructions = buildInvokedSkillInstructions(
+                  effectiveUserPrompt,
+                  projectCwd,
+                );
+
                 const candidateMessages: Array<{
                   role: "system" | "user" | "assistant";
                   content: string;
                 }> = [
                   { role: "system" as const, content: systemPrompt },
                   ...cleanHistory,
+                  ...(skillInstructions
+                    ? [{ role: "system" as const, content: skillInstructions }]
+                    : []),
                   { role: "user" as const, content: effectiveUserPrompt },
                 ];
 
@@ -2252,6 +2264,14 @@ export function createCustomProviderInstance(
     accentColor: input.accentColor,
     enabled: input.enabled,
     snapshot,
+    // The custom endpoint has no skill runtime, so the workspace snapshot
+    // carries the skills T3 discovered on disk. The composer lists them and
+    // `$name` mentions dispatch through the request builder.
+    snapshotForCwd: (cwd: string) =>
+      Effect.sync(() => ({
+        ...rawSnapshot,
+        skills: discoverCustomSkills(cwd),
+      })),
     orchestrationAdapter,
     textGeneration,
   } satisfies ProviderInstance;

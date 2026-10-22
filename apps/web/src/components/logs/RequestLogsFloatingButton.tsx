@@ -36,7 +36,7 @@ export function RequestLogsFloatingButton() {
       <button
         type="button"
         onClick={() => setIsOpen(true)}
-        className={`fixed bottom-1.5 right-1.5 sm:bottom-2.5 sm:right-2.5 z-[90] flex items-center gap-1.5 rounded-full border ${borderClass} px-2 py-1 text-xs font-medium text-zinc-200 shadow-lg backdrop-blur-md transition-all duration-150 hover:scale-105 hover:bg-zinc-800 hover:border-zinc-500 hover:text-white active:scale-95 cursor-pointer group`}
+        className={`fixed bottom-[1.5px] right-[1.5px] z-[90] flex scale-[0.66] origin-bottom-right items-center gap-1.5 rounded-full border ${borderClass} px-2 py-1 text-xs font-medium text-zinc-200 shadow-lg backdrop-blur-md transition-all duration-150 hover:scale-[1] hover:bg-zinc-800 hover:border-zinc-500 hover:text-white active:scale-[0.62] cursor-pointer group`}
         title={`Open Network & Runtime Logs (${logs.length} captured)`}
       >
         <ActivityIcon className={`size-3.5 transition-all shrink-0 ${iconColorClass}`} />

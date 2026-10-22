@@ -22,99 +22,11 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import { fromLenientJson } from "@t3tools/shared/schemaJson";
-import { parse as parseYamlDocument } from "yaml";
+import { parseSkillFrontmatter } from "@t3tools/shared/agentSkills";
 
 import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
 
 type ClaudeSkillScope = "user" | "project";
-
-const FRONTMATTER_PATTERN = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/;
-
-type SkillFrontmatter =
-  | { readonly kind: "missing" }
-  | { readonly kind: "malformed" }
-  | {
-      readonly kind: "parsed";
-      readonly description?: string;
-      readonly userInvocationOnly?: boolean;
-      readonly userInvocable?: boolean;
-    };
-
-/**
- * Claude Code accepts the YAML 1.1 boolean spellings (`yes`/`no`, `on`/`off`,
- * `1`/`0`), which the 1.2 core schema this parser uses leaves as strings and
- * numbers. Verified against the CLI: a skill carrying `user-invocable: no` is
- * absent from its published slash commands, so a strict `=== false` here would
- * offer a command the CLI rejects.
- */
-function parseFrontmatterBoolean(value: unknown): boolean | undefined {
-  if (typeof value === "boolean") return value;
-  if (typeof value === "number") {
-    return value === 1 ? true : value === 0 ? false : undefined;
-  }
-  if (typeof value !== "string") return undefined;
-  switch (value.trim().toLowerCase()) {
-    case "true":
-    case "yes":
-    case "on":
-    case "y":
-      return true;
-    case "false":
-    case "no":
-    case "off":
-    case "n":
-      return false;
-    default:
-      return undefined;
-  }
-}
-
-function parseSkillFrontmatter(contents: string): SkillFrontmatter {
-  const match = FRONTMATTER_PATTERN.exec(contents);
-  if (!match) {
-    return { kind: "missing" };
-  }
-
-  const frontmatter = match[1] ?? "";
-  let parsed: unknown;
-  try {
-    parsed = parseYamlDocument(frontmatter);
-  } catch {
-    // Claude Code accepts plain scalars containing `: `. Repair only those,
-    // leaving comments and YAML structure for the full-document parser.
-    const repaired = frontmatter.replace(
-      /^([\w-]+:[ \t]*)([^\r\n]*)/gm,
-      (line, prefix: string, value: string) => {
-        const scalar = value.split(/[ \t]+#/)[0] ?? "";
-        if (!/:[ \t]/.test(scalar) || /^(?:["'[\]{}|>&*!#%@`]|[-?:](?:[ \t]|$))/.test(scalar)) {
-          return line;
-        }
-        return `${prefix}${JSON.stringify(scalar)}${value.slice(scalar.length)}`;
-      },
-    );
-    try {
-      parsed = parseYamlDocument(repaired);
-    } catch {
-      return { kind: "malformed" };
-    }
-  }
-  if (typeof parsed !== "object" || parsed === null) {
-    return { kind: "malformed" };
-  }
-
-  const record = parsed as Record<string, unknown>;
-  const description = typeof record.description === "string" ? record.description.trim() : "";
-  return {
-    kind: "parsed",
-    ...(description ? { description } : {}),
-    ...(parseFrontmatterBoolean(record["disable-model-invocation"]) === true
-      ? { userInvocationOnly: true }
-      : {}),
-    ...(parseFrontmatterBoolean(record["user-invocable"]) === false
-      ? { userInvocable: false }
-      : {}),
-  };
-}
 
 /**
  * Where an administrator installs the policy file whose settings outrank every

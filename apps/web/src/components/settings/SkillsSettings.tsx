@@ -15,6 +15,8 @@ import {
   RefreshCwIcon,
   LayersIcon,
   CheckCircle2Icon,
+  TerminalIcon,
+  XIcon,
 } from "lucide-react";
 
 import { Badge } from "../ui/badge";
@@ -35,7 +37,26 @@ import {
 } from "../ui/dialog";
 import { Tooltip, TooltipTrigger, TooltipPopup } from "../ui/tooltip";
 import { SettingsPageContainer } from "./settingsLayout";
+import { useOptionalSettingsScope } from "./SettingsScopeContext";
+import { Sheet, SheetPopup, SheetHeader, SheetTitle, SheetDescription } from "../ui/sheet";
+import { useProjects, useThreadShells } from "../../state/entities";
 import { cn } from "~/lib/utils";
+import JSZip from "jszip";
+
+export interface ProjectGlobalSkills {
+  id: string;
+  title: string;
+  workspaceRoot: string;
+  enabled: string[];
+  pending?: boolean;
+}
+
+export interface GlobalSkillItem extends SkillItem {
+  /** Whether this project already uses the global skill. */
+  enabledInProject: boolean;
+  /** True while the enable or disable request is running. */
+  pending?: boolean;
+}
 
 export interface SkillItem {
   dirName: string;
@@ -48,6 +69,50 @@ export interface SkillItem {
   content: string;
 }
 
+/** Skills are listed ten at a time, with the pager above and below the list. */
+const SKILL_PAGE_SIZE = 10;
+
+function SkillPagination({
+  page,
+  pageCount,
+  total,
+  onPageChange,
+}: {
+  page: number;
+  pageCount: number;
+  total: number;
+  onPageChange: (page: number) => void;
+}) {
+  if (total === 0) return null;
+  return (
+    <div className="flex items-center justify-between gap-2 px-1">
+      <span className="text-[11px] text-muted-foreground">
+        Page {page} of {pageCount} · {total} skill{total === 1 ? "" : "s"}
+      </span>
+      <div className="flex items-center gap-1">
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 px-2 text-xs"
+          disabled={page <= 1}
+          onClick={() => onPageChange(page - 1)}
+        >
+          Previous
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 px-2 text-xs"
+          disabled={page >= pageCount}
+          onClick={() => onPageChange(page + 1)}
+        >
+          Next
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 const DEFAULT_BUILTIN_NAMES = new Set([
   "agent-browser-testing",
   "web-ui-design",
@@ -57,6 +122,62 @@ const DEFAULT_BUILTIN_NAMES = new Set([
   "contribution-triage",
   "test-t3-app",
 ]);
+
+/**
+ * One compact skill row: the name, a short description, the path in grey, and
+ * the actions as icon buttons so the list stays tight.
+ */
+function SkillTile({
+  skill,
+  path,
+  badges,
+  footnote,
+  actions,
+  trailing,
+}: {
+  skill: SkillItem;
+  path: string;
+  badges?: React.ReactNode;
+  footnote?: React.ReactNode;
+  actions: ReadonlyArray<{ label: string; icon: React.ReactNode; onClick: () => void }>;
+  trailing?: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-3 border-b border-border/40 px-3 py-2 last:border-b-0">
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <div className="flex items-center gap-2">
+          <span className="truncate text-xs font-medium text-foreground">{skill.name}</span>
+          {badges}
+        </div>
+        {skill.description && (
+          <p className="truncate text-[11px] text-muted-foreground">{skill.description}</p>
+        )}
+        <code className="truncate font-mono text-[10px] text-muted-foreground/80">{path}</code>
+        {footnote}
+      </div>
+      <div className="flex shrink-0 items-center gap-1">
+        {actions.map((action) => (
+          <Tooltip key={action.label}>
+            <TooltipTrigger
+              render={
+                <button
+                  type="button"
+                  onClick={action.onClick}
+                  className="flex size-7 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  aria-label={action.label}
+                >
+                  {action.icon}
+                </button>
+              }
+            />
+            <TooltipPopup>{action.label}</TooltipPopup>
+          </Tooltip>
+        ))}
+        {trailing}
+      </div>
+    </div>
+  );
+}
 
 export function SkillsSettingsPanel() {
   const [skills, setSkills] = useState<SkillItem[]>([]);
@@ -69,6 +190,7 @@ export function SkillsSettingsPanel() {
   // View / Edit modal state
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [editorTarget, setEditorTarget] = useState<"global" | "project">("project");
   const [editorDirName, setEditorDirName] = useState("");
   const [editorName, setEditorName] = useState("");
   const [editorDesc, setEditorDesc] = useState("");
@@ -81,7 +203,24 @@ export function SkillsSettingsPanel() {
   // Import modal state
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [importText, setImportText] = useState("");
+  const [importName, setImportName] = useState("");
   const [isImporting, setIsImporting] = useState(false);
+
+  // Install-from-command modal state
+  const [isInstallOpen, setIsInstallOpen] = useState(false);
+  const [installCommand, setInstallCommand] = useState("");
+  const [isInstalling, setIsInstalling] = useState(false);
+  const [installOutput, setInstallOutput] = useState<string>("");
+  const [installTarget, setInstallTarget] = useState<"project" | "global">("project");
+
+  // Global skills: downloaded once, enabled per project
+  const [globalSkills, setGlobalSkills] = useState<GlobalSkillItem[]>([]);
+  const [isLoadingGlobal, setIsLoadingGlobal] = useState(false);
+  const [projectGlobalSkills, setProjectGlobalSkills] = useState<ProjectGlobalSkills[]>([]);
+  const [globalPage, setGlobalPage] = useState(1);
+  const [globalSkillToDelete, setGlobalSkillToDelete] = useState<GlobalSkillItem | null>(null);
+  const [isDeletingGlobal, setIsDeletingGlobal] = useState(false);
+  const [projectPage, setProjectPage] = useState(1);
 
   // Delete confirm state
   const [skillToDelete, setSkillToDelete] = useState<SkillItem | null>(null);
@@ -95,7 +234,7 @@ export function SkillsSettingsPanel() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          command: "python3 scripts/skills-manager.py list",
+          command: "node --experimental-strip-types scripts/skills-manager.ts list",
           timeoutMs: 15_000,
         }),
       });
@@ -141,7 +280,7 @@ export function SkillsSettingsPanel() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          command: `python3 scripts/skills-manager.py toggle ${JSON.stringify(skill.dirName)} ${newState ? "1" : "0"}`,
+          command: `node --experimental-strip-types scripts/skills-manager.ts toggle ${JSON.stringify(skill.dirName)} ${newState ? "1" : "0"}`,
           timeoutMs: 10_000,
         }),
       });
@@ -175,6 +314,7 @@ export function SkillsSettingsPanel() {
   // Open Create Skill Modal
   const handleOpenCreateModal = () => {
     setIsEditing(false);
+    setEditorTarget("global");
     setEditorDirName("");
     setEditorName("");
     setEditorDesc("");
@@ -185,8 +325,9 @@ export function SkillsSettingsPanel() {
   };
 
   // Open Edit Skill Modal
-  const handleOpenEditModal = (skill: SkillItem) => {
+  const handleOpenEditModal = (skill: SkillItem, target: "global" | "project" = "project") => {
     setIsEditing(true);
+    setEditorTarget(target);
     setEditorDirName(skill.dirName);
     setEditorName(skill.name);
     setEditorDesc(skill.description);
@@ -234,7 +375,7 @@ ${editorBody.trim()}
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          command: `python3 scripts/skills-manager.py save ${JSON.stringify(slug)} ${JSON.stringify(b64)}`,
+          command: `node --experimental-strip-types scripts/skills-manager.ts ${editorTarget === "global" ? "save-global" : "save"} ${JSON.stringify(slug)} ${JSON.stringify(b64)}`,
           timeoutMs: 15_000,
         }),
       });
@@ -242,7 +383,7 @@ ${editorBody.trim()}
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       toastManager.add({
         title: isEditing ? "Skill Updated" : "Skill Created",
-        description: `Saved to .agents/skills/${slug}/SKILL.md`,
+        description: `Added to the skill list. Turn it on to use it in a project.`,
       });
 
       setIsEditorOpen(false);
@@ -275,7 +416,7 @@ ${editorBody.trim()}
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          command: `python3 scripts/skills-manager.py delete ${JSON.stringify(skillToDelete.dirName)}`,
+          command: `node --experimental-strip-types scripts/skills-manager.ts delete ${JSON.stringify(skillToDelete.dirName)}`,
           timeoutMs: 10_000,
         }),
       });
@@ -298,49 +439,45 @@ ${editorBody.trim()}
   };
 
   // Reset a built-in skill to its default template
-  const handleResetSkill = async (skill: SkillItem) => {
+  // Download a zip that keeps the skill folder layout, so the export can be
+  // dropped straight into another `.agents/skills` directory.
+  const downloadSkillArchive = async (entries: ReadonlyArray<SkillItem>, fileName: string) => {
+    const zip = new JSZip();
+    for (const skill of entries) {
+      const folder = zip.folder(skill.dirName);
+      if (!folder) continue;
+      folder.file("SKILL.md", skill.content);
+    }
+    const blob = await zip.generateAsync({ type: "blob" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  // Export a single skill as its own folder
+  const handleExportSkill = async (skill: SkillItem) => {
     try {
-      const res = await fetch("/api/terminal/exec", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          command: `python3 scripts/skills-manager.py reset ${JSON.stringify(skill.dirName)}`,
-          timeoutMs: 10_000,
-        }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await downloadSkillArchive([skill], `${skill.dirName}.zip`);
       toastManager.add({
-        title: "Skill Restored",
-        description: `Reset .agents/skills/${skill.dirName}/SKILL.md to default template.`,
+        title: "Skill Exported",
+        description: `Downloaded ${skill.dirName}/SKILL.md`,
       });
-      await loadSkills();
     } catch (err) {
       toastManager.add({
-        title: "Failed to reset skill",
+        type: "error",
+        title: "Export failed",
         description: err instanceof Error ? err.message : String(err),
       });
     }
   };
 
-  // Export a single skill (.md file download)
-  const handleExportSkill = (skill: SkillItem) => {
-    const blob = new Blob([skill.content], { type: "text/markdown;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${skill.dirName}.skill.md`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    toastManager.add({
-      title: "Skill Exported",
-      description: `Downloaded ${skill.dirName}.skill.md`,
-    });
-  };
-
-  // Export all active skills bundle as JSON
-  const handleExportAllActive = () => {
+  // Export every active skill as a folder per skill
+  const handleExportAllActive = async () => {
     const activeSkills = skills.filter((s) => s.isActive);
     if (activeSkills.length === 0) {
       toastManager.add({
@@ -350,33 +487,353 @@ ${editorBody.trim()}
       return;
     }
 
-    const payload = {
-      exportedAt: new Date().toISOString(),
-      skills: activeSkills.map((s) => ({
-        name: s.name,
-        dirName: s.dirName,
-        description: s.description,
-        path: s.path,
-        content: s.content,
-      })),
-    };
+    try {
+      await downloadSkillArchive(activeSkills, `t3-active-skills-${Date.now()}.zip`);
+      toastManager.add({
+        title: "Active Skills Bundle Exported",
+        description: `Exported ${activeSkills.length} active skills as folders.`,
+      });
+    } catch (err) {
+      toastManager.add({
+        type: "error",
+        title: "Export failed",
+        description: err instanceof Error ? err.message : String(err),
+      });
+    }
+  };
 
-    const blob = new Blob([JSON.stringify(payload, null, 2)], {
-      type: "application/json;charset=utf-8",
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `t3-active-skills-${Date.now()}.json`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+  // The project the global skills are enabled for. The settings scope knows
+  // the checkout when one is selected; otherwise the manager falls back to
+  // the environment workspace.
+  const settingsScope = useOptionalSettingsScope();
+  const projects = useProjects();
+  const threadShells = useThreadShells();
 
-    toastManager.add({
-      title: "Active Skills Bundle Exported",
-      description: `Exported ${activeSkills.length} active skills.`,
-    });
+  const targetProject = useMemo(() => {
+    const scope = settingsScope?.scope;
+    if (scope?.kind === "project") {
+      return { title: scope.group.displayName, workspaceRoot: scope.group.workspaceRoot };
+    }
+    if (scope?.kind === "checkout") {
+      return { title: scope.group.displayName, workspaceRoot: scope.checkout.workspaceRoot };
+    }
+    const latest = [...threadShells]
+      .filter((shell) => Boolean(shell.projectId))
+      .sort((left, right) => (right.updatedAt ?? "").localeCompare(left.updatedAt ?? ""))[0];
+    const project = latest ? projects.find((entry) => entry.id === latest.projectId) : undefined;
+    return project ? { title: project.title, workspaceRoot: project.workspaceRoot } : null;
+  }, [projects, settingsScope, threadShells]);
+
+  const targetProjectLabel = targetProject?.title ?? null;
+
+  const encodeProjectRoot = useCallback(() => {
+    if (!targetProject?.workspaceRoot) return "";
+    return btoa(unescape(encodeURIComponent(targetProject.workspaceRoot)));
+  }, [targetProject]);
+
+  // The folder the imported skill lands in, shown while the name is typed.
+  const importSlug = useMemo(
+    () =>
+      importName
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]/g, "-")
+        .replace(/-+/g, "-"),
+    [importName],
+  );
+  const importPath = importSlug
+    ? `.agents/skills/${importSlug}/SKILL.md`
+    : ".agents/skills/<name>/SKILL.md";
+
+  const loadProjectGlobalSkills = useCallback(async () => {
+    if (projects.length === 0) {
+      setProjectGlobalSkills([]);
+      return;
+    }
+    try {
+      // The same checkout can appear in more than one environment, so the
+      // matrix lists every workspace once.
+      const byRoot = new Map<string, { id: string; title: string; workspaceRoot: string }>();
+      for (const project of projects) {
+        if (!byRoot.has(project.workspaceRoot)) {
+          byRoot.set(project.workspaceRoot, {
+            id: project.id,
+            title: project.title,
+            workspaceRoot: project.workspaceRoot,
+          });
+        }
+      }
+      const payload = [...byRoot.values()];
+      const res = await fetch("/api/terminal/exec", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          command: `node --experimental-strip-types scripts/skills-manager.ts enabled-matrix ${JSON.stringify(btoa(unescape(encodeURIComponent(JSON.stringify(payload)))))}`,
+          timeoutMs: 20_000,
+        }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = (await res.json()) as { stdout: string };
+      const parsed = JSON.parse(data.stdout || "{}") as {
+        ok: boolean;
+        projects?: ProjectGlobalSkills[];
+      };
+      if (parsed.ok && parsed.projects) {
+        setProjectGlobalSkills(parsed.projects);
+      }
+    } catch (err) {
+      console.error("Failed to load per-project global skills", err);
+    }
+  }, [projects]);
+
+  const loadGlobalSkills = useCallback(async () => {
+    setIsLoadingGlobal(true);
+    try {
+      const res = await fetch("/api/terminal/exec", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          command: `node --experimental-strip-types scripts/skills-manager.ts list-global ${JSON.stringify(encodeProjectRoot())}`,
+          timeoutMs: 20_000,
+        }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = (await res.json()) as { stdout: string };
+      const parsed = JSON.parse(data.stdout || "{}") as { ok: boolean; skills?: GlobalSkillItem[] };
+      if (parsed.ok && parsed.skills) {
+        setGlobalSkills(parsed.skills);
+      }
+      await loadProjectGlobalSkills();
+    } catch (err) {
+      console.error("Failed to load global skills", err);
+      toastManager.add({
+        type: "error",
+        title: "Failed to load global skills",
+        description: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setIsLoadingGlobal(false);
+    }
+  }, [encodeProjectRoot, loadProjectGlobalSkills]);
+
+  // Enable or disable a global skill for this project. Enabling copies the
+  // skill into the project, disabling removes that copy.
+  const handleToggleGlobalSkill = useCallback(
+    async (skill: GlobalSkillItem, enabled: boolean) => {
+      setGlobalSkills((prev) =>
+        prev.map((entry) =>
+          entry.dirName === skill.dirName ? { ...entry, pending: true } : entry,
+        ),
+      );
+      try {
+        const res = await fetch("/api/terminal/exec", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            command: `node --experimental-strip-types scripts/skills-manager.ts ${enabled ? "enable" : "disable"} ${JSON.stringify(skill.dirName)} ${JSON.stringify(encodeProjectRoot())}`,
+            timeoutMs: 20_000,
+          }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = (await res.json()) as { stdout: string };
+        const parsed = JSON.parse(data.stdout || "{}") as { ok: boolean; error?: string };
+        if (!parsed.ok) {
+          throw new Error(parsed.error ?? "The command did not finish");
+        }
+        setGlobalSkills((prev) =>
+          prev.map((entry) =>
+            entry.dirName === skill.dirName
+              ? { ...entry, enabledInProject: enabled, pending: false }
+              : entry,
+          ),
+        );
+        toastManager.add({
+          type: "success",
+          title: enabled ? "Skill enabled for this project" : "Skill disabled",
+          description: enabled
+            ? `${skill.name} was copied into this project's .agents/skills.`
+            : `${skill.name} was removed from this project.`,
+        });
+        if (enabled) {
+          void loadSkills();
+        }
+        void loadProjectGlobalSkills();
+      } catch (err) {
+        setGlobalSkills((prev) =>
+          prev.map((entry) =>
+            entry.dirName === skill.dirName ? { ...entry, pending: false } : entry,
+          ),
+        );
+        toastManager.add({
+          type: "error",
+          title: enabled ? "Could not enable the skill" : "Could not disable the skill",
+          description: err instanceof Error ? err.message : String(err),
+        });
+      }
+    },
+    [encodeProjectRoot, loadProjectGlobalSkills, loadSkills],
+  );
+
+  // The global store is read on mount so its list is there without a tab.
+  useEffect(() => {
+    void loadGlobalSkills();
+  }, [loadGlobalSkills]);
+
+  // Enable or disable a global skill for one specific project. The same
+  // command the project tab uses, with the project's own root.
+  const handleToggleGlobalSkillForProject = useCallback(
+    async (skill: GlobalSkillItem, project: ProjectGlobalSkills, enabled: boolean) => {
+      setProjectGlobalSkills((prev) =>
+        prev.map((entry) => (entry.id === project.id ? { ...entry, pending: true } : entry)),
+      );
+      try {
+        const encodedRoot = btoa(unescape(encodeURIComponent(project.workspaceRoot)));
+        const res = await fetch("/api/terminal/exec", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            command: `node --experimental-strip-types scripts/skills-manager.ts ${enabled ? "enable" : "disable"} ${JSON.stringify(skill.dirName)} ${JSON.stringify(encodedRoot)}`,
+            timeoutMs: 20_000,
+          }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = (await res.json()) as { stdout: string };
+        const parsed = JSON.parse(data.stdout || "{}") as { ok: boolean; error?: string };
+        if (!parsed.ok) {
+          throw new Error(parsed.error ?? "The command did not finish");
+        }
+        setProjectGlobalSkills((prev) =>
+          prev.map((entry) =>
+            entry.id === project.id
+              ? {
+                  ...entry,
+                  pending: false,
+                  enabled: enabled
+                    ? [...new Set([...entry.enabled, skill.dirName])]
+                    : entry.enabled.filter((name) => name !== skill.dirName),
+                }
+              : entry,
+          ),
+        );
+        await Promise.all([loadGlobalSkills(), loadProjectGlobalSkills()]);
+      } catch (err) {
+        setProjectGlobalSkills((prev) =>
+          prev.map((entry) => (entry.id === project.id ? { ...entry, pending: false } : entry)),
+        );
+        toastManager.add({
+          type: "error",
+          title: "Could not update the skill",
+          description: err instanceof Error ? err.message : String(err),
+        });
+      }
+    },
+    [loadGlobalSkills, loadProjectGlobalSkills],
+  );
+
+  // Remove a skill from the global store. The project copy is left alone.
+  const handleDeleteGlobalSkill = useCallback(async () => {
+    const skill = globalSkillToDelete;
+    if (!skill) return;
+    setIsDeletingGlobal(true);
+    try {
+      const res = await fetch("/api/terminal/exec", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          command: `node --experimental-strip-types scripts/skills-manager.ts delete-global ${JSON.stringify(skill.dirName)}`,
+          timeoutMs: 20_000,
+        }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = (await res.json()) as { stdout: string };
+      const parsed = JSON.parse(data.stdout || "{}") as { ok: boolean; error?: string };
+      if (!parsed.ok) throw new Error(parsed.error ?? "The command did not finish");
+      setGlobalSkillToDelete(null);
+      toastManager.add({
+        type: "success",
+        title: "Global skill removed",
+        description: `${skill.name} was removed from the global store.`,
+      });
+      await loadGlobalSkills();
+    } catch (err) {
+      toastManager.add({
+        type: "error",
+        title: "Could not remove the skill",
+        description: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setIsDeletingGlobal(false);
+    }
+  }, [globalSkillToDelete, loadGlobalSkills]);
+
+  // Install a skill with a command, for example the skills CLI:
+  // `npx skills add owner/repo`. The command runs on the environment host and
+  // the skills it adds land in `.agents/skills`, which both the Codex and the
+  // custom engine read.
+  const handleExecuteInstall = async () => {
+    const command = installCommand.trim();
+    if (!command) {
+      toastManager.add({
+        type: "warning",
+        title: "Command required",
+        description: "Enter the install command to run, for example: npx skills add owner/repo",
+      });
+      return;
+    }
+    setIsInstalling(true);
+    setInstallOutput("");
+    try {
+      const encoded = btoa(unescape(encodeURIComponent(command)));
+      const res = await fetch("/api/terminal/exec", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          command: `node --experimental-strip-types scripts/skills-manager.ts ${installTarget === "global" ? "install-global" : "install"} ${JSON.stringify(encoded)}`,
+          timeoutMs: 300_000,
+        }),
+      });
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = (await res.json()) as { stdout: string; ok: boolean; stderr?: string };
+      const parsed = JSON.parse(data.stdout || "{}") as {
+        ok: boolean;
+        output?: string;
+        skills?: SkillItem[];
+      };
+      setInstallOutput(parsed.output ?? "");
+
+      if (parsed.ok) {
+        toastManager.add({
+          type: "success",
+          title: installTarget === "global" ? "Skill installed globally" : "Skill installed",
+          description:
+            installTarget === "global"
+              ? "The skill is in the global store. Enable it per project from the Global tab."
+              : `Skills are ready in .agents/skills. ${parsed.skills?.length ?? 0} skill(s) available now.`,
+        });
+        setIsInstallOpen(false);
+        setInstallCommand("");
+        if (installTarget === "global") {
+          await loadGlobalSkills();
+        } else {
+          await loadSkills();
+        }
+      } else {
+        toastManager.add({
+          type: "error",
+          title: "Install failed",
+          description: "The command did not finish. Check the output below.",
+        });
+      }
+    } catch (err) {
+      toastManager.add({
+        type: "error",
+        title: "Install failed",
+        description: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setIsInstalling(false);
+    }
   };
 
   // Handle Import from File
@@ -386,6 +843,17 @@ ${editorBody.trim()}
       const text = e.target?.result as string;
       if (text) {
         setImportText(text);
+        // A file that carries frontmatter names the skill for the user.
+        const frontmatterName = text
+          .match(/^---\s*\n([\s\S]*?)\n---/)?.[1]
+          ?.match(/^name:\s*(.+)$/m)?.[1]
+          ?.trim()
+          .replace(/^["']|["']$/g, "");
+        if (frontmatterName) {
+          setImportName(frontmatterName);
+        } else if (!importName) {
+          setImportName(file.name.replace(/\.md$|\.txt$/i, ""));
+        }
       }
     };
     reader.readAsText(file);
@@ -423,6 +891,12 @@ ${editorBody.trim()}
       }
     }
 
+    // The name typed in the sheet wins: the folder and the frontmatter always
+    // agree, so the skill is found by the name the user chose.
+    const requestedName = importName.trim();
+    if (requestedName) {
+      name = requestedName;
+    }
     if (!name) {
       // Default to generic slug if not found
       name = `custom-skill-${Date.now().toString(36)}`;
@@ -443,6 +917,13 @@ description: ${desc || "Imported custom skill"}
 
 ${raw}
 `;
+    } else if (requestedName) {
+      // Keep the pasted frontmatter but point it at the chosen name.
+      const frontmatter = (fmMatch[1] ?? "")
+        .split("\n")
+        .map((line) => (line.startsWith("name:") ? `name: ${name}` : line))
+        .join("\n");
+      finalContent = `---\n${frontmatter}\n---${raw.slice(fmMatch[0].length)}`;
     }
 
     setIsImporting(true);
@@ -452,7 +933,7 @@ ${raw}
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          command: `python3 scripts/skills-manager.py save ${JSON.stringify(slug)} ${JSON.stringify(b64)}`,
+          command: `node --experimental-strip-types scripts/skills-manager.ts save-global ${JSON.stringify(slug)} ${JSON.stringify(b64)}`,
           timeoutMs: 15_000,
         }),
       });
@@ -460,12 +941,13 @@ ${raw}
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       toastManager.add({
         title: "Skill Imported Successfully",
-        description: `Imported as .agents/skills/${slug}/SKILL.md`,
+        description: `Imported into the global store as ${slug}/SKILL.md`,
       });
 
       setIsImportOpen(false);
       setImportText("");
-      await loadSkills();
+      setImportName("");
+      await Promise.all([loadSkills(), loadGlobalSkills()]);
     } catch (err) {
       toastManager.add({
         title: "Import Failed",
@@ -477,10 +959,31 @@ ${raw}
   };
 
   // Filter skills
+  /**
+   * The project the current chat belongs to: the settings scope when it names
+   * one, otherwise the project of the thread that was used last.
+   */
+  // Every skill the workspace knows about, in one list: the project's own
+  // skills and the global store, so a skill added from anywhere shows up here.
+  const allSkills = useMemo(() => {
+    const byName = new Map<string, GlobalSkillItem>();
+    for (const skill of globalSkills) {
+      byName.set(skill.dirName, { ...skill, enabledInProject: skill.enabledInProject });
+    }
+    for (const skill of skills) {
+      const existing = byName.get(skill.dirName);
+      byName.set(skill.dirName, {
+        ...skill,
+        enabledInProject: existing ? existing.enabledInProject : skill.isActive,
+      });
+    }
+    return [...byName.values()].sort((left, right) => left.name.localeCompare(right.name));
+  }, [globalSkills, skills]);
+
   const filteredSkills = useMemo(() => {
-    return skills.filter((item) => {
-      if (filterType === "active" && !item.isActive) return false;
-      if (filterType === "inactive" && item.isActive) return false;
+    return allSkills.filter((item) => {
+      if (filterType === "active" && !item.enabledInProject) return false;
+      if (filterType === "inactive" && item.enabledInProject) return false;
       if (filterType === "builtin" && !item.isBuiltin) return false;
       if (filterType === "custom" && item.isBuiltin) return false;
 
@@ -492,16 +995,31 @@ ${raw}
         item.path.toLowerCase().includes(q)
       );
     });
-  }, [skills, filterType, searchQuery]);
+  }, [allSkills, filterType, searchQuery]);
 
-  const activeCount = useMemo(() => skills.filter((s) => s.isActive).length, [skills]);
-  const builtinCount = useMemo(() => skills.filter((s) => s.isBuiltin).length, [skills]);
-  const customCount = useMemo(() => skills.filter((s) => !s.isBuiltin).length, [skills]);
+  const globalPageCount = Math.max(1, Math.ceil(allSkills.length / SKILL_PAGE_SIZE));
+  const globalSkillsPage = useMemo(() => {
+    const page = Math.min(globalPage, globalPageCount);
+    return allSkills.slice((page - 1) * SKILL_PAGE_SIZE, page * SKILL_PAGE_SIZE);
+  }, [allSkills, globalPage, globalPageCount]);
+  const projectPageCount = Math.max(1, Math.ceil(skills.length / SKILL_PAGE_SIZE));
+  const projectSkillsPage = useMemo(() => {
+    const page = Math.min(projectPage, projectPageCount);
+    return skills.slice((page - 1) * SKILL_PAGE_SIZE, page * SKILL_PAGE_SIZE);
+  }, [projectPage, projectPageCount, skills]);
+
+  const activeCount = useMemo(
+    () => allSkills.filter((s) => s.enabledInProject).length,
+    [allSkills],
+  );
+  const builtinCount = useMemo(() => allSkills.filter((s) => s.isBuiltin).length, [allSkills]);
+  const customCount = useMemo(() => allSkills.filter((s) => !s.isBuiltin).length, [allSkills]);
+  const totalSkillCount = allSkills.length;
 
   return (
     <SettingsPageContainer width="readable">
       {/* Header section */}
-      <div className="flex flex-col gap-3 pb-2">
+      <div className="flex flex-col gap-3 pb-3">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary shadow-xs">
@@ -542,304 +1060,351 @@ ${raw}
               <UploadIcon className="size-3.5" />
               <span>Import</span>
             </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setInstallTarget("global");
+                setIsInstallOpen(true);
+              }}
+            >
+              <TerminalIcon className="size-3.5" />
+              <span>Install</span>
+            </Button>
             <Button size="sm" variant="default" onClick={handleOpenCreateModal}>
               <PlusIcon className="size-3.5" />
               <span>New Skill</span>
             </Button>
           </div>
         </div>
-
-        {/* Stats Summary Card */}
-        <div className="grid grid-cols-2 gap-3 pt-2 sm:grid-cols-4">
-          <div className="flex flex-col gap-0.5 rounded-lg border bg-card/50 p-3 shadow-xs">
-            <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-              Total Skills
-            </span>
-            <span className="text-lg font-bold">{skills.length}</span>
-          </div>
-          <div className="flex flex-col gap-0.5 rounded-lg border bg-card/50 p-3 shadow-xs">
-            <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-              Active
-            </span>
-            <div className="flex items-center gap-1.5">
-              <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
-                {activeCount}
-              </span>
-              <span className="text-xs text-muted-foreground">/ {skills.length}</span>
-            </div>
-          </div>
-          <div className="flex flex-col gap-0.5 rounded-lg border bg-card/50 p-3 shadow-xs">
-            <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-              Built-in (Protected)
-            </span>
-            <span className="text-lg font-bold">{builtinCount}</span>
-          </div>
-          <div className="flex flex-col gap-0.5 rounded-lg border bg-card/50 p-3 shadow-xs">
-            <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-              Custom Skills
-            </span>
-            <span className="text-lg font-bold">{customCount}</span>
-          </div>
-        </div>
-
-        {/* Search & Filter Bar */}
-        <div className="flex flex-col gap-2 pt-2 sm:flex-row sm:items-center sm:justify-between">
-          <div className="relative flex-1">
-            <SearchIcon className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search skills by name, description, or path..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-8 pl-8 text-xs"
-            />
-          </div>
-          <div className="flex flex-wrap items-center gap-1">
-            {(
-              [
-                { id: "all", label: "All" },
-                { id: "active", label: `Active (${activeCount})` },
-                { id: "inactive", label: "Inactive" },
-                { id: "builtin", label: "Built-in" },
-                { id: "custom", label: "Custom" },
-              ] as const
-            ).map((tab) => (
-              <Button
-                key={tab.id}
-                size="sm"
-                variant={filterType === tab.id ? "secondary" : "ghost"}
-                className={cn(
-                  "h-7 px-2.5 text-xs font-medium",
-                  filterType === tab.id && "bg-muted shadow-xs",
-                )}
-                onClick={() => setFilterType(tab.id)}
-              >
-                {tab.label}
-              </Button>
-            ))}
-          </div>
-        </div>
       </div>
 
-      {/* Skills Grid */}
-      {isLoading && skills.length === 0 ? (
-        <div className="flex h-48 flex-col items-center justify-center gap-2 rounded-xl border border-dashed text-muted-foreground">
-          <Spinner className="size-6" />
-          <p className="text-xs">Loading skills from .agents/skills...</p>
+      {/* Global skills: downloaded once, enabled per project */}
+      <section className="flex flex-col gap-2 pb-5">
+        <div className="flex min-w-0 flex-col px-1">
+          <h2 className="text-sm font-semibold">All Skills</h2>
+          <p className="text-[11px] text-muted-foreground">
+            Every skill lives here, whether it came from Import, New Skill or Install. Use Add to
+            put one in a project.
+          </p>
         </div>
-      ) : filteredSkills.length === 0 ? (
-        <div className="flex h-48 flex-col items-center justify-center gap-2 rounded-xl border border-dashed text-muted-foreground">
-          <LayersIcon className="size-8 stroke-[1.5] text-muted-foreground/60" />
-          <p className="text-sm font-medium">No skills found</p>
-          <p className="text-xs">Try adjusting your search query or filter options.</p>
-        </div>
-      ) : (
-        <div className="grid gap-3 sm:grid-cols-1">
-          {filteredSkills.map((skill) => (
-            <div
-              key={skill.dirName}
-              className={cn(
-                "group relative flex flex-col justify-between gap-3 rounded-xl border bg-card p-4 transition-all shadow-xs hover:border-foreground/20 hover:shadow-sm",
-                skill.isActive &&
-                  "border-emerald-500/40 bg-emerald-500/[0.02] dark:border-emerald-500/30",
-              )}
-            >
-              {/* Top row: Title, badges, and toggle switch */}
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-start gap-3">
-                  <button
-                    type="button"
-                    onClick={() => void handleToggleActive(skill)}
-                    className={cn(
-                      "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-md border transition-colors cursor-pointer",
-                      skill.isActive
-                        ? "border-emerald-500 bg-emerald-500 text-white dark:bg-emerald-600"
-                        : "border-input bg-background hover:border-foreground/40",
-                    )}
-                    title={skill.isActive ? "Click to deactivate" : "Click to activate"}
-                  >
-                    {skill.isActive && <CheckIcon className="size-3.5 stroke-[3]" />}
-                  </button>
 
-                  <div className="flex flex-col gap-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-semibold text-sm tracking-tight">{skill.name}</span>
-                      {skill.isBuiltin ? (
-                        <Badge
-                          variant="secondary"
-                          className="gap-1 text-[10px] font-medium text-sky-600 dark:text-sky-400 bg-sky-500/10 border-sky-500/20"
+        {isLoadingGlobal && allSkills.length === 0 ? (
+          <div className="flex h-32 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed text-muted-foreground">
+            <Spinner className="size-5" />
+            <p className="text-xs">Loading global skills...</p>
+          </div>
+        ) : allSkills.length === 0 ? (
+          <div className="flex h-32 flex-col items-center justify-center gap-1 rounded-2xl border border-dashed text-muted-foreground">
+            <LayersIcon className="size-7 stroke-[1.5] text-muted-foreground/60" />
+            <p className="text-xs font-medium">No global skills yet</p>
+            <p className="text-[11px]">Install one with npx skills add owner/repo</p>
+          </div>
+        ) : (
+          <>
+            {/* Stats Summary Card */}
+            <div className="grid grid-cols-2 gap-3 pt-2 sm:grid-cols-4">
+              <div className="flex flex-col gap-0.5 rounded-lg border bg-card/50 p-3 shadow-xs">
+                <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+                  Total Skills
+                </span>
+                <span className="text-lg font-bold">{totalSkillCount}</span>
+              </div>
+              <div className="flex flex-col gap-0.5 rounded-lg border bg-card/50 p-3 shadow-xs">
+                <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+                  Active
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
+                    {activeCount}
+                  </span>
+                  <span className="text-xs text-muted-foreground">/ {skills.length}</span>
+                </div>
+              </div>
+              <div className="flex flex-col gap-0.5 rounded-lg border bg-card/50 p-3 shadow-xs">
+                <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+                  Built-in (Protected)
+                </span>
+                <span className="text-lg font-bold">{builtinCount}</span>
+              </div>
+              <div className="flex flex-col gap-0.5 rounded-lg border bg-card/50 p-3 shadow-xs">
+                <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+                  Custom Skills
+                </span>
+                <span className="text-lg font-bold">{customCount}</span>
+              </div>
+            </div>
+
+            {/* Search & Filter Bar */}
+            <div className="flex flex-col gap-2 pt-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="relative flex-1">
+                <SearchIcon className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Search skills by name, description, or path..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="h-8 pl-8 text-xs"
+                />
+              </div>
+              <div className="flex flex-wrap items-center gap-1">
+                {(
+                  [
+                    { id: "all", label: "All" },
+                    { id: "active", label: `Active (${activeCount})` },
+                    { id: "inactive", label: "Inactive" },
+                    { id: "builtin", label: "Built-in" },
+                    { id: "custom", label: "Custom" },
+                  ] as const
+                ).map((tab) => (
+                  <Button
+                    key={tab.id}
+                    size="sm"
+                    variant={filterType === tab.id ? "secondary" : "ghost"}
+                    className={cn(
+                      "h-7 px-2.5 text-xs font-medium",
+                      filterType === tab.id && "bg-muted shadow-xs",
+                    )}
+                    onClick={() => setFilterType(tab.id)}
+                  >
+                    {tab.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            <SkillPagination
+              page={globalPage}
+              pageCount={globalPageCount}
+              total={allSkills.length}
+              onPageChange={setGlobalPage}
+            />
+            <div className="overflow-hidden rounded-2xl border bg-card/60">
+              {globalSkillsPage.map((skill) => {
+                const activeIn = projectGlobalSkills
+                  .filter((project) => project.enabled.includes(skill.dirName))
+                  .map((project) => project.title);
+                const globalEntry = globalSkills.find((entry) => entry.dirName === skill.dirName);
+                const projectEntry = skills.find((entry) => entry.dirName === skill.dirName);
+                return (
+                  <SkillTile
+                    key={skill.dirName}
+                    skill={skill}
+                    path={globalEntry?.fullPath ?? skill.fullPath}
+                    badges={
+                      skill.enabledInProject ? (
+                        <span className="shrink-0 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+                          on
+                        </span>
+                      ) : null
+                    }
+                    footnote={
+                      activeIn.length > 0 ? (
+                        <span
+                          className="truncate text-[10px] text-muted-foreground"
+                          title={activeIn.join(", ")}
                         >
-                          <ShieldCheckIcon className="size-2.5" />
-                          Built-in
-                        </Badge>
+                          Active in: {activeIn.join(", ")}
+                        </span>
+                      ) : null
+                    }
+                    actions={[
+                      {
+                        label: "View",
+                        icon: <EyeIcon className="size-3.5" />,
+                        onClick: () => setViewSkill(skill),
+                      },
+                      {
+                        label: "Edit",
+                        icon: <PencilIcon className="size-3.5" />,
+                        onClick: () =>
+                          handleOpenEditModal(skill, globalEntry ? "global" : "project"),
+                      },
+                      {
+                        label: "Export",
+                        icon: <DownloadIcon className="size-3.5" />,
+                        onClick: () => void handleExportSkill(skill),
+                      },
+                      {
+                        label: "Delete",
+                        icon: <Trash2Icon className="size-3.5" />,
+                        onClick: () =>
+                          globalEntry
+                            ? setGlobalSkillToDelete(globalEntry)
+                            : setSkillToDelete(skill),
+                      },
+                    ]}
+                    trailing={
+                      skill.enabledInProject ? (
+                        <Button
+                          size="xs"
+                          variant="ghost"
+                          className="h-7 px-2 text-xs text-muted-foreground"
+                          onClick={() => {
+                            if (globalEntry) {
+                              void handleToggleGlobalSkill(globalEntry, false);
+                            } else if (projectEntry) {
+                              void handleToggleActive(projectEntry);
+                            }
+                          }}
+                        >
+                          Added
+                        </Button>
                       ) : (
-                        <Badge variant="outline" className="text-[10px] text-muted-foreground">
-                          Custom
+                        <Button
+                          size="xs"
+                          variant="outline"
+                          className="h-7 px-2 text-xs"
+                          disabled={!globalEntry}
+                          onClick={() => {
+                            if (globalEntry) {
+                              void handleToggleGlobalSkill(globalEntry, true);
+                            }
+                          }}
+                        >
+                          Add
+                        </Button>
+                      )
+                    }
+                  />
+                );
+              })}
+            </div>
+            <SkillPagination
+              page={globalPage}
+              pageCount={globalPageCount}
+              total={allSkills.length}
+              onPageChange={setGlobalPage}
+            />
+          </>
+        )}
+
+        {projectGlobalSkills.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 px-1 pt-1">
+            {projectGlobalSkills
+              .filter((project) => project.enabled.length > 0)
+              .map((project) => (
+                <span
+                  key={project.workspaceRoot}
+                  className="inline-flex items-center gap-1 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400"
+                >
+                  {project.title}: {project.enabled.length}
+                </span>
+              ))}
+          </div>
+        )}
+      </section>
+
+      {/* This project's own skills */}
+      <section className="flex flex-col gap-2">
+        <div className="flex items-center justify-between gap-2 px-1">
+          <h2 className="text-sm font-semibold">
+            Active skills for {targetProjectLabel ?? "this project"}
+          </h2>
+          <span className="text-[11px] text-muted-foreground">
+            {skills.length} skill{skills.length === 1 ? "" : "s"} in .agents/skills
+          </span>
+        </div>
+        <SkillPagination
+          page={projectPage}
+          pageCount={projectPageCount}
+          total={skills.length}
+          onPageChange={setProjectPage}
+        />
+        {isLoading && skills.length === 0 ? (
+          <div className="flex h-48 flex-col items-center justify-center gap-2 rounded-xl border border-dashed text-muted-foreground">
+            <Spinner className="size-6" />
+            <p className="text-xs">Loading skills from .agents/skills...</p>
+          </div>
+        ) : filteredSkills.length === 0 ? (
+          <div className="flex h-48 flex-col items-center justify-center gap-2 rounded-xl border border-dashed text-muted-foreground">
+            <LayersIcon className="size-8 stroke-[1.5] text-muted-foreground/60" />
+            <p className="text-sm font-medium">No skills found</p>
+            <p className="text-xs">Try adjusting your search query or filter options.</p>
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-2xl border bg-card/60">
+            {projectSkillsPage.map((skill) => {
+              const globalEntry = globalSkills.find((entry) => entry.dirName === skill.dirName);
+              return (
+                <SkillTile
+                  key={skill.dirName}
+                  skill={skill}
+                  path={skill.fullPath}
+                  badges={
+                    <>
+                      {skill.isBuiltin && (
+                        <Badge variant="secondary" className="text-2xs">
+                          built-in
                         </Badge>
                       )}
                       {skill.isActive ? (
-                        <Badge
-                          variant="secondary"
-                          className="gap-1 text-[10px] font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
-                        >
-                          <CheckCircle2Icon className="size-2.5" />
-                          Active
-                        </Badge>
+                        <span className="shrink-0 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+                          on
+                        </span>
                       ) : (
-                        <Badge variant="outline" className="text-[10px] text-muted-foreground/70">
-                          Disabled
-                        </Badge>
+                        <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                          off
+                        </span>
                       )}
-                    </div>
-                    <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">
-                      {skill.description}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Right side switch */}
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-[11px] text-muted-foreground font-medium hidden sm:inline">
-                    {skill.isActive ? "Active" : "Inactive"}
-                  </span>
-                  <Switch
-                    checked={skill.isActive}
-                    onCheckedChange={() => void handleToggleActive(skill)}
-                    aria-label={`Toggle ${skill.name}`}
-                  />
-                </div>
-              </div>
-
-              {/* Bottom row: Exact Path & Action Buttons */}
-              <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-2.5 text-xs">
-                {/* Exact Antigravity Path with Copy */}
-                <div className="flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground bg-muted/40 rounded px-2 py-1 max-w-full overflow-hidden">
-                  <FileCodeIcon className="size-3 shrink-0 text-muted-foreground/70" />
-                  <span className="truncate">{skill.path}</span>
-                  <button
-                    type="button"
-                    onClick={() => handleCopyPath(skill.path)}
-                    className="ml-1 text-muted-foreground hover:text-foreground cursor-pointer"
-                    title="Copy relative path"
-                  >
-                    <CopyIcon className="size-3" />
-                  </button>
-                </div>
-
-                {/* Actions */}
-                <div className="flex items-center gap-1">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 px-2 text-xs"
-                    onClick={() => setViewSkill(skill)}
-                    title="View skill documentation"
-                  >
-                    <EyeIcon className="size-3 mr-1" />
-                    View
-                  </Button>
-
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 px-2 text-xs"
-                    onClick={() => handleOpenEditModal(skill)}
-                    title="Edit skill"
-                  >
-                    <PencilIcon className="size-3 mr-1" />
-                    Edit
-                  </Button>
-
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 px-2 text-xs"
-                    onClick={() => handleExportSkill(skill)}
-                    title="Export skill as SKILL.md"
-                  >
-                    <DownloadIcon className="size-3 mr-1" />
-                    Export
-                  </Button>
-
-                  {/* Reset button for Builtin skills */}
-                  {skill.isBuiltin && (
-                    <Tooltip>
-                      <TooltipTrigger
-                        render={
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-7 px-2 text-xs text-amber-500 hover:bg-amber-500/10 hover:text-amber-500"
-                            onClick={() => handleResetSkill(skill)}
-                            title="Reset to default"
-                          >
-                            <RefreshCwIcon className="size-3 mr-1" />
-                            Reset
-                          </Button>
-                        }
-                      />
-                      <TooltipPopup side="top">
-                        Restore this skill's original default template.
-                      </TooltipPopup>
-                    </Tooltip>
-                  )}
-
-                  {/* Delete Button: Disabled / Protected for Builtin */}
-                  {skill.isBuiltin ? (
-                    <Tooltip>
-                      <TooltipTrigger
-                        render={
-                          <span tabIndex={0} className="inline-block cursor-not-allowed">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              disabled
-                              className="h-7 px-2 text-xs text-muted-foreground/40 opacity-50"
-                            >
-                              <Trash2Icon className="size-3 mr-1" />
-                              Delete
-                            </Button>
-                          </span>
-                        }
-                      />
-                      <TooltipPopup side="top">
-                        Default built-in skills cannot be deleted. You can disable them instead.
-                      </TooltipPopup>
-                    </Tooltip>
-                  ) : (
+                    </>
+                  }
+                  actions={[
+                    {
+                      label: "View",
+                      icon: <EyeIcon className="size-3.5" />,
+                      onClick: () => setViewSkill(skill),
+                    },
+                  ]}
+                  trailing={
                     <Button
-                      size="sm"
+                      size="xs"
                       variant="ghost"
-                      className="h-7 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
-                      onClick={() => setSkillToDelete(skill)}
-                      title="Delete custom skill"
+                      className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
+                      onClick={() => {
+                        if (globalEntry) {
+                          void handleToggleGlobalSkill(globalEntry, false);
+                        } else {
+                          void handleToggleActive(skill);
+                        }
+                      }}
                     >
-                      <Trash2Icon className="size-3 mr-1" />
-                      Delete
+                      Remove
                     </Button>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+                  }
+                />
+              );
+            })}
+          </div>
+        )}
 
-      {/* View Skill Modal */}
-      <Dialog open={!!viewSkill} onOpenChange={(open) => !open && setViewSkill(null)}>
-        <DialogPopup className="w-full sm:max-w-2xl">
-          <DialogHeader>
+        <SkillPagination
+          page={projectPage}
+          pageCount={projectPageCount}
+          total={skills.length}
+          onPageChange={setProjectPage}
+        />
+      </section>
+
+      {/* View Skill Sheet */}
+      <Sheet open={!!viewSkill} onOpenChange={(open) => !open && setViewSkill(null)}>
+        <SheetPopup
+          side="right"
+          showCloseButton={false}
+          className="w-[90vw] max-w-[90vw] sm:w-[460px] sm:max-w-[460px]"
+        >
+          <SheetHeader>
             <div className="flex items-center gap-2">
               <SparklesIcon className="size-5 text-primary" />
-              <DialogTitle>{viewSkill?.name}</DialogTitle>
+              <SheetTitle>{viewSkill?.name}</SheetTitle>
             </div>
-            <DialogDescription className="font-mono text-xs">{viewSkill?.path}</DialogDescription>
-          </DialogHeader>
-          <DialogPanel className="max-h-[60vh] overflow-y-auto">
+            <SheetDescription className="font-mono text-xs">{viewSkill?.path}</SheetDescription>
+          </SheetHeader>
+          <div className="overflow-y-auto px-6 pb-6">
             <div className="rounded-lg border bg-muted/30 p-4 font-mono text-xs whitespace-pre-wrap leading-relaxed select-text">
               {viewSkill?.content}
             </div>
-          </DialogPanel>
-          <DialogFooter className="flex justify-between sm:justify-between items-center w-full">
+          </div>
+          <div className="mt-auto flex items-center justify-between gap-2 border-t bg-muted/20 px-6 py-4">
             <div className="flex items-center gap-2">
               {viewSkill && (
                 <Button
@@ -850,30 +1415,44 @@ ${raw}
                   }}
                 >
                   <DownloadIcon className="size-3.5 mr-1" />
-                  Download SKILL.md
+                  Export Folder
                 </Button>
               )}
             </div>
-            <Button size="sm" variant="default" onClick={() => setViewSkill(null)}>
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogPopup>
-      </Dialog>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="default" onClick={() => setViewSkill(null)}>
+                Close
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={() => setViewSkill(null)}
+                aria-label="Close sheet"
+              >
+                <XIcon className="size-4" />
+              </Button>
+            </div>
+          </div>
+        </SheetPopup>
+      </Sheet>
 
-      {/* Create / Edit Skill Modal */}
-      <Dialog open={isEditorOpen} onOpenChange={setIsEditorOpen}>
-        <DialogPopup className="w-full sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>
+      {/* Create / Edit Skill Sheet */}
+      <Sheet open={isEditorOpen} onOpenChange={setIsEditorOpen}>
+        <SheetPopup
+          side="right"
+          showCloseButton={false}
+          className="w-[90vw] max-w-[90vw] sm:w-[460px] sm:max-w-[460px]"
+        >
+          <SheetHeader>
+            <SheetTitle>
               {isEditing ? `Edit Skill: ${editorName}` : "Create New Custom Skill"}
-            </DialogTitle>
-            <DialogDescription>
+            </SheetTitle>
+            <SheetDescription>
               Skills are saved as Markdown instructions with YAML frontmatter at{" "}
               <code className="text-xs font-mono">.agents/skills/&lt;name&gt;/SKILL.md</code>
-            </DialogDescription>
-          </DialogHeader>
-          <DialogPanel className="flex flex-col gap-4 max-h-[65vh] overflow-y-auto pr-1">
+            </SheetDescription>
+          </SheetHeader>
+          <div className="flex flex-col gap-4 overflow-y-auto px-6 pb-6">
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-medium">Skill Name</label>
@@ -927,8 +1506,8 @@ ${raw}
                 className="font-mono text-xs leading-relaxed"
               />
             </div>
-          </DialogPanel>
-          <DialogFooter>
+          </div>
+          <div className="mt-auto flex items-center justify-end gap-2 border-t bg-muted/20 px-6 py-4">
             <Button
               size="sm"
               variant="outline"
@@ -947,21 +1526,134 @@ ${raw}
                 "Save Skill"
               )}
             </Button>
-          </DialogFooter>
-        </DialogPopup>
-      </Dialog>
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={() => setIsEditorOpen(false)}
+              disabled={isSaving}
+              aria-label="Close sheet"
+              className="ml-1"
+            >
+              <XIcon className="size-4" />
+            </Button>
+          </div>
+        </SheetPopup>
+      </Sheet>
 
-      {/* Import Skill Modal */}
-      <Dialog open={isImportOpen} onOpenChange={setIsImportOpen}>
-        <DialogPopup className="w-full sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Import Skill</DialogTitle>
-            <DialogDescription>
+      {/* Install Skill From Command Sheet */}
+      <Sheet open={isInstallOpen} onOpenChange={setIsInstallOpen}>
+        <SheetPopup
+          side="right"
+          showCloseButton={false}
+          className="w-[90vw] max-w-[90vw] sm:w-[460px] sm:max-w-[460px]"
+        >
+          <SheetHeader>
+            <SheetTitle>
+              {installTarget === "global" ? "Install Skill Globally" : "Install Skill From Command"}
+            </SheetTitle>
+            <SheetDescription>
+              {installTarget === "global" ? (
+                <>
+                  Run an install command on the environment host. The skill is downloaded once into{" "}
+                  <code className="text-xs font-mono">~/.agents/skills</code> and can then be
+                  enabled per project.
+                </>
+              ) : (
+                <>
+                  Run an install command on the environment host. Installed skills land in{" "}
+                  <code className="text-xs font-mono">.agents/skills/&lt;name&gt;/SKILL.md</code>{" "}
+                  and become available to the Codex and custom engines.
+                </>
+              )}
+            </SheetDescription>
+          </SheetHeader>
+          <div className="flex flex-col gap-3 overflow-y-auto px-6 pb-6">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium">Install command</label>
+              <Input
+                value={installCommand}
+                onChange={(e) => setInstallCommand(e.target.value)}
+                placeholder="npx skills add vercel-labs/agent-skills --skill web-design-guidelines"
+                className="font-mono text-xs"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !isInstalling) {
+                    e.preventDefault();
+                    void handleExecuteInstall();
+                  }
+                }}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                The skills CLI is supported out of the box:{" "}
+                <code className="font-mono">npx skills add &lt;owner/repo&gt;</code>. The command
+                runs with <code className="font-mono">--yes</code> and{" "}
+                <code className="font-mono">--agent codex</code> unless you pass your own flags.
+              </p>
+            </div>
+            {installOutput && (
+              <div className="max-h-48 overflow-y-auto rounded-lg border bg-muted/30 p-2.5 font-mono text-2xs whitespace-pre-wrap text-muted-foreground">
+                {installOutput}
+              </div>
+            )}
+          </div>
+          <div className="mt-auto flex items-center justify-end gap-2 border-t bg-muted/20 px-6 py-4">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setIsInstallOpen(false)}
+              disabled={isInstalling}
+            >
+              Close
+            </Button>
+            <Button size="sm" disabled={isInstalling} onClick={() => void handleExecuteInstall()}>
+              {isInstalling ? <Spinner size="sm" /> : <TerminalIcon className="size-3.5" />}
+              <span>{isInstalling ? "Installing..." : "Run Command"}</span>
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={() => setIsInstallOpen(false)}
+              disabled={isInstalling}
+              aria-label="Close sheet"
+              className="ml-1"
+            >
+              <XIcon className="size-4" />
+            </Button>
+          </div>
+        </SheetPopup>
+      </Sheet>
+
+      {/* Import Skill Sheet */}
+      <Sheet open={isImportOpen} onOpenChange={setIsImportOpen}>
+        <SheetPopup
+          side="right"
+          showCloseButton={false}
+          className="w-[90vw] max-w-[90vw] sm:w-[460px] sm:max-w-[460px]"
+        >
+          <SheetHeader>
+            <SheetTitle>Import Skill</SheetTitle>
+            <SheetDescription>
               Upload an existing <code className="text-xs font-mono">SKILL.md</code> or paste
               markdown instructions with frontmatter.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogPanel className="flex flex-col gap-4 max-h-[65vh] overflow-y-auto">
+            </SheetDescription>
+          </SheetHeader>
+          <div className="flex flex-col gap-4 overflow-y-auto px-6 pb-6">
+            {/* The skill name decides the folder it lands in */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium">Skill Name</label>
+              <Input
+                placeholder="e.g. fast-code-auditor"
+                value={importName}
+                onChange={(e) => setImportName(e.target.value)}
+                className="h-8 text-xs"
+              />
+              <div className="flex items-center gap-1.5 rounded-lg border bg-muted/30 px-2.5 py-1.5">
+                <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                  Path
+                </span>
+                <code className="truncate font-mono text-2xs text-foreground">{importPath}</code>
+              </div>
+            </div>
+
             {/* File upload drag drop / input */}
             <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-input bg-muted/20 p-6 text-center hover:bg-muted/40 transition-colors">
               <UploadIcon className="size-8 text-muted-foreground/70 mb-2" />
@@ -996,8 +1688,8 @@ ${raw}
                 className="font-mono text-xs leading-relaxed"
               />
             </div>
-          </DialogPanel>
-          <DialogFooter>
+          </div>
+          <div className="mt-auto flex items-center justify-end gap-2 border-t bg-muted/20 px-6 py-4">
             <Button
               size="sm"
               variant="outline"
@@ -1010,7 +1702,7 @@ ${raw}
               size="sm"
               variant="default"
               onClick={handleExecuteImport}
-              disabled={isImporting || !importText.trim()}
+              disabled={isImporting || !importText.trim() || !importName.trim()}
             >
               {isImporting ? (
                 <>
@@ -1019,6 +1711,59 @@ ${raw}
                 </>
               ) : (
                 "Import & Save"
+              )}
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={() => setIsImportOpen(false)}
+              disabled={isImporting}
+              aria-label="Close sheet"
+              className="ml-1"
+            >
+              <XIcon className="size-4" />
+            </Button>
+          </div>
+        </SheetPopup>
+      </Sheet>
+
+      {/* Delete Global Skill Modal */}
+      <Dialog
+        open={!!globalSkillToDelete}
+        onOpenChange={(open) => !open && setGlobalSkillToDelete(null)}
+      >
+        <DialogPopup className="w-full sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-destructive">Remove Global Skill?</DialogTitle>
+            <DialogDescription>
+              <strong className="text-foreground">{globalSkillToDelete?.name}</strong> will be
+              removed from the global store{" "}
+              <code className="text-xs font-mono">~/.agents/skills</code>. Copies already enabled in
+              a project stay there.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setGlobalSkillToDelete(null)}
+              disabled={isDeletingGlobal}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={() => void handleDeleteGlobalSkill()}
+              disabled={isDeletingGlobal}
+            >
+              {isDeletingGlobal ? (
+                <>
+                  <Spinner size="sm" className="mr-1" />
+                  Removing...
+                </>
+              ) : (
+                "Remove Skill"
               )}
             </Button>
           </DialogFooter>

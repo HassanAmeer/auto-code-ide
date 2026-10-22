@@ -1,0 +1,16 @@
+{
+  "ios-design": {
+    "enabled": true
+  },
+  "skills": {
+    "enabled": false
+  },
+  "research": {
+    "enabled": true,
+    "fromGlobal": true
+  },
+  "skills-cli": {
+    "enabled": true,
+    "fromGlobal": true
+  }
+}
