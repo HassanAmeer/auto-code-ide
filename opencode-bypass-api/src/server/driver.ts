@@ -49,6 +49,7 @@ import {
   resolveChatEndpoint,
   type BypassChatMessage,
 } from "./bypass/client.ts";
+import { getActiveEngineSystemPrompt, executeActiveEnginePipeline } from "./engineBridge.ts";
 
 const DRIVER_KIND = ProviderDriverKind.make("opencodebypasssetup");
 const decodeSettings = Schema.decodeSync(OpenCodeBypassSetupSettings);
@@ -520,7 +521,15 @@ export const OpenCodeBypassSetupDriver: ProviderDriver<
                       promptText,
                       turnInput.runtimePolicy?.cwd ?? undefined,
                     );
+                    const projectCwd = turnInput.runtimePolicy?.cwd ?? "";
+                    const engineSystemPrompt = projectCwd
+                      ? getActiveEngineSystemPrompt(projectCwd)
+                      : "";
+
                     const chatMessages: BypassChatMessage[] = [
+                      ...(engineSystemPrompt
+                        ? [{ role: "system" as const, content: engineSystemPrompt }]
+                        : []),
                       ...(skillInstructions
                         ? [{ role: "system" as const, content: skillInstructions }]
                         : []),
@@ -676,9 +685,23 @@ export const OpenCodeBypassSetupDriver: ProviderDriver<
 
                     const finishedTime = yield* DateTime.now;
 
-                    // If model only returned reasoning/thinking and no separate assistant text,
-                    // promote reasoning to the message text so it is never empty!
-                    const finalText = accumulatedText || accumulatedReasoning;
+                    // Execute Active Engine Pipeline (Custom Engine or Codex CLI)
+                    // Automatically extracts generated files, writes them to disk in projectCwd,
+                    // runs git auto-commit, and links Live Preview.
+                    const rawFinalText = accumulatedText || accumulatedReasoning;
+                    let finalText = rawFinalText;
+
+                    if (projectCwd && rawFinalText) {
+                      try {
+                        const engineResult = executeActiveEnginePipeline(rawFinalText, projectCwd);
+                        finalText = engineResult.finalText;
+                      } catch (pipelineErr) {
+                        console.error(
+                          "[OpenCodeBypass] Active engine pipeline error:",
+                          pipelineErr,
+                        );
+                      }
+                    }
 
                     if (hasEmittedReasoning) {
                       yield* Queue.offer(eventsQueue, {
