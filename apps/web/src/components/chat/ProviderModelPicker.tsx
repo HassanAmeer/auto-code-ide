@@ -99,6 +99,8 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   onOpenChange?: (open: boolean) => void;
   onOpenProviderSetup?: (instanceId: ProviderInstanceId) => void;
   getModelDisabledReason?: (instanceId: ProviderInstanceId, model: string) => string | null;
+  /** Re-read a provider's model catalog and show it again. */
+  onRefreshModels?: ((instanceId: ProviderInstanceId) => void) | undefined;
   onInstanceModelChange: (instanceId: ProviderInstanceId, model: string) => void;
 }) {
   const composerFloatingLayerProps = useComposerMenuProps();
@@ -360,6 +362,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
           {...(props.getModelDisabledReason
             ? { getModelDisabledReason: props.getModelDisabledReason }
             : {})}
+          {...(props.onRefreshModels ? { onRefreshModels: props.onRefreshModels } : {})}
           onInstanceModelChange={handleInstanceModelChange}
         />
         {props.selectedModels === undefined ? (

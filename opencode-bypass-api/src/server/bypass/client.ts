@@ -13,6 +13,7 @@
 
 import { buildBypassHeaders, injectFingerprintTools, UPSTREAM_BASE } from "./fingerprint.ts";
 import { mintSession } from "./session.ts";
+import { getBypassDispatcher, DEFAULT_WARP_HTTP_PROXY, isWarpProxyAvailable } from "./proxy.ts";
 
 export const OPENCODE_BYPASS_ENABLED: boolean = process.env.OPENCODE_BYPASS_ENABLED !== "false";
 
@@ -131,11 +132,25 @@ export async function bypassChatStream(
   };
 
   const endpoint = resolveChatEndpoint(options.baseUrl);
-  const res = await fetch(endpoint, {
+
+  // If WARP/Privoxy is running, attach proxy/dispatcher to bypass datacenter IP 429
+  const dispatcher = await getBypassDispatcher();
+  const isWarp = await isWarpProxyAvailable();
+
+  const fetchOptions: any = {
     method: "POST",
     headers,
     body: JSON.stringify(body),
-  });
+  };
+
+  if (dispatcher) {
+    fetchOptions.dispatcher = dispatcher;
+  }
+  if (isWarp) {
+    fetchOptions.proxy = DEFAULT_WARP_HTTP_PROXY;
+  }
+
+  const res = await fetch(endpoint, fetchOptions);
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");

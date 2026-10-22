@@ -153,14 +153,9 @@ export function injectFingerprintTools(
     }
   }
 
-  let placeholderNote: string | null = null;
-  if (injectedNames.length > 0) {
-    const list = injectedNames.map((n) => `\`${n}\``).join(" or ");
-    placeholderNote =
-      injectedNames.length > 1
-        ? `Do not call the ${list} tools; they are placeholders that do nothing. Use the other tools you have been given instead.`
-        : `Do not call the ${list} tool; it is a placeholder that does nothing. Use the other tools you have been given instead.`;
-  }
+  // Strong system instruction to output direct code/text instead of triggering placeholder tools
+  const placeholderNote =
+    "IMPORTANT: You are in direct conversational code generation mode. Do NOT invoke any tools (like `read` or `shell`). Instead, write and present the complete code, solution and explanations directly in your text response.";
 
   return { tools: allTools, injectedNames, placeholderNote };
 }

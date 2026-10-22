@@ -10791,22 +10791,15 @@ export default function ChatView(props: ChatViewProps) {
     composerRef,
   ]);
 
+  /**
+   * No model is ever greyed out: every provider stays selectable so a failed
+   * selection can be replaced with any other provider's model right away. When
+   * the running thread cannot switch provider, the pick starts a new chat with
+   * the chosen model instead of refusing the click.
+   */
   const getModelDisabledReason = useCallback(
-    (instanceId: ProviderInstanceId, model: string): string | null => {
-      if (!activeThread) {
-        return null;
-      }
-      const reason = getStartedThreadModelChangeBlockReason({
-        providers: providerStatuses,
-        hasStartedSession: activeRuntime !== null,
-        supportsProviderSwitchingViaHandoff,
-        currentModelSelection: activeThread.modelSelection,
-        currentProviderInstanceId: activeRuntime?.providerInstanceId ?? null,
-        nextModelSelection: { instanceId, model },
-      });
-      return reason ? `${reason.description} Start a new thread to use this model.` : null;
-    },
-    [activeRuntime, activeThread, providerStatuses, supportsProviderSwitchingViaHandoff],
+    (_instanceId: ProviderInstanceId, _model: string): string | null => null,
+    [],
   );
 
   const onProviderModelSelect = useCallback(
@@ -10872,10 +10865,23 @@ export default function ChatView(props: ChatViewProps) {
         nextModelSelection,
       });
       if (modelChangeBlockReason) {
+        // The running thread keeps its provider, so the chosen model moves to a
+        // fresh chat. The pick is never refused.
+        saveLastSelectedModel(nextModelSelection);
+        setStickyComposerModelSelection(nextModelSelection);
+        void updateProjectScriptSettings({
+          environmentId,
+          input: {
+            patch: {
+              defaultModelSelection: nextModelSelection,
+            },
+          },
+        });
+        handleNewThreadInActiveProject();
         toastManager.add({
-          type: "warning",
-          title: modelChangeBlockReason.title,
-          description: modelChangeBlockReason.description,
+          type: "success",
+          title: `Switched to ${nextModelSelection.model}`,
+          description: `Started a new chat with this model. ${modelChangeBlockReason.description}`,
         });
         if (options?.focusComposer !== false) scheduleComposerFocus();
         return;

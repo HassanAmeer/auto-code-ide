@@ -2229,6 +2229,19 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     reportFailure: false,
   });
   const polishPrompt = useAtomCommand(serverEnvironment.polishPrompt);
+  /**
+   * Re-read a provider's model catalog so the picker shows the current list
+   * again instead of a stale snapshot.
+   */
+  const handleRefreshProviderModels = useCallback(
+    (instanceId: ProviderInstanceId) => {
+      void refreshProviders({
+        environmentId,
+        input: { instanceId, cwd: gitCwd ?? undefined, refreshModels: true },
+      });
+    },
+    [environmentId, gitCwd, refreshProviders],
+  );
   const [isPolishingPrompt, setIsPolishingPrompt] = useState(false);
   const [polishedPrompt, setPolishedPrompt] = useState<{
     original: string;
@@ -5695,7 +5708,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       <ProviderModelPicker
         compact={false}
         isComposerOwned
-        disabled={providerCatalogPending || isSendBusy}
         {...(routeKind === "draft" && supportsMultipleModels
           ? {
               ...(multipleModelSelections !== null
@@ -5774,6 +5786,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           : {})}
         onOpenChange={setIsComposerModelPickerOpen}
         getModelDisabledReason={getModelDisabledReason}
+        onRefreshModels={handleRefreshProviderModels}
         onInstanceModelChange={(instanceId, model) => {
           setMultipleModelSelections(null);
           onProviderModelSelect(instanceId, model);

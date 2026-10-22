@@ -194,6 +194,8 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
   onRequestClose?: () => void;
   onOpenProviderSetup?: (instanceId: ProviderInstanceId) => void;
   getModelDisabledReason?: (instanceId: ProviderInstanceId, model: string) => string | null;
+  /** Re-read a provider's model catalog and show it again. */
+  onRefreshModels?: ((instanceId: ProviderInstanceId) => void) | undefined;
   onInstanceModelChange: (instanceId: ProviderInstanceId, model: string) => void;
 }) {
   const {
@@ -201,6 +203,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
     modelOptionsByInstance,
     instanceEntries,
     getModelDisabledReason,
+    onRefreshModels,
     onInstanceModelChange,
     onToggleModel,
   } = props;
@@ -338,6 +341,28 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
     },
     [isRefreshingModels],
   );
+
+  // Reload the model catalog of the provider whose models are on screen.
+  const handleRefreshModels = useCallback(async () => {
+    if (isRefreshingModels) return;
+    if (currentCustomProvider) {
+      await refreshCustomProviderModels(currentCustomProvider);
+      return;
+    }
+    if (!onRefreshModels || selectedInstanceId === "favorites") return;
+    setIsRefreshingModels(true);
+    try {
+      onRefreshModels(selectedInstanceId);
+    } finally {
+      setIsRefreshingModels(false);
+    }
+  }, [
+    currentCustomProvider,
+    isRefreshingModels,
+    onRefreshModels,
+    refreshCustomProviderModels,
+    selectedInstanceId,
+  ]);
 
   const handleSelectInstance = useCallback(
     (instanceId: ProviderInstanceId | "favorites") => {
@@ -973,87 +998,87 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
               showSidebar && "border-l border-border/70",
             )}
           >
-            <div className="relative">
-              <ComboboxSearchInput
-                ref={searchInputRef}
-                placeholder="Search models..."
-                value={searchQuery}
-                className={currentCustomProvider ? "[&_input]:pe-7" : undefined}
-                onChange={(e) => {
-                  if (!isSearching) setSearchHeight(pickerContentRef.current?.offsetHeight ?? 0);
-                  setSearchQuery(e.target.value);
-                }}
-                onKeyDown={(e) => {
-                  if (
-                    showSidebar &&
-                    !e.altKey &&
-                    !e.ctrlKey &&
-                    !e.metaKey &&
-                    ((e.key === "ArrowLeft" && !e.shiftKey && searchQuery.length === 0) ||
-                      (e.key === "Tab" && e.shiftKey))
-                  ) {
-                    const sidebar = e.currentTarget
-                      .closest("[data-model-picker-content]")
-                      ?.querySelector("[data-model-picker-sidebar]");
-                    const button =
-                      sidebar?.querySelector<HTMLButtonElement>(
-                        'button[aria-pressed="true"]:not(:disabled)',
-                      ) ?? sidebar?.querySelector<HTMLButtonElement>("button:not(:disabled)");
-                    if (button) {
+            <div className="flex items-center gap-1.5">
+              <div className="relative min-w-0 flex-1">
+                <ComboboxSearchInput
+                  ref={searchInputRef}
+                  placeholder="Search models..."
+                  value={searchQuery}
+                  className={currentCustomProvider ? "[&_input]:pe-7" : undefined}
+                  onChange={(e) => {
+                    if (!isSearching) setSearchHeight(pickerContentRef.current?.offsetHeight ?? 0);
+                    setSearchQuery(e.target.value);
+                  }}
+                  onKeyDown={(e) => {
+                    if (
+                      showSidebar &&
+                      !e.altKey &&
+                      !e.ctrlKey &&
+                      !e.metaKey &&
+                      ((e.key === "ArrowLeft" && !e.shiftKey && searchQuery.length === 0) ||
+                        (e.key === "Tab" && e.shiftKey))
+                    ) {
+                      const sidebar = e.currentTarget
+                        .closest("[data-model-picker-content]")
+                        ?.querySelector("[data-model-picker-sidebar]");
+                      const button =
+                        sidebar?.querySelector<HTMLButtonElement>(
+                          'button[aria-pressed="true"]:not(:disabled)',
+                        ) ?? sidebar?.querySelector<HTMLButtonElement>("button:not(:disabled)");
+                      if (button) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        button.focus();
+                        return;
+                      }
+                    }
+                    if (e.key === "Escape") {
                       e.preventDefault();
                       e.stopPropagation();
-                      button.focus();
+                      props.onRequestClose?.();
                       return;
                     }
-                  }
-                  if (e.key === "Escape") {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    props.onRequestClose?.();
-                    return;
-                  }
-                  if (e.key === "Enter" && highlightedModelKeyRef.current) {
-                    (
-                      e as typeof e & { preventBaseUIHandler?: () => void }
-                    ).preventBaseUIHandler?.();
-                    e.preventDefault();
-                    e.stopPropagation();
-                    const legacyInstanceId = parseModelPickerLegacySectionKey(
-                      highlightedModelKeyRef.current,
-                    );
-                    if (legacyInstanceId) {
-                      toggleLegacySection(legacyInstanceId);
+                    if (e.key === "Enter" && highlightedModelKeyRef.current) {
+                      (
+                        e as typeof e & { preventBaseUIHandler?: () => void }
+                      ).preventBaseUIHandler?.();
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const legacyInstanceId = parseModelPickerLegacySectionKey(
+                        highlightedModelKeyRef.current,
+                      );
+                      if (legacyInstanceId) {
+                        toggleLegacySection(legacyInstanceId);
+                        return;
+                      }
+                      const model = parseModelPickerModelKey(highlightedModelKeyRef.current);
+                      if (model) {
+                        handleModelSelect(model.slug, model.instanceId, e.shiftKey);
+                      }
                       return;
                     }
-                    const model = parseModelPickerModelKey(highlightedModelKeyRef.current);
-                    if (model) {
-                      handleModelSelect(model.slug, model.instanceId, e.shiftKey);
-                    }
-                    return;
-                  }
-                  e.stopPropagation();
-                }}
-                onMouseDown={(e) => e.stopPropagation()}
-                onTouchStart={(e) => e.stopPropagation()}
-              />
-              {currentCustomProvider && (
-                <button
-                  type="button"
-                  title="Reload models from provider"
-                  aria-label="Reload models from provider"
-                  onClick={(e) => {
-                    e.preventDefault();
                     e.stopPropagation();
-                    void refreshCustomProviderModels(currentCustomProvider);
                   }}
-                  disabled={isRefreshingModels}
-                  className="absolute right-3 top-2.5 inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
-                >
-                  <RotateCwIcon
-                    className={cn("size-3.5", isRefreshingModels && "animate-spin text-primary")}
-                  />
-                </button>
-              )}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onTouchStart={(e) => e.stopPropagation()}
+                />
+              </div>
+              <button
+                type="button"
+                title="Reload models from provider"
+                aria-label="Reload models from provider"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  void handleRefreshModels();
+                }}
+                disabled={isRefreshingModels}
+                className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+              >
+                <RotateCwIcon
+                  className={cn("size-3.5", isRefreshingModels && "animate-spin text-primary")}
+                />
+              </button>
             </div>
 
             {/* Model list */}
