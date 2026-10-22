@@ -231,12 +231,45 @@ export function getAppModelOptionsForInstance(
   entry: ProviderInstanceEntry,
   selectedModel?: string | null,
 ): AppModelOption[] {
-  const options: AppModelOption[] = entry.models
-    .filter((model) => !model.isCustom)
-    .map(toAppModelOption);
+  // If this is OpenCode Bypass and cachedModelsText is present in settings, use those loaded models!
+  const instance = settings.providerInstances?.[entry.instanceId];
+  const config = instance?.config;
+  const cachedModelsText =
+    config !== null && typeof config === "object"
+      ? (config as Record<string, unknown>).cachedModelsText
+      : undefined;
+
+  let baseModels = entry.models.filter((model) => !model.isCustom);
+  if (
+    entry.driverKind === "opencodebypasssetup" &&
+    typeof cachedModelsText === "string" &&
+    cachedModelsText.trim()
+  ) {
+    const lines = cachedModelsText
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean);
+    if (lines.length > 0) {
+      baseModels = lines.map((slug) => {
+        const cleanName = slug
+          .replace(/-free$/, "")
+          .split("-")
+          .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+          .join(" ");
+        return {
+          slug,
+          name: slug.includes("free") ? `${cleanName} (Free)` : cleanName,
+          isCustom: false,
+          capabilities: null,
+        };
+      });
+    }
+  }
+
+  const options: AppModelOption[] = baseModels.map(toAppModelOption);
   const seen = new Set(options.map((option) => option.slug));
   const builtInModelSlugs = new Set(
-    Arr.filterMap(entry.models, (model) =>
+    Arr.filterMap(baseModels, (model) =>
       model.isCustom ? Result.failVoid : Result.succeed(model.slug),
     ),
   );

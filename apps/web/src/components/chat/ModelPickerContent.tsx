@@ -1,7 +1,7 @@
 import {
   ANTIGRAVITY_DEFAULT_MODEL,
+  ProviderDriverKind,
   type ProviderInstanceId,
-  type ProviderDriverKind,
   type ResolvedKeybindingsConfig,
 } from "@t3tools/contracts";
 import { resolveSelectableModel } from "@t3tools/shared/model";
@@ -44,7 +44,11 @@ import {
   resolveShortcutCommand,
   shortcutLabelForCommand,
 } from "../../keybindings";
-import { useClientSettings, useUpdateClientSettings } from "~/hooks/useSettings";
+import {
+  useClientSettings,
+  useUpdateClientSettings,
+  useUpdatePrimarySettings,
+} from "~/hooks/useSettings";
 import { cn } from "~/lib/utils";
 import { getVirtualizedScrollFadeClassName } from "../ui/scroll-area";
 import { TooltipProvider } from "../ui/tooltip";
@@ -287,6 +291,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
   const serverKeybindings = useAtomValue(primaryServerKeybindingsAtom);
   const keybindings = providedKeybindings ?? serverKeybindings;
   const updateSettings = useUpdateClientSettings();
+  const updatePrimarySettings = useUpdatePrimarySettings();
   const navigate = useNavigate();
 
   const focusSearchInput = useCallback(() => {
@@ -349,7 +354,56 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
       await refreshCustomProviderModels(currentCustomProvider);
       return;
     }
-    if (!onRefreshModels || selectedInstanceId === "favorites") return;
+    if (selectedInstanceId === "favorites") return;
+
+    // Special handling for OpenCode Bypass Setup: fetch live models and persist to settings!
+    const activeSelectedEntry = instanceEntries.find((e) => e.instanceId === selectedInstanceId);
+    if (activeSelectedEntry?.driverKind === "opencodebypasssetup") {
+      setIsRefreshingModels(true);
+      try {
+        const rawUrl =
+          ((activeSelectedEntry.snapshot as any)?.config as any)?.baseUrl ||
+          "https://opencode.ai/inference/v1";
+        const endpoint = `${rawUrl.replace(/\/+$/, "")}/models`;
+        const res = await fetch(endpoint, {
+          headers: { "User-Agent": "opencode/latest/2.0.26/cli" },
+        });
+        if (res.ok) {
+          const json = (await res.json()) as { data?: Array<{ id: string }> };
+          const list = (json.data ?? []).map((m) => m.id);
+          if (list.length > 0) {
+            const joined = list.join("\n");
+            const existingConfig =
+              (activeSelectedEntry.snapshot as any)?.config !== null &&
+              typeof (activeSelectedEntry.snapshot as any)?.config === "object"
+                ? ((activeSelectedEntry.snapshot as any).config as Record<string, unknown>)
+                : {};
+            updatePrimarySettings({
+              providerInstances: {
+                [selectedInstanceId as any]: {
+                  driver: ProviderDriverKind.make("opencodebypasssetup"),
+                  enabled: true,
+                  config: {
+                    ...existingConfig,
+                    cachedModelsText: joined,
+                  },
+                },
+              } as any,
+            });
+          }
+        }
+      } catch (e) {
+        console.warn("Failed to refresh bypass models directly:", e);
+      } finally {
+        if (onRefreshModels) {
+          onRefreshModels(selectedInstanceId);
+        }
+        setIsRefreshingModels(false);
+      }
+      return;
+    }
+
+    if (!onRefreshModels) return;
     setIsRefreshingModels(true);
     try {
       onRefreshModels(selectedInstanceId);
@@ -358,10 +412,12 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
     }
   }, [
     currentCustomProvider,
+    instanceEntries,
     isRefreshingModels,
     onRefreshModels,
     refreshCustomProviderModels,
     selectedInstanceId,
+    updatePrimarySettings,
   ]);
 
   const handleSelectInstance = useCallback(
