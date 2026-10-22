@@ -13,7 +13,8 @@
 
 import { buildBypassHeaders, injectFingerprintTools, UPSTREAM_BASE } from "./fingerprint.ts";
 import { mintSession } from "./session.ts";
-import { getBypassDispatcher, DEFAULT_WARP_HTTP_PROXY, isWarpProxyAvailable } from "./proxy.ts";
+import { getBypassDispatcher } from "./proxy.ts";
+import { fetch as undiciFetch } from "undici";
 
 export const OPENCODE_BYPASS_ENABLED: boolean = process.env.OPENCODE_BYPASS_ENABLED !== "false";
 
@@ -133,9 +134,8 @@ export async function bypassChatStream(
 
   const endpoint = resolveChatEndpoint(options.baseUrl);
 
-  // If WARP/Privoxy is running, attach proxy/dispatcher to bypass datacenter IP 429
+  // If WARP/Privoxy is running, attach dispatcher to bypass datacenter IP 429
   const dispatcher = await getBypassDispatcher();
-  const isWarp = await isWarpProxyAvailable();
 
   const fetchOptions: any = {
     method: "POST",
@@ -143,63 +143,103 @@ export async function bypassChatStream(
     body: JSON.stringify(body),
   };
 
+  let res: any;
   if (dispatcher) {
+    // When using undici ProxyAgent, we must use undiciFetch so the dispatcher is respected
     fetchOptions.dispatcher = dispatcher;
+    res = await undiciFetch(endpoint, fetchOptions);
+  } else {
+    res = await globalThis.fetch(endpoint, fetchOptions);
   }
-  if (isWarp) {
-    fetchOptions.proxy = DEFAULT_WARP_HTTP_PROXY;
-  }
-
-  const res = await fetch(endpoint, fetchOptions);
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`[opencode-bypass] HTTP ${res.status}: ${text.slice(0, 300)}`);
   }
 
-  const reader = res.body?.getReader();
-  if (!reader) throw new Error("[opencode-bypass] No response body");
-
   const decoder = new TextDecoder();
   let buffer = "";
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
+  // Handle both WHATWG ReadableStream and Node/undici ReadableStream
+  if (res.body && typeof (res.body as any).getReader === "function") {
+    const reader = (res.body as any).getReader();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
 
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed || !trimmed.startsWith("data:")) continue;
-      const data = trimmed.slice(5).trim();
-      if (data === "[DONE]") {
-        onDone?.(sessionId);
-        return;
-      }
-      try {
-        const chunk = JSON.parse(data) as {
-          choices?: Array<{
-            delta?: {
-              content?: string;
-              reasoning_content?: string;
-              reasoning?: string;
-              thought?: string;
-            };
-            text?: string;
-          }>;
-        };
-        const delta = chunk.choices?.[0]?.delta;
-        const text = delta?.content ?? chunk.choices?.[0]?.text ?? "";
-        const reasoning = delta?.reasoning_content ?? delta?.reasoning ?? delta?.thought;
-        if (text || reasoning) {
-          onChunk(text, reasoning);
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || !trimmed.startsWith("data:")) continue;
+        const data = trimmed.slice(5).trim();
+        if (data === "[DONE]") {
+          onDone?.(sessionId);
+          return;
         }
-      } catch {
-        // malformed chunk — skip
+        try {
+          const chunk = JSON.parse(data) as {
+            choices?: Array<{
+              delta?: {
+                content?: string;
+                reasoning_content?: string;
+                reasoning?: string;
+                thought?: string;
+              };
+              text?: string;
+            }>;
+          };
+          const delta = chunk.choices?.[0]?.delta;
+          const text = delta?.content ?? chunk.choices?.[0]?.text ?? "";
+          const reasoning = delta?.reasoning_content ?? delta?.reasoning ?? delta?.thought;
+          if (text || reasoning) {
+            onChunk(text, reasoning);
+          }
+        } catch {
+          // malformed chunk — skip
+        }
       }
     }
+  } else if (res.body && typeof (res.body as any)[Symbol.asyncIterator] === "function") {
+    for await (const chunk of res.body as any) {
+      buffer += typeof chunk === "string" ? chunk : decoder.decode(chunk, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || !trimmed.startsWith("data:")) continue;
+        const data = trimmed.slice(5).trim();
+        if (data === "[DONE]") {
+          onDone?.(sessionId);
+          return;
+        }
+        try {
+          const parsed = JSON.parse(data) as {
+            choices?: Array<{
+              delta?: {
+                content?: string;
+                reasoning_content?: string;
+                reasoning?: string;
+                thought?: string;
+              };
+              text?: string;
+            }>;
+          };
+          const delta = parsed.choices?.[0]?.delta;
+          const text = delta?.content ?? parsed.choices?.[0]?.text ?? "";
+          const reasoning = delta?.reasoning_content ?? delta?.reasoning ?? delta?.thought;
+          if (text || reasoning) {
+            onChunk(text, reasoning);
+          }
+        } catch {
+          // malformed chunk — skip
+        }
+      }
+    }
+  } else {
+    throw new Error("[opencode-bypass] No response body");
   }
 
   onDone?.(sessionId);
