@@ -625,7 +625,9 @@ export function ProviderInstanceCard({
   const accentColor = normalizeProviderAccentColor(instance.accentColor);
 
   const [isLoadingModels, setIsLoadingModels] = useState(false);
-  const [loadedModelsText, setLoadedModelsText] = useState("");
+  const [loadedModelsText, setLoadedModelsText] = useState(() => {
+    return readConfigString(instance.config, "cachedModelsText") ?? "";
+  });
   const [customModelInput, setCustomModelInput] = useState("");
   const { copyToClipboard } = useCopyToClipboard<{ providerName: string }>({
     onCopy: ({ providerName }) => {
@@ -1302,7 +1304,7 @@ export function ProviderInstanceCard({
                       }}
                     >
                       <PlusIcon className="mr-1.5 size-3.5" />
-                      Add Custom Model
+                      Custom
                     </Button>
 
                     <Button
@@ -1327,11 +1329,21 @@ export function ProviderInstanceCard({
                             data?: Array<{ id: string }>;
                           };
                           const list = (json.data ?? []).map((m) => m.id);
-                          setLoadedModelsText(list.join("\n"));
+                          const joined = list.join("\n");
+                          setLoadedModelsText(joined);
+                          // Save cached models to instance config permanently so they persist across reloads
+                          const nextConfig = nextConfigBlobWithValue(
+                            instance.config,
+                            "cachedModelsText",
+                            joined,
+                          );
+                          const { config: _omit, ...rest } = instance;
+                          onUpdate({ ...rest, config: nextConfig } as ProviderInstanceConfig);
+
                           toastManager.add({
                             type: "success",
-                            title: "Models loaded successfully",
-                            description: `${list.length} models fetched`,
+                            title: "Models loaded and saved",
+                            description: `${list.length} models fetched & persisted`,
                           });
                         } catch (err) {
                           toastManager.add({
@@ -1349,42 +1361,25 @@ export function ProviderInstanceCard({
                       ) : (
                         <RefreshCwIcon className="mr-1.5 size-3.5" />
                       )}
-                      Load Models
+                      Auto
                     </Button>
                   </div>
                 </div>
 
-                {/* Chota Textarea for Loaded Models */}
+                {/* Only the Textarea for Loaded Models */}
                 {loadedModelsText ? (
                   <div>
                     <label className="mb-1 block text-2xs font-medium text-muted-foreground">
                       Loaded Models ({loadedModelsText.split("\n").filter(Boolean).length}):
                     </label>
                     <Textarea
-                      rows={4}
+                      rows={6}
                       readOnly
                       value={loadedModelsText}
                       className="font-mono text-2xs w-full bg-muted/30"
                     />
                   </div>
                 ) : null}
-
-                {/* Models List */}
-                <ProviderModelsSection
-                  canManageCustomModels={!readOnly}
-                  canWritePreferences={canWriteSettings}
-                  instanceId={instanceId}
-                  driverKind={driverKind}
-                  models={modelsForDisplay}
-                  customModels={customModels}
-                  hiddenModels={hiddenModels}
-                  favoriteModels={favoriteModels}
-                  modelOrder={modelOrder}
-                  onChange={updateCustomModels}
-                  onHiddenModelsChange={onHiddenModelsChange}
-                  onFavoriteModelsChange={onFavoriteModelsChange}
-                  onModelOrderChange={onModelOrderChange}
-                />
               </div>
             ) : (
               <>
