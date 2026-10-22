@@ -430,9 +430,15 @@ export const OpenCodeBypassSetupDriver: ProviderDriver<
                   const turnOrdinal = PositiveInt.make(
                     Math.max(1, turnInput.providerTurnOrdinal ?? turnInput.runOrdinal ?? 1),
                   );
+                  const reasoningTurnItemId = TurnItemId.make(
+                    `bypass-item-reasoning-${turnInput.threadId}-${turnInput.runId}-${turnInput.attemptId}`,
+                  );
+                  const reasoningOrdinal = NonNegativeInt.make(turnOrdinal * 100);
                   const itemOrdinal = NonNegativeInt.make(turnOrdinal * 100 + 1);
 
                   let accumulatedText = "";
+                  let accumulatedReasoning = "";
+                  let hasEmittedReasoning = false;
 
                   const runTurn: Effect.Effect<void, never, never> = Effect.gen(function* () {
                     yield* Queue.offer(eventsQueue, {
@@ -536,11 +542,47 @@ export const OpenCodeBypassSetupDriver: ProviderDriver<
                             baseUrl: config.baseUrl,
                             messages: chatMessages,
                           },
-                          (chunkText) => {
-                            accumulatedText += chunkText;
+                          (chunkText, reasoningText) => {
+                            if (reasoningText) {
+                              accumulatedReasoning += reasoningText;
+                              hasEmittedReasoning = true;
+                            }
+                            if (chunkText) {
+                              accumulatedText += chunkText;
+                            }
                             const nowMs = Date.now();
                             if (nowMs - lastEmitted > 40) {
                               lastEmitted = nowMs;
+
+                              // If the model is outputting reasoning / thinking tokens
+                              if (hasEmittedReasoning) {
+                                const reasoningDone = accumulatedText.length > 0;
+                                Queue.offerUnsafe(eventsQueue, {
+                                  type: "turn_item.updated",
+                                  driver: DRIVER_KIND,
+                                  turnItem: {
+                                    id: reasoningTurnItemId,
+                                    threadId: turnInput.threadId,
+                                    runId: turnInput.runId,
+                                    nodeId: turnInput.rootNodeId,
+                                    providerThreadId: turnInput.providerThread.id,
+                                    providerTurnId,
+                                    nativeItemRef: null,
+                                    parentItemId: null,
+                                    ordinal: reasoningOrdinal,
+                                    status: reasoningDone ? "completed" : "running",
+                                    title: "Thinking",
+                                    startedAt: turnStartedAt,
+                                    completedAt: reasoningDone ? DateTime.makeUnsafe(nowMs) : null,
+                                    updatedAt: DateTime.makeUnsafe(nowMs),
+                                    type: "reasoning",
+                                    text: accumulatedReasoning,
+                                    streaming: !reasoningDone,
+                                  },
+                                });
+                              }
+
+                              // Output assistant message
                               Queue.offerUnsafe(eventsQueue, {
                                 type: "turn_item.updated",
                                 driver: DRIVER_KIND,
@@ -561,7 +603,9 @@ export const OpenCodeBypassSetupDriver: ProviderDriver<
                                   updatedAt: DateTime.makeUnsafe(nowMs),
                                   type: "assistant_message",
                                   messageId: assistantMessageId,
-                                  text: accumulatedText,
+                                  text:
+                                    accumulatedText ||
+                                    (hasEmittedReasoning && !accumulatedText ? "" : ""),
                                   streaming: true,
                                 },
                               });
@@ -611,6 +655,36 @@ export const OpenCodeBypassSetupDriver: ProviderDriver<
 
                     const finishedTime = yield* DateTime.now;
 
+                    // If model only returned reasoning/thinking and no separate assistant text,
+                    // promote reasoning to the message text so it is never empty!
+                    const finalText = accumulatedText || accumulatedReasoning;
+
+                    if (hasEmittedReasoning) {
+                      yield* Queue.offer(eventsQueue, {
+                        type: "turn_item.updated",
+                        driver: DRIVER_KIND,
+                        turnItem: {
+                          id: reasoningTurnItemId,
+                          threadId: turnInput.threadId,
+                          runId: turnInput.runId,
+                          nodeId: turnInput.rootNodeId,
+                          providerThreadId: turnInput.providerThread.id,
+                          providerTurnId,
+                          nativeItemRef: null,
+                          parentItemId: null,
+                          ordinal: reasoningOrdinal,
+                          status: "completed",
+                          title: "Thinking",
+                          startedAt: turnStartedAt,
+                          completedAt: finishedTime,
+                          updatedAt: finishedTime,
+                          type: "reasoning",
+                          text: accumulatedReasoning,
+                          streaming: false,
+                        },
+                      });
+                    }
+
                     yield* Queue.offer(eventsQueue, {
                       type: "message.updated",
                       driver: DRIVER_KIND,
@@ -620,7 +694,7 @@ export const OpenCodeBypassSetupDriver: ProviderDriver<
                         runId: turnInput.runId,
                         nodeId: turnInput.rootNodeId,
                         role: "assistant",
-                        text: accumulatedText,
+                        text: finalText,
                         attachments: [],
                         streaming: false,
                         createdBy: "agent",
@@ -650,7 +724,7 @@ export const OpenCodeBypassSetupDriver: ProviderDriver<
                         updatedAt: finishedTime,
                         type: "assistant_message",
                         messageId: assistantMessageId,
-                        text: accumulatedText,
+                        text: finalText,
                         streaming: false,
                       },
                     });
