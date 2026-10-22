@@ -1,5 +1,7 @@
 import type { ModelSelection, ProviderInstanceId } from "@t3tools/contracts";
 
+import { saveServerSetting } from "./serverSettingsSync";
+
 export const LAST_SELECTED_MODEL_STORAGE_KEY = "t3:last_selected_model";
 
 /**
@@ -37,14 +39,15 @@ export function saveLastSelectedModel(selection: ModelSelection | null | undefin
     return;
   }
   try {
-    window.localStorage.setItem(
-      LAST_SELECTED_MODEL_STORAGE_KEY,
-      JSON.stringify({
-        instanceId: selection.instanceId,
-        model: selection.model,
-        options: selection.options,
-      }),
-    );
+    const payload = {
+      instanceId: selection.instanceId,
+      model: selection.model,
+      options: selection.options,
+    };
+    window.localStorage.setItem(LAST_SELECTED_MODEL_STORAGE_KEY, JSON.stringify(payload));
+    // The server keeps the live copy, so the model follows the user to any
+    // other machine that opens the same environment.
+    void saveServerSetting(LAST_SELECTED_MODEL_STORAGE_KEY, payload);
   } catch {
     // Ignore quota or security errors
   }

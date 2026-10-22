@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { RefreshCwIcon } from "lucide-react";
 import { Button } from "~/components/ui/button";
-import { SettingsRow } from "~/components/ui/settings-row";
+import { SettingsRow } from "~/components/settings/settingsLayout";
 import { toastManager } from "~/components/ui/toast";
 
 export function OpenCodeBypassWarpControl({ readOnly = false }: { readOnly?: boolean }) {
