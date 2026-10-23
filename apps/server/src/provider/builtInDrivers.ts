@@ -33,7 +33,7 @@ import { OpenCodeDriver, type OpenCodeDriverEnv } from "@t3tools/provider-openco
 import {
   OpenCodeBypassSetupDriver,
   type OpenCodeBypassSetupDriverEnv,
-} from "@t3tools/provider-opencodebypasssetup/server";
+} from "./Drivers/OpenCodeBypassSetupDriverWrapper.ts";
 import { MuseDriver, type MuseDriverEnv } from "@t3tools/provider-muse/server";
 import { PiDriver, type PiDriverEnv } from "@t3tools/provider-pi/server";
 import { CustomDriver } from "./Drivers/CustomDriver.ts";
