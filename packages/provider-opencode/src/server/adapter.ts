@@ -3217,8 +3217,35 @@ export const makeOpenCodeAdapterV2 = Effect.fn("makeOpenCodeAdapterV2")(function
                   "OpenCode event stream has ended; reconnect the provider session before starting another turn.",
                 );
               }
-              const sessionId = nativeThreadId(turnInput.providerThread);
-              const state = threads.get(sessionId);
+              let rawSessionId = turnInput.providerThread.nativeThreadRef?.nativeId;
+              let sessionId: string;
+              if (
+                rawSessionId == null ||
+                rawSessionId.startsWith("pending:") ||
+                !rawSessionId.startsWith("ses_")
+              ) {
+                const ensured = yield* runtimeSession.ensureThread({
+                  threadId: turnInput.threadId,
+                  modelSelection: turnInput.modelSelection,
+                  runtimePolicy: turnInput.runtimePolicy,
+                  existingProviderThread: {
+                    ...turnInput.providerThread,
+                    nativeThreadRef: null,
+                  },
+                });
+                sessionId = nativeThreadId(ensured);
+              } else {
+                sessionId = rawSessionId;
+              }
+              let state = threads.get(sessionId);
+              if (state === undefined && sessionId.startsWith("ses_")) {
+                yield* Effect.result(
+                  runtimeSession.resumeThread({
+                    providerThread: turnInput.providerThread,
+                  }),
+                );
+                state = threads.get(sessionId);
+              }
               if (state === undefined) {
                 return yield* protocolError(`OpenCode session ${sessionId} is not registered`);
               }

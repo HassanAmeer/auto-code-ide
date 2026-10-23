@@ -2482,13 +2482,21 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (
         case "session.execution.interrupted":
           return yield* endExecution(state, turn, { status: "interrupted" });
         case "session.execution.failed": {
-          const errMessage = event.data.error.message;
+          const rawMessage = event.data.error.message;
+          const cleanErr =
+            extractUnderlyingErrorMessage(event.data.error) ??
+            extractUnderlyingErrorMessage(rawMessage) ??
+            rawMessage ??
+            "OpenCode execution failed";
           const statusCode =
-            extractStatusCode(event.data.error) ?? extractStatusCode(errMessage) ?? 500;
+            extractStatusCode(event.data.error) ??
+            extractStatusCode(rawMessage) ??
+            extractStatusCode(cleanErr) ??
+            500;
           return yield* endExecution(state, turn, {
             status: "failed",
             failure: makeProviderFailure({
-              message: errMessage,
+              message: cleanErr,
               code: statusCode ? String(statusCode) : event.data.error.type,
               class: "provider_error",
             }),
@@ -4038,8 +4046,37 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (
           // it does not hold the gate.
           const started = yield* exclusive(turnInput.providerThread)(
             Effect.gen(function* () {
-              const sessionId = yield* sessionIdOf(turnInput.providerThread);
-              const state = threads.get(sessionId);
+              let sessionIdResult = yield* Effect.result(sessionIdOf(turnInput.providerThread));
+              let sessionId =
+                sessionIdResult._tag === "Success" &&
+                !sessionIdResult.success.startsWith("pending:")
+                  ? sessionIdResult.success
+                  : null;
+              if (sessionId === null) {
+                const ensured = yield* runtime.ensureThread({
+                  threadId: turnInput.threadId,
+                  modelSelection: turnInput.modelSelection,
+                  runtimePolicy: turnInput.runtimePolicy,
+                  providerSessionId: turnInput.providerThread.providerSessionId ?? session.id,
+                  existingProviderThread: {
+                    ...turnInput.providerThread,
+                    nativeThreadRef: null,
+                  },
+                });
+                sessionId = yield* sessionIdOf(ensured);
+              }
+              let state = threads.get(sessionId);
+              if (state === undefined && sessionId.startsWith("ses_")) {
+                yield* Effect.result(
+                  runtime.resumeThread({
+                    providerThread: turnInput.providerThread,
+                    threadId: turnInput.threadId,
+                    modelSelection: turnInput.modelSelection,
+                    runtimePolicy: turnInput.runtimePolicy,
+                  }),
+                );
+                state = threads.get(sessionId);
+              }
               if (state === undefined) {
                 return yield* new ProviderAdapter.ProviderAdapterProtocolError({
                   driver: OPENCODE_PROVIDER,
