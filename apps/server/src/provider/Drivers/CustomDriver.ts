@@ -60,6 +60,17 @@ import type { ProviderTextGeneration } from "@t3tools/provider-core/server/textG
 import { AcpProviderCapabilitiesV2 } from "@t3tools/provider-acp/server/adapter";
 import { getThreadPreviewErrors } from "../../preview/ServerBrowser.ts";
 import { buildInvokedSkillInstructions, discoverCustomSkills } from "@t3tools/shared/agentSkills";
+import {
+  OpenCodeDriver,
+  type OpenCodeDriverEnv,
+  OpenCode2AdapterV2,
+  OpenCode2Server,
+  OpenCode2Client,
+  OpenCodeRuntime,
+} from "@t3tools/provider-opencode/server";
+import * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
+import { mergeProviderInstanceEnvironment } from "@t3tools/provider-core/server/instanceEnvironment";
+import type { AnyProviderDriver } from "@t3tools/provider-core/server/driver";
 
 // Allow HTTPS requests with IP addresses and self-signed certificates for custom providers
 if (typeof process !== "undefined" && process.env) {
@@ -2252,6 +2263,65 @@ ${userPrompt || "Continue generating from where you were interrupted"}`;
   };
 }
 
+export function syncCustomProviderToOpenCode(
+  instanceId: string,
+  displayName: string,
+  config: CustomDriverConfig,
+): void {
+  try {
+    const cleanId = String(instanceId).trim();
+    if (!cleanId) return;
+
+    let baseUrl = (config.baseUrl ?? "").trim().replace(/\/+$/, "");
+    if (!baseUrl) return;
+    baseUrl = baseUrl.replace(/\/chat\/completions\/?$/i, "").replace(/\/+$/, "");
+    if (baseUrl.includes("openrouter.ai")) {
+      baseUrl = "https://openrouter.ai/api/v1";
+    }
+
+    const apiKey = (config.apiKey ?? "").trim() || "no-key";
+    const modelsObj: Record<string, { name: string }> = {};
+
+    if (config.models && Array.isArray(config.models)) {
+      for (const m of config.models) {
+        if (m.id) {
+          modelsObj[m.id] = { name: m.name ?? m.id };
+        }
+      }
+    }
+
+    const targetPaths = [
+      "/root/all-ai-clis/third-party-provider/opencode.json",
+      NodePath.join(NodeOS.homedir(), ".config/opencode/opencode.json"),
+      NodePath.join(process.cwd(), "opencode.json"),
+    ];
+
+    for (const p of targetPaths) {
+      try {
+        if (NodeFS.existsSync(p)) {
+          const raw = NodeFS.readFileSync(p, "utf-8");
+          const json = JSON.parse(raw);
+          if (!json.provider) json.provider = {};
+          json.provider[cleanId] = {
+            npm: "@ai-sdk/openai-compatible",
+            name: displayName || cleanId,
+            options: {
+              baseURL: baseUrl,
+              apiKey: apiKey,
+            },
+            models: Object.keys(modelsObj).length > 0 ? modelsObj : { default: { name: cleanId } },
+          };
+          NodeFS.writeFileSync(p, JSON.stringify(json, null, 2), "utf-8");
+        }
+      } catch {
+        // ignore
+      }
+    }
+  } catch (err) {
+    console.error("Failed to sync custom provider to opencode.json:", err);
+  }
+}
+
 export function createCustomProviderInstance(
   input: ProviderDriverCreateInput<CustomDriverConfig>,
 ): ProviderInstance {
@@ -2260,6 +2330,7 @@ export function createCustomProviderInstance(
     instanceId: input.instanceId,
   });
   const displayName = input.displayName ?? "Custom Provider";
+  syncCustomProviderToOpenCode(String(input.instanceId), displayName, input.config);
   const rawSnapshot = makeCustomSnapshot(
     input.instanceId,
     displayName,
@@ -2441,15 +2512,79 @@ export function listFallbackCustomInstanceIds(): string[] {
 // Load persisted custom providers on startup
 loadPersistedCustomProviders();
 
-export const CustomDriver: ProviderDriver<CustomDriverConfig, never> = {
+export const CustomDriver: AnyProviderDriver<OpenCodeDriverEnv> = {
   driverKind: DRIVER,
   metadata: { displayName: "Custom Provider", supportsMultipleInstances: true },
   configSchema: CustomDriverSettingsSchema,
   defaultConfig: () => decodeCustomSettings({}),
   create: (input) =>
-    Effect.sync(() => {
-      const instance = createCustomProviderInstance(input);
+    Effect.gen(function* () {
+      const openCodeRuntime = yield* OpenCodeRuntime.OpenCodeRuntime;
+      const httpClient = yield* HttpClient.HttpClient;
+      const host = yield* ProviderHost.ProviderHost;
+      const processEnv = mergeProviderInstanceEnvironment(input.environment);
+
+      const displayName = input.displayName ?? "Custom Provider";
+      syncCustomProviderToOpenCode(String(input.instanceId), displayName, input.config);
+
+      const continuationIdentity = defaultProviderContinuationIdentity({
+        driverKind: DRIVER,
+        instanceId: input.instanceId,
+      });
+
+      const rawSnapshot = makeCustomSnapshot(
+        input.instanceId,
+        displayName,
+        input.config,
+        input.enabled,
+      );
+      const snapshot = makeCustomServerProviderShape(rawSnapshot);
+      const textGeneration = makeUnsupportedTextGeneration();
+
+      let orchestrationAdapter: ProviderAdapterV2Shape;
+      try {
+        const openCode2Server = yield* OpenCode2Server.make({
+          binaryPath: "",
+          serverUrl: "http://127.0.0.1:4099",
+          serverPassword: "",
+          directory: host.paths.cwd,
+          environment: processEnv,
+        }).pipe(
+          Effect.provideService(OpenCodeRuntime.OpenCodeRuntime, openCodeRuntime),
+          Effect.provideService(
+            OpenCode2Client.OpenCode2Client,
+            yield* OpenCode2Client.make.pipe(
+              Effect.provideService(HttpClient.HttpClient, httpClient),
+            ),
+          ),
+        );
+
+        orchestrationAdapter = yield* OpenCode2AdapterV2.make(input.instanceId, DRIVER).pipe(
+          Effect.provideService(OpenCode2Server.OpenCode2Server, openCode2Server),
+        );
+      } catch (adapterErr) {
+        orchestrationAdapter = makeCustomAdapterV2(input.instanceId, input.config);
+      }
+
+      const instance: ProviderInstance = {
+        instanceId: input.instanceId,
+        driverKind: DRIVER,
+        continuationIdentity,
+        displayName,
+        accentColor: input.accentColor,
+        enabled: input.enabled,
+        snapshot,
+        snapshotForCwd: (cwd: string) =>
+          Effect.sync(() => ({
+            ...rawSnapshot,
+            skills: discoverCustomSkills(cwd),
+          })),
+        orchestrationAdapter,
+        textGeneration,
+      };
+
       fallbackInstances.set(String(input.instanceId), instance);
+      fallbackInstances.set(String(input.instanceId).replace(/^custom_/, ""), instance);
       return instance;
     }),
 };

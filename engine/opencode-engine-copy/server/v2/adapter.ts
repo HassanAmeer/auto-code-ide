@@ -51,6 +51,7 @@ import {
   type OrchestrationV2UserInputQuestion,
   type ModelSelection,
   type ProviderApprovalDecision,
+  type ProviderDriverKind,
   type ProviderInstanceId,
   type RunId,
   type RuntimeRequestId,
@@ -840,13 +841,84 @@ const turnTokenUsage = (turn: ActiveTurn, status: OrchestrationV2ProviderTurn["s
  * The adapter for one provider instance. It talks to the instance's
  * {@link OpenCode2Server.OpenCode2Server}, which the driver builds from the instance's settings.
  */
-export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: ProviderInstanceId) {
+export const make = Effect.fn("OpenCode2Adapter.make")(function* (
+  instanceId: ProviderInstanceId,
+  overrideDriver?: ProviderDriverKind,
+) {
   const server = yield* OpenCode2Server.OpenCode2Server;
   const idAllocator = yield* IdAllocator.IdAllocatorV2;
   const host = yield* ProviderHost.ProviderHost;
   const continuationRequests = yield* ProviderContinuationRequests.ProviderContinuationRequests;
   const crypto = yield* Crypto.Crypto;
-  const driver = OPENCODE_PROVIDER;
+  const driver = overrideDriver ?? OPENCODE_PROVIDER;
+  const contextWindows = new Map<string, Map<string, number>>();
+  const globalDiscoveredModels = new Map<
+    string,
+    { providerID: string; id: string; name?: string }
+  >();
+
+  const resolveModelRef = (
+    selection: ProviderAdapter.ProviderAdapterV2TurnInput["modelSelection"],
+  ): Model.Ref => {
+    const rawModel = (selection?.model || "").trim();
+    const variant = getModelSelectionStringOptionValue(selection, "variant");
+    const makeRef = (providerID: string, id: string) =>
+      Model.Ref.make({
+        providerID: Provider.ID.make(providerID),
+        id: Model.ID.make(id),
+        ...(variant === undefined ? {} : { variant: Model.VariantID.make(variant) }),
+      });
+
+    // 1. Direct match in globalDiscoveredModels: `${providerID}/${id}`
+    const exact = globalDiscoveredModels.get(rawModel);
+    if (exact) {
+      return makeRef(exact.providerID, exact.id);
+    }
+
+    // 2. If selection.instanceId matches a providerID, check if model exists under that provider
+    for (const m of globalDiscoveredModels.values()) {
+      if (
+        (m.providerID === selection.instanceId ||
+          String(selection.instanceId).includes(m.providerID)) &&
+        (m.id === rawModel || m.name === rawModel)
+      ) {
+        return makeRef(m.providerID, m.id);
+      }
+    }
+
+    // 3. Search for model ID matching rawModel across any provider
+    for (const m of globalDiscoveredModels.values()) {
+      if (m.id === rawModel || m.name === rawModel) {
+        return makeRef(m.providerID, m.id);
+      }
+    }
+
+    // 4. Try stripping provider prefix if present (e.g. cheaprouter/antseed/glm-5.3-flash -> antseed/glm-5.3-flash)
+    const stripped = rawModel.replace(/^[a-zA-Z0-9_\-\.]+\//, "");
+    if (stripped !== rawModel) {
+      for (const m of globalDiscoveredModels.values()) {
+        if (m.id === stripped) {
+          return makeRef(m.providerID, m.id);
+        }
+      }
+    }
+
+    // 5. If rawModel has slash and matches a parsed provider
+    const parsed = OpenCodeRuntime.parseOpenCodeModelSlug(rawModel);
+    if (parsed !== null) {
+      return makeRef(parsed.providerID, parsed.modelID);
+    }
+
+    // 6. Fallback: if selection.instanceId is custom or bypass, use it
+    const inst = String(selection.instanceId || "");
+    if (inst && inst !== "opencode" && inst !== "opencodebypasssetup") {
+      return makeRef(inst, rawModel);
+    }
+
+    // 7. Ultimate fallback: default to cheaprouter or opencode
+    return makeRef("cheaprouter", rawModel || "antseed/glm-5.3-flash");
+  };
+
   const mcpServerNameFor = (threadId: string) =>
     t3McpServerName(threadId).pipe(Effect.provideService(Crypto.Crypto, crypto));
 
@@ -2963,6 +3035,11 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
                   `${model.providerID}/${model.id}`,
                   model.limit.input ?? model.limit.context,
                 );
+                globalDiscoveredModels.set(`${model.providerID}/${model.id}`, {
+                  providerID: model.providerID,
+                  id: model.id,
+                  name: model.name,
+                });
               }
             }),
           ),
@@ -3676,7 +3753,7 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
             });
           }
           yield* readModelsOnce(threadInput.runtimePolicy.cwd);
-          const model = modelRef(threadInput.modelSelection);
+          const model = resolveModelRef(threadInput.modelSelection);
           if (model === undefined) {
             return yield* new ProviderAdapter.ProviderAdapterProtocolError({
               driver: OPENCODE_PROVIDER,
@@ -3851,7 +3928,7 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
               }
               // A turn T3 will not run still starts and fails, so the refusal is what
               // the user reads.
-              const model = modelRef(turnInput.modelSelection);
+              const model = resolveModelRef(turnInput.modelSelection);
               if (model === undefined) {
                 yield* begin;
                 return yield* finishTurn(state, {
