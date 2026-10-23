@@ -338,9 +338,7 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
             <span className="text-sm font-medium text-zinc-300 group-hover/header:text-zinc-100 transition-colors">
               Subagents
             </span>
-            <span className="inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-zinc-800/80 text-zinc-400 font-mono text-2xs">
-              {subagentsCount}
-            </span>
+            <span className="text-zinc-500 font-mono text-xs">{subagentsCount}</span>
           </div>
           <ChevronDownIcon
             className={cn(
@@ -400,9 +398,7 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
             <span className="text-sm font-medium text-zinc-300 group-hover/header:text-zinc-100 transition-colors">
               Background Tasks
             </span>
-            <span className="inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-zinc-800/80 text-zinc-400 font-mono text-2xs">
-              {tasksCount}
-            </span>
+            <span className="text-zinc-500 font-mono text-xs">{tasksCount}</span>
           </div>
           <ChevronDownIcon
             className={cn(

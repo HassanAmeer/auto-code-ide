@@ -2447,7 +2447,14 @@ export const layerDbInspectRoute = HttpRouter.add(
       query?: string;
       table?: string;
     };
-    const targetCwd = (bodyJson?.cwd?.trim() || process.cwd()).replace(/\\/g, "/");
+    const rawCwd = bodyJson?.cwd?.trim() || process.cwd();
+    const targetCwd = NodePath.resolve(rawCwd);
+    if (!NodeFS.existsSync(targetCwd) || !NodeFS.statSync(targetCwd).isDirectory()) {
+      return HttpServerResponse.jsonUnsafe({
+        ok: false,
+        error: `Workspace directory not found: ${targetCwd}`,
+      });
+    }
 
     // 1. Search for SQLite database files
     const commonSqliteRelativePaths = [
@@ -2516,8 +2523,16 @@ export const layerDbInspectRoute = HttpRouter.add(
 
         let sampleRows: any[] = [];
         if (bodyJson?.table) {
+          const tableName = bodyJson.table.trim();
+          if (!/^[a-zA-Z0-9_]+$/.test(tableName)) {
+            return HttpServerResponse.jsonUnsafe({
+              ok: false,
+              error:
+                "Invalid table name. Only alphanumeric characters and underscores are allowed.",
+            });
+          }
           try {
-            sampleRows = db.prepare(`SELECT * FROM "${bodyJson.table}" LIMIT 10`).all();
+            sampleRows = db.prepare(`SELECT * FROM "${tableName}" LIMIT 10`).all();
           } catch (err: any) {
             sampleRows = [{ error: err?.message || String(err) }];
           }
@@ -2525,8 +2540,8 @@ export const layerDbInspectRoute = HttpRouter.add(
 
         let customQueryResult: any = null;
         if (bodyJson?.query?.trim()) {
-          const q = bodyJson.query.trim();
-          if (/^select\b/i.test(q)) {
+          const q = bodyJson.query.trim().replace(/;+$/, "").trim();
+          if (/^select\b/i.test(q) && !q.includes(";")) {
             try {
               customQueryResult = db.prepare(q).all();
             } catch (err: any) {
@@ -2534,7 +2549,7 @@ export const layerDbInspectRoute = HttpRouter.add(
             }
           } else {
             customQueryResult = {
-              error: "Security restriction: Only read-only SELECT queries are allowed.",
+              error: "Security restriction: Only a single read-only SELECT query is allowed.",
             };
           }
         }
@@ -2652,7 +2667,14 @@ export const layerMcpSyncRoute = HttpRouter.add(
       cwd?: string;
     };
 
-    const targetCwd = (bodyJson?.cwd?.trim() || process.cwd()).replace(/\\/g, "/");
+    const rawCwd = bodyJson?.cwd?.trim() || process.cwd();
+    const targetCwd = NodePath.resolve(rawCwd);
+    if (!NodeFS.existsSync(targetCwd) || !NodeFS.statSync(targetCwd).isDirectory()) {
+      return HttpServerResponse.jsonUnsafe({
+        ok: false,
+        error: `Workspace directory not found: ${targetCwd}`,
+      });
+    }
     const servers = Array.isArray(bodyJson?.servers) ? bodyJson.servers : [];
 
     const mcpServersRecord: Record<string, any> = {};
@@ -2739,14 +2761,53 @@ export const layerWebFetchRoute = HttpRouter.add(
       url?: string;
     };
 
-    if (!bodyJson?.url || !/^https?:\/\//i.test(bodyJson.url.trim())) {
+    if (!bodyJson?.url || typeof bodyJson.url !== "string") {
       return HttpServerResponse.jsonUnsafe({
         ok: false,
         error: "Valid HTTP/HTTPS url is required.",
       });
     }
 
-    const targetUrl = bodyJson.url.trim();
+    const trimmedUrl = bodyJson.url.trim();
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(trimmedUrl);
+    } catch {
+      return HttpServerResponse.jsonUnsafe({
+        ok: false,
+        error: "Invalid URL format.",
+      });
+    }
+
+    if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+      return HttpServerResponse.jsonUnsafe({
+        ok: false,
+        error: "Only HTTP and HTTPS protocols are allowed.",
+      });
+    }
+
+    const hostname = parsedUrl.hostname.toLowerCase();
+    const isPrivateOrInternal =
+      hostname === "localhost" ||
+      hostname.endsWith(".localhost") ||
+      hostname.endsWith(".local") ||
+      hostname.endsWith(".internal") ||
+      hostname === "0.0.0.0" ||
+      hostname === "::1" ||
+      /^127\.\d+\.\d+\.\d+$/.test(hostname) ||
+      /^10\.\d+\.\d+\.\d+$/.test(hostname) ||
+      /^192\.168\.\d+\.\d+$/.test(hostname) ||
+      /^172\.(1[6-9]|2\d|3[01])\.\d+\.\d+$/.test(hostname) ||
+      /^169\.254\.\d+\.\d+$/.test(hostname);
+
+    if (isPrivateOrInternal) {
+      return HttpServerResponse.jsonUnsafe({
+        ok: false,
+        error: "Access to private or local network addresses is prohibited.",
+      });
+    }
+
+    const targetUrl = parsedUrl.toString();
 
     try {
       try {

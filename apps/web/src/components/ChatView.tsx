@@ -9472,33 +9472,43 @@ export default function ChatView(props: ChatViewProps) {
       messageTextForSend = inspectRes.markdown;
     } else if (isWebSearchSlashCommand(messageTextForSend)) {
       const { query } = parseWebSearchSlashCommand(messageTextForSend);
-      if (query) {
-        toastManager.add({ type: "neutral", title: "Searching the web via Brave Search MCP..." });
-        const mcpServers = getMcpServers();
-        const braveServer = mcpServers.find(
-          (s) => s.enabled && s.name.toLowerCase().includes("brave"),
-        );
-        const braveApiKey = braveServer?.headers?.find((h) => h.key === "BRAVE_API_KEY")?.value;
-        const searchRes = await searchBraveMcp(query, braveApiKey);
-        if (searchRes.success && searchRes.results.length > 0) {
-          const items = searchRes.results
-            .map((r, i) => `${i + 1}. **${r.title}**\n   URL: ${r.url}\n   Summary: ${r.snippet}`)
-            .join("\n\n");
-          messageTextForSend = `[Live Web Search via Brave Search MCP]\nQuery: "${query}"\n\n${items}\n\nDirectives for AI Assistant:\n- Use these search results to answer the query: "${query}".\n- Provide the explanation in Roman Urdu.`;
-        } else {
-          messageTextForSend = `[Live Web Search via Brave Search MCP]\nQuery: "${query}"\n\n⚠️ No direct results returned. (You can also add a free BRAVE_API_KEY in Settings -> MCP for high-speed live searching).`;
-        }
+      if (!query) {
+        toastManager.add({
+          type: "neutral",
+          title: "Please provide a search query: /web <query>",
+        });
+        return;
+      }
+      toastManager.add({ type: "neutral", title: "Searching the web via Brave Search MCP..." });
+      const mcpServers = getMcpServers();
+      const braveServer = mcpServers.find(
+        (s) => s.enabled && s.name.toLowerCase().includes("brave"),
+      );
+      const braveApiKey = braveServer?.headers?.find((h) => h.key === "BRAVE_API_KEY")?.value;
+      const searchRes = await searchBraveMcp(query, braveApiKey);
+      if (searchRes.success && searchRes.results.length > 0) {
+        const items = searchRes.results
+          .map((r, i) => `${i + 1}. **${r.title}**\n   URL: ${r.url}\n   Summary: ${r.snippet}`)
+          .join("\n\n");
+        messageTextForSend = `[Live Web Search via Brave Search MCP]\nQuery: "${query}"\n\n${items}\n\nDirectives for AI Assistant:\n- Use these search results to answer the query: "${query}".\n- Provide the explanation in Roman Urdu.`;
+      } else {
+        messageTextForSend = `[Live Web Search via Brave Search MCP]\nQuery: "${query}"\n\n⚠️ No direct results returned. (You can also add a free BRAVE_API_KEY in Settings -> MCP for high-speed live searching).`;
       }
     } else if (isFetchSlashCommand(messageTextForSend)) {
       const { url } = parseFetchSlashCommand(messageTextForSend);
-      if (url) {
-        toastManager.add({ type: "neutral", title: "Fetching webpage via Fetch MCP..." });
-        const fetchRes = await fetchUrlMcp(url);
-        if (fetchRes.success && fetchRes.text) {
-          messageTextForSend = `[Webpage Content via Fetch MCP: ${url}]\nTitle: ${fetchRes.title || url}\n\n${fetchRes.text}\n\nDirectives for AI Assistant:\n- Summarize or analyze the content from this page.\n- Provide the explanation in Roman Urdu.`;
-        } else {
-          messageTextForSend = `[Fetch MCP Notice: ${url}]\n⚠️ Could not fetch page content: ${fetchRes.error || "Unknown error"}`;
-        }
+      if (!url) {
+        toastManager.add({
+          type: "neutral",
+          title: "Please provide a valid URL: /fetch <url>",
+        });
+        return;
+      }
+      toastManager.add({ type: "neutral", title: "Fetching webpage via Fetch MCP..." });
+      const fetchRes = await fetchUrlMcp(url);
+      if (fetchRes.success && fetchRes.text) {
+        messageTextForSend = `[Webpage Content via Fetch MCP: ${url}]\nTitle: ${fetchRes.title || url}\n\n${fetchRes.text}\n\nDirectives for AI Assistant:\n- Summarize or analyze the content from this page.\n- Provide the explanation in Roman Urdu.`;
+      } else {
+        messageTextForSend = `[Fetch MCP Notice: ${url}]\n⚠️ Could not fetch page content: ${fetchRes.error || "Unknown error"}`;
       }
     }
 
