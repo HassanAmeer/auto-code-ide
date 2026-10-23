@@ -3485,11 +3485,32 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (
           );
         if (added) state.mcp = wanted;
       }
+      let projectRules: string | undefined;
+      try {
+        const candidateRulesFiles = [
+          NodePath.join(directory, ".autocode", "rules.md"),
+          NodePath.join(directory, "AGENTS.md"),
+          NodePath.join(directory, "CLAUDE.md"),
+        ];
+        for (const candidate of candidateRulesFiles) {
+          if (NodeFS.existsSync(candidate)) {
+            const rawRules = NodeFS.readFileSync(candidate, "utf-8").trim();
+            if (rawRules.length > 0) {
+              projectRules = `<project_rules file="${NodePath.basename(candidate)}">\n${rawRules}\n</project_rules>`;
+              break;
+            }
+          }
+        }
+      } catch {
+        // Ignore file read errors
+      }
+
       const instructions = [
         buildRuntimeInstructions({ harness: "OpenCode", model: turnInput.modelSelection.model }),
+        projectRules,
         t3OrchestrationSystemPrompt(state.mcp !== undefined, true),
       ]
-        .filter((part) => part !== undefined && part.length > 0)
+        .filter((part): part is string => part !== undefined && part.length > 0)
         .join("\n\n");
       if (instructions !== state.instructions) {
         yield* client.session.instructions.entry.put({

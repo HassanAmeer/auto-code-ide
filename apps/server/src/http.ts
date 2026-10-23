@@ -2045,6 +2045,7 @@ export const layerFsSaveRoute = HttpRouter.add(
     }
     const content = bodyJson.content ?? "";
     try {
+      NodeFS.mkdirSync(NodePath.dirname(resolved), { recursive: true });
       NodeFS.writeFileSync(resolved, content, "utf-8");
       return HttpServerResponse.jsonUnsafe({ ok: true, path: resolved });
     } catch (err: any) {

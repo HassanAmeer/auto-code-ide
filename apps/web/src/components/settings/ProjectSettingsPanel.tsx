@@ -45,6 +45,7 @@ import {
 } from "./ProjectFaviconPickerDialog";
 import { ProjectActionsSettings } from "./ProjectActionsSettings";
 import { ProjectDefaultsSettings } from "./ProjectDefaultsSettings";
+import { ProjectAiRulesSettings } from "./ProjectAiRulesSettings";
 import { projectGroupTitleNeedsUpdate } from "./ProjectSettingsPanel.logic";
 import { useSettingsProjectGroups } from "./useSettingsProjectGroups";
 
@@ -562,6 +563,11 @@ function ProjectDetail({
             }
           />
         </SettingsSection>
+        <ProjectAiRulesSettings
+          projectKey={group.projectKey}
+          workspaceRoot={representative?.workspaceRoot}
+          projectName={group.displayName}
+        />
         <ProjectDefaultsSettings category="project" />
         <ProjectActionsSettings />
         {hasMultipleCheckouts ? checkoutChoices : null}
