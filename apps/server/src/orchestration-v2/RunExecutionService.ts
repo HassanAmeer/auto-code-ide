@@ -54,6 +54,16 @@ import {
   makeProviderFailure,
   makeProviderFailureTurnItem,
 } from "@t3tools/provider-core/server/failure";
+import {
+  createAiModelLogId,
+  formatAiModelLogTime,
+  getAiModelLogByRunId,
+  recordAiModelLog,
+  updateAiModelLog,
+  extractStatusCode,
+  extractStatusText,
+  extractUnderlyingErrorMessage,
+} from "@t3tools/provider-core/server/aiModelLog";
 import * as RunFinalizationService from "./RunFinalizationService.ts";
 
 export interface ProviderEventRoutingState {
@@ -1435,57 +1445,87 @@ export const layer: Layer.Layer<
             : input.session.startTurn(turnInput);
           yield* Effect.andThen(shouldStart, startTurn).pipe(
             Effect.catchCause((cause) =>
-              Effect.logError("orchestration V2 provider turn start failed", {
-                runId: input.run.id,
-                cause,
-              }).pipe(
-                Effect.andThen(Fiber.interrupt(providerEventFiber)),
-                Effect.andThen(Ref.get(latestProviderThread)),
-                Effect.flatMap((providerThread) =>
-                  Ref.get(latestTurnItemOrdinal).pipe(
-                    Effect.flatMap((latestItemOrdinal) =>
-                      Ref.get(openRunOwnedSubagents).pipe(
-                        Effect.flatMap((openSubagents) =>
-                          writeFinalRunEvents({
-                            run: input.run,
-                            rootNode: input.rootNode,
-                            checkpointScope: input.checkpointScope,
-                            providerThread,
-                            attempt: input.attempt,
-                            // Checked in the write transaction, not by another
-                            // read that can fail like the one before the start.
-                            writeIfRunCurrent: {
-                              activeAttemptId: input.attempt.id,
-                              expectedStatus: "running",
-                            },
-                            openRunOwnedSubagents: openSubagents,
-                            terminal: makeFailedTerminalEvent(
-                              (() => {
-                                const startCause = Cause.squash(cause);
-                                const startMsg =
-                                  startCause instanceof Error
-                                    ? startCause.message
-                                    : typeof startCause === "object" &&
-                                        startCause !== null &&
-                                        "message" in startCause
-                                      ? String((startCause as any).message)
-                                      : undefined;
-                                return makeProviderFailure({
-                                  cause: startCause,
-                                  message: startMsg,
-                                  class: Exit.isFailure(shouldStart) ? "unknown" : "provider_error",
-                                });
-                              })(),
-                              latestItemOrdinal + 1,
-                            ),
-                            failureItemPersisted: false,
-                            refreshAfterTurn,
-                          }),
-                        ),
-                      ),
-                    ),
+              Effect.gen(function* () {
+                const startCause = Cause.squash(cause);
+                const cleanErr =
+                  extractUnderlyingErrorMessage(startCause) ??
+                  (startCause instanceof Error ? startCause.message : String(startCause));
+                const statusCode = extractStatusCode(startCause) ?? 500;
+                const statusText = extractStatusText(statusCode) ?? "Provider Turn Start Error";
+
+                // Always ensure AI model log is recorded / updated
+                const existingLog = getAiModelLogByRunId(input.run.id);
+                if (existingLog) {
+                  updateAiModelLog(existingLog.id, {
+                    state: "error",
+                    status: statusCode,
+                    statusText,
+                    error: cleanErr,
+                    errorType: "turn_start_failure",
+                  });
+                } else {
+                  const now = DateTime.toEpochMillis(yield* DateTime.now);
+                  const promptText = input.message.text;
+                  recordAiModelLog({
+                    id: createAiModelLogId(),
+                    timestamp: now,
+                    timeFormatted: formatAiModelLogTime(now),
+                    threadId: input.run.threadId,
+                    runId: input.run.id,
+                    provider: input.session.driver,
+                    providerInstanceId: input.run.providerInstanceId,
+                    model: input.modelSelection.model,
+                    baseUrl: "",
+                    endpoint: "/session/prompt",
+                    requestHeaders: {},
+                    apiKeyMasked: "(internal)",
+                    userPrompt: promptText,
+                    messages: [{ role: "user", content: promptText }],
+                    status: statusCode,
+                    statusText,
+                    durationMs: 0,
+                    state: "error",
+                    error: cleanErr,
+                    errorType: "turn_start_failure",
+                  });
+                }
+
+                yield* Effect.logError("orchestration V2 provider turn start failed", {
+                  runId: input.run.id,
+                  error: cleanErr,
+                  statusCode,
+                  cause: Cause.pretty(cause),
+                });
+                yield* Fiber.interrupt(providerEventFiber);
+                const providerThread = yield* Ref.get(latestProviderThread);
+                const latestItemOrdinal = yield* Ref.get(latestTurnItemOrdinal);
+                const openSubagents = yield* Ref.get(openRunOwnedSubagents);
+                yield* writeFinalRunEvents({
+                  run: input.run,
+                  rootNode: input.rootNode,
+                  checkpointScope: input.checkpointScope,
+                  providerThread,
+                  attempt: input.attempt,
+                  // Checked in the write transaction, not by another
+                  // read that can fail like the one before the start.
+                  writeIfRunCurrent: {
+                    activeAttemptId: input.attempt.id,
+                    expectedStatus: "running",
+                  },
+                  openRunOwnedSubagents: openSubagents,
+                  terminal: makeFailedTerminalEvent(
+                    makeProviderFailure({
+                      cause: startCause,
+                      message: cleanErr,
+                      code: statusCode ? String(statusCode) : null,
+                      class: Exit.isFailure(shouldStart) ? "unknown" : "provider_error",
+                    }),
+                    latestItemOrdinal + 1,
                   ),
-                ),
+                  failureItemPersisted: false,
+                  refreshAfterTurn,
+                });
+              }).pipe(
                 Effect.mapError(
                   (writeCause) =>
                     new RunExecutionStartError({

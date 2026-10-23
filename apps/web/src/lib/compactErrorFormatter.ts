@@ -29,7 +29,7 @@ export function extractSingleLineDetail(rawText: string | null | undefined): str
   const parts = clean.split(/(?::\s*|—\s*)/);
   if (parts.length > 2) {
     const lastPart = parts[parts.length - 1]?.trim();
-    if (lastPart && lastPart.length > 12) {
+    if (lastPart && lastPart.length > 8 && !/^(run|error|failed)$/i.test(lastPart)) {
       return lastPart;
     }
   }
@@ -95,7 +95,7 @@ export function parseErrorDetails(
     if (
       modelMatch &&
       modelMatch[1] &&
-      !/^(response|timed|stream|turn|a|the|failed|error)$/i.test(modelMatch[1])
+      !/^(response|timed|stream|turn|a|the|failed|error|run)$/i.test(modelMatch[1])
     ) {
       detectedModel = modelMatch[1];
     }

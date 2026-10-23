@@ -75,6 +75,9 @@ import {
   maskAiApiKey,
   recordAiModelLog,
   updateAiModelLog,
+  extractStatusCode,
+  extractStatusText,
+  extractUnderlyingErrorMessage,
 } from "@t3tools/provider-core/server/aiModelLog";
 import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import {
@@ -2086,14 +2089,21 @@ export const makeOpenCodeAdapterV2 = Effect.fn("makeOpenCodeAdapterV2")(function
                     .trim();
             const failure = terminal?.failure ?? null;
             const completedAtMillis = DateTime.toEpochMillis(completedAt);
+            const isFailed = status === "failed";
+            const errMessage = isFailed ? failure?.message : undefined;
+            const statusCode = isFailed
+              ? (extractStatusCode(failure?.code) ?? extractStatusCode(errMessage) ?? 500)
+              : 200;
+            const statusText = extractStatusText(statusCode) ?? (isFailed ? "Error" : "OK");
+
             for (const id of turn.aiLogIds) {
               updateAiModelLog(id, {
-                status: status === "failed" ? 500 : 200,
-                statusText: status,
+                status: statusCode,
+                statusText,
                 ...(turn.aiLogStartedAt === null
                   ? {}
                   : { durationMs: Math.max(0, completedAtMillis - turn.aiLogStartedAt) }),
-                state: status === "failed" ? "error" : "completed",
+                state: isFailed ? "error" : "completed",
                 ...(responseText.length > 0 ? { responseBody: responseText } : {}),
                 ...(failure === null
                   ? {}

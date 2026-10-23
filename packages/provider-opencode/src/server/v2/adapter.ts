@@ -90,6 +90,9 @@ import {
   formatAiModelLogTime,
   recordAiModelLog,
   updateAiModelLog,
+  extractStatusCode,
+  extractStatusText,
+  extractUnderlyingErrorMessage,
 } from "@t3tools/provider-core/server/aiModelLog";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import {
@@ -1245,6 +1248,12 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (
       entry.text = update(entry.text);
       if (kind === "text") turn.aiLogTexts.set(nativeId, entry.text);
       else turn.aiLogReasoningTexts.set(nativeId, entry.text);
+      for (const id of turn.aiLogIds) {
+        updateAiModelLog(id, {
+          state: "streaming",
+          responseBody: entry.text,
+        });
+      }
       if (completed) turn.texts.delete(nativeId);
       else turn.texts.set(nativeId, entry);
       if (entry.text.length === 0) return;
@@ -1841,17 +1850,24 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (
           Array.from(turn.aiLogTexts.values()).join("\n\n").trim() ||
           Array.from(turn.aiLogReasoningTexts.values()).join("\n\n").trim();
         const completedAtMillis = DateTime.toEpochMillis(completedAt);
+        const isFailed = terminal.status === "failed";
+        const errMessage = isFailed ? terminal.failure.message : undefined;
+        const statusCode = isFailed
+          ? (extractStatusCode(terminal.failure.code) ?? extractStatusCode(errMessage) ?? 500)
+          : 200;
+        const statusText = extractStatusText(statusCode) ?? (isFailed ? "Error" : "OK");
+
         for (const id of turn.aiLogIds) {
           updateAiModelLog(id, {
-            status: terminal.status === "failed" ? 500 : 200,
-            statusText: terminal.status,
+            status: statusCode,
+            statusText,
             ...(turn.aiLogStartedAt === null
               ? {}
               : { durationMs: Math.max(0, completedAtMillis - turn.aiLogStartedAt) }),
-            state: terminal.status === "failed" ? "error" : "completed",
+            state: isFailed ? "error" : "completed",
             ...(responseText.length > 0 ? { responseBody: responseText } : {}),
-            ...(terminal.status === "failed"
-              ? { error: terminal.failure.message, errorType: terminal.failure.class }
+            ...(isFailed
+              ? { error: errMessage, errorType: terminal.failure.class ?? "provider_error" }
               : {}),
           });
         }
@@ -2465,15 +2481,19 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (
           });
         case "session.execution.interrupted":
           return yield* endExecution(state, turn, { status: "interrupted" });
-        case "session.execution.failed":
+        case "session.execution.failed": {
+          const errMessage = event.data.error.message;
+          const statusCode =
+            extractStatusCode(event.data.error) ?? extractStatusCode(errMessage) ?? 500;
           return yield* endExecution(state, turn, {
             status: "failed",
             failure: makeProviderFailure({
-              message: event.data.error.message,
-              code: event.data.error.type,
+              message: errMessage,
+              code: statusCode ? String(statusCode) : event.data.error.type,
               class: "provider_error",
             }),
           });
+        }
         default:
           return;
       }
@@ -3676,6 +3696,17 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (
       input: { readonly endpointPath: string; readonly text: string },
     ) =>
       Effect.gen(function* () {
+        const endpoint = `${connection.url.replace(/\/+$/, "")}${input.endpointPath}`;
+        if (turn.aiLogIds.length > 0) {
+          for (const id of turn.aiLogIds) {
+            updateAiModelLog(id, {
+              endpoint,
+              userPrompt: input.text.length > 0 ? input.text : "(Empty message)",
+              messages: [{ role: "user", content: input.text }],
+            });
+          }
+          return;
+        }
         const startedAt = DateTime.toEpochMillis(yield* DateTime.now);
         const aiLogId = createAiModelLogId();
         turn.aiLogIds.push(aiLogId);
@@ -3690,7 +3721,7 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (
           providerInstanceId: instanceId,
           model: turn.input.modelSelection.model,
           baseUrl: connection.url,
-          endpoint: `${connection.url.replace(/\/+$/, "")}${input.endpointPath}`,
+          endpoint,
           requestHeaders: { "Content-Type": "application/json" },
           apiKeyMasked: "(local server)",
           userPrompt: input.text.length > 0 ? input.text : "(Empty message)",
@@ -3963,8 +3994,31 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (
       // `/compact` is its own turn, which `startTurn` sends as `session.compact`.
       compactThread: (turnInput) =>
         runtime.startTurn({ ...turnInput, message: { ...turnInput.message, text: "/compact" } }),
-      startTurn: (turnInput) =>
-        Effect.gen(function* () {
+      startTurn: (turnInput) => {
+        let aiLogId = "";
+        let turnStartedAt = 0;
+        return Effect.gen(function* () {
+          turnStartedAt = DateTime.toEpochMillis(yield* DateTime.now);
+          aiLogId = createAiModelLogId();
+          const userPromptText = promptText(turnInput);
+          const initialEndpoint = `${connection.url.replace(/\/+$/, "")}/session/prompt`;
+          recordAiModelLog({
+            id: aiLogId,
+            timestamp: turnStartedAt,
+            timeFormatted: formatAiModelLogTime(turnStartedAt),
+            threadId: turnInput.threadId,
+            ...(turnInput.runId === null ? {} : { runId: turnInput.runId }),
+            provider: "OpenCode",
+            providerInstanceId: instanceId,
+            model: turnInput.modelSelection.model,
+            baseUrl: connection.url,
+            endpoint: initialEndpoint,
+            requestHeaders: { "Content-Type": "application/json" },
+            apiKeyMasked: "(local server)",
+            userPrompt: userPromptText.length > 0 ? userPromptText : "(Empty message)",
+            messages: [{ role: "user", content: userPromptText }],
+            state: "pending",
+          });
           // A lost stream is reconnecting: wait for it rather than prompt into
           // a dead stream, and refuse the turn before any request if it gave up.
           // Waited out before the session's gate, so a rollback or fork is not
@@ -4078,6 +4132,8 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (
               if (stagedReverts.has(sessionId)) yield* clearRevert(sessionId);
               yield* prepareTurn(sessionId, state, turnInput);
               const turn = yield* begin;
+              turn.aiLogIds.push(aiLogId);
+              if (turn.aiLogStartedAt === null) turn.aiLogStartedAt = turnStartedAt;
               turn.unsent = true;
               // An execution OpenCode is running on its own takes this prompt at
               // its next step, so this turn is that execution from here on.
@@ -4120,6 +4176,26 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (
             ),
           );
         }).pipe(
+          Effect.tapError((cause) =>
+            Effect.gen(function* () {
+              const nowMillis = DateTime.toEpochMillis(yield* DateTime.now);
+              const cleanErr =
+                extractUnderlyingErrorMessage(cause) ??
+                (cause instanceof Error ? cause.message : String(cause));
+              const statusCode = extractStatusCode(cause) ?? 500;
+              const statusText = extractStatusText(statusCode) ?? "Start Turn Error";
+              if (aiLogId) {
+                updateAiModelLog(aiLogId, {
+                  state: "error",
+                  status: statusCode,
+                  statusText,
+                  durationMs: Math.max(0, nowMillis - turnStartedAt),
+                  error: cleanErr,
+                  errorType: (cause as any)?._tag ?? "turn_start_error",
+                });
+              }
+            }),
+          ),
           Effect.mapError((cause) =>
             isProviderAdapterError(cause)
               ? cause
@@ -4131,7 +4207,8 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (
                   cause,
                 }),
           ),
-        ),
+        );
+      },
       steerTurn: (steerInput) =>
         Effect.gen(function* () {
           const sessionId = yield* sessionIdOf(steerInput.providerThread);

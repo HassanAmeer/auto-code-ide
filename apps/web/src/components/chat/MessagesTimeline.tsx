@@ -3093,6 +3093,7 @@ function CupertinoTimelineErrorCard({
   rawError,
   errorType,
   explicitModel,
+  statusCode: explicitStatusCode,
   isWarning,
   timestamp,
   visibility,
@@ -3106,6 +3107,7 @@ function CupertinoTimelineErrorCard({
   rawError: string;
   errorType?: string | undefined;
   explicitModel?: string | null | undefined;
+  statusCode?: string | undefined;
   isWarning?: boolean | undefined;
   timestamp?: ReactNode | undefined;
   visibility?: "local" | "inherited" | "synthetic" | undefined;
@@ -3123,11 +3125,15 @@ function CupertinoTimelineErrorCard({
 
   const errorInfo = parseErrorDetails(rawError, explicitModel);
 
-  const displayStatusCode = errorInfo.statusCode
-    ? errorInfo.statusCode.startsWith("HTTP") || errorInfo.statusCode === "Timeout"
-      ? errorInfo.statusCode
-      : `HTTP ${errorInfo.statusCode}`
-    : "Error";
+  const displayStatusCode = explicitStatusCode
+    ? explicitStatusCode.startsWith("HTTP") || explicitStatusCode === "Timeout"
+      ? explicitStatusCode
+      : `HTTP ${explicitStatusCode}`
+    : errorInfo.statusCode
+      ? errorInfo.statusCode.startsWith("HTTP") || errorInfo.statusCode === "Timeout"
+        ? errorInfo.statusCode
+        : `HTTP ${errorInfo.statusCode}`
+      : "Error";
 
   const resolvedType =
     errorType || (isWarning ? "Usage limit reached" : errorInfo.shortReason || "Provider error");
@@ -3346,10 +3352,16 @@ function CupertinoErrorRow({
     }
   };
 
+  const runModel = item.runId
+    ? ctx.runs?.find((r) => r.id === item.runId)?.modelSelection?.model
+    : undefined;
+
   return (
     <CupertinoTimelineErrorCard
       rawError={presentation.detail || item.failure.message}
       errorType={presentation.label}
+      explicitModel={runModel}
+      statusCode={item.failure.code ?? undefined}
       isWarning={presentation.tone === "warning"}
       visibility={visibility}
       sourceThreadId={sourceThreadId}

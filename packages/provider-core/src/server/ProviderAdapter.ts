@@ -43,6 +43,7 @@ import type {
   ProviderSelectionTransitionInput,
   ProviderSelectionTransitionPlan,
 } from "./selectionTransition.ts";
+import { extractUnderlyingErrorMessage } from "./aiModelLog.ts";
 
 export const ProviderAdapterV2RuntimePolicy = Schema.Struct({
   runtimeMode: RuntimeMode,
@@ -182,6 +183,10 @@ export class ProviderAdapterOpenSessionError extends Schema.TaggedError<Provider
   },
 ) {
   override get message(): string {
+    const underlying = extractUnderlyingErrorMessage(this.cause);
+    if (underlying) {
+      return underlying;
+    }
     return `Failed to open ${this.driver} provider session ${this.providerSessionId}.`;
   }
 }
@@ -209,6 +214,10 @@ export class ProviderAdapterResumeThreadError extends Schema.TaggedError<Provide
   },
 ) {
   override get message(): string {
+    const underlying = extractUnderlyingErrorMessage(this.cause);
+    if (underlying) {
+      return underlying;
+    }
     return `Failed to resume ${this.driver} provider thread ${this.providerThreadId}.`;
   }
 }
@@ -277,6 +286,10 @@ export class ProviderAdapterTurnStartError extends Schema.TaggedError<ProviderAd
   },
 ) {
   override get message(): string {
+    const underlying = extractUnderlyingErrorMessage(this.cause);
+    if (underlying) {
+      return underlying;
+    }
     return `Failed to start run ${this.runId} on ${this.driver} provider thread ${this.providerThreadId}.`;
   }
 }

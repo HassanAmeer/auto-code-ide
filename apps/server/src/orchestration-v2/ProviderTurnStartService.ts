@@ -47,6 +47,16 @@ import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as ProjectionStore from "./ProjectionStore.ts";
 import * as ProviderSessionManager from "./ProviderSessionManager.ts";
 import { makeProviderFailure } from "@t3tools/provider-core/server/failure";
+import {
+  createAiModelLogId,
+  formatAiModelLogTime,
+  getAiModelLogByRunId,
+  recordAiModelLog,
+  updateAiModelLog,
+  extractStatusCode,
+  extractStatusText,
+  extractUnderlyingErrorMessage,
+} from "@t3tools/provider-core/server/aiModelLog";
 import * as RunExecutionService from "./RunExecutionService.ts";
 import * as RuntimePolicy from "./RuntimePolicy.ts";
 import {
@@ -559,7 +569,47 @@ export const layer: Layer.Layer<
         readonly error: Error;
       }) =>
         Effect.gen(function* () {
-          const nestedCause = "cause" in failed.error ? failed.error.cause : undefined;
+          const cleanErr =
+            extractUnderlyingErrorMessage(failed.error) ??
+            (failed.error instanceof Error ? failed.error.message : String(failed.error));
+          const statusCode = extractStatusCode(failed.error) ?? 500;
+          const statusText = extractStatusText(statusCode) ?? failed.title;
+
+          const existingLog = getAiModelLogByRunId(run.id);
+          if (existingLog) {
+            updateAiModelLog(existingLog.id, {
+              state: "error",
+              status: statusCode,
+              statusText,
+              error: cleanErr,
+              errorType: failed.signal,
+            });
+          } else {
+            const now = DateTime.toEpochMillis(yield* DateTime.now);
+            recordAiModelLog({
+              id: createAiModelLogId(),
+              timestamp: now,
+              timeFormatted: formatAiModelLogTime(now),
+              threadId: projection.thread.id,
+              runId: run.id,
+              provider: providerThread.driver ?? "OpenCode",
+              providerInstanceId: run.providerInstanceId ?? "",
+              model: run.modelSelection?.model ?? "unknown",
+              baseUrl: "",
+              endpoint: "/turn/start",
+              requestHeaders: {},
+              apiKeyMasked: "(internal)",
+              userPrompt: userText,
+              messages: [{ role: "user", content: userText }],
+              status: statusCode,
+              statusText,
+              durationMs: 0,
+              state: "error",
+              error: cleanErr,
+              errorType: failed.signal,
+            });
+          }
+
           yield* settleRunBeforeStart({
             signal: failed.signal,
             status: "failed",
@@ -571,12 +621,8 @@ export const layer: Layer.Layer<
               title: failed.title,
               failure: makeProviderFailure({
                 cause: failed.error,
-                message:
-                  nestedCause instanceof Error
-                    ? nestedCause.message
-                    : typeof nestedCause === "string"
-                      ? nestedCause
-                      : failed.error.message,
+                message: cleanErr,
+                code: statusCode ? String(statusCode) : null,
                 class: "provider_error",
               }),
             },
