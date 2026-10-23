@@ -47,6 +47,7 @@ import { ThreadDetailsPrRows } from "./chat/ThreadDetailsPrRows";
 import { parsePullRequestReference } from "../pullRequestReference";
 import { getSourceControlPresentation } from "../sourceControlPresentation";
 import { useComposerMenuProps } from "./chat/composerEventScope";
+import { pushToGithub, gitPull, gitFetch } from "~/lib/gitOperations";
 import {
   deriveLocalBranchNameFromRemoteRef,
   resolveBranchTriggerLabel,
@@ -398,14 +399,34 @@ export function BranchToolbarBranchSelector({
       if (!api) return;
       event.preventDefault();
       event.stopPropagation();
-      const items: ContextMenuItem<"copy-branch-name">[] = [
+      const items: ContextMenuItem<
+        "push-github" | "git-pull" | "git-fetch" | "copy-branch-name"
+      >[] = [
+        { id: "push-github", label: "Push to GitHub (Auto Commit & Push)", icon: "upload" },
+        { id: "git-pull", label: "Git Pull", icon: "download" },
+        { id: "git-fetch", label: "Git Fetch", icon: "refresh-cw" },
         { id: "copy-branch-name", label: "Copy branch name", icon: "copy" },
       ];
       void api.contextMenu.show(items, { x: event.clientX, y: event.clientY }).then((action) => {
-        if (action === "copy-branch-name") copyBranchName(branchName);
+        if (!action) return;
+        if (action === "copy-branch-name") {
+          copyBranchName(branchName);
+          return;
+        }
+        const targetCwd = branchCwd ?? activeProjectCwd;
+        const projectName = activeProject?.title ?? "Project";
+        if (!targetCwd) return;
+
+        if (action === "push-github") {
+          void pushToGithub({ cwd: targetCwd, projectName });
+        } else if (action === "git-pull") {
+          void gitPull(targetCwd, projectName);
+        } else if (action === "git-fetch") {
+          void gitFetch(targetCwd, projectName);
+        }
       });
     },
-    [copyBranchName],
+    [activeProject?.title, activeProjectCwd, branchCwd, copyBranchName],
   );
 
   const runBranchAction = (action: () => Promise<void>) => {

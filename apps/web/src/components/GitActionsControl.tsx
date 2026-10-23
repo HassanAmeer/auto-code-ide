@@ -1595,7 +1595,11 @@ export default function GitActionsControl({
   const openDialogForMenuItem = (item: GitActionMenuItem) => {
     if (item.disabled) return;
     if (item.dialogAction === "push") {
-      void runGitActionWithToast({ action: "push" });
+      if (gitStatusForActions?.hasWorkingTreeChanges) {
+        void runGitActionWithToast({ action: "commit_push" });
+      } else {
+        void runGitActionWithToast({ action: "push" });
+      }
       return;
     }
     if (item.dialogAction === "create_pr") {
@@ -1605,6 +1609,20 @@ export default function GitActionsControl({
     setExcludedFiles(new Set());
     setIsEditingFiles(false);
     setIsCommitDialogOpen(true);
+  };
+
+  const runDialogCommitAndPushAction = () => {
+    if (!isCommitDialogOpen) return;
+    const commitMessage = dialogCommitMessage.trim();
+    setIsCommitDialogOpen(false);
+    setDialogCommitMessage("");
+    setExcludedFiles(new Set());
+    setIsEditingFiles(false);
+    void runGitActionWithToast({
+      action: "commit_push",
+      ...(commitMessage ? { commitMessage } : {}),
+      ...(!allSelected ? { filePaths: selectedFiles.map((f) => f.path) } : {}),
+    });
   };
 
   const runDialogAction = () => {
@@ -1729,6 +1747,21 @@ export default function GitActionsControl({
           </MenuItem>
         );
       })}
+      {gitStatusForActions &&
+      (gitStatusForActions.hasWorkingTreeChanges || gitStatusForActions.aheadCount > 0) ? (
+        <MenuItem
+          density={presentation === "menu" ? "touch" : "default"}
+          disabled={isGitActionRunning || !canWriteSourceControl}
+          onClick={() => {
+            void runGitActionWithToast({
+              action: gitStatusForActions.hasWorkingTreeChanges ? "commit_push" : "push",
+            });
+          }}
+        >
+          <CloudUploadIcon />
+          <MenuItemLabel>Auto Commit & Push</MenuItemLabel>
+        </MenuItem>
+      ) : null}
       {canPublishRepository ? (
         <MenuItem
           density={presentation === "menu" ? "touch" : "default"}
@@ -2146,11 +2179,19 @@ export default function GitActionsControl({
               Commit on new branch
             </Button>
             <Button
+              variant="outline"
               size="sm"
               disabled={!canWriteSourceControl || noneSelected}
               onClick={runDialogAction}
             >
               Commit
+            </Button>
+            <Button
+              size="sm"
+              disabled={!canWriteSourceControl || noneSelected}
+              onClick={runDialogCommitAndPushAction}
+            >
+              Commit & Push
             </Button>
           </DialogFooter>
         </DialogPopup>

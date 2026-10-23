@@ -79,16 +79,19 @@ import {
   PlusIcon,
   SparklesIcon,
   FileArchiveIcon,
+  MoreHorizontalIcon,
   SettingsIcon,
   ShieldQuestionIcon,
   SquarePenIcon,
   TerminalIcon,
   Undo2Icon,
+  UploadCloudIcon,
   XIcon,
 } from "lucide-react";
 import { projectCreateModalStore } from "./project/projectCreateModalStore";
 import { projectUploadStore } from "~/state/projectUploadProgress";
 import { downloadProjectZip } from "~/lib/projectZipUtils";
+import { pushToGithub, gitPull, gitFetch, forcePull } from "~/lib/gitOperations";
 import {
   memo,
   useCallback,
@@ -2765,6 +2768,76 @@ export default function Sidebar() {
     [openProjectSettings],
   );
 
+  const handleProjectContextMenu = useCallback(
+    (event: ReactMouseEvent<HTMLElement>, projectGroup: SidebarProjectSnapshot) => {
+      event.preventDefault();
+      event.stopPropagation();
+      suppressNextScopeChangeRef.current = true;
+      const api = readLocalApi();
+      if (!api) return;
+
+      const wsRoot = projectGroup.workspaceRoot || projectGroup.memberProjects[0]?.workspaceRoot;
+
+      void (async () => {
+        const clicked = await api.contextMenu.show(
+          [
+            { id: "push-github", label: "Push to GitHub (Auto Commit & Push)", icon: "upload" },
+            { id: "git-pull", label: "Git Pull", icon: "download" },
+            { id: "git-fetch", label: "Git Fetch", icon: "refresh-cw" },
+            {
+              id: "git-force-pull",
+              label: "Force Pull (Reset Hard)",
+              destructive: true,
+              icon: "rotate-ccw",
+            },
+            { id: "download-zip", label: "Download ZIP", icon: "archive" },
+            { id: "project-settings", label: "Project settings", icon: "settings" },
+          ],
+          { x: event.clientX, y: event.clientY },
+        );
+
+        if (!clicked) return;
+
+        switch (clicked) {
+          case "push-github":
+            if (wsRoot) {
+              void pushToGithub({ cwd: wsRoot, projectName: projectGroup.displayName });
+            }
+            break;
+          case "git-pull":
+            if (wsRoot) {
+              void gitPull(wsRoot, projectGroup.displayName);
+            }
+            break;
+          case "git-fetch":
+            if (wsRoot) {
+              void gitFetch(wsRoot, projectGroup.displayName);
+            }
+            break;
+          case "git-force-pull":
+            if (wsRoot) {
+              void forcePull(wsRoot, projectGroup.displayName);
+            }
+            break;
+          case "download-zip":
+            if (wsRoot) {
+              downloadProjectZip(wsRoot, projectGroup.displayName);
+              toastManager.add({
+                type: "info",
+                title: "Downloading Project ZIP...",
+                description: `Preparing ${projectGroup.displayName}.zip archive for download.`,
+              });
+            }
+            break;
+          case "project-settings":
+            openProjectSettings(projectGroup);
+            break;
+        }
+      })();
+    },
+    [openProjectSettings],
+  );
+
   // Keep a dropped row at its destination while its server applies the
   // lifecycle command and any order-key writes. The next pickup waits for
   // this hold so a second drop cannot replace an unconfirmed placement.
@@ -5134,7 +5207,7 @@ export default function Sidebar() {
                             hideIndicator
                             value={item}
                             onContextMenu={(event) => {
-                              if (project) handleProjectSettings(event, project);
+                              if (project) handleProjectContextMenu(event, project);
                             }}
                           >
                             {project ? (
@@ -5152,6 +5225,43 @@ export default function Sidebar() {
                             ) : null}
                             {project ? (
                               <div className="ml-auto flex items-center gap-0.5">
+                                <Button
+                                  size="icon-xs"
+                                  variant="ghost-muted"
+                                  tabIndex={-1}
+                                  aria-hidden="true"
+                                  title={`Push ${project.displayName} to GitHub (Auto Commit & Push)`}
+                                  className="text-sidebar-muted-foreground hover:text-emerald-400"
+                                  onPointerDown={(event) => event.stopPropagation()}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    const wsRoot =
+                                      project.workspaceRoot ||
+                                      project.memberProjects[0]?.workspaceRoot;
+                                    if (wsRoot) {
+                                      void pushToGithub({
+                                        cwd: wsRoot,
+                                        projectName: project.displayName,
+                                      });
+                                    }
+                                  }}
+                                >
+                                  <UploadCloudIcon className="size-3.5 text-emerald-400" />
+                                </Button>
+                                <Button
+                                  size="icon-xs"
+                                  variant="ghost-muted"
+                                  tabIndex={-1}
+                                  aria-hidden="true"
+                                  title={`More options for ${project.displayName}`}
+                                  className="text-sidebar-muted-foreground hover:text-sidebar-foreground"
+                                  onPointerDown={(event) => event.stopPropagation()}
+                                  onClick={(event) => {
+                                    handleProjectContextMenu(event, project);
+                                  }}
+                                >
+                                  <MoreHorizontalIcon className="size-3.5" />
+                                </Button>
                                 <Button
                                   size="icon-xs"
                                   variant="ghost-muted"
