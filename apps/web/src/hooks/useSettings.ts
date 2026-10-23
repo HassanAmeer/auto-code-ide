@@ -192,6 +192,7 @@ function enqueueClientSettingsPersistence<A>(work: () => Promise<A>): Promise<A>
  * settings as the first one.
  */
 function applySharedClientSettingsFromServer(): void {
+  if (typeof window === "undefined") return;
   const handler = (event: Event) => {
     const detail = (event as CustomEvent<Record<string, unknown>>).detail;
     if (!detail || typeof detail !== "object") return;
