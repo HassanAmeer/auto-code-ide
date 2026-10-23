@@ -205,9 +205,13 @@ export function CustomProvidersSettingsPanel() {
       toastManager.add({ type: "error", title: "Provider Name is required" });
       return;
     }
-    if (!baseUrl.trim()) {
+    let cleanBase = baseUrl.trim();
+    if (!cleanBase) {
       toastManager.add({ type: "error", title: "API Base URL is required" });
       return;
+    }
+    if (!/^https?:\/\//i.test(cleanBase)) {
+      cleanBase = `http://${cleanBase}`;
     }
 
     // Parse models from modelIdsInput
@@ -228,7 +232,7 @@ export function CustomProvidersSettingsPanel() {
       ...(editingProviderId ? { id: editingProviderId } : {}),
       name: name.trim(),
       format,
-      baseUrl: baseUrl.trim(),
+      baseUrl: cleanBase,
       ...(apiKey.trim().length > 0 ? { apiKey: apiKey.trim() } : {}),
       ...(cleanHeaders.length > 0 ? { headers: cleanHeaders } : {}),
       models: finalModels,
@@ -401,7 +405,7 @@ export function CustomProvidersSettingsPanel() {
                   API Base URL <span className="text-destructive">*</span>
                 </label>
                 <input
-                  type="url"
+                  type="text"
                   value={baseUrl}
                   onChange={(e) => setBaseUrl(e.target.value)}
                   placeholder={

@@ -380,7 +380,11 @@ export function subscribeCustomProviders(
  * Normalizes a base URL by stripping trailing slashes.
  */
 export function normalizeBaseUrl(url: string): string {
-  return url.trim().replace(/\/+$/, "");
+  let trimmed = url.trim().replace(/\/+$/, "");
+  if (trimmed && !/^https?:\/\//i.test(trimmed)) {
+    trimmed = `http://${trimmed}`;
+  }
+  return trimmed;
 }
 
 /**

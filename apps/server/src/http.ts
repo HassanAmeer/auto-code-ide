@@ -2752,20 +2752,6 @@ export const layerMcpSyncRoute = HttpRouter.add(
   ),
 );
 
-function isRestrictedHost(rawHostname: string): boolean {
-  const h = rawHostname
-    .replace(/^\[|\]$/g, "")
-    .trim()
-    .toLowerCase();
-  // Only protect against cloud instance metadata exfiltration (AWS/GCP 169.254.x.x)
-  // Fully allow:
-  // - localhost and 127.0.0.1 (for local AI providers like Ollama, LMStudio, vLLM, dev servers)
-  // - Local network IPs (192.168.x.x, 10.x.x.x, 172.x.x.x)
-  // - Cloudflare WARP rotated IPs and local proxies
-  // - Plain HTTP and HTTPS endpoints
-  return /^169\.254\.\d+\.\d+$/.test(h);
-}
-
 export const layerWebFetchRoute = HttpRouter.add(
   "POST",
   "/api/web/fetch",
@@ -2778,11 +2764,15 @@ export const layerWebFetchRoute = HttpRouter.add(
     if (!bodyJson?.url || typeof bodyJson.url !== "string") {
       return HttpServerResponse.jsonUnsafe({
         ok: false,
-        error: "Valid HTTP/HTTPS url is required.",
+        error: "Valid url is required.",
       });
     }
 
-    const trimmedUrl = bodyJson.url.trim();
+    let trimmedUrl = bodyJson.url.trim();
+    if (!/^https?:\/\//i.test(trimmedUrl)) {
+      trimmedUrl = `http://${trimmedUrl}`;
+    }
+
     let parsedUrl: URL;
     try {
       parsedUrl = new URL(trimmedUrl);
@@ -2797,13 +2787,6 @@ export const layerWebFetchRoute = HttpRouter.add(
       return HttpServerResponse.jsonUnsafe({
         ok: false,
         error: "Only HTTP and HTTPS protocols are allowed.",
-      });
-    }
-
-    if (isRestrictedHost(parsedUrl.hostname)) {
-      return HttpServerResponse.jsonUnsafe({
-        ok: false,
-        error: "Access to cloud metadata service is prohibited.",
       });
     }
 
@@ -2849,12 +2832,6 @@ export const layerWebFetchRoute = HttpRouter.add(
             return HttpServerResponse.jsonUnsafe({
               ok: false,
               error: "Redirect to non-HTTP/HTTPS protocol prohibited.",
-            });
-          }
-          if (isRestrictedHost(nextUrl.hostname)) {
-            return HttpServerResponse.jsonUnsafe({
-              ok: false,
-              error: "Redirect to cloud metadata service is prohibited.",
             });
           }
           currentUrl = nextUrl.toString();
