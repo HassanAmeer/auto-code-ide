@@ -1,3 +1,7 @@
+// @effect-diagnostics nodeBuiltinImport:off
+import * as fs from "node:fs";
+import * as path from "node:path";
+import * as os from "node:os";
 import type {
   Event as OpenCodeEvent,
   Message as OpenCodeMessage,
@@ -2057,6 +2061,57 @@ export const makeOpenCodeAdapterV2 = Effect.fn("makeOpenCodeAdapterV2")(function
           );
         });
 
+        function cleanOpenCodeError(raw: string): string {
+          let cleaned = raw.trim();
+          const causeMatch = cleaned.match(
+            /Cause\(\[(?:Fail|Die)\((?:[a-zA-Z0-9_$]+:\s*)?([\s\S]+?)\)\s*\]\)/,
+          );
+          if (causeMatch && causeMatch[1]) {
+            cleaned = causeMatch[1].trim();
+          }
+          cleaned = cleaned.replace(/^AI_(?:APICallError|RetryError):\s*/i, "");
+          return cleaned;
+        }
+
+        function getRecentOpenCodeServerError(modelId?: string, sessionId?: string): string | null {
+          try {
+            const candidatePaths = [
+              path.join(os.homedir(), ".local/share/opencode/log/opencode.log"),
+              path.join("/root", ".local/share/opencode/log/opencode.log"),
+            ];
+            for (const logPath of candidatePaths) {
+              if (!fs.existsSync(logPath)) continue;
+              const stat = fs.statSync(logPath);
+              if (stat.size === 0) continue;
+              const bufferSize = Math.min(65536, stat.size);
+              const fd = fs.openSync(logPath, "r");
+              const buffer = Buffer.alloc(bufferSize);
+              fs.readSync(fd, buffer, 0, bufferSize, stat.size - bufferSize);
+              fs.closeSync(fd);
+              const text = buffer.toString("utf8");
+              const lines = text.split("\n").filter((l) => l.includes("level=ERROR"));
+              for (let i = lines.length - 1; i >= 0; i--) {
+                const line = lines[i];
+                if (!line) continue;
+                if (sessionId && line.includes(sessionId)) {
+                  const m = line.match(/(?:error(?:\.error)?(?:\.message)?|cause)=\"([^\"]+)\"/);
+                  if (m && m[1]) return cleanOpenCodeError(m[1]);
+                }
+                if (modelId && line.includes(modelId)) {
+                  const m = line.match(/(?:error(?:\.error)?(?:\.message)?|cause)=\"([^\"]+)\"/);
+                  if (m && m[1]) return cleanOpenCodeError(m[1]);
+                }
+              }
+              const lastLine = lines[lines.length - 1];
+              if (lastLine) {
+                const m = lastLine.match(/(?:error(?:\.error)?(?:\.message)?|cause)=\"([^\"]+)\"/);
+                if (m && m[1]) return cleanOpenCodeError(m[1]);
+              }
+            }
+          } catch {}
+          return null;
+        }
+
         const finalizeTurn = Effect.fnUntraced(function* (
           state: OpenCodeThreadState,
           turn: ActiveOpenCodeTurn,
@@ -2073,26 +2128,54 @@ export const makeOpenCodeAdapterV2 = Effect.fn("makeOpenCodeAdapterV2")(function
           }
           turn.finalized = true;
           const completedAt = yield* DateTime.now;
+
+          const textResponse = Array.from(turn.parts.values())
+            .filter((part) => part.type === "text")
+            .map((part) => part.text)
+            .join("\n\n")
+            .trim();
+          const responseText =
+            textResponse.length > 0
+              ? textResponse
+              : Array.from(turn.parts.values())
+                  .filter((part) => part.type === "reasoning")
+                  .map((part) => part.text)
+                  .join("\n\n")
+                  .trim();
+
+          let effectiveStatus: TerminalTurnStatus = status;
+          let effectiveFailure: OrchestrationV2ProviderFailure | null = terminal?.failure ?? null;
+
+          if (
+            effectiveStatus !== "failed" &&
+            effectiveStatus !== "interrupted" &&
+            responseText.length === 0 &&
+            turn.parts.size === 0
+          ) {
+            const recentError = getRecentOpenCodeServerError(
+              turn.modelSelection.model,
+              state.nativeSessionId,
+            );
+            effectiveStatus = "failed";
+            effectiveFailure = makeProviderFailure({
+              message:
+                recentError ??
+                "Model returned an empty response. Upstream provider quota or rate limit may have been reached (e.g. Free usage limit reached).",
+              code: recentError ? "upstream_error" : "empty_response",
+              class: "provider_error",
+            });
+            terminal = {
+              ...(terminal ?? {}),
+              failure: effectiveFailure,
+            };
+          }
+
           if (turn.aiLogIds.length > 0) {
-            const textResponse = Array.from(turn.parts.values())
-              .filter((part) => part.type === "text")
-              .map((part) => part.text)
-              .join("\n\n")
-              .trim();
-            const responseText =
-              textResponse.length > 0
-                ? textResponse
-                : Array.from(turn.parts.values())
-                    .filter((part) => part.type === "reasoning")
-                    .map((part) => part.text)
-                    .join("\n\n")
-                    .trim();
-            const failure = terminal?.failure ?? null;
             const completedAtMillis = DateTime.toEpochMillis(completedAt);
-            const isFailed = status === "failed";
-            const errMessage = isFailed ? failure?.message : undefined;
+            const isFailed = effectiveStatus === "failed";
+            const errMessage = isFailed ? effectiveFailure?.message : undefined;
             const statusCode = isFailed
-              ? (extractStatusCode(failure?.code) ?? extractStatusCode(errMessage) ?? 500)
+              ? (extractStatusCode(effectiveFailure?.code) ?? extractStatusCode(errMessage) ?? 500)
               : 200;
             const statusText = extractStatusText(statusCode) ?? (isFailed ? "Error" : "OK");
 
@@ -2105,11 +2188,11 @@ export const makeOpenCodeAdapterV2 = Effect.fn("makeOpenCodeAdapterV2")(function
                   : { durationMs: Math.max(0, completedAtMillis - turn.aiLogStartedAt) }),
                 state: isFailed ? "error" : "completed",
                 ...(responseText.length > 0 ? { responseBody: responseText } : {}),
-                ...(failure === null
+                ...(effectiveFailure === null
                   ? {}
                   : {
-                      error: failure.message,
-                      errorType: failure.class,
+                      error: effectiveFailure.message,
+                      errorType: effectiveFailure.class,
                     }),
               });
             }
@@ -2127,7 +2210,7 @@ export const makeOpenCodeAdapterV2 = Effect.fn("makeOpenCodeAdapterV2")(function
               yield* resolveRuntimeRequest(pending.nativeRequestId, "cancelled");
             }
           }
-          yield* emitProviderTurn(state, turn, status, completedAt);
+          yield* emitProviderTurn(state, turn, effectiveStatus, completedAt);
           const threadDisposition = terminal?.threadDisposition ?? "reusable";
           yield* updateProviderThread(state, {
             status: turn.isRoot ? "active" : threadDisposition === "broken" ? "error" : "idle",
@@ -2148,7 +2231,7 @@ export const makeOpenCodeAdapterV2 = Effect.fn("makeOpenCodeAdapterV2")(function
                 parentNodeId: null,
                 rootNodeId: turn.rootNodeId,
                 kind: "root_turn",
-                status,
+                status: effectiveStatus,
                 countsForRun: false,
                 providerThreadId: state.providerThread.id,
                 providerTurnId: turn.providerTurnId,
@@ -2165,11 +2248,13 @@ export const makeOpenCodeAdapterV2 = Effect.fn("makeOpenCodeAdapterV2")(function
             (candidate) => candidate.activeTurn?.isRoot === true,
           );
           yield* updateProviderSession(
-            anotherTurnIsActive ? "running" : status === "failed" ? "error" : "ready",
-            status === "failed" ? sessionEntity.lastError : null,
+            anotherTurnIsActive ? "running" : effectiveStatus === "failed" ? "error" : "ready",
+            effectiveStatus === "failed"
+              ? (effectiveFailure?.message ?? sessionEntity.lastError)
+              : null,
           );
           yield* emitProviderEvent(
-            status === "failed"
+            effectiveStatus === "failed"
               ? {
                   type: "turn.terminal",
                   driver: OPENCODE_PROVIDER,
@@ -2177,9 +2262,9 @@ export const makeOpenCodeAdapterV2 = Effect.fn("makeOpenCodeAdapterV2")(function
                   providerTurnId: turn.providerTurnId,
                   runOrdinal: turn.runOrdinal,
                   failureItemOrdinal: itemOrdinal(turn, `terminal-failure:${turn.providerTurnId}`),
-                  status,
+                  status: effectiveStatus,
                   failure:
-                    terminal?.failure ??
+                    effectiveFailure ??
                     makeProviderFailure({
                       message: sessionEntity.lastError ?? undefined,
                       class: "provider_error",
@@ -2192,7 +2277,7 @@ export const makeOpenCodeAdapterV2 = Effect.fn("makeOpenCodeAdapterV2")(function
                   providerThreadId: turn.providerThreadId,
                   providerTurnId: turn.providerTurnId,
                   runOrdinal: turn.runOrdinal,
-                  status,
+                  status: effectiveStatus,
                   failure: null,
                   threadDisposition,
                 },
