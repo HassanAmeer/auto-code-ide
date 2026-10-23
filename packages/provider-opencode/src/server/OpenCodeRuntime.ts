@@ -430,37 +430,137 @@ export function parseOpenCodeModelSlug(
   }
 
   const trimmed = slug.trim();
+  const candidateInstance = (fallbackProviderID ?? "").trim();
+  const isCustomCandidate =
+    candidateInstance &&
+    candidateInstance !== "opencode" &&
+    candidateInstance !== "opencodebypasssetup";
+
+  // Check if candidateInstance already matches or owns this model directly
+  if (isCustomCandidate) {
+    if (trimmed.startsWith(`${candidateInstance}/`)) {
+      return {
+        providerID: candidateInstance,
+        modelID: trimmed.slice(candidateInstance.length + 1),
+      };
+    }
+  }
+
+  // Check opencode.json configurations first to see if candidateInstance explicitly registers this model
+  const diskPaths = [
+    NodePath.join(NodeOS.homedir(), ".config/opencode/opencode.json"),
+    "/root/all-ai-clis/third-party-provider/opencode.json",
+    NodePath.join(process.cwd(), "opencode.json"),
+  ];
+  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const rawNorm = norm(trimmed);
+
+  try {
+    for (const dp of diskPaths) {
+      if (NodeFS.existsSync(dp)) {
+        const cfg = JSON.parse(NodeFS.readFileSync(dp, "utf-8"));
+        if (cfg && cfg.provider) {
+          // If candidateInstance is provided, check if candidateInstance registers this exact model!
+          if (isCustomCandidate && cfg.provider[candidateInstance]?.models) {
+            const models = cfg.provider[candidateInstance].models;
+            for (const [mId, mData] of Object.entries<any>(models)) {
+              if (
+                mId === trimmed ||
+                mData?.name === trimmed ||
+                norm(mId) === rawNorm ||
+                (mData?.name && norm(mData.name) === rawNorm)
+              ) {
+                return {
+                  providerID: candidateInstance,
+                  modelID: mId,
+                };
+              }
+            }
+          }
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  // If candidateInstance is a known custom provider (e.g. OpenRouter, TokenDealer)
+  // and the model is selected while using that provider, keep it routed to that provider!
+  if (isCustomCandidate) {
+    const candidatePrefix = candidateInstance.toLowerCase();
+    if (
+      candidatePrefix.includes("openrouter") ||
+      candidatePrefix.startsWith("custom_") ||
+      candidatePrefix.includes("tokendeal")
+    ) {
+      let knownOtherProviderPrefix = false;
+      try {
+        for (const dp of diskPaths) {
+          if (NodeFS.existsSync(dp)) {
+            const cfg = JSON.parse(NodeFS.readFileSync(dp, "utf-8"));
+            if (cfg?.provider) {
+              for (const pId of Object.keys(cfg.provider)) {
+                if (pId !== candidateInstance && trimmed.startsWith(`${pId}/`)) {
+                  knownOtherProviderPrefix = true;
+                  break;
+                }
+              }
+            }
+          }
+        }
+      } catch {}
+      if (!knownOtherProviderPrefix) {
+        return {
+          providerID: candidateInstance,
+          modelID: trimmed,
+        };
+      }
+    }
+  }
+
+  // If a slash is present, check if the prefix matches a real provider ID in opencode.json
   const separator = trimmed.indexOf("/");
   if (separator > 0 && separator < trimmed.length - 1) {
+    const potentialProvider = trimmed.slice(0, separator);
+    const potentialModel = trimmed.slice(separator + 1);
+
+    try {
+      for (const dp of diskPaths) {
+        if (NodeFS.existsSync(dp)) {
+          const cfg = JSON.parse(NodeFS.readFileSync(dp, "utf-8"));
+          if (cfg?.provider && cfg.provider[potentialProvider]) {
+            return {
+              providerID: potentialProvider,
+              modelID: potentialModel,
+            };
+          }
+        }
+      }
+    } catch {}
+
+    if (isCustomCandidate) {
+      return {
+        providerID: candidateInstance,
+        modelID: trimmed,
+      };
+    }
+
     return {
-      providerID: trimmed.slice(0, separator),
-      modelID: trimmed.slice(separator + 1),
+      providerID: potentialProvider,
+      modelID: potentialModel,
     };
   }
 
   // If no slash, check fallbackProviderID
-  const candidateInstance = (fallbackProviderID ?? "").trim();
-  if (
-    candidateInstance &&
-    candidateInstance !== "opencode" &&
-    candidateInstance !== "opencodebypasssetup"
-  ) {
+  if (isCustomCandidate) {
     return {
       providerID: candidateInstance,
       modelID: trimmed,
     };
   }
 
-  // Look up in opencode.json configurations
+  // Scan opencode.json for model across all providers
   try {
-    const diskPaths = [
-      NodePath.join(NodeOS.homedir(), ".config/opencode/opencode.json"),
-      "/root/all-ai-clis/third-party-provider/opencode.json",
-      NodePath.join(process.cwd(), "opencode.json"),
-    ];
-    const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
-    const rawNorm = norm(trimmed);
-
     for (const dp of diskPaths) {
       if (NodeFS.existsSync(dp)) {
         const cfg = JSON.parse(NodeFS.readFileSync(dp, "utf-8"));
@@ -470,7 +570,7 @@ export function parseOpenCodeModelSlug(
               for (const [mId, mData] of Object.entries<any>(pData.models)) {
                 if (
                   mId === trimmed ||
-                  (mData?.name && mData.name === trimmed) ||
+                  mData?.name === trimmed ||
                   norm(mId) === rawNorm ||
                   (mData?.name && norm(mData.name) === rawNorm)
                 ) {
