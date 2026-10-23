@@ -89,11 +89,7 @@ export const ProjectAiRulesSettings = memo(function ProjectAiRulesSettings(props
   const charCount = rules.length;
 
   return (
-    <SettingsSection
-      id="project-ai-rules"
-      title="Project AI Rules (.autocode/rules.md)"
-      description="Custom system instructions automatically followed by the AI model on every turn in this project. Use rules to enforce coding style, language preferences, framework versions, or architectural patterns."
-    >
+    <SettingsSection id="project-ai-rules" title="Project AI Rules (.autocode/rules.md)">
       <div className="flex flex-col gap-4 p-4 rounded-xl border border-border/40 bg-card/60 backdrop-blur-sm">
         {/* Header row with badges */}
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/30 pb-3">

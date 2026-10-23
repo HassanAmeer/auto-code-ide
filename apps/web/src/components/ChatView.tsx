@@ -374,6 +374,21 @@ import {
   preventTerminalCloseShortcut,
 } from "../lib/terminalCloseShortcut";
 import { exportSessionToJson, exportSessionToMarkdown } from "../lib/sessionExportImport";
+import {
+  isAutoDebugCommand,
+  parseAutoDebugCommand,
+  buildAutoDebugPrompt,
+} from "../lib/autoDebugService";
+import {
+  isGithubPrCommand,
+  parseGithubPrCommand,
+  buildGithubPrReviewPrompt,
+} from "../lib/githubPrService";
+import {
+  isDbInspectCommand,
+  parseDbInspectCommand,
+  inspectDatabase,
+} from "../lib/dbInspectorService";
 import { resolveNewDraftStartFromOrigin } from "../lib/chatThreadActions";
 import {
   deriveLogicalProjectKeyFromSettings,
@@ -9320,7 +9335,10 @@ export default function ChatView(props: ChatViewProps) {
         toastManager.add({ type: "neutral", title: "Switched to Bug Hunter Persona" });
         return;
       }
-      if (multipleModelSelections === null) {
+      if (
+        (standaloneSlashCommand === "plan" || standaloneSlashCommand === "default") &&
+        multipleModelSelections === null
+      ) {
         handleInteractionModeChange(standaloneSlashCommand);
         promptRef.current = "";
         clearComposerDraftContent(composerDraftTarget);
@@ -9427,6 +9445,22 @@ export default function ChatView(props: ChatViewProps) {
         promptForSend,
       )
       .trim();
+
+    if (isAutoDebugCommand(messageTextForSend)) {
+      const { targetCommand } = parseAutoDebugCommand(messageTextForSend);
+      messageTextForSend = buildAutoDebugPrompt(targetCommand);
+      toastManager.add({ type: "neutral", title: "Autonomous Auto-Debug activated" });
+    } else if (isGithubPrCommand(messageTextForSend)) {
+      const { target } = parseGithubPrCommand(messageTextForSend);
+      messageTextForSend = buildGithubPrReviewPrompt(target);
+      toastManager.add({ type: "neutral", title: "GitHub PR Reviewer activated" });
+    } else if (isDbInspectCommand(messageTextForSend)) {
+      const { argument } = parseDbInspectCommand(messageTextForSend);
+      toastManager.add({ type: "neutral", title: "Inspecting database schema..." });
+      const cwdForDb = activeProject?.workspaceRoot || projectForSend?.workspaceRoot || undefined;
+      const inspectRes = await inspectDatabase(cwdForDb, argument);
+      messageTextForSend = inspectRes.markdown;
+    }
 
     if (isComposerWebSearchEnabled() && messageTextForSend && !messageTextForSend.startsWith("/")) {
       try {

@@ -908,6 +908,7 @@ const SETTINGS_CATEGORY_SCOPES: Readonly<Record<SettingsPath, SettingsSearchScop
   "/settings/keybindings": null,
   "/settings/browser": null,
   "/settings/skills": null,
+  "/settings/mcp": null,
   "/settings/providers": null,
   "/settings/custom-providers": null,
   "/settings/integrations": null,

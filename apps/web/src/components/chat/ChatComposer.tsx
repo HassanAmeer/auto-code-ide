@@ -2739,6 +2739,27 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           label: "/review",
           description: "Switch to Bug Hunter Persona for security & code review",
         },
+        {
+          id: "slash:debug",
+          type: "slash-command",
+          command: "debug",
+          label: "/debug",
+          description: "Autonomous Auto-Debug Loop (fix build/test failures automatically)",
+        },
+        {
+          id: "slash:pr",
+          type: "slash-command",
+          command: "pr",
+          label: "/pr",
+          description: "Direct GitHub PR Reviewer & Audit (/pr <number|url>)",
+        },
+        {
+          id: "slash:db",
+          type: "slash-command",
+          command: "db",
+          label: "/db",
+          description: "Database Schema & Query Inspector (/db [table|query])",
+        },
         ...(planModeUiEnabled
           ? ([
               {
@@ -4199,6 +4220,29 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           if (applied) {
             setComposerHighlightedItemId(null);
             setIsComposerModelPickerOpen(true);
+          }
+          return;
+        }
+        if (
+          item.command === "debug" ||
+          item.command === "pr" ||
+          item.command === "db" ||
+          item.command === "fork" ||
+          item.command === "export" ||
+          item.command === "coder" ||
+          item.command === "review"
+        ) {
+          const replacement = `/${item.command} `;
+          const applied = applyPromptReplacement(
+            trigger.rangeStart,
+            trigger.rangeEnd,
+            replacement,
+            {
+              expectedText: snapshot.value.slice(trigger.rangeStart, trigger.rangeEnd),
+            },
+          );
+          if (applied) {
+            setComposerHighlightedItemId(null);
           }
           return;
         }

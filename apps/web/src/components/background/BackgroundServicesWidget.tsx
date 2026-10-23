@@ -266,7 +266,7 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
       const isTimer =
         task.prompt?.toLowerCase().includes("timer") ||
         task.title?.toLowerCase().includes("timer") ||
-        task.schedule?.type === "once";
+        (task.schedule as any)?.type === "once";
       const isFailed = task.lastRunStatus === "failed";
       const isRunning = task.lastRunStatus === "running";
 
@@ -363,7 +363,10 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
                   <div className="flex items-center gap-2.5 min-w-0 flex-1">
                     <SubagentBotIcon className="size-4 shrink-0 text-zinc-400" />
                     <span className="text-xs text-zinc-300 group-hover:text-zinc-100 font-normal truncate">
-                      {agent.agentRole || agent.name || "Subagent"}
+                      {(agent as any).agentRole ||
+                        (agent as any).name ||
+                        agent.driver ||
+                        "Subagent"}
                     </span>
                   </div>
                   {agent.status && (

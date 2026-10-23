@@ -2436,3 +2436,200 @@ export const layerOpenCodeBypassRotateRoute = HttpRouter.add(
     });
   }),
 );
+
+export const layerDbInspectRoute = HttpRouter.add(
+  "POST",
+  "/api/db/inspect",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      cwd?: string;
+      query?: string;
+      table?: string;
+    };
+    const targetCwd = (bodyJson?.cwd?.trim() || process.cwd()).replace(/\\/g, "/");
+
+    // 1. Search for SQLite database files
+    const commonSqliteRelativePaths = [
+      "prisma/dev.db",
+      "prisma/db.sqlite",
+      "prisma/database.sqlite",
+      "data.db",
+      "db.sqlite",
+      "db.sqlite3",
+      "database.sqlite",
+      "dev.db",
+      "local.db",
+      "app.db",
+    ];
+
+    let foundSqlitePath: string | null = null;
+    for (const rel of commonSqliteRelativePaths) {
+      const fullPath = NodePath.join(targetCwd, rel);
+      if (NodeFS.existsSync(fullPath)) {
+        foundSqlitePath = fullPath;
+        break;
+      }
+    }
+
+    if (!foundSqlitePath) {
+      try {
+        const entries = NodeFS.readdirSync(targetCwd, { withFileTypes: true });
+        for (const entry of entries) {
+          if (entry.isFile() && /\.(sqlite|sqlite3|db)$/i.test(entry.name)) {
+            foundSqlitePath = NodePath.join(targetCwd, entry.name);
+            break;
+          }
+        }
+      } catch {}
+    }
+
+    if (foundSqlitePath) {
+      try {
+        const { DatabaseSync } = yield* Effect.promise(() => import("node:sqlite"));
+        const db = new DatabaseSync(foundSqlitePath, { readOnly: true });
+
+        const rawTables = db
+          .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+          .all() as Array<{ name: string }>;
+
+        const tables = rawTables.map((t) => {
+          let columns: any[] = [];
+          let rowCount = 0;
+          try {
+            columns = db.prepare(`PRAGMA table_info("${t.name}")`).all();
+            const countRes = db.prepare(`SELECT count(*) as count FROM "${t.name}"`).get() as any;
+            rowCount = countRes?.count ?? 0;
+          } catch {}
+          return {
+            name: t.name,
+            columns: columns.map((c: any) => ({
+              cid: c.cid,
+              name: c.name,
+              type: c.type || "ANY",
+              notnull: Boolean(c.notnull),
+              pk: Boolean(c.pk),
+            })),
+            rowCount,
+          };
+        });
+
+        let sampleRows: any[] = [];
+        if (bodyJson?.table) {
+          try {
+            sampleRows = db.prepare(`SELECT * FROM "${bodyJson.table}" LIMIT 10`).all();
+          } catch (err: any) {
+            sampleRows = [{ error: err?.message || String(err) }];
+          }
+        }
+
+        let customQueryResult: any = null;
+        if (bodyJson?.query?.trim()) {
+          const q = bodyJson.query.trim();
+          if (/^select\b/i.test(q)) {
+            try {
+              customQueryResult = db.prepare(q).all();
+            } catch (err: any) {
+              customQueryResult = { error: err?.message || String(err) };
+            }
+          } else {
+            customQueryResult = {
+              error: "Security restriction: Only read-only SELECT queries are allowed.",
+            };
+          }
+        }
+
+        return HttpServerResponse.jsonUnsafe({
+          ok: true,
+          dialect: "sqlite",
+          dbPath: foundSqlitePath,
+          tables,
+          sampleRows,
+          customQueryResult,
+        });
+      } catch (err: any) {
+        return HttpServerResponse.jsonUnsafe({
+          ok: false,
+          error: `SQLite inspection error: ${err?.message || String(err)}`,
+        });
+      }
+    }
+
+    // 2. Fallback: Parse prisma/schema.prisma if present
+    const prismaSchemaPath = NodePath.join(targetCwd, "prisma", "schema.prisma");
+    if (NodeFS.existsSync(prismaSchemaPath)) {
+      try {
+        const schemaText = NodeFS.readFileSync(prismaSchemaPath, "utf-8");
+        const modelRegex = /model\s+([A-Za-z0-9_]+)\s*\{([^}]+)\}/g;
+        const tables: Array<{ name: string; columns: any[]; rowCount: number }> = [];
+        let match: RegExpExecArray | null;
+        while ((match = modelRegex.exec(schemaText)) !== null) {
+          const modelName = match[1]!;
+          const body = match[2]!;
+          const lines = body
+            .split("\n")
+            .map((l) => l.trim())
+            .filter((l) => l && !l.startsWith("//") && !l.startsWith("@@"));
+          const columns = lines.map((line, idx) => {
+            const parts = line.split(/\s+/);
+            return {
+              cid: idx,
+              name: parts[0] || "",
+              type: parts[1] || "String",
+              notnull: !line.includes("?"),
+              pk: line.includes("@id"),
+            };
+          });
+          tables.push({ name: modelName, columns, rowCount: -1 });
+        }
+        return HttpServerResponse.jsonUnsafe({
+          ok: true,
+          dialect: "prisma",
+          schemaFile: "prisma/schema.prisma",
+          tables,
+        });
+      } catch {}
+    }
+
+    // 3. Fallback: Check .env for database connection URL
+    const envPaths = [NodePath.join(targetCwd, ".env"), NodePath.join(targetCwd, ".env.local")];
+    for (const envPath of envPaths) {
+      if (NodeFS.existsSync(envPath)) {
+        try {
+          const envText = NodeFS.readFileSync(envPath, "utf-8");
+          const dbUrlMatch = envText.match(
+            /(?:DATABASE_URL|POSTGRES_URL|MYSQL_URL)\s*=\s*["']?([^"'\r\n]+)["']?/,
+          );
+          if (dbUrlMatch && dbUrlMatch[1]) {
+            const rawUrl = dbUrlMatch[1].trim();
+            const provider = rawUrl.startsWith("postgres")
+              ? "PostgreSQL"
+              : rawUrl.startsWith("mysql")
+                ? "MySQL"
+                : rawUrl.startsWith("sqlite")
+                  ? "SQLite"
+                  : "Database";
+            const masked = rawUrl.replace(/:([^@/]+)@/, ":****@");
+            return HttpServerResponse.jsonUnsafe({
+              ok: true,
+              dialect: "env_connection",
+              provider,
+              connectionUrl: masked,
+              tables: [],
+            });
+          }
+        } catch {}
+      }
+    }
+
+    return HttpServerResponse.jsonUnsafe({
+      ok: false,
+      error:
+        "No database detected in workspace (Checked for SQLite .db/.sqlite files, prisma/schema.prisma, and .env DATABASE_URL).",
+    });
+  }).pipe(
+    Effect.catchCause((cause) =>
+      Effect.succeed(HttpServerResponse.jsonUnsafe({ ok: false, error: Cause.pretty(cause) })),
+    ),
+  ),
+);

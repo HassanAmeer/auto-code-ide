@@ -4,18 +4,18 @@
  */
 
 export interface ExportedMessage {
-  id?: string;
+  id?: string | undefined;
   role: "user" | "assistant" | "system";
   text: string;
-  createdAt?: string;
-  model?: string;
+  createdAt?: string | undefined;
+  model?: string | undefined;
 }
 
 export interface ExportedTimelineItem {
   kind: string;
-  label?: string;
-  detail?: string;
-  timestamp?: string;
+  label?: string | undefined;
+  detail?: string | undefined;
+  timestamp?: string | undefined;
 }
 
 export interface ExportedSession {
@@ -25,11 +25,11 @@ export interface ExportedSession {
   thread: {
     id: string;
     title: string;
-    environmentId?: string;
-    createdAt?: string;
+    environmentId?: string | undefined;
+    createdAt?: string | undefined;
   };
   messages: ExportedMessage[];
-  timelineSummary?: ExportedTimelineItem[];
+  timelineSummary?: ExportedTimelineItem[] | undefined;
 }
 
 function sanitizeFileName(name: string): string {
@@ -40,7 +40,12 @@ function sanitizeFileName(name: string): string {
  * Serializes and triggers browser download of the thread as JSON.
  */
 export function exportSessionToJson(
-  thread: { id: string; title: string; environmentId?: string; createdAt?: string },
+  thread: {
+    id: string;
+    title: string;
+    environmentId?: string | undefined;
+    createdAt?: string | undefined;
+  },
   timelineEntries: readonly any[],
 ): void {
   const messages: ExportedMessage[] = [];

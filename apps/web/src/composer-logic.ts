@@ -19,7 +19,10 @@ export type ComposerSlashCommand =
   | "fork"
   | "export"
   | "review"
-  | "coder";
+  | "coder"
+  | "debug"
+  | "pr"
+  | "db";
 export type ComposerSubmissionIntent = "foreground" | "background" | "alternate";
 
 export interface ComposerTrigger {
