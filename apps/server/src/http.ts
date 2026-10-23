@@ -2752,28 +2752,18 @@ export const layerMcpSyncRoute = HttpRouter.add(
   ),
 );
 
-function isPrivateOrLocalHost(rawHostname: string): boolean {
+function isRestrictedHost(rawHostname: string): boolean {
   const h = rawHostname
     .replace(/^\[|\]$/g, "")
     .trim()
     .toLowerCase();
-  return (
-    h === "localhost" ||
-    h.endsWith(".localhost") ||
-    h.endsWith(".local") ||
-    h.endsWith(".internal") ||
-    h === "0.0.0.0" ||
-    h === "::" ||
-    h === "::1" ||
-    h.startsWith("fe80:") ||
-    h.startsWith("fc00:") ||
-    h.startsWith("fd") ||
-    /^127\.\d+\.\d+\.\d+$/.test(h) ||
-    /^10\.\d+\.\d+\.\d+$/.test(h) ||
-    /^192\.168\.\d+\.\d+$/.test(h) ||
-    /^172\.(1[6-9]|2\d|3[01])\.\d+\.\d+$/.test(h) ||
-    /^169\.254\.\d+\.\d+$/.test(h)
-  );
+  // Only protect against cloud instance metadata exfiltration (AWS/GCP 169.254.x.x)
+  // Fully allow:
+  // - localhost and 127.0.0.1 (for local AI providers like Ollama, LMStudio, vLLM, dev servers)
+  // - Local network IPs (192.168.x.x, 10.x.x.x, 172.x.x.x)
+  // - Cloudflare WARP rotated IPs and local proxies
+  // - Plain HTTP and HTTPS endpoints
+  return /^169\.254\.\d+\.\d+$/.test(h);
 }
 
 export const layerWebFetchRoute = HttpRouter.add(
@@ -2810,10 +2800,10 @@ export const layerWebFetchRoute = HttpRouter.add(
       });
     }
 
-    if (isPrivateOrLocalHost(parsedUrl.hostname)) {
+    if (isRestrictedHost(parsedUrl.hostname)) {
       return HttpServerResponse.jsonUnsafe({
         ok: false,
-        error: "Access to private or local network addresses is prohibited.",
+        error: "Access to cloud metadata service is prohibited.",
       });
     }
 
@@ -2861,10 +2851,10 @@ export const layerWebFetchRoute = HttpRouter.add(
               error: "Redirect to non-HTTP/HTTPS protocol prohibited.",
             });
           }
-          if (isPrivateOrLocalHost(nextUrl.hostname)) {
+          if (isRestrictedHost(nextUrl.hostname)) {
             return HttpServerResponse.jsonUnsafe({
               ok: false,
-              error: "Redirect to private or local network addresses is prohibited.",
+              error: "Redirect to cloud metadata service is prohibited.",
             });
           }
           currentUrl = nextUrl.toString();
