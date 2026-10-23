@@ -2285,7 +2285,38 @@ export function syncCustomProviderToOpenCode(
     if (config.models && Array.isArray(config.models)) {
       for (const m of config.models) {
         if (m.id) {
-          modelsObj[m.id] = { name: m.name ?? m.id };
+          const rawId = m.id.trim();
+          const name = m.name?.trim() || rawId;
+          modelsObj[rawId] = { name };
+
+          // Aliases:
+          // 1. Lowercase slug (spaces/underscores to dashes)
+          const slug1 = rawId.toLowerCase().replace(/[\s_]+/g, "-");
+          modelsObj[slug1] = { name };
+
+          // 2. Dots to dashes: e.g. claude-sonnet-4.6 -> claude-sonnet-4-6
+          const slug2 = slug1.replace(/\./g, "-");
+          modelsObj[slug2] = { name };
+
+          // 3. Dashes to dots: e.g. 4-6 -> 4.6
+          const slug3 = slug1.replace(/-(\d+)-(\d+)/g, "-$1.$2");
+          modelsObj[slug3] = { name };
+
+          // 4. Strip prefix if present: e.g. "oc/claude-sonnet-4-6" -> "claude-sonnet-4-6"
+          if (rawId.includes("/")) {
+            const stripped = rawId.split("/").pop()!;
+            modelsObj[stripped] = { name };
+            const strippedSlug = stripped.toLowerCase().replace(/[\s_]+/g, "-");
+            modelsObj[strippedSlug] = { name };
+            modelsObj[strippedSlug.replace(/\./g, "-")] = { name };
+          }
+
+          // 5. If name is different from rawId, register name slugs too
+          if (name !== rawId) {
+            const nameSlug = name.toLowerCase().replace(/[\s_]+/g, "-");
+            modelsObj[nameSlug] = { name };
+            modelsObj[nameSlug.replace(/\./g, "-")] = { name };
+          }
         }
       }
     }

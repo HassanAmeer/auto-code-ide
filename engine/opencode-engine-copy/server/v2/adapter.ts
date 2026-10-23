@@ -3793,13 +3793,24 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (
           : undefined,
       ensureThread: (threadInput) =>
         Effect.gen(function* () {
-          if (threadInput.existingProviderThread?.nativeThreadRef != null) {
-            return yield* runtime.resumeThread({
-              providerThread: threadInput.existingProviderThread,
-              threadId: threadInput.threadId,
-              modelSelection: threadInput.modelSelection,
-              runtimePolicy: threadInput.runtimePolicy,
-            });
+          const existingNativeId = threadInput.existingProviderThread?.nativeThreadRef?.nativeId;
+          const isValidNativeId =
+            existingNativeId != null &&
+            !existingNativeId.startsWith("pending:") &&
+            existingNativeId.startsWith("ses_");
+
+          if (isValidNativeId && threadInput.existingProviderThread != null) {
+            const resumed = yield* Effect.result(
+              runtime.resumeThread({
+                providerThread: threadInput.existingProviderThread,
+                threadId: threadInput.threadId,
+                modelSelection: threadInput.modelSelection,
+                runtimePolicy: threadInput.runtimePolicy,
+              }),
+            );
+            if (resumed._tag === "Success") {
+              return resumed.success;
+            }
           }
           yield* readModelsOnce(threadInput.runtimePolicy.cwd);
           const model = resolveModelRef(threadInput.modelSelection);
@@ -3863,12 +3874,43 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (
       resumeThread: (threadInput) =>
         Effect.gen(function* () {
           const sessionId = yield* sessionIdOf(threadInput.providerThread);
+          const fallbackToEnsure = () =>
+            runtime.ensureThread({
+              threadId: (threadInput.threadId ??
+                threadInput.providerThread.appThreadId ??
+                threadInput.providerThread
+                  .id) as ProviderAdapter.ProviderAdapterV2EnsureThreadInput["threadId"],
+              modelSelection: threadInput.modelSelection ?? {
+                instanceId,
+                model: session.model ?? "default",
+              },
+              runtimePolicy: threadInput.runtimePolicy ?? {
+                runtimeMode: "full-access",
+                interactionMode: "default",
+                cwd: host.paths.cwd,
+              },
+              providerSessionId: input.providerSessionId,
+              existingProviderThread: {
+                ...threadInput.providerThread,
+                nativeThreadRef: null,
+              },
+            });
+
+          if (sessionId.startsWith("pending:") || !sessionId.startsWith("ses_")) {
+            return yield* fallbackToEnsure();
+          }
           if (threadInput.runtimePolicy !== undefined) {
             yield* readModelsOnce(threadInput.runtimePolicy.cwd);
           }
           // 1.x session ids survive the upgrade; a server without this session
           // fails the resume, so T3 recreates the thread with a handoff.
-          const native = yield* client.session.get({ sessionID: Session.ID.make(sessionId) });
+          const nativeResult = yield* Effect.result(
+            client.session.get({ sessionID: Session.ID.make(sessionId) }),
+          );
+          if (nativeResult._tag === "Failure") {
+            return yield* fallbackToEnsure();
+          }
+          const native = nativeResult.success;
           const providerThread: OrchestrationV2ProviderThread = {
             ...threadInput.providerThread,
             providerSessionId: input.providerSessionId,

@@ -105,8 +105,10 @@ export const layerFromProviderInstanceRegistry: Layer.Layer<
                           openCodeInstance.orchestrationAdapter.openSession(input).pipe(
                             Effect.map((runtime) => ({
                               ...runtime,
+                              instanceId,
+                              driver: resolvedInstance.driverKind,
                               session: {
-                                ...runtime.session,
+                                ...(runtime as any).session,
                                 driver: resolvedInstance.driverKind,
                                 providerInstanceId: instanceId,
                               },

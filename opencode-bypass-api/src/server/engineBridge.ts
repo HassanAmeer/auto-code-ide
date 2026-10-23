@@ -235,6 +235,7 @@ export function scanWorkspaceContext(
 export function extractFilesFromMarkdown(
   markdown: string,
   projectCwd?: string,
+  userPrompt?: string,
 ): Array<ExtractedProjectFile> {
   const files: Array<ExtractedProjectFile> = [];
   const seenPaths = new Set<string>();

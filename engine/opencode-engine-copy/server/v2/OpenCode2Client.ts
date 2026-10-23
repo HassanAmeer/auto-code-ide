@@ -174,10 +174,53 @@ export const make = Effect.gen(function* () {
   const httpClient = yield* HttpClient.HttpClient;
   return OpenCode2Client.of({
     connect: ({ baseUrl, password }) => {
-      const authenticated = HttpClient.mapRequest(
-        httpClient,
-        HttpClientRequest.setHeader("Authorization", basicAuthorization(password)),
-      );
+      const authenticated = HttpClient.mapRequest(httpClient, (req) => {
+        let updated = HttpClientRequest.setHeader(
+          req,
+          "Authorization",
+          basicAuthorization(password),
+        );
+        if (
+          req.method === "POST" &&
+          (updated.url.includes("/prompt") || updated.url.includes("/api/session/"))
+        ) {
+          try {
+            if (updated.body && updated.body._tag === "Uint8Array") {
+              const text = new TextDecoder().decode((updated.body as any).body);
+              const obj = JSON.parse(text);
+              if (obj && typeof obj === "object" && obj.text !== undefined && !obj.prompt) {
+                const withPrompt = {
+                  ...obj,
+                  prompt: {
+                    text: obj.text,
+                    ...(obj.files ? { files: obj.files } : {}),
+                    ...(obj.agents ? { agents: obj.agents } : {}),
+                    ...(obj.skills ? { skills: obj.skills } : {}),
+                  },
+                };
+                return updated.pipe(HttpClientRequest.bodyJsonUnsafe(withPrompt));
+              }
+            } else if (updated.body && updated.body._tag === "Raw") {
+              const data = (updated.body as any).body;
+              if (data && typeof data === "object" && data.text !== undefined && !data.prompt) {
+                const withPrompt = {
+                  ...data,
+                  prompt: {
+                    text: data.text,
+                    ...(data.files ? { files: data.files } : {}),
+                    ...(data.agents ? { agents: data.agents } : {}),
+                    ...(data.skills ? { skills: data.skills } : {}),
+                  },
+                };
+                return updated.pipe(HttpClientRequest.bodyJsonUnsafe(withPrompt));
+              }
+            }
+          } catch {
+            // ignore
+          }
+        }
+        return updated;
+      });
       return OpenCode.make({ baseUrl }).pipe(
         Effect.provideService(HttpClient.HttpClient, authenticated),
         Effect.map((client) => ({
