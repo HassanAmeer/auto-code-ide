@@ -611,13 +611,21 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
   const filteredModels = useMemo(() => {
     let result = flatModels;
 
+    const effectiveInstanceId =
+      selectedInstanceId || props.activeInstanceId || instanceEntries[0]?.instanceId;
+
     if (props.lockedProvider !== null) {
       result = result.filter((m) => matchesLockedProvider(m));
     }
-    if (selectedInstanceId === "favorites") {
+    if (effectiveInstanceId === "favorites") {
       result = result.filter((m) => favoritesSet.has(providerModelKey(m.instanceId, m.slug)));
-    } else if (selectedInstanceId) {
-      result = result.filter((m) => m.instanceId === selectedInstanceId);
+    } else if (effectiveInstanceId) {
+      result = result.filter((m) => {
+        if (m.instanceId === effectiveInstanceId) return true;
+        const strM = String(m.instanceId);
+        const strEff = String(effectiveInstanceId);
+        return strM === `custom_${strEff}` || `custom_${strM}` === strEff;
+      });
     }
 
     // Apply tokenized fuzzy search across the combined provider/model search fields,

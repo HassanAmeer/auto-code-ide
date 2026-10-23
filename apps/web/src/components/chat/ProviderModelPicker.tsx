@@ -113,12 +113,20 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   // instance disappears, do not infer a replacement from its driver kind.
   const activeEntry = useMemo(() => {
     return (
-      props.instanceEntries.find((entry) => entry.instanceId === props.activeInstanceId) ?? null
+      props.instanceEntries.find(
+        (entry) =>
+          entry.instanceId === props.activeInstanceId ||
+          `custom_${entry.instanceId}` === String(props.activeInstanceId) ||
+          entry.instanceId === `custom_${String(props.activeInstanceId)}`,
+      ) ?? null
     );
   }, [props.activeInstanceId, props.instanceEntries]);
 
-  const activeInstanceId = props.activeInstanceId;
-  const selectedInstanceOptions = props.modelOptionsByInstance.get(activeInstanceId) ?? [];
+  const activeInstanceId = activeEntry?.instanceId ?? props.activeInstanceId;
+  const selectedInstanceOptions =
+    props.modelOptionsByInstance.get(activeInstanceId) ??
+    props.modelOptionsByInstance.get(props.activeInstanceId) ??
+    [];
   // Account-specific catalogs must keep the selected model label while unavailable.
   const selectedModel =
     resolveModelPickerSelectedModel({

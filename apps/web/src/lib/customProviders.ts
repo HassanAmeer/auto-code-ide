@@ -41,14 +41,24 @@ export function normalizeCustomProvider(p: unknown): CustomProvider | null {
   const headers: CustomHeader[] = Array.isArray(anyP.headers)
     ? anyP.headers.filter((h: any) => h && typeof h === "object" && typeof h.key === "string")
     : [];
-  const models: CustomProviderModel[] = Array.isArray(anyP.models)
+  const rawModels: CustomProviderModel[] = Array.isArray(anyP.models)
     ? anyP.models
         .filter((m: any) => m && (typeof m.id === "string" || typeof m.name === "string"))
         .map((m: any) => ({
-          id: String(m.id || m.name),
-          name: m.name ? String(m.name) : undefined,
+          id: String(m.id || m.name).trim(),
+          name: m.name ? String(m.name).trim() : undefined,
         }))
+        .filter((m: CustomProviderModel) => m.id.length > 0)
     : [];
+
+  const seenModelIds = new Set<string>();
+  const models: CustomProviderModel[] = [];
+  for (const m of rawModels) {
+    if (!seenModelIds.has(m.id)) {
+      seenModelIds.add(m.id);
+      models.push(m);
+    }
+  }
   const enabled = anyP.enabled !== undefined ? Boolean(anyP.enabled) : true;
   const createdAt = anyP.createdAt ? String(anyP.createdAt) : new Date().toISOString();
   const updatedAt = anyP.updatedAt ? String(anyP.updatedAt) : new Date().toISOString();
@@ -126,8 +136,10 @@ export const DEFAULT_CUSTOM_PROVIDERS: CustomProvider[] = [
       { key: "X-Title", value: "Jobi Code" },
     ],
     models: [
+      { id: "openrouter/free", name: "Auto Free Router (OpenRouter)" },
+      { id: "cohere/north-mini-code:free", name: "North Mini Code (Free)" },
+      { id: "liquid/lfm-2.5-2.6b:free", name: "Liquid LFM 2.6B (Free)" },
       { id: "meta-llama/llama-3.3-70b-instruct:free", name: "Llama 3.3 70B (Free)" },
-      { id: "google/gemini-2.0-flash-exp:free", name: "Gemini 2.0 Flash Exp (Free)" },
       { id: "deepseek/deepseek-r1:free", name: "DeepSeek R1 (Free)" },
       { id: "anthropic/claude-3.5-sonnet", name: "Claude 3.5 Sonnet" },
       { id: "openai/gpt-4o", name: "GPT-4o" },

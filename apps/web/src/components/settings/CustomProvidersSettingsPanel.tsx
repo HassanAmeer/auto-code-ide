@@ -53,8 +53,10 @@ const PRESETS: ProviderPreset[] = [
       { key: "X-Title", value: "Jobi Code" },
     ],
     defaultModels: [
+      { id: "openrouter/free", name: "Auto Free Router (OpenRouter)" },
+      { id: "cohere/north-mini-code:free", name: "North Mini Code (Free)" },
+      { id: "liquid/lfm-2.5-2.6b:free", name: "Liquid LFM 2.6B (Free)" },
       { id: "meta-llama/llama-3.3-70b-instruct:free", name: "Llama 3.3 70B (Free)" },
-      { id: "google/gemini-2.0-flash-exp:free", name: "Gemini 2.0 Flash Exp (Free)" },
       { id: "deepseek/deepseek-r1:free", name: "DeepSeek R1 (Free)" },
       { id: "anthropic/claude-3.5-sonnet", name: "Claude 3.5 Sonnet" },
       { id: "openai/gpt-4o", name: "GPT-4o" },

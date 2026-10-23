@@ -266,6 +266,17 @@ export function getAppModelOptionsForInstance(
     }
   }
 
+  if (entry.driverKind === "opencode") {
+    baseModels = baseModels.filter(
+      (model) =>
+        !model.slug.startsWith("custom_") &&
+        !model.slug.startsWith("td/") &&
+        !model.slug.startsWith("vpsm/") &&
+        !model.slug.startsWith("cheaprouter/") &&
+        !model.slug.startsWith("openrouter/"),
+    );
+  }
+
   const options: AppModelOption[] = baseModels.map(toAppModelOption);
   const seen = new Set(options.map((option) => option.slug));
   const builtInModelSlugs = new Set(

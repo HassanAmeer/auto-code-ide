@@ -1,3 +1,8 @@
+// @effect-diagnostics nodeBuiltinImport:off
+import * as NodeFS from "node:fs";
+import * as NodePath from "node:path";
+import * as NodeOS from "node:os";
+
 import {
   type ModelCapabilities,
   type ServerProviderModel,
@@ -256,8 +261,63 @@ function flattenOpenCodeModels(
   const connected = new Set(input.providerList.connected);
   const models: Array<ServerProviderModel> = [];
 
+  const customProviderIds = new Set<string>();
+  try {
+    const procEnv = (globalThis as { process?: { env?: Record<string, string | undefined> } })
+      .process?.env;
+    const baseDir =
+      procEnv?.T3CODE_HOME ||
+      procEnv?.AUTOJOBS_DATA_DIR ||
+      NodePath.join(NodeOS.homedir(), ".autojobs/data");
+    const candidates = [
+      NodePath.resolve(baseDir, "userdata", "custom-providers-cache.json"),
+      "/root/autojobs/data/userdata/custom-providers-cache.json",
+      "/root/.autojobs/data/userdata/custom-providers-cache.json",
+    ];
+    for (const cacheFile of candidates) {
+      if (NodeFS.existsSync(cacheFile)) {
+        const list = JSON.parse(NodeFS.readFileSync(cacheFile, "utf-8"));
+        if (Array.isArray(list)) {
+          for (const item of list) {
+            if (item?.instanceId) customProviderIds.add(String(item.instanceId));
+            if (item?.id) customProviderIds.add(String(item.id));
+            if (item?.name) {
+              customProviderIds.add(
+                String(item.name)
+                  .trim()
+                  .toLowerCase()
+                  .replace(/[^a-z0-9_-]/g, ""),
+              );
+            }
+            if (item?.displayName) {
+              customProviderIds.add(
+                String(item.displayName)
+                  .trim()
+                  .toLowerCase()
+                  .replace(/[^a-z0-9_-]/g, ""),
+              );
+            }
+          }
+        }
+      }
+    }
+  } catch {}
+
   for (const provider of input.providerList.all) {
     if (!connected.has(provider.id)) {
+      continue;
+    }
+    // Prevent custom providers (custom_*, td, vpsm, cheaprouter, openrouter, etc.)
+    // from leaking into OpenCode's model list. Each custom provider has its own
+    // dedicated instance in the picker.
+    if (
+      provider.id.startsWith("custom_") ||
+      provider.id === "td" ||
+      provider.id === "vpsm" ||
+      provider.id === "cheaprouter" ||
+      provider.id === "openrouter" ||
+      customProviderIds.has(provider.id)
+    ) {
       continue;
     }
 

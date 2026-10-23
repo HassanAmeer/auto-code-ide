@@ -446,14 +446,76 @@ export function parseOpenCodeModelSlug(
     }
   }
 
-  // Check opencode.json configurations first to see if candidateInstance explicitly registers this model
+  // Check opencode.json and custom-providers-cache.json configurations first
   const diskPaths = [
     NodePath.join(NodeOS.homedir(), ".config/opencode/opencode.json"),
     "/root/all-ai-clis/third-party-provider/opencode.json",
     NodePath.join(process.cwd(), "opencode.json"),
   ];
+  const customCachePaths = [
+    "/root/autojobs/data/userdata/custom-providers-cache.json",
+    "/root/.autojobs/data/userdata/custom-providers-cache.json",
+    NodePath.join(NodeOS.homedir(), ".autojobs/data/userdata/custom-providers-cache.json"),
+  ];
   const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
   const rawNorm = norm(trimmed);
+
+  // 1. Check custom-providers-cache.json to see if candidateInstance or any custom provider owns this model
+  try {
+    for (const cpPath of customCachePaths) {
+      if (NodeFS.existsSync(cpPath)) {
+        const list = JSON.parse(NodeFS.readFileSync(cpPath, "utf-8"));
+        if (Array.isArray(list)) {
+          if (isCustomCandidate) {
+            const matchedCp = list.find(
+              (p: any) =>
+                p &&
+                (p.instanceId === candidateInstance ||
+                  p.id === candidateInstance ||
+                  p.name?.toLowerCase() === candidateInstance.toLowerCase() ||
+                  p.displayName?.toLowerCase() === candidateInstance.toLowerCase() ||
+                  `custom_${p.name?.toLowerCase()}` === candidateInstance.toLowerCase()),
+            );
+            if (matchedCp && Array.isArray(matchedCp.models)) {
+              for (const m of matchedCp.models) {
+                if (
+                  m &&
+                  (m.id === trimmed ||
+                    m.name === trimmed ||
+                    norm(m.id) === rawNorm ||
+                    (m.name && norm(m.name) === rawNorm))
+                ) {
+                  return {
+                    providerID: matchedCp.instanceId || matchedCp.id || candidateInstance,
+                    modelID: m.id,
+                  };
+                }
+              }
+            }
+          }
+
+          for (const cp of list) {
+            if (cp && Array.isArray(cp.models)) {
+              for (const m of cp.models) {
+                if (
+                  m &&
+                  (m.id === trimmed ||
+                    m.name === trimmed ||
+                    norm(m.id) === rawNorm ||
+                    (m.name && norm(m.name) === rawNorm))
+                ) {
+                  return {
+                    providerID: cp.instanceId || cp.id,
+                    modelID: m.id,
+                  };
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  } catch {}
 
   try {
     for (const dp of diskPaths) {
