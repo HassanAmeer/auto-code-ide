@@ -205,6 +205,7 @@ export interface ExtractedProjectFile {
 export function extractFilesFromMarkdown(
   markdown: string,
   projectCwd?: string,
+  userPrompt?: string,
 ): Array<ExtractedProjectFile> {
   const files: Array<ExtractedProjectFile> = [];
   const seenPaths = new Set<string>();
@@ -249,7 +250,27 @@ export function extractFilesFromMarkdown(
       }
     }
 
-    // 3. Fallback heuristics for common templates (like 2D game or website)
+    // 3. Check preceding text or user prompt for explicit filename (e.g. `in jet.html`, `Save this as jet.html`)
+    if (!detectedPath && match.index > 0) {
+      const precedingText = markdown.slice(Math.max(0, match.index - 300), match.index);
+      const preMatch = precedingText.match(
+        /(?:file(?:path)?|in|to|update|edit|modify|create|new|for|add|save\s+(?:this\s+)?as)\s+[`'"]?([a-zA-Z0-9_\-./]+\.[a-zA-Z0-9]+)[`'"]?/i,
+      );
+      if (preMatch && preMatch[1]) {
+        detectedPath = preMatch[1].trim();
+      }
+    }
+
+    if (!detectedPath && userPrompt) {
+      const promptMatch = userPrompt.match(
+        /(?:in|to|named|file|create)\s+[`'"]?([a-zA-Z0-9_\-./]+\.(?:html|js|css|py|ts|json|txt))[`'"]?/i,
+      );
+      if (promptMatch && promptMatch[1]) {
+        detectedPath = promptMatch[1].trim();
+      }
+    }
+
+    // 4. Fallback heuristics for common templates (like 2D game or website)
     if (!detectedPath) {
       const lowerHeader = header.toLowerCase();
       const trimmed = content.trim();
@@ -276,17 +297,6 @@ export function extractFilesFromMarkdown(
       } else if (lowerHeader.includes("python") && pyCount === 0) {
         detectedPath = "main.py";
         pyCount++;
-      }
-    }
-
-    // 4. Preceding context check (e.g. `In index.html:` or `create new file audio.js`)
-    if (!detectedPath && match.index > 0) {
-      const precedingText = markdown.slice(Math.max(0, match.index - 200), match.index);
-      const preMatch = precedingText.match(
-        /(?:file(?:path)?|in|to|update|edit|modify|create|new|for|add)\s+[`'"]?([a-zA-Z0-9_\-./]+\.[a-zA-Z0-9]+)[`'"]?/i,
-      );
-      if (preMatch && preMatch[1]) {
-        detectedPath = preMatch[1].trim();
       }
     }
 
@@ -1901,7 +1911,11 @@ ${userPrompt || "Continue generating from where you were interrupted"}`;
                 const finishedTime = yield* DateTime.now;
 
                 // Automatically extract and save generated project files to disk in projectCwd
-                const extractedFiles = extractFilesFromMarkdown(accumulatedText, projectCwd);
+                const extractedFiles = extractFilesFromMarkdown(
+                  accumulatedText,
+                  projectCwd,
+                  userPrompt,
+                );
                 const savedFiles: string[] = [];
 
                 for (const file of extractedFiles) {
