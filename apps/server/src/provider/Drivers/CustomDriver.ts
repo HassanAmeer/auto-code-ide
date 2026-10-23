@@ -2290,6 +2290,31 @@ export function syncCustomProviderToOpenCode(
       }
     }
 
+    const headersObj: Record<string, string> = {};
+    if (config.headers && Array.isArray(config.headers)) {
+      for (const h of config.headers) {
+        if (h && h.key && h.value) {
+          headersObj[h.key] = h.value;
+        }
+      }
+    }
+
+    const providerEntry = {
+      npm: "@ai-sdk/openai-compatible",
+      name: displayName || cleanId,
+      options: {
+        baseURL: baseUrl,
+        apiKey: apiKey,
+        ...(Object.keys(headersObj).length > 0 ? { headers: headersObj } : {}),
+      },
+      models: Object.keys(modelsObj).length > 0 ? modelsObj : { default: { name: cleanId } },
+    };
+
+    const cleanName = displayName
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]/g, "");
+
     const targetPaths = [
       "/root/all-ai-clis/third-party-provider/opencode.json",
       NodePath.join(NodeOS.homedir(), ".config/opencode/opencode.json"),
@@ -2298,21 +2323,22 @@ export function syncCustomProviderToOpenCode(
 
     for (const p of targetPaths) {
       try {
-        if (NodeFS.existsSync(p)) {
-          const raw = NodeFS.readFileSync(p, "utf-8");
-          const json = JSON.parse(raw);
-          if (!json.provider) json.provider = {};
-          json.provider[cleanId] = {
-            npm: "@ai-sdk/openai-compatible",
-            name: displayName || cleanId,
-            options: {
-              baseURL: baseUrl,
-              apiKey: apiKey,
-            },
-            models: Object.keys(modelsObj).length > 0 ? modelsObj : { default: { name: cleanId } },
-          };
-          NodeFS.writeFileSync(p, JSON.stringify(json, null, 2), "utf-8");
+        const dir = NodePath.dirname(p);
+        if (!NodeFS.existsSync(dir)) {
+          NodeFS.mkdirSync(dir, { recursive: true });
         }
+        let json: any = { $schema: "https://opencode.ai/config.json", provider: {} };
+        if (NodeFS.existsSync(p)) {
+          try {
+            json = JSON.parse(NodeFS.readFileSync(p, "utf-8")) || json;
+          } catch {}
+        }
+        if (!json.provider) json.provider = {};
+        json.provider[cleanId] = providerEntry;
+        if (cleanName && cleanName !== cleanId) {
+          json.provider[cleanName] = providerEntry;
+        }
+        NodeFS.writeFileSync(p, JSON.stringify(json, null, 2), "utf-8");
       } catch {
         // ignore
       }

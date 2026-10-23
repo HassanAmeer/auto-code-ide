@@ -1,3 +1,4 @@
+// @effect-diagnostics nodeBuiltinImport:off preferSchemaOverJson:off
 /**
  * The OpenCode 2 runtime behind the `opencode` driver. It talks to the
  * instance's `opencode serve` process through the HTTP client and reads that
@@ -102,6 +103,9 @@ import {
   makeSubagentConversationArtifacts,
   subagentThreadTitle,
 } from "@t3tools/provider-core/server/subagentProjection";
+import * as NodeFS from "node:fs";
+import * as NodePath from "node:path";
+import * as NodeOS from "node:os";
 import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import { turnScopedSelectionTransition } from "@t3tools/provider-core/server/selectionTransition";
 import { OPENCODE_PROVIDER, openCodePermissionRequestKind } from "../adapter.ts";
@@ -901,6 +905,51 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (
           return makeRef(m.providerID, m.id);
         }
       }
+    }
+
+    // 4b. Normalized slug matching (ignores case, dashes, spaces, slashes)
+    const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const rawNorm = norm(rawModel);
+    for (const m of globalDiscoveredModels.values()) {
+      if (
+        norm(m.id) === rawNorm ||
+        (m.name && norm(m.name) === rawNorm) ||
+        norm(m.id.replace(/^[a-zA-Z0-9_\-.]+\//i, "")) === rawNorm
+      ) {
+        return makeRef(m.providerID, m.id);
+      }
+    }
+
+    // 4c. Inspect opencode.json directly if globalDiscoveredModels didn't match yet
+    try {
+      const diskPaths = [
+        NodePath.join(NodeOS.homedir(), ".config/opencode/opencode.json"),
+        "/root/all-ai-clis/third-party-provider/opencode.json",
+        NodePath.join(process.cwd(), "opencode.json"),
+      ];
+      for (const dp of diskPaths) {
+        if (NodeFS.existsSync(dp)) {
+          const cfg = JSON.parse(NodeFS.readFileSync(dp, "utf-8"));
+          if (cfg && cfg.provider) {
+            for (const [pId, pData] of Object.entries<any>(cfg.provider)) {
+              if (pData?.models) {
+                for (const [mId, mData] of Object.entries<any>(pData.models)) {
+                  if (
+                    mId === rawModel ||
+                    (mData?.name && mData.name === rawModel) ||
+                    norm(mId) === rawNorm ||
+                    (mData?.name && norm(mData.name) === rawNorm)
+                  ) {
+                    return makeRef(pId, mId);
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch {
+      // ignore
     }
 
     // 5. If rawModel has slash and matches a parsed provider

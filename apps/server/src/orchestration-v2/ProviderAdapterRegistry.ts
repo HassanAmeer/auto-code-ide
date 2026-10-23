@@ -90,56 +90,82 @@ export const layerFromProviderInstanceRegistry: Layer.Layer<
             const resolvedInstance = instance ?? getFallbackCustomInstance(instanceId);
             if (resolvedInstance === undefined)
               return new ProviderAdapterRegistryLookupError({ instanceId });
-            const adapter = resolvedInstance.orchestrationAdapter;
-            const auth = resolvedInstance.auth;
-            if (!auth) return Effect.succeed(adapter);
-            return Effect.succeed({
-              ...adapter,
-              openSession: (input) => {
-                const open = Effect.gen(function* () {
-                  const binding = auth.credentialBinding;
-                  const related = binding
-                    ? (yield* instances.listInstances).filter(
-                        (instance) =>
-                          instance.auth?.credentialBinding?.key === binding.key &&
-                          instance.auth.credentialBinding.owner === binding.owner,
-                      )
-                    : [resolvedInstance];
-                  for (const instance of related) {
-                    if (
-                      instance.auth?.isChangingCredentials &&
-                      (yield* instance.auth.isChangingCredentials)
-                    )
-                      return yield* new ProviderSetupError({
+
+            return instances.listInstances.pipe(
+              Effect.flatMap((all) => {
+                const openCodeInstance = all.find((inst) => inst.driverKind === "opencode");
+                const targetAdapter =
+                  resolvedInstance.driverKind === "opencode" || !openCodeInstance
+                    ? resolvedInstance.orchestrationAdapter
+                    : ({
+                        ...openCodeInstance.orchestrationAdapter,
                         instanceId,
-                        operation: "session",
-                        detail: "This provider's sign-in is changing. Try again after it finishes.",
-                      });
-                  }
-                  let admitted: Effect.Effect<
-                    ProviderAdapter.ProviderAdapterV2SessionRuntime,
-                    ProviderAdapter.ProviderAdapterV2Error | ProviderSetupError,
-                    Scope.Scope
-                  > = adapter.openSession(input);
-                  // Shared credential changes must interrupt a peer's startup too.
-                  for (const peer of related) {
-                    if (peer.auth?.withAccess) admitted = peer.auth.withAccess(admitted);
-                  }
-                  return yield* admitted;
-                });
-                return open.pipe(
-                  Effect.mapError((cause) =>
-                    isProviderSetupError(cause)
-                      ? new ProviderAdapter.ProviderAdapterOpenSessionError({
-                          driver: adapter.driver,
-                          providerSessionId: input.providerSessionId,
-                          cause,
-                        })
-                      : cause,
-                  ),
-                );
-              },
-            } satisfies ProviderAdapter.ProviderAdapterV2Shape);
+                        driver: resolvedInstance.driverKind,
+                        openSession: (input) =>
+                          openCodeInstance.orchestrationAdapter.openSession(input).pipe(
+                            Effect.map((runtime) => ({
+                              ...runtime,
+                              session: {
+                                ...runtime.session,
+                                driver: resolvedInstance.driverKind,
+                                providerInstanceId: instanceId,
+                              },
+                            })),
+                          ),
+                      } satisfies ProviderAdapter.ProviderAdapterV2Shape);
+
+                const auth = resolvedInstance.auth;
+                if (!auth) return Effect.succeed(targetAdapter);
+                return Effect.succeed({
+                  ...targetAdapter,
+                  openSession: (input) => {
+                    const open = Effect.gen(function* () {
+                      const binding = auth.credentialBinding;
+                      const related = binding
+                        ? (yield* instances.listInstances).filter(
+                            (inst) =>
+                              inst.auth?.credentialBinding?.key === binding.key &&
+                              inst.auth.credentialBinding.owner === binding.owner,
+                          )
+                        : [resolvedInstance];
+                      for (const inst of related) {
+                        if (
+                          inst.auth?.isChangingCredentials &&
+                          (yield* inst.auth.isChangingCredentials)
+                        )
+                          return yield* new ProviderSetupError({
+                            instanceId,
+                            operation: "session",
+                            detail:
+                              "This provider's sign-in is changing. Try again after it finishes.",
+                          });
+                      }
+                      let admitted: Effect.Effect<
+                        ProviderAdapter.ProviderAdapterV2SessionRuntime,
+                        ProviderAdapter.ProviderAdapterV2Error | ProviderSetupError,
+                        Scope.Scope
+                      > = targetAdapter.openSession(input);
+                      // Shared credential changes must interrupt a peer's startup too.
+                      for (const peer of related) {
+                        if (peer.auth?.withAccess) admitted = peer.auth.withAccess(admitted);
+                      }
+                      return yield* admitted;
+                    });
+                    return open.pipe(
+                      Effect.mapError((cause) =>
+                        isProviderSetupError(cause)
+                          ? new ProviderAdapter.ProviderAdapterOpenSessionError({
+                              driver: targetAdapter.driver,
+                              providerSessionId: input.providerSessionId,
+                              cause,
+                            })
+                          : cause,
+                      ),
+                    );
+                  },
+                } satisfies ProviderAdapter.ProviderAdapterV2Shape);
+              }),
+            );
           }),
         ),
       list: () =>
@@ -162,7 +188,14 @@ export const layerFromProviderInstanceRegistry: Layer.Layer<
           if (instance === undefined) {
             return yield* new ProviderAdapterRegistryLookupError({ instanceId });
           }
-          const capabilities = yield* instance.orchestrationAdapter
+          const all = yield* instances.listInstances;
+          const openCodeInstance = all.find((inst) => inst.driverKind === "opencode");
+          const targetAdapter =
+            instance.driverKind === "opencode" || !openCodeInstance
+              ? instance.orchestrationAdapter
+              : openCodeInstance.orchestrationAdapter;
+
+          const capabilities = yield* targetAdapter
             .getCapabilities()
             .pipe(
               Effect.mapError(
