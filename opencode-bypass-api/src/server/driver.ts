@@ -49,7 +49,12 @@ import {
   resolveChatEndpoint,
   type BypassChatMessage,
 } from "./bypass/client.ts";
-import { getActiveEngineSystemPrompt, executeActiveEnginePipeline } from "./engineBridge.ts";
+import {
+  getActiveEngineSystemPrompt,
+  executeActiveEnginePipeline,
+  getBypassThreadHistory,
+  saveBypassThreadHistory,
+} from "./engineBridge.ts";
 
 const DRIVER_KIND = ProviderDriverKind.make("opencodebypasssetup");
 const decodeSettings = Schema.decodeSync(OpenCodeBypassSetupSettings);
@@ -526,6 +531,11 @@ export const OpenCodeBypassSetupDriver: ProviderDriver<
                       ? getActiveEngineSystemPrompt(projectCwd)
                       : "";
 
+                    const threadKey = String(turnInput.threadId ?? "");
+                    const previousThreadHistory = threadKey
+                      ? getBypassThreadHistory(threadKey, projectCwd)
+                      : [];
+
                     const chatMessages: BypassChatMessage[] = [
                       ...(engineSystemPrompt
                         ? [{ role: "system" as const, content: engineSystemPrompt }]
@@ -533,6 +543,7 @@ export const OpenCodeBypassSetupDriver: ProviderDriver<
                       ...(skillInstructions
                         ? [{ role: "system" as const, content: skillInstructions }]
                         : []),
+                      ...previousThreadHistory,
                       { role: "user", content: promptText },
                     ];
 
@@ -691,9 +702,13 @@ export const OpenCodeBypassSetupDriver: ProviderDriver<
                     const rawFinalText = accumulatedText || accumulatedReasoning;
                     let finalText = rawFinalText;
 
-                    if (projectCwd && rawFinalText) {
+                    if (projectCwd && (accumulatedText || accumulatedReasoning)) {
                       try {
-                        const engineResult = executeActiveEnginePipeline(rawFinalText, projectCwd);
+                        const engineResult = executeActiveEnginePipeline(
+                          accumulatedText,
+                          accumulatedReasoning,
+                          projectCwd,
+                        );
                         finalText = engineResult.finalText;
                       } catch (pipelineErr) {
                         console.error(
@@ -701,6 +716,16 @@ export const OpenCodeBypassSetupDriver: ProviderDriver<
                           pipelineErr,
                         );
                       }
+                    }
+
+                    // Save multi-turn conversation history for this thread
+                    if (threadKey) {
+                      const updatedHistory = [
+                        ...previousThreadHistory,
+                        { role: "user" as const, content: promptText },
+                        { role: "assistant" as const, content: finalText },
+                      ];
+                      saveBypassThreadHistory(threadKey, updatedHistory, projectCwd);
                     }
 
                     if (hasEmittedReasoning) {

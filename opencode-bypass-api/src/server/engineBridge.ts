@@ -9,6 +9,79 @@ export interface ExtractedProjectFile {
   readonly content: string;
 }
 
+export interface ScannedFileDetail {
+  readonly relPath: string;
+  readonly linesCount: number;
+  readonly content?: string;
+  readonly outline?: string;
+  readonly isFull: boolean;
+}
+
+export interface WorkspaceContextResult {
+  readonly hasFiles: boolean;
+  readonly fileCount: number;
+  readonly summary: string;
+  readonly fileDetails: ReadonlyArray<ScannedFileDetail>;
+}
+
+/**
+ * Thread conversation history store so follow-up prompts always have context.
+ */
+const GLOBAL_BYPASS_THREAD_HISTORIES = new Map<
+  string,
+  Array<{ role: "system" | "user" | "assistant"; content: string }>
+>();
+
+export function getBypassThreadHistory(
+  threadKey: string,
+  projectCwd?: string,
+): Array<{ role: "system" | "user" | "assistant"; content: string }> {
+  if (threadKey && GLOBAL_BYPASS_THREAD_HISTORIES.has(threadKey)) {
+    const mem = GLOBAL_BYPASS_THREAD_HISTORIES.get(threadKey);
+    if (mem && mem.length > 0) return mem;
+  }
+
+  if (projectCwd && threadKey) {
+    const historyFile = NodePath.join(projectCwd, ".autocode", `bypass_thread_${threadKey}.json`);
+    try {
+      if (NodeFS.existsSync(historyFile)) {
+        const raw = NodeFS.readFileSync(historyFile, "utf-8");
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          GLOBAL_BYPASS_THREAD_HISTORIES.set(threadKey, parsed);
+          return parsed;
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return [];
+}
+
+export function saveBypassThreadHistory(
+  threadKey: string,
+  history: Array<{ role: "system" | "user" | "assistant"; content: string }>,
+  projectCwd?: string,
+): void {
+  if (threadKey) {
+    GLOBAL_BYPASS_THREAD_HISTORIES.set(threadKey, history);
+  }
+  if (projectCwd && history.length > 0 && threadKey) {
+    try {
+      const autoDir = NodePath.join(projectCwd, ".autocode");
+      if (!NodeFS.existsSync(autoDir)) {
+        NodeFS.mkdirSync(autoDir, { recursive: true });
+      }
+      const historyFile = NodePath.join(autoDir, `bypass_thread_${threadKey}.json`);
+      NodeFS.writeFileSync(historyFile, JSON.stringify(history, null, 2), "utf-8");
+    } catch {
+      // ignore
+    }
+  }
+}
+
 /**
  * Reads the active execution engine settings persisted by the IDE UI.
  */
@@ -40,7 +113,124 @@ export function getActiveExecutionEngineMode(): {
 }
 
 /**
- * Extracts generated project files from LLM Markdown responses.
+ * Scans workspace filesystem so model is 100% aware of existing files and never stops to "read directory".
+ */
+export function scanWorkspaceContext(
+  projectCwd: string,
+  maxTotalBytes = 40000,
+): WorkspaceContextResult {
+  if (!projectCwd || !NodeFS.existsSync(projectCwd)) {
+    return { hasFiles: false, fileCount: 0, summary: "Workspace is fresh/empty.", fileDetails: [] };
+  }
+
+  const ignoreDirs = new Set([
+    ".git",
+    "node_modules",
+    "dist",
+    "build",
+    ".next",
+    "__pycache__",
+    ".venv",
+    ".autocode",
+    ".cache",
+    ".turbo",
+  ]);
+  const files: Array<{ relPath: string; fullPath: string; size: number }> = [];
+
+  function walk(dir: string, depth = 0) {
+    if (depth > 4 || files.length >= 60) return;
+    try {
+      const entries = NodeFS.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.name.startsWith(".") && entry.name !== ".env.example") continue;
+        if (ignoreDirs.has(entry.name)) continue;
+
+        const full = NodePath.join(dir, entry.name);
+        const rel = NodePath.relative(projectCwd, full);
+
+        if (entry.isDirectory()) {
+          walk(full, depth + 1);
+        } else if (entry.isFile()) {
+          try {
+            const stat = NodeFS.statSync(full);
+            files.push({ relPath: rel, fullPath: full, size: stat.size });
+          } catch {
+            // ignore
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  walk(projectCwd);
+
+  if (files.length === 0) {
+    return { hasFiles: false, fileCount: 0, summary: "Workspace is empty.", fileDetails: [] };
+  }
+
+  files.sort((a, b) => {
+    const extOrder: Record<string, number> = {
+      html: 1,
+      js: 2,
+      ts: 3,
+      css: 4,
+      py: 5,
+      json: 6,
+    };
+    const extA = a.relPath.split(".").pop()?.toLowerCase() || "";
+    const extB = b.relPath.split(".").pop()?.toLowerCase() || "";
+    const rankA = extOrder[extA] ?? 99;
+    const rankB = extOrder[extB] ?? 99;
+    return rankA - rankB;
+  });
+
+  let currentBytes = 0;
+  const fileDetails: ScannedFileDetail[] = [];
+  const summaryLines = [
+    `Existing Workspace Files (${files.length} file${files.length > 1 ? "s" : ""}):`,
+  ];
+
+  for (const f of files) {
+    try {
+      const content = NodeFS.readFileSync(f.fullPath, "utf-8");
+      const lines = content.split("\n");
+      summaryLines.push(
+        `- ${f.relPath} (${lines.length} lines, ${Math.round((f.size / 1024) * 10) / 10} KB)`,
+      );
+
+      if (currentBytes + f.size <= maxTotalBytes) {
+        currentBytes += f.size;
+        fileDetails.push({
+          relPath: f.relPath,
+          linesCount: lines.length,
+          content,
+          isFull: true,
+        });
+      } else {
+        fileDetails.push({
+          relPath: f.relPath,
+          linesCount: lines.length,
+          outline: `First 10 lines:\n${lines.slice(0, 10).join("\n")}`,
+          isFull: false,
+        });
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return {
+    hasFiles: true,
+    fileCount: files.length,
+    summary: summaryLines.join("\n"),
+    fileDetails,
+  };
+}
+
+/**
+ * Extracts generated project files from LLM responses (both thinking and text blocks).
  */
 export function extractFilesFromMarkdown(
   markdown: string,
@@ -325,13 +515,40 @@ export function applyFileContentOrPatch(
  */
 export function getActiveEngineSystemPrompt(projectCwd: string): string {
   const engine = getActiveExecutionEngineMode();
+  const workspace = scanWorkspaceContext(projectCwd);
+
+  let filesContext = "";
+  if (workspace.hasFiles && workspace.fileCount > 0) {
+    for (const f of workspace.fileDetails) {
+      if (f.isFull && f.content) {
+        filesContext += `\n--- EXISTING FILE ON DISK: ${f.relPath} (${f.linesCount} lines) ---\n\`\`\`\n${f.content}\n\`\`\`\n`;
+      } else if (f.outline) {
+        filesContext += `\n--- EXISTING FILE STRUCTURE: ${f.relPath} (${f.linesCount} lines) ---\n${f.outline}\n`;
+      }
+    }
+  }
+
   return `You are an elite, production-grade AI Software Engineer operating directly inside the user's workspace.
 Current Project Directory: ${projectCwd}
 Active Execution Engine: ${engine.mode === "codex" ? "OpenAI Codex CLI Engine" : "Custom AI Engine"}
 
 ================================================================================
-CRITICAL FILE CREATION & EDITING RULES:
-1. ALWAYS OUTPUT CODE IN EXPLICIT CODE BLOCKS WITH FILEPATHS:
+WORKSPACE FILE SYSTEM CONTEXT (ALREADY SCANNED - DO NOT ASK TO READ DIRECTORY):
+${workspace.summary}
+${filesContext || "(Workspace is currently fresh/empty)"}
+
+================================================================================
+CRITICAL MANDATORY RULES FOR CODE GENERATION (100% RELIABILITY):
+1. NEVER ASK OR THINK TO "READ THE DIRECTORY" OR "LIST FILES":
+   • The workspace files are ALREADY fully provided above!
+   • Start implementing the requested files immediately!
+
+2. DO NOT HIDE CODE IN THINKING PROCESS:
+   • You MUST output the FULL, COMPLETE, PRODUCTION-READY code in the FINAL message response.
+   • NEVER output 5-10 lines of partial snippets or cut code off with "for(let i=0; i<r".
+   • If creating a game or website, ALWAYS write the ENTIRE working index.html (or game.js / style.css) with all logic, canvas sizing, collision detection, and controls.
+
+3. ALWAYS OUTPUT CODE IN EXPLICIT CODE BLOCKS WITH FILEPATHS:
    \`\`\`<language> filepath=<relative/path>
    // complete file content or diff
    \`\`\`
@@ -341,34 +558,23 @@ CRITICAL FILE CREATION & EDITING RULES:
    ...
    </html>
    \`\`\`
-   or for diffs:
-   \`\`\`javascript filepath=game.js
-   <<<< SEARCH
-   // exact lines to replace
-   ====
-   // new replacement lines
-   >>>>
-   \`\`\`
 
-2. COMPLETE WORKING FILES:
-   • For new files, websites, or games: ALWAYS provide the FULL, 100% complete, working code.
-   • NEVER use placeholders like "// ... rest of code unchanged ...".
-   • If building a web app or game, ensure index.html contains everything needed so it runs immediately in Live Preview!
+4. ZERO BROKEN ASSETS:
+   • Draw game sprites procedurally on HTML5 Canvas or use emojis ("🚀", "👾", "🪙", "💥").
+   • Never reference external images or sounds that do not exist locally on disk.
 
-3. AUTOMATIC DISK PERSISTENCE:
+5. AUTOMATIC DISK PERSISTENCE:
    • The host IDE automatically saves files to ${projectCwd} and stages them to Git when you output code blocks with filepaths.
 ================================================================================`;
 }
 
 /**
- * Executes the engine pipeline on the completed model response:
- * - Extracts files
- * - Writes/patches files to disk
- * - Auto-commits to git
- * - Generates formatted status message
+ * Executes the engine pipeline on the completed model response.
+ * Inspects BOTH assistant text AND reasoning/thinking text so no code is lost!
  */
 export function executeActiveEnginePipeline(
   responseMarkdown: string,
+  reasoningMarkdown: string | undefined,
   projectCwd: string,
 ): {
   finalText: string;
@@ -378,7 +584,25 @@ export function executeActiveEnginePipeline(
     return { finalText: responseMarkdown, savedFiles: [] };
   }
 
-  const extractedFiles = extractFilesFromMarkdown(responseMarkdown, projectCwd);
+  // 1. First extract files from response markdown
+  let extractedFiles = extractFilesFromMarkdown(responseMarkdown, projectCwd);
+
+  // 2. If response markdown had incomplete or zero files, inspect reasoning/thinking!
+  // Often reasoning models write the complete 300+ line code in thinking and leave final message brief!
+  if (reasoningMarkdown && reasoningMarkdown.length > 50) {
+    const thinkingFiles = extractFilesFromMarkdown(reasoningMarkdown, projectCwd);
+    for (const tf of thinkingFiles) {
+      const existing = extractedFiles.find((ef) => ef.path === tf.path);
+      if (!existing) {
+        extractedFiles.push(tf);
+      } else if (tf.content.length > existing.content.length + 100) {
+        // Thinking version has much more complete code!
+        extractedFiles = extractedFiles.filter((ef) => ef.path !== tf.path);
+        extractedFiles.push(tf);
+      }
+    }
+  }
+
   const savedFiles: string[] = [];
 
   for (const file of extractedFiles) {
