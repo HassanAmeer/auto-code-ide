@@ -432,7 +432,11 @@ export async function fetchModelsFromProvider(
   };
 
   if (apiKey && apiKey.trim().length > 0) {
-    requestHeaders["Authorization"] = `Bearer ${apiKey.trim()}`;
+    const k = apiKey.trim();
+    requestHeaders["Authorization"] = `Bearer ${k}`;
+    requestHeaders["x-api-key"] = k;
+    requestHeaders["x-goog-api-key"] = k;
+    requestHeaders["anthropic-version"] = "2023-06-01";
   }
 
   if (headers && headers.length > 0) {
@@ -455,6 +459,10 @@ export async function fetchModelsFromProvider(
   const urlsToTry = [modelsUrl];
   if (modelsUrl !== directUrl) {
     urlsToTry.push(directUrl);
+  }
+
+  if (apiKey && cleanBase.includes("googleapis.com")) {
+    urlsToTry.push(`${cleanBase}/models?key=${encodeURIComponent(apiKey.trim())}`);
   }
 
   // Also include Ollama /api/tags if host resembles ollama or localhost:11434

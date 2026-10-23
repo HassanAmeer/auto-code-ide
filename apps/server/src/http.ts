@@ -658,7 +658,11 @@ export const layerCustomProviderFetchModelsRoute = HttpRouter.add(
         };
 
         if (bodyJson.apiKey && bodyJson.apiKey.trim().length > 0) {
-          requestHeaders["Authorization"] = `Bearer ${bodyJson.apiKey.trim()}`;
+          const k = bodyJson.apiKey.trim();
+          requestHeaders["Authorization"] = `Bearer ${k}`;
+          requestHeaders["x-api-key"] = k;
+          requestHeaders["x-goog-api-key"] = k;
+          requestHeaders["anthropic-version"] = "2023-06-01";
         }
 
         if (bodyJson.headers && Array.isArray(bodyJson.headers)) {
@@ -679,6 +683,11 @@ export const layerCustomProviderFetchModelsRoute = HttpRouter.add(
         const urlsToTry = [modelsUrl];
         if (modelsUrl !== directUrl) {
           urlsToTry.push(directUrl);
+        }
+        if (bodyJson.apiKey && cleanBase.includes("googleapis.com")) {
+          urlsToTry.push(
+            `${baseWithoutChat}/models?key=${encodeURIComponent(bodyJson.apiKey.trim())}`,
+          );
         }
         if (cleanBase.includes("11434") || cleanBase.toLowerCase().includes("ollama")) {
           const rootUrl = baseWithoutChat.replace(/\/v1$/, "");
@@ -732,7 +741,12 @@ export const layerCustomProviderFetchModelsRoute = HttpRouter.add(
                 )
                 .map((item: any) => ({
                   id: String(item.id || item.name || item.serviceId),
-                  name: typeof item.name === "string" ? item.name : undefined,
+                  name:
+                    typeof item.displayName === "string"
+                      ? item.displayName
+                      : typeof item.name === "string"
+                        ? item.name
+                        : undefined,
                 }));
               if (models.length > 0) {
                 return { ok: true, models };

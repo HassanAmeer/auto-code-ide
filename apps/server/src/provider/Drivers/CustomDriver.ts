@@ -1586,6 +1586,17 @@ ${userPrompt || "Continue generating from where you were interrupted"}`;
                     "Authorization",
                     `Bearer ${cleanApiKey}`,
                   );
+                  if (chatUrl.includes("anthropic.com")) {
+                    request = HttpClientRequest.setHeader(request, "x-api-key", cleanApiKey);
+                    request = HttpClientRequest.setHeader(
+                      request,
+                      "anthropic-version",
+                      "2023-06-01",
+                    );
+                  }
+                  if (chatUrl.includes("googleapis.com")) {
+                    request = HttpClientRequest.setHeader(request, "x-goog-api-key", cleanApiKey);
+                  }
                 }
 
                 if (config.headers && Array.isArray(config.headers)) {
