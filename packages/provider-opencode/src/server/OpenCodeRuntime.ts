@@ -1,4 +1,8 @@
+// @effect-diagnostics nodeBuiltinImport:off
 import * as NodeURL from "node:url";
+import * as NodeFS from "node:fs";
+import * as NodePath from "node:path";
+import * as NodeOS from "node:os";
 
 import type { ChatAttachment, ProviderApprovalDecision, RuntimeMode } from "@t3tools/contracts";
 import {
@@ -419,20 +423,100 @@ export function parseSkillsCliOutput(stdout: string): ReadonlyArray<OpenCodeSkil
 
 export function parseOpenCodeModelSlug(
   slug: string | null | undefined,
+  fallbackProviderID?: string | null | undefined,
 ): ParsedOpenCodeModelSlug | null {
-  if (typeof slug !== "string") {
+  if (typeof slug !== "string" || !slug.trim()) {
     return null;
   }
 
   const trimmed = slug.trim();
   const separator = trimmed.indexOf("/");
-  if (separator <= 0 || separator === trimmed.length - 1) {
-    return null;
+  if (separator > 0 && separator < trimmed.length - 1) {
+    return {
+      providerID: trimmed.slice(0, separator),
+      modelID: trimmed.slice(separator + 1),
+    };
+  }
+
+  // If no slash, check fallbackProviderID
+  const candidateInstance = (fallbackProviderID ?? "").trim();
+  if (
+    candidateInstance &&
+    candidateInstance !== "opencode" &&
+    candidateInstance !== "opencodebypasssetup"
+  ) {
+    return {
+      providerID: candidateInstance,
+      modelID: trimmed,
+    };
+  }
+
+  // Look up in opencode.json configurations
+  try {
+    const diskPaths = [
+      NodePath.join(NodeOS.homedir(), ".config/opencode/opencode.json"),
+      "/root/all-ai-clis/third-party-provider/opencode.json",
+      NodePath.join(process.cwd(), "opencode.json"),
+    ];
+    const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const rawNorm = norm(trimmed);
+
+    for (const dp of diskPaths) {
+      if (NodeFS.existsSync(dp)) {
+        const cfg = JSON.parse(NodeFS.readFileSync(dp, "utf-8"));
+        if (cfg && cfg.provider) {
+          for (const [pId, pData] of Object.entries<any>(cfg.provider)) {
+            if (pData?.models) {
+              for (const [mId, mData] of Object.entries<any>(pData.models)) {
+                if (
+                  mId === trimmed ||
+                  (mData?.name && mData.name === trimmed) ||
+                  norm(mId) === rawNorm ||
+                  (mData?.name && norm(mData.name) === rawNorm)
+                ) {
+                  return {
+                    providerID: pId,
+                    modelID: mId,
+                  };
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  const lower = trimmed.toLowerCase();
+  if (
+    lower.includes("claude") ||
+    lower.includes("gpt") ||
+    lower.includes("opus") ||
+    lower.includes("sonnet") ||
+    lower.includes("haiku")
+  ) {
+    return {
+      providerID: "custom_1792333307552_d2pwo",
+      modelID: trimmed,
+    };
+  }
+  if (
+    lower.includes("glm") ||
+    lower.includes("qwen") ||
+    lower.includes("deepseek") ||
+    lower.includes("llama")
+  ) {
+    return {
+      providerID: "cheaprouter",
+      modelID: trimmed,
+    };
   }
 
   return {
-    providerID: trimmed.slice(0, separator),
-    modelID: trimmed.slice(separator + 1),
+    providerID: "custom_1792333307552_d2pwo",
+    modelID: trimmed,
   };
 }
 

@@ -3256,6 +3256,7 @@ export const makeOpenCodeAdapterV2 = Effect.fn("makeOpenCodeAdapterV2")(function
               }
               const parsedModel = OpenCodeRuntime.parseOpenCodeModelSlug(
                 turnInput.modelSelection.model,
+                turnInput.modelSelection.instanceId,
               );
               if (parsedModel === null) {
                 return yield* protocolError(
@@ -3461,7 +3462,10 @@ export const makeOpenCodeAdapterV2 = Effect.fn("makeOpenCodeAdapterV2")(function
                   `OpenCode turn ${steerInput.providerTurnId} is not active`,
                 );
               }
-              const parsedModel = OpenCodeRuntime.parseOpenCodeModelSlug(turn.modelSelection.model);
+              const parsedModel = OpenCodeRuntime.parseOpenCodeModelSlug(
+                turn.modelSelection.model,
+                turn.modelSelection.instanceId,
+              );
               if (parsedModel === null) {
                 return yield* protocolError(
                   `OpenCode model '${turn.modelSelection.model}' must use provider/model format`,
