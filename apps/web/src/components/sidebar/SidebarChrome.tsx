@@ -6,6 +6,7 @@ import {
   ChevronDownIcon,
   ChevronUpIcon,
   FolderTreeIcon,
+  FileJsonIcon,
   SettingsIcon,
   TerminalSquareIcon,
 } from "lucide-react";
@@ -13,6 +14,7 @@ import type { ReactNode } from "react";
 import { memo, useCallback, useState } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { useNotes, useNotesSheetState } from "../../lib/notesStore";
+import { useImportSessionStore } from "../chat/importSessionStore";
 
 import { useEnvironmentIdentificationMode } from "../../hooks/useSettings";
 import { cn } from "../../lib/utils";
@@ -450,6 +452,26 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
                 <span className="font-semibold text-[11px] truncate">VPS Background</span>
                 <span className="text-[9px] text-muted-foreground truncate">
                   {isBgEnabled ? "24/7 VPS (ON)" : "Paused (OFF)"}
+                </span>
+              </div>
+            </button>
+
+            {/* Import Session (JSON) */}
+            <button
+              type="button"
+              onClick={() => {
+                useImportSessionStore.getState().openDialog();
+                setIsExpanded(false);
+              }}
+              className="flex items-center gap-2 rounded-lg p-1.5 text-xs font-medium hover:bg-sidebar-row-hover text-sidebar-foreground transition-all text-left border border-transparent cursor-pointer"
+            >
+              <div className="size-6 rounded-md bg-amber-500/10 text-amber-400 flex items-center justify-center shrink-0">
+                <FileJsonIcon className="size-3.5" />
+              </div>
+              <div className="flex flex-col min-w-0">
+                <span className="font-semibold text-[11px] truncate">Import Chat</span>
+                <span className="text-[9px] text-muted-foreground truncate">
+                  Restore session JSON
                 </span>
               </div>
             </button>

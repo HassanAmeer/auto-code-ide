@@ -373,6 +373,7 @@ import {
   preventRepeatedTerminalCloseShortcut,
   preventTerminalCloseShortcut,
 } from "../lib/terminalCloseShortcut";
+import { exportSessionToJson, exportSessionToMarkdown } from "../lib/sessionExportImport";
 import { resolveNewDraftStartFromOrigin } from "../lib/chatThreadActions";
 import {
   deriveLogicalProjectKeyFromSettings,
@@ -8706,6 +8707,58 @@ export default function ChatView(props: ChatViewProps) {
       setThreadError,
     ],
   );
+
+  const handleForkCurrentSession = useCallback(async () => {
+    if (!activeThread) return;
+    let latestRunId: RunId | null = null;
+    for (let i = timelineEntries.length - 1; i >= 0; i--) {
+      const entry = timelineEntries[i];
+      if (entry && "runId" in entry && entry.runId) {
+        latestRunId = entry.runId as RunId;
+        break;
+      }
+    }
+    if (latestRunId) {
+      await onForkFromRun({ sourceThreadId: activeThread.id, runId: latestRunId });
+    } else {
+      toastManager.add({
+        type: "neutral",
+        title: "Nothing to fork yet",
+        description: "Send at least one message before creating a fork branch.",
+      });
+    }
+  }, [activeThread, timelineEntries, onForkFromRun]);
+
+  const handleExportCurrentSession = useCallback(
+    (format: "json" | "markdown") => {
+      if (!activeThread) return;
+      if (format === "json") {
+        exportSessionToJson(
+          {
+            id: activeThread.id,
+            title: activeThread.title,
+            environmentId: activeThread.environmentId,
+            createdAt: activeThread.createdAt,
+          },
+          timelineEntries,
+        );
+        toastManager.add({ type: "success", title: "Session exported to JSON" });
+      } else {
+        exportSessionToMarkdown(
+          {
+            id: activeThread.id,
+            title: activeThread.title,
+            environmentId: activeThread.environmentId,
+            createdAt: activeThread.createdAt,
+          },
+          timelineEntries,
+        );
+        toastManager.add({ type: "success", title: "Session exported to Markdown" });
+      }
+    },
+    [activeThread, timelineEntries],
+  );
+
   const onCompactContext = () => {
     if (compactDisabled) return;
     void sendStandaloneCommand("/compact", "Failed to compact context.");
@@ -9236,12 +9289,44 @@ export default function ChatView(props: ChatViewProps) {
       composerThreadContexts.length === 0
         ? parseStandaloneComposerSlashCommand(trimmed)
         : null;
-    if (standaloneSlashCommand && multipleModelSelections === null) {
-      handleInteractionModeChange(standaloneSlashCommand);
-      promptRef.current = "";
-      clearComposerDraftContent(composerDraftTarget);
-      composerRef.current?.resetCursorState();
-      return;
+    if (standaloneSlashCommand) {
+      if (standaloneSlashCommand === "fork") {
+        void handleForkCurrentSession();
+        promptRef.current = "";
+        clearComposerDraftContent(composerDraftTarget);
+        composerRef.current?.resetCursorState();
+        return;
+      }
+      if (standaloneSlashCommand === "export") {
+        handleExportCurrentSession("json");
+        promptRef.current = "";
+        clearComposerDraftContent(composerDraftTarget);
+        composerRef.current?.resetCursorState();
+        return;
+      }
+      if (standaloneSlashCommand === "coder") {
+        handleInteractionModeChange("default");
+        promptRef.current = "";
+        clearComposerDraftContent(composerDraftTarget);
+        composerRef.current?.resetCursorState();
+        toastManager.add({ type: "neutral", title: "Switched to Coder Persona" });
+        return;
+      }
+      if (standaloneSlashCommand === "review") {
+        handleInteractionModeChange("plan");
+        promptRef.current = "";
+        clearComposerDraftContent(composerDraftTarget);
+        composerRef.current?.resetCursorState();
+        toastManager.add({ type: "neutral", title: "Switched to Bug Hunter Persona" });
+        return;
+      }
+      if (multipleModelSelections === null) {
+        handleInteractionModeChange(standaloneSlashCommand);
+        promptRef.current = "";
+        clearComposerDraftContent(composerDraftTarget);
+        composerRef.current?.resetCursorState();
+        return;
+      }
     }
     if (!hasSendableContent) {
       if (expiredTerminalContextCount > 0) {
@@ -11771,6 +11856,8 @@ export default function ChatView(props: ChatViewProps) {
             activeProject={activeProject ?? null}
             rightPanelOpen={inlineRightPanelOwnsTitleBar}
             onNewThreadInProject={handleNewThreadInActiveProject}
+            onForkCurrentThread={handleForkCurrentSession}
+            onExportCurrentThread={handleExportCurrentSession}
             {...(activeDraftLogicalProjectKey
               ? { onOpenProjectSettings: handleOpenDraftProjectSettings }
               : {})}

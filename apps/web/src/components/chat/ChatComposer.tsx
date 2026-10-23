@@ -2711,6 +2711,34 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           label: "/model",
           description: "Switch response model for this thread",
         },
+        {
+          id: "slash:fork",
+          type: "slash-command",
+          command: "fork",
+          label: "/fork",
+          description: "Fork this session into a new branch (Shakha)",
+        },
+        {
+          id: "slash:export",
+          type: "slash-command",
+          command: "export",
+          label: "/export",
+          description: "Export current chat session to JSON file",
+        },
+        {
+          id: "slash:coder",
+          type: "slash-command",
+          command: "coder",
+          label: "/coder",
+          description: "Switch to Coder Persona for fast implementation",
+        },
+        {
+          id: "slash:review",
+          type: "slash-command",
+          command: "review",
+          label: "/review",
+          description: "Switch to Bug Hunter Persona for security & code review",
+        },
         ...(planModeUiEnabled
           ? ([
               {
@@ -2718,7 +2746,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                 type: "slash-command",
                 command: "plan",
                 label: "/plan",
-                description: "Switch this thread into plan mode",
+                description: "Switch this thread into architect / plan mode",
               },
               {
                 id: "slash:default",

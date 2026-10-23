@@ -9,7 +9,7 @@ import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
-import { ChevronDownIcon } from "lucide-react";
+import { ChevronDownIcon, DownloadIcon, GitForkIcon } from "lucide-react";
 import {
   memo,
   useCallback,
@@ -22,6 +22,8 @@ import {
 } from "react";
 import { isTrailingDoubleClick } from "../Sidebar.logic";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { Button } from "../ui/button";
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
 import { toastManager } from "../ui/toast";
 import { useThreadActionMenu } from "~/hooks/useThreadActionMenu";
 import { readLocalApi } from "~/localApi";
@@ -48,6 +50,8 @@ interface ChatHeaderProps {
   rightPanelOpen: boolean;
   onNewThreadInProject: () => void;
   onOpenProjectSettings?: (() => void) | undefined;
+  onForkCurrentThread?: (() => void) | undefined;
+  onExportCurrentThread?: ((format: "json" | "markdown") => void) | undefined;
 }
 
 /**
@@ -80,6 +84,8 @@ export const ChatHeader = memo(function ChatHeader({
   rightPanelOpen,
   onNewThreadInProject,
   onOpenProjectSettings,
+  onForkCurrentThread,
+  onExportCurrentThread,
 }: ChatHeaderProps) {
   const activeProjectName = activeProject?.title;
   const activeProjectCwd = activeProject?.workspaceRoot ?? null;
@@ -355,6 +361,66 @@ export const ChatHeader = memo(function ChatHeader({
           )}
         </WorkspaceBreadcrumbItem>
       </WorkspaceBreadcrumb>
+
+      {/* Quick Action Buttons: Fork Session & Export Session */}
+      {isServerThread && (
+        <div className="flex shrink-0 items-center gap-1.5 ml-auto">
+          {onForkCurrentThread && (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    type="button"
+                    size="xs"
+                    variant="ghost"
+                    onClick={onForkCurrentThread}
+                    className="h-7 px-2 gap-1 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 cursor-pointer"
+                    aria-label="Fork session into a new branch"
+                  >
+                    <GitForkIcon className="size-3.5 text-primary" />
+                    <span className="hidden sm:inline">Fork</span>
+                  </Button>
+                }
+              />
+              <TooltipPopup side="bottom">Fork session (Shakha) into a new branch</TooltipPopup>
+            </Tooltip>
+          )}
+
+          {onExportCurrentThread && (
+            <Menu>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <MenuTrigger
+                      render={
+                        <Button
+                          type="button"
+                          size="xs"
+                          variant="ghost"
+                          className="h-7 px-2 gap-1 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 cursor-pointer"
+                          aria-label="Export chat session"
+                        >
+                          <DownloadIcon className="size-3.5" />
+                          <span className="hidden sm:inline">Export</span>
+                        </Button>
+                      }
+                    />
+                  }
+                />
+                <TooltipPopup side="bottom">Export session (JSON / Markdown)</TooltipPopup>
+              </Tooltip>
+              <MenuPopup side="bottom" align="end" className="w-48">
+                <MenuItem onClick={() => onExportCurrentThread("json")}>
+                  Export as JSON (.json)
+                </MenuItem>
+                <MenuItem onClick={() => onExportCurrentThread("markdown")}>
+                  Export as Markdown (.md)
+                </MenuItem>
+              </MenuPopup>
+            </Menu>
+          )}
+        </div>
+      )}
     </div>
   );
 });

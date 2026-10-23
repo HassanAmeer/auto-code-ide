@@ -30,6 +30,7 @@ import { Route as SettingsProvidersRouteImport } from './routes/settings.provide
 import { Route as SettingsProjectsRouteImport } from './routes/settings.projects'
 import { Route as SettingsOpenSourceLicensesRouteImport } from './routes/settings.open-source-licenses'
 import { Route as SettingsNotificationsRouteImport } from './routes/settings.notifications'
+import { Route as SettingsMcpRouteImport } from './routes/settings.mcp'
 import { Route as SettingsKeybindingsRouteImport } from './routes/settings.keybindings'
 import { Route as SettingsIntegrationsRouteImport } from './routes/settings.integrations'
 import { Route as SettingsGeneralRouteImport } from './routes/settings.general'
@@ -149,6 +150,11 @@ const SettingsNotificationsRoute = SettingsNotificationsRouteImport.update({
   path: '/notifications',
   getParentRoute: () => SettingsRoute,
 } as any)
+const SettingsMcpRoute = SettingsMcpRouteImport.update({
+  id: '/mcp',
+  path: '/mcp',
+  getParentRoute: () => SettingsRoute,
+} as any)
 const SettingsKeybindingsRoute = SettingsKeybindingsRouteImport.update({
   id: '/keybindings',
   path: '/keybindings',
@@ -235,6 +241,7 @@ export interface FileRoutesByFullPath {
   '/settings/general': typeof SettingsGeneralRoute
   '/settings/integrations': typeof SettingsIntegrationsRoute
   '/settings/keybindings': typeof SettingsKeybindingsRoute
+  '/settings/mcp': typeof SettingsMcpRoute
   '/settings/notifications': typeof SettingsNotificationsRoute
   '/settings/open-source-licenses': typeof SettingsOpenSourceLicensesRoute
   '/settings/projects': typeof SettingsProjectsRoute
@@ -269,6 +276,7 @@ export interface FileRoutesByTo {
   '/settings/general': typeof SettingsGeneralRoute
   '/settings/integrations': typeof SettingsIntegrationsRoute
   '/settings/keybindings': typeof SettingsKeybindingsRoute
+  '/settings/mcp': typeof SettingsMcpRoute
   '/settings/notifications': typeof SettingsNotificationsRoute
   '/settings/open-source-licenses': typeof SettingsOpenSourceLicensesRoute
   '/settings/projects': typeof SettingsProjectsRoute
@@ -306,6 +314,7 @@ export interface FileRoutesById {
   '/settings/general': typeof SettingsGeneralRoute
   '/settings/integrations': typeof SettingsIntegrationsRoute
   '/settings/keybindings': typeof SettingsKeybindingsRoute
+  '/settings/mcp': typeof SettingsMcpRoute
   '/settings/notifications': typeof SettingsNotificationsRoute
   '/settings/open-source-licenses': typeof SettingsOpenSourceLicensesRoute
   '/settings/projects': typeof SettingsProjectsRoute
@@ -344,6 +353,7 @@ export interface FileRouteTypes {
     | '/settings/general'
     | '/settings/integrations'
     | '/settings/keybindings'
+    | '/settings/mcp'
     | '/settings/notifications'
     | '/settings/open-source-licenses'
     | '/settings/projects'
@@ -378,6 +388,7 @@ export interface FileRouteTypes {
     | '/settings/general'
     | '/settings/integrations'
     | '/settings/keybindings'
+    | '/settings/mcp'
     | '/settings/notifications'
     | '/settings/open-source-licenses'
     | '/settings/projects'
@@ -414,6 +425,7 @@ export interface FileRouteTypes {
     | '/settings/general'
     | '/settings/integrations'
     | '/settings/keybindings'
+    | '/settings/mcp'
     | '/settings/notifications'
     | '/settings/open-source-licenses'
     | '/settings/projects'
@@ -592,6 +604,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsNotificationsRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/settings/mcp': {
+      id: '/settings/mcp'
+      path: '/mcp'
+      fullPath: '/settings/mcp'
+      preLoaderRoute: typeof SettingsMcpRouteImport
+      parentRoute: typeof SettingsRoute
+    }
     '/settings/keybindings': {
       id: '/settings/keybindings'
       path: '/keybindings'
@@ -712,6 +731,7 @@ interface SettingsRouteChildren {
   SettingsGeneralRoute: typeof SettingsGeneralRoute
   SettingsIntegrationsRoute: typeof SettingsIntegrationsRoute
   SettingsKeybindingsRoute: typeof SettingsKeybindingsRoute
+  SettingsMcpRoute: typeof SettingsMcpRoute
   SettingsNotificationsRoute: typeof SettingsNotificationsRoute
   SettingsOpenSourceLicensesRoute: typeof SettingsOpenSourceLicensesRoute
   SettingsProjectsRoute: typeof SettingsProjectsRoute
@@ -737,6 +757,7 @@ const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsGeneralRoute: SettingsGeneralRoute,
   SettingsIntegrationsRoute: SettingsIntegrationsRoute,
   SettingsKeybindingsRoute: SettingsKeybindingsRoute,
+  SettingsMcpRoute: SettingsMcpRoute,
   SettingsNotificationsRoute: SettingsNotificationsRoute,
   SettingsOpenSourceLicensesRoute: SettingsOpenSourceLicensesRoute,
   SettingsProjectsRoute: SettingsProjectsRoute,
