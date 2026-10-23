@@ -2752,6 +2752,30 @@ export const layerMcpSyncRoute = HttpRouter.add(
   ),
 );
 
+function isPrivateOrLocalHost(rawHostname: string): boolean {
+  const h = rawHostname
+    .replace(/^\[|\]$/g, "")
+    .trim()
+    .toLowerCase();
+  return (
+    h === "localhost" ||
+    h.endsWith(".localhost") ||
+    h.endsWith(".local") ||
+    h.endsWith(".internal") ||
+    h === "0.0.0.0" ||
+    h === "::" ||
+    h === "::1" ||
+    h.startsWith("fe80:") ||
+    h.startsWith("fc00:") ||
+    h.startsWith("fd") ||
+    /^127\.\d+\.\d+\.\d+$/.test(h) ||
+    /^10\.\d+\.\d+\.\d+$/.test(h) ||
+    /^192\.168\.\d+\.\d+$/.test(h) ||
+    /^172\.(1[6-9]|2\d|3[01])\.\d+\.\d+$/.test(h) ||
+    /^169\.254\.\d+\.\d+$/.test(h)
+  );
+}
+
 export const layerWebFetchRoute = HttpRouter.add(
   "POST",
   "/api/web/fetch",
@@ -2786,21 +2810,7 @@ export const layerWebFetchRoute = HttpRouter.add(
       });
     }
 
-    const hostname = parsedUrl.hostname.toLowerCase();
-    const isPrivateOrInternal =
-      hostname === "localhost" ||
-      hostname.endsWith(".localhost") ||
-      hostname.endsWith(".local") ||
-      hostname.endsWith(".internal") ||
-      hostname === "0.0.0.0" ||
-      hostname === "::1" ||
-      /^127\.\d+\.\d+\.\d+$/.test(hostname) ||
-      /^10\.\d+\.\d+\.\d+$/.test(hostname) ||
-      /^192\.168\.\d+\.\d+$/.test(hostname) ||
-      /^172\.(1[6-9]|2\d|3[01])\.\d+\.\d+$/.test(hostname) ||
-      /^169\.254\.\d+\.\d+$/.test(hostname);
-
-    if (isPrivateOrInternal) {
+    if (isPrivateOrLocalHost(parsedUrl.hostname)) {
       return HttpServerResponse.jsonUnsafe({
         ok: false,
         error: "Access to private or local network addresses is prohibited.",
@@ -2827,20 +2837,48 @@ export const layerWebFetchRoute = HttpRouter.add(
         }
       } catch {}
 
-      const res = yield* Effect.promise(() =>
-        fetch(targetUrl, {
-          headers: {
-            "User-Agent":
-              "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 AutoCodeBot/1.0",
-            Accept: "text/html,application/xhtml+xml,text/plain",
-          },
-        }),
-      );
+      let currentUrl = targetUrl;
+      let res: Response | null = null;
+      for (let redirectCount = 0; redirectCount < 5; redirectCount++) {
+        const candidateRes: Response = yield* Effect.promise(() =>
+          fetch(currentUrl, {
+            redirect: "manual",
+            headers: {
+              "User-Agent":
+                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 AutoCodeBot/1.0",
+              Accept: "text/html,application/xhtml+xml,text/plain",
+            },
+          }),
+        );
 
-      if (!res.ok) {
+        if (candidateRes.status >= 300 && candidateRes.status < 400) {
+          const location = candidateRes.headers.get("location");
+          if (!location) break;
+          const nextUrl = new URL(location, currentUrl);
+          if (nextUrl.protocol !== "http:" && nextUrl.protocol !== "https:") {
+            return HttpServerResponse.jsonUnsafe({
+              ok: false,
+              error: "Redirect to non-HTTP/HTTPS protocol prohibited.",
+            });
+          }
+          if (isPrivateOrLocalHost(nextUrl.hostname)) {
+            return HttpServerResponse.jsonUnsafe({
+              ok: false,
+              error: "Redirect to private or local network addresses is prohibited.",
+            });
+          }
+          currentUrl = nextUrl.toString();
+          continue;
+        }
+
+        res = candidateRes;
+        break;
+      }
+
+      if (!res || !res.ok) {
         return HttpServerResponse.jsonUnsafe({
           ok: false,
-          error: `HTTP ${res.status}: ${res.statusText}`,
+          error: res ? `HTTP ${res.status}: ${res.statusText}` : "Failed to fetch webpage.",
         });
       }
 
