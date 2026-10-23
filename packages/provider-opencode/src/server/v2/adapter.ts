@@ -3834,9 +3834,15 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (
             permissions,
           });
           const createdAt = yield* DateTime.now;
+          const threadId =
+            threadInput.existingProviderThread?.id &&
+            !threadInput.existingProviderThread.id.includes("pending:")
+              ? threadInput.existingProviderThread.id
+              : idAllocator.derive.providerThread({ driver, nativeThreadId: created.id });
+
           const providerThread: OrchestrationV2ProviderThread = {
             ...(threadInput.existingProviderThread ?? {
-              id: idAllocator.derive.providerThread({ driver, nativeThreadId: created.id }),
+              id: threadId,
               driver,
               providerInstanceId: instanceId,
               appThreadId: threadInput.threadId,
@@ -3847,6 +3853,8 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (
               forkedFrom: null,
               createdAt,
             }),
+            id: threadId,
+            driver,
             providerSessionId: input.providerSessionId,
             nativeThreadRef: ref(created.id),
             nativeConversationHeadRef: null,
@@ -3873,7 +3881,7 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (
         ),
       resumeThread: (threadInput) =>
         Effect.gen(function* () {
-          const sessionId = yield* sessionIdOf(threadInput.providerThread);
+          const rawNativeId = threadInput.providerThread.nativeThreadRef?.nativeId;
           const fallbackToEnsure = () =>
             runtime.ensureThread({
               threadId: (threadInput.threadId ??
@@ -3896,9 +3904,15 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (
               },
             });
 
-          if (sessionId.startsWith("pending:") || !sessionId.startsWith("ses_")) {
+          if (
+            rawNativeId === undefined ||
+            rawNativeId === null ||
+            rawNativeId.startsWith("pending:") ||
+            !rawNativeId.startsWith("ses_")
+          ) {
             return yield* fallbackToEnsure();
           }
+          const sessionId = rawNativeId;
           if (threadInput.runtimePolicy !== undefined) {
             yield* readModelsOnce(threadInput.runtimePolicy.cwd);
           }

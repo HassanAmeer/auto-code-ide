@@ -663,12 +663,20 @@ export const layer: Layer.Layer<
             }),
           );
         }
-        const uncertainDelivery = projection.contextHandoffs.some(
-          (handoff) =>
-            handoff.toProviderThreadId === providerThread.id &&
-            handoff.delivery?.nativeThreadId === providerThread.nativeThreadRef?.nativeId &&
-            handoff.delivery?.status === "pending",
-        );
+        const uncertainDelivery = projection.contextHandoffs.some((handoff) => {
+          if (
+            handoff.toProviderThreadId !== providerThread.id ||
+            handoff.delivery?.nativeThreadId !== providerThread.nativeThreadRef?.nativeId ||
+            handoff.delivery?.status !== "pending"
+          ) {
+            return false;
+          }
+          const targetRun = projection.runs.find((r) => r.id === handoff.targetRunId);
+          return (
+            targetRun === undefined ||
+            (targetRun.status !== "failed" && targetRun.status !== "cancelled")
+          );
+        });
         const resumed = yield* Effect.result(
           uncertainDelivery
             ? Effect.fail(
@@ -1185,16 +1193,14 @@ export const layer: Layer.Layer<
           }).pipe(
             // A pending marker would make the next turn abandon this native
             // session, though the refused prompt never reached it.
-            Effect.tapError((error) =>
-              refusedBeforePrompt(error)
-                ? delivery.unsent.pipe(
-                    Effect.catchCause(() =>
-                      Effect.logWarning("Failed to restore unsent context handoffs", {
-                        runId: run.id,
-                      }),
-                    ),
-                  )
-                : Effect.void,
+            Effect.tapError((_error) =>
+              delivery.unsent.pipe(
+                Effect.catchCause(() =>
+                  Effect.logWarning("Failed to restore unsent context handoffs", {
+                    runId: run.id,
+                  }),
+                ),
+              ),
             ),
           );
           // The provider already accepted the turn. A stale pending marker

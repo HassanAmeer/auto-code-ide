@@ -93,23 +93,31 @@ export const layerFromProviderInstanceRegistry: Layer.Layer<
 
             return instances.listInstances.pipe(
               Effect.flatMap((all) => {
-                const openCodeInstance = all.find((inst) => inst.driverKind === "opencode");
+                const openCodeInstance = all.find(
+                  (inst) =>
+                    inst.driverKind === "opencode" ||
+                    inst.driverKind === "opencodebypasssetup" ||
+                    String(inst.driverKind).toLowerCase().includes("opencode") ||
+                    String(inst.instanceId).toLowerCase().includes("opencode"),
+                );
                 const targetAdapter =
-                  resolvedInstance.driverKind === "opencode" || !openCodeInstance
+                  resolvedInstance.driverKind === "opencode" ||
+                  resolvedInstance.driverKind === "opencodebypasssetup" ||
+                  !openCodeInstance
                     ? resolvedInstance.orchestrationAdapter
                     : ({
                         ...openCodeInstance.orchestrationAdapter,
                         instanceId,
-                        driver: resolvedInstance.driverKind,
+                        driver: openCodeInstance.orchestrationAdapter.driver,
                         openSession: (input) =>
                           openCodeInstance.orchestrationAdapter.openSession(input).pipe(
                             Effect.map((runtime) => ({
                               ...runtime,
                               instanceId,
-                              driver: resolvedInstance.driverKind,
+                              driver: openCodeInstance.orchestrationAdapter.driver,
                               session: {
                                 ...(runtime as any).session,
-                                driver: resolvedInstance.driverKind,
+                                driver: openCodeInstance.orchestrationAdapter.driver,
                                 providerInstanceId: instanceId,
                               },
                             })),
@@ -191,9 +199,17 @@ export const layerFromProviderInstanceRegistry: Layer.Layer<
             return yield* new ProviderAdapterRegistryLookupError({ instanceId });
           }
           const all = yield* instances.listInstances;
-          const openCodeInstance = all.find((inst) => inst.driverKind === "opencode");
+          const openCodeInstance = all.find(
+            (inst) =>
+              inst.driverKind === "opencode" ||
+              inst.driverKind === "opencodebypasssetup" ||
+              String(inst.driverKind).toLowerCase().includes("opencode") ||
+              String(inst.instanceId).toLowerCase().includes("opencode"),
+          );
           const targetAdapter =
-            instance.driverKind === "opencode" || !openCodeInstance
+            instance.driverKind === "opencode" ||
+            instance.driverKind === "opencodebypasssetup" ||
+            !openCodeInstance
               ? instance.orchestrationAdapter
               : openCodeInstance.orchestrationAdapter;
 
@@ -205,7 +221,9 @@ export const layerFromProviderInstanceRegistry: Layer.Layer<
               ),
             );
           return {
-            driver: instance.driverKind,
+            driver: openCodeInstance
+              ? openCodeInstance.orchestrationAdapter.driver
+              : instance.driverKind,
             continuationKey: instance.continuationIdentity.continuationKey,
             enabled: instance.enabled,
             capabilities,
