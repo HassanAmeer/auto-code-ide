@@ -15,10 +15,13 @@ export interface CustomProviderModel {
   name?: string | undefined;
 }
 
+export type ProviderFormat = "openai" | "anthropic" | "gemini";
+
 export interface CustomProvider {
   id: string;
   name: string;
   baseUrl: string;
+  format?: ProviderFormat | undefined;
   apiKey?: string | undefined;
   headers?: CustomHeader[] | undefined;
   models: CustomProviderModel[];
@@ -37,6 +40,13 @@ export function normalizeCustomProvider(p: unknown): CustomProvider | null {
   const cleanId = strId.startsWith("custom_") ? strId : `custom_${strId}`;
   const name = String(anyP.name ?? anyP.displayName ?? "Custom Provider");
   const baseUrl = String(anyP.baseUrl ?? anyP.base_url ?? "");
+  const rawFormat = String(anyP.format || "openai").toLowerCase();
+  const format: ProviderFormat =
+    rawFormat === "anthropic" || rawFormat === "claude"
+      ? "anthropic"
+      : rawFormat === "gemini" || rawFormat === "google"
+        ? "gemini"
+        : "openai";
   const apiKey = anyP.apiKey ? String(anyP.apiKey) : undefined;
   const headers: CustomHeader[] = Array.isArray(anyP.headers)
     ? anyP.headers.filter((h: any) => h && typeof h === "object" && typeof h.key === "string")
@@ -67,6 +77,7 @@ export function normalizeCustomProvider(p: unknown): CustomProvider | null {
     id: cleanId,
     name,
     baseUrl,
+    format,
     apiKey,
     headers,
     models,

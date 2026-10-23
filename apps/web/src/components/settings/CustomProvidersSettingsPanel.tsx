@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   CheckIcon,
+  ChevronDownIcon,
   CopyIcon,
   Edit3Icon,
   EyeIcon,
@@ -8,8 +9,6 @@ import {
   GlobeIcon,
   KeyIcon,
   LayersIcon,
-  PauseIcon,
-  PlayIcon,
   PlusIcon,
   RefreshCwIcon,
   ServerIcon,
@@ -23,6 +22,7 @@ import {
   type CustomHeader,
   type CustomProvider,
   type CustomProviderModel,
+  type ProviderFormat,
   deleteCustomProvider,
   fetchModelsFromProvider,
   getCustomProviders,
@@ -34,73 +34,17 @@ import { cn } from "../../lib/utils";
 import { Button } from "../ui/button";
 import { Switch } from "../ui/switch";
 import { toastManager } from "../ui/toast";
-import { SettingsPageContainer, SettingsRow, SettingsSection } from "./settingsLayout";
-
-interface ProviderPreset {
-  name: string;
-  baseUrl: string;
-  defaultHeaders?: CustomHeader[];
-  defaultModels?: CustomProviderModel[];
-  hint: string;
-}
-
-const PRESETS: ProviderPreset[] = [
-  {
-    name: "OpenRouter",
-    baseUrl: "https://openrouter.ai/api/v1",
-    defaultHeaders: [
-      { key: "HTTP-Referer", value: "https://autojobs.tokendeal.cloud" },
-      { key: "X-Title", value: "Jobi Code" },
-    ],
-    defaultModels: [
-      { id: "openrouter/free", name: "Auto Free Router (OpenRouter)" },
-      { id: "cohere/north-mini-code:free", name: "North Mini Code (Free)" },
-      { id: "liquid/lfm-2.5-2.6b:free", name: "Liquid LFM 2.6B (Free)" },
-      { id: "meta-llama/llama-3.3-70b-instruct:free", name: "Llama 3.3 70B (Free)" },
-      { id: "deepseek/deepseek-r1:free", name: "DeepSeek R1 (Free)" },
-      { id: "anthropic/claude-3.5-sonnet", name: "Claude 3.5 Sonnet" },
-      { id: "openai/gpt-4o", name: "GPT-4o" },
-      { id: "deepseek/deepseek-chat", name: "DeepSeek V3" },
-    ],
-    hint: "Requires OpenRouter API key from openrouter.ai/settings/keys",
-  },
-  {
-    name: "CheapRouter (Local 8377)",
-    baseUrl: "http://127.0.0.1:8377/v1",
-    defaultModels: [
-      { id: "glm-4.5-flash", name: "GLM 4.5 Flash" },
-      { id: "deepseek-ai/DeepSeek-V3", name: "DeepSeek V3" },
-    ],
-    hint: "Local Antseed / CheapRouter gateway",
-  },
-  {
-    name: "Ollama (Local)",
-    baseUrl: "http://127.0.0.1:11434/v1",
-    hint: "No API key needed by default",
-  },
-  {
-    name: "LM Studio",
-    baseUrl: "http://127.0.0.1:1234/v1",
-    hint: "Local OpenAI-compatible endpoint",
-  },
-  {
-    name: "vLLM Local",
-    baseUrl: "http://127.0.0.1:8000/v1",
-    hint: "High-throughput local LLM server",
-  },
-  {
-    name: "Groq",
-    baseUrl: "https://api.groq.com/openai/v1",
-    hint: "Ultra-fast Llama & DeepSeek inference",
-  },
-];
+import { SettingsPageContainer, SettingsSection } from "./settingsLayout";
 
 export function CustomProvidersSettingsPanel() {
   const [providers, setProviders] = useState<CustomProvider[]>(() => getCustomProviders());
+  const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingProviderId, setEditingProviderId] = useState<string | null>(null);
+  const [expandedTileIds, setExpandedTileIds] = useState<Set<string>>(() => new Set());
 
   // Form State
   const [name, setName] = useState("");
+  const [format, setFormat] = useState<ProviderFormat>("openai");
   const [baseUrl, setBaseUrl] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
@@ -109,7 +53,10 @@ export function CustomProvidersSettingsPanel() {
   const [loadedModels, setLoadedModels] = useState<CustomProviderModel[]>([]);
   const [isFetchingModels, setIsFetchingModels] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
+
+  // Quick Action State
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [refreshingTileId, setRefreshingTileId] = useState<string | null>(null);
 
   useEffect(() => {
     return subscribeCustomProviders((updated) => {
@@ -120,6 +67,7 @@ export function CustomProvidersSettingsPanel() {
   const resetForm = useCallback(() => {
     setEditingProviderId(null);
     setName("");
+    setFormat("openai");
     setBaseUrl("");
     setApiKey("");
     setShowApiKey(false);
@@ -127,41 +75,44 @@ export function CustomProvidersSettingsPanel() {
     setModelIdsInput("");
     setLoadedModels([]);
     setFetchError(null);
+    setIsFormOpen(false);
   }, []);
 
-  const handleApplyPreset = (preset: ProviderPreset) => {
-    setName(preset.name);
-    setBaseUrl(preset.baseUrl);
-    if (preset.defaultHeaders) {
-      setHeaders(preset.defaultHeaders);
-    } else {
-      setHeaders([]);
-    }
-    if (preset.defaultModels && preset.defaultModels.length > 0) {
-      setLoadedModels(preset.defaultModels);
-      setModelIdsInput(preset.defaultModels.map((m) => m.id).join(", "));
-    } else {
-      setLoadedModels([]);
-      setModelIdsInput("");
-    }
-    setFetchError(null);
+  const handleOpenAddForm = () => {
+    resetForm();
+    setIsFormOpen(true);
+    setTimeout(() => {
+      document.getElementById("custom-provider-form-card")?.scrollIntoView({ behavior: "smooth" });
+    }, 50);
   };
 
   const handleStartEdit = (provider: CustomProvider) => {
     setEditingProviderId(provider.id);
     setName(provider.name);
+    setFormat(provider.format || "openai");
     setBaseUrl(provider.baseUrl);
     setApiKey(provider.apiKey ?? "");
     setHeaders(provider.headers ?? []);
     setLoadedModels(provider.models ?? []);
     setModelIdsInput(provider.models.map((m) => m.id).join(", "));
     setFetchError(null);
+    setIsFormOpen(true);
 
-    // Scroll to form
-    const formElement = document.getElementById("custom-provider-form");
-    if (formElement) {
-      formElement.scrollIntoView({ behavior: "smooth" });
-    }
+    setTimeout(() => {
+      document.getElementById("custom-provider-form-card")?.scrollIntoView({ behavior: "smooth" });
+    }, 50);
+  };
+
+  const toggleTileExpand = (id: string) => {
+    setExpandedTileIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
   };
 
   const handleFetchModels = async () => {
@@ -182,7 +133,7 @@ export function CustomProvidersSettingsPanel() {
       toastManager.add({
         type: "success",
         title: "Models loaded successfully",
-        description: `Discovered ${result.models.length} model(s) from ${baseUrl}`,
+        description: `Discovered ${result.models.length} model(s) from endpoint.`,
       });
     } else {
       setFetchError(result.error ?? "Failed to load models. Check URL and credentials.");
@@ -194,10 +145,8 @@ export function CustomProvidersSettingsPanel() {
     }
   };
 
-  const [fetchingCardId, setFetchingCardId] = useState<string | null>(null);
-
-  const handleCardFetchModels = async (p: CustomProvider) => {
-    setFetchingCardId(p.id);
+  const handleTileRefreshModels = async (p: CustomProvider) => {
+    setRefreshingTileId(p.id);
     try {
       const result = await fetchModelsFromProvider(p.baseUrl, p.apiKey, p.headers);
       if (result.success && result.models.length > 0) {
@@ -229,7 +178,7 @@ export function CustomProvidersSettingsPanel() {
         description: err instanceof Error ? err.message : "Network error",
       });
     } finally {
-      setFetchingCardId(null);
+      setRefreshingTileId(null);
     }
   };
 
@@ -278,6 +227,7 @@ export function CustomProvidersSettingsPanel() {
     saveCustomProvider({
       ...(editingProviderId ? { id: editingProviderId } : {}),
       name: name.trim(),
+      format,
       baseUrl: baseUrl.trim(),
       ...(apiKey.trim().length > 0 ? { apiKey: apiKey.trim() } : {}),
       ...(cleanHeaders.length > 0 ? { headers: cleanHeaders } : {}),
@@ -294,13 +244,16 @@ export function CustomProvidersSettingsPanel() {
     resetForm();
   };
 
-  const handleCopyUrl = (id: string, url: string) => {
-    void navigator.clipboard.writeText(url);
+  const handleCopyText = (id: string, text: string) => {
+    void navigator.clipboard.writeText(text);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 1500);
   };
 
   const handleDelete = (provider: CustomProvider) => {
+    if (!window.confirm(`Are you sure you want to remove "${provider.name}"?`)) {
+      return;
+    }
     deleteCustomProvider(provider.id);
     if (editingProviderId === provider.id) {
       resetForm();
@@ -317,7 +270,7 @@ export function CustomProvidersSettingsPanel() {
   return (
     <SettingsPageContainer>
       {/* Header section */}
-      <div className="flex flex-col gap-2 border-b border-border/40 pb-6">
+      <div className="flex flex-col gap-2 border-b border-border/40 pb-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="flex size-10 items-center justify-center rounded-lg border border-border/80 bg-muted/40 shadow-xs">
@@ -328,8 +281,8 @@ export function CustomProvidersSettingsPanel() {
                 Custom Providers
               </h1>
               <p className="text-sm text-muted-foreground">
-                Connect OpenAI-compatible APIs, local Ollama, OpenRouter, vLLM, or LM Studio with
-                custom headers.
+                Connect OpenAI, Claude/Anthropic, or Gemini compatible endpoints with custom models
+                and headers.
               </p>
             </div>
           </div>
@@ -342,249 +295,107 @@ export function CustomProvidersSettingsPanel() {
         </div>
       </div>
 
-      {/* TOP SECTION: Configured Custom Providers (List Style) */}
-      <SettingsSection title="Configured Providers">
-        <p className="px-3 pb-2 text-xs text-muted-foreground sm:px-4">
-          All added custom endpoints. You can toggle active/paused status, refresh models, edit
-          settings, or delete providers.
-        </p>
-        {providers.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border/80 bg-card/40 p-8 text-center">
-            <SlidersIcon className="mb-3 size-8 text-muted-foreground/60" />
-            <h3 className="text-sm font-medium text-foreground">
-              No custom providers configured yet
-            </h3>
-            <p className="mt-1 max-w-sm text-xs text-muted-foreground">
-              Add your local Ollama instance or third-party OpenAI-compatible APIs using the form
-              below.
-            </p>
-            <div className="mt-4 flex flex-wrap justify-center gap-2">
-              <Button size="xs" variant="outline" onClick={() => handleApplyPreset(PRESETS[0]!)}>
-                + Quick Add Ollama (Local)
-              </Button>
-              <Button size="xs" variant="outline" onClick={() => handleApplyPreset(PRESETS[1]!)}>
-                + Quick Add OpenRouter
-              </Button>
+      {/* TOP SECTION: Single Collapsible Form Card ("+ Add Custom Provider") */}
+      <div id="custom-provider-form-card" className="flex flex-col gap-3">
+        <div className="rounded-xl border border-border/80 bg-card overflow-hidden shadow-2xs transition-all">
+          {/* Collapsible Card Header */}
+          <div
+            className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-muted/30 transition-colors select-none"
+            onClick={() => {
+              if (isFormOpen && editingProviderId) {
+                resetForm();
+              } else {
+                setIsFormOpen((v) => !v);
+              }
+            }}
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="flex size-7 items-center justify-center rounded-md border border-border/60 bg-muted/40 text-foreground">
+                {editingProviderId ? (
+                  <Edit3Icon className="size-3.5 text-primary" />
+                ) : (
+                  <PlusIcon className="size-3.5" />
+                )}
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">
+                  {editingProviderId
+                    ? `Edit Provider: ${name || "Untitled"}`
+                    : "Add Custom Provider"}
+                </h3>
+                <p className="text-[11px] text-muted-foreground">
+                  {isFormOpen
+                    ? "Fill in endpoint details, credentials, and models below"
+                    : "Click to expand provider configuration form"}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {!isFormOpen && (
+                <Button
+                  size="xs"
+                  variant="outline"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleOpenAddForm();
+                  }}
+                  className="gap-1 font-medium"
+                >
+                  <PlusIcon className="size-3" />
+                  Add Provider
+                </Button>
+              )}
+              <ChevronDownIcon
+                className={cn(
+                  "size-4 text-muted-foreground transition-transform duration-200",
+                  isFormOpen && "rotate-180",
+                )}
+              />
             </div>
           </div>
-        ) : (
-          <div className="flex flex-col gap-3">
-            {providers.map((p) => {
-              const isEditing = editingProviderId === p.id;
-              return (
-                <div
-                  key={p.id}
-                  className={cn(
-                    "flex flex-col rounded-xl border bg-card p-4 shadow-2xs transition-colors",
-                    isEditing
-                      ? "border-foreground/40 ring-1 ring-foreground/20"
-                      : "border-border/80 hover:border-border",
-                    !p.enabled && "opacity-75 bg-muted/20",
-                  )}
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className="flex size-9 items-center justify-center rounded-md border border-border/70 bg-muted/30">
-                        <GlobeIcon className="size-4 text-foreground/70" />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h4 className="text-sm font-semibold text-foreground">{p.name}</h4>
-                          <span
-                            className={cn(
-                              "inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium border",
-                              p.enabled
-                                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
-                                : "border-amber-500/30 bg-amber-500/10 text-amber-400",
-                            )}
-                          >
-                            {p.enabled ? "Active" : "Paused"}
-                          </span>
-                          {p.apiKey && (
-                            <span className="inline-flex items-center gap-1 rounded-md border border-border/60 bg-muted/40 px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                              <KeyIcon className="size-2.5" /> API Key
-                            </span>
-                          )}
-                          {p.headers && p.headers.length > 0 && (
-                            <span className="rounded-md border border-border/60 bg-muted/40 px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                              {p.headers.length} header(s)
-                            </span>
-                          )}
-                        </div>
-                        <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground font-mono">
-                          <span className="truncate max-w-sm">{p.baseUrl}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleCopyUrl(p.id, p.baseUrl)}
-                            className="text-muted-foreground hover:text-foreground"
-                            title="Copy Base URL"
-                          >
-                            {copiedId === p.id ? (
-                              <CheckIcon className="size-3 text-emerald-400" />
-                            ) : (
-                              <CopyIcon className="size-3" />
-                            )}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
 
-                    {/* Actions: Fetch Models, Pause, Edit, Delete */}
-                    <div className="flex items-center gap-2">
-                      <Button
-                        size="xs"
-                        variant="outline"
-                        disabled={fetchingCardId === p.id}
-                        onClick={() => handleCardFetchModels(p)}
-                        title="Fetch / Reload models from endpoint"
-                      >
-                        <RefreshCwIcon
-                          className={cn("size-3", fetchingCardId === p.id && "animate-spin")}
-                        />
-                        {fetchingCardId === p.id ? "Fetching..." : "Fetch Models"}
-                      </Button>
-                      <Button
-                        size="xs"
-                        variant="outline"
-                        onClick={() => toggleCustomProvider(p.id)}
-                        title={p.enabled ? "Pause Provider" : "Resume Provider"}
-                      >
-                        {p.enabled ? (
-                          <>
-                            <PauseIcon className="size-3 text-amber-400" />
-                            Pause
-                          </>
-                        ) : (
-                          <>
-                            <PlayIcon className="size-3 text-emerald-400" />
-                            Resume
-                          </>
-                        )}
-                      </Button>
-                      <Button
-                        size="xs"
-                        variant="outline"
-                        onClick={() => handleStartEdit(p)}
-                        title="Edit Provider"
-                      >
-                        <Edit3Icon className="size-3" />
-                        Edit
-                      </Button>
-                      <Button
-                        size="xs"
-                        variant="destructive"
-                        onClick={() => handleDelete(p)}
-                        title="Delete Provider"
-                      >
-                        <Trash2Icon className="size-3" />
-                      </Button>
-                    </div>
-                  </div>
-
-                  {/* Loaded Models pills */}
-                  <div className="mt-3 border-t border-border/40 pt-3">
-                    <div className="flex items-center justify-between gap-2 text-xs font-medium text-muted-foreground">
-                      <div className="flex items-center gap-2">
-                        <LayersIcon className="size-3" />
-                        <span>Loaded Models ({p.models.length}):</span>
-                      </div>
-                      <button
-                        type="button"
-                        disabled={fetchingCardId === p.id}
-                        onClick={() => handleCardFetchModels(p)}
-                        className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                        title="Reload models list"
-                      >
-                        <RefreshCwIcon
-                          className={cn("size-2.5", fetchingCardId === p.id && "animate-spin")}
-                        />
-                        Reload
-                      </button>
-                    </div>
-                    {p.models.length === 0 ? (
-                      <div className="mt-2 flex items-center justify-between rounded-lg border border-dashed border-border/70 bg-muted/20 p-2.5">
-                        <p className="text-xs text-muted-foreground">
-                          No models loaded yet. Click &quot;Load Models&quot; to auto-discover
-                          models.
-                        </p>
-                        <Button
-                          size="xs"
-                          variant="secondary"
-                          disabled={fetchingCardId === p.id}
-                          onClick={() => handleCardFetchModels(p)}
-                          className="shrink-0 font-medium"
-                        >
-                          <RefreshCwIcon
-                            className={cn("size-3", fetchingCardId === p.id && "animate-spin")}
-                          />
-                          {fetchingCardId === p.id ? "Loading..." : "Load Models"}
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="mt-2 flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
-                        {p.models.map((m) => (
-                          <span
-                            key={m.id}
-                            className="inline-flex items-center rounded-md border border-border/80 bg-muted/40 px-2 py-0.5 font-mono text-[11px] text-foreground"
-                          >
-                            {m.id}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+          {/* Form Content (when expanded) */}
+          {isFormOpen && (
+            <form
+              onSubmit={handleSave}
+              className="border-t border-border/60 p-4 sm:p-5 flex flex-col gap-4 bg-muted/[0.02]"
+            >
+              {/* Row 1: Name and Format */}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold text-foreground">
+                    Provider Name <span className="text-destructive">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="e.g. My Local Ollama, OpenRouter, Self-Hosted LLM"
+                    required
+                    className="h-9 w-full rounded-md border border-border/80 bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:border-foreground/50 focus:outline-hidden"
+                  />
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </SettingsSection>
 
-      {/* BOTTOM SECTION: Add / Edit Custom Provider Form */}
-      <div id="custom-provider-form">
-        <SettingsSection title={editingProviderId ? "Edit Custom Provider" : "Add Custom Provider"}>
-          <p className="px-3 pb-2 text-xs text-muted-foreground sm:px-4">
-            Configure an endpoint with its base URL, optional API key, custom headers, and models.
-          </p>
-          <form
-            onSubmit={handleSave}
-            className="flex flex-col gap-5 rounded-xl border border-border/80 bg-card p-5 shadow-2xs"
-          >
-            {/* Presets Row (only when creating new) */}
-            {!editingProviderId && (
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">Quick Presets:</label>
-                <div className="mt-1.5 flex flex-wrap gap-2">
-                  {PRESETS.map((preset) => (
-                    <button
-                      key={preset.name}
-                      type="button"
-                      onClick={() => handleApplyPreset(preset)}
-                      className="rounded-md border border-border/80 bg-muted/30 px-2.5 py-1 text-xs font-medium text-foreground/90 transition-colors hover:bg-muted/70 hover:border-foreground/30"
-                    >
-                      {preset.name}
-                    </button>
-                  ))}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold text-foreground">
+                    Provider Format Type <span className="text-destructive">*</span>
+                  </label>
+                  <select
+                    value={format}
+                    onChange={(e) => setFormat(e.target.value as ProviderFormat)}
+                    className="h-9 w-full rounded-md border border-border/80 bg-background px-3 text-sm text-foreground focus:border-foreground/50 focus:outline-hidden cursor-pointer"
+                  >
+                    <option value="openai">
+                      OpenAI Compatible (Ollama, vLLM, OpenRouter, LM Studio)
+                    </option>
+                    <option value="anthropic">Anthropic / Claude Compatible</option>
+                    <option value="gemini">Google Gemini Compatible</option>
+                  </select>
                 </div>
               </div>
-            )}
 
-            {/* Provider Name & Base URL */}
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-foreground">
-                  Provider Name <span className="text-destructive">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. My Local Ollama, OpenRouter"
-                  required
-                  className="h-9 w-full rounded-md border border-border/80 bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:border-foreground/50 focus:outline-hidden"
-                />
-              </div>
-
+              {/* Row 2: Base URL */}
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-semibold text-foreground">
                   API Base URL <span className="text-destructive">*</span>
@@ -593,165 +404,499 @@ export function CustomProvidersSettingsPanel() {
                   type="url"
                   value={baseUrl}
                   onChange={(e) => setBaseUrl(e.target.value)}
-                  placeholder="e.g. http://127.0.0.1:11434/v1"
+                  placeholder={
+                    format === "anthropic"
+                      ? "https://api.anthropic.com/v1"
+                      : format === "gemini"
+                        ? "https://generativelanguage.googleapis.com/v1beta"
+                        : "http://127.0.0.1:11434/v1 or https://openrouter.ai/api/v1"
+                  }
                   required
                   className="h-9 w-full rounded-md border border-border/80 bg-background px-3 font-mono text-sm text-foreground placeholder:text-muted-foreground/60 focus:border-foreground/50 focus:outline-hidden"
                 />
-              </div>
-            </div>
-
-            {/* API Key (Optional) */}
-            <div className="flex flex-col gap-1.5">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-semibold text-foreground">
-                  API Key{" "}
-                  <span className="text-xs font-normal text-muted-foreground">(Optional)</span>
-                </label>
-                <span className="text-[11px] text-muted-foreground">
-                  Leave empty for local Ollama / unauthenticated servers
-                </span>
-              </div>
-              <div className="relative flex items-center">
-                <input
-                  type={showApiKey ? "text" : "password"}
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  placeholder="sk-... (optional)"
-                  className="h-9 w-full rounded-md border border-border/80 bg-background pr-10 pl-3 font-mono text-sm text-foreground placeholder:text-muted-foreground/60 focus:border-foreground/50 focus:outline-hidden"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowApiKey((v) => !v)}
-                  className="absolute right-2.5 text-muted-foreground hover:text-foreground"
-                  title={showApiKey ? "Hide key" : "Show key"}
-                >
-                  {showApiKey ? <EyeOffIcon className="size-4" /> : <EyeIcon className="size-4" />}
-                </button>
-              </div>
-            </div>
-
-            {/* Custom Headers (Optional) */}
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-semibold text-foreground">
-                  Custom HTTP Headers{" "}
-                  <span className="text-xs font-normal text-muted-foreground">(Optional)</span>
-                </label>
-                <Button type="button" size="xs" variant="outline" onClick={handleAddHeader}>
-                  <PlusIcon className="size-3" /> Add Header
-                </Button>
+                <p className="text-[11px] text-muted-foreground">
+                  Standard endpoint URL without endpoints like /chat/completions (e.g.
+                  http://127.0.0.1:11434/v1).
+                </p>
               </div>
 
-              {headers.length > 0 && (
-                <div className="flex flex-col gap-2 rounded-lg border border-border/60 bg-muted/20 p-3">
-                  {headers.map((h, index) => (
-                    <div key={index} className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        value={h.key}
-                        onChange={(e) => handleUpdateHeader(index, e.target.value, h.value)}
-                        placeholder="Header Name (e.g. HTTP-Referer)"
-                        className="h-8 flex-1 rounded-md border border-border/80 bg-background px-2.5 font-mono text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-hidden"
-                      />
-                      <input
-                        type="text"
-                        value={h.value}
-                        onChange={(e) => handleUpdateHeader(index, h.key, e.target.value)}
-                        placeholder="Header Value"
-                        className="h-8 flex-1 rounded-md border border-border/80 bg-background px-2.5 font-mono text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-hidden"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveHeader(index)}
-                        className="p-1 text-muted-foreground hover:text-destructive"
-                        title="Remove header"
-                      >
-                        <Trash2Icon className="size-3.5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Models Configuration & Live Fetch */}
-            <div className="flex flex-col gap-2.5 border-t border-border/40 pt-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <label className="text-xs font-semibold text-foreground">
-                    Model IDs &amp; Discovery
-                  </label>
-                  <p className="text-[11px] text-muted-foreground">
-                    Click &quot;Fetch / Load Models&quot; to auto-discover models from the endpoint,
-                    or enter them manually.
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  size="xs"
-                  variant="outline"
-                  disabled={isFetchingModels || !baseUrl.trim()}
-                  onClick={handleFetchModels}
-                  className="font-medium"
-                >
-                  <RefreshCwIcon className={cn("size-3.5", isFetchingModels && "animate-spin")} />
-                  {isFetchingModels ? "Fetching Models..." : "Fetch / Load Models"}
-                </Button>
-              </div>
-
-              {fetchError && (
-                <div className="rounded-md border border-destructive/30 bg-destructive/10 p-2.5 text-xs text-destructive">
-                  {fetchError}
-                </div>
-              )}
-
+              {/* Row 3: API Key (Optional) */}
               <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-foreground">
+                    API Key{" "}
+                    <span className="text-xs font-normal text-muted-foreground">(Optional)</span>
+                  </label>
+                  <span className="text-[11px] text-muted-foreground">
+                    Leave empty for local servers or unauthenticated gateways
+                  </span>
+                </div>
+                <div className="relative flex items-center">
+                  <input
+                    type={showApiKey ? "text" : "password"}
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder="sk-... (optional)"
+                    className="h-9 w-full rounded-md border border-border/80 bg-background pr-10 pl-3 font-mono text-sm text-foreground placeholder:text-muted-foreground/60 focus:border-foreground/50 focus:outline-hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowApiKey((v) => !v)}
+                    className="absolute right-2.5 text-muted-foreground hover:text-foreground cursor-pointer"
+                    title={showApiKey ? "Hide key" : "Show key"}
+                  >
+                    {showApiKey ? (
+                      <EyeOffIcon className="size-4" />
+                    ) : (
+                      <EyeIcon className="size-4" />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Row 4: Custom HTTP Headers (Optional) */}
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-foreground">
+                    Custom HTTP Headers{" "}
+                    <span className="text-xs font-normal text-muted-foreground">(Optional)</span>
+                  </label>
+                  <Button type="button" size="xs" variant="outline" onClick={handleAddHeader}>
+                    <PlusIcon className="size-3" /> Add Header
+                  </Button>
+                </div>
+
+                {headers.length > 0 && (
+                  <div className="flex flex-col gap-2 rounded-lg border border-border/60 bg-muted/20 p-2.5">
+                    {headers.map((h, index) => (
+                      <div key={index} className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={h.key}
+                          onChange={(e) => handleUpdateHeader(index, e.target.value, h.value)}
+                          placeholder="Header Name (e.g. HTTP-Referer, anthropic-version)"
+                          className="h-8 flex-1 rounded-md border border-border/80 bg-background px-2.5 font-mono text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-hidden"
+                        />
+                        <input
+                          type="text"
+                          value={h.value}
+                          onChange={(e) => handleUpdateHeader(index, h.key, e.target.value)}
+                          placeholder="Header Value"
+                          className="h-8 flex-1 rounded-md border border-border/80 bg-background px-2.5 font-mono text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-hidden"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveHeader(index)}
+                          className="p-1 text-muted-foreground hover:text-destructive cursor-pointer"
+                          title="Remove header"
+                        >
+                          <Trash2Icon className="size-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Row 5: Model IDs & Discovery */}
+              <div className="flex flex-col gap-2 border-t border-border/40 pt-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <label className="text-xs font-semibold text-foreground">
+                      Model IDs &amp; Discovery
+                    </label>
+                    <p className="text-[11px] text-muted-foreground">
+                      Click &quot;Load Models&quot; to auto-discover models or type model slugs
+                      manually.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    size="xs"
+                    variant="outline"
+                    disabled={isFetchingModels || !baseUrl.trim()}
+                    onClick={handleFetchModels}
+                    className="font-medium gap-1.5"
+                  >
+                    <RefreshCwIcon className={cn("size-3.5", isFetchingModels && "animate-spin")} />
+                    {isFetchingModels ? "Loading Models..." : "Load Models"}
+                  </Button>
+                </div>
+
+                {fetchError && (
+                  <div className="rounded-md border border-destructive/30 bg-destructive/10 p-2 text-xs text-destructive">
+                    {fetchError}
+                  </div>
+                )}
+
                 <textarea
                   value={modelIdsInput}
                   onChange={(e) => setModelIdsInput(e.target.value)}
-                  placeholder="Enter model IDs separated by commas or newlines (e.g. qwen2.5-coder:7b, llama3.2, mistral)"
-                  rows={3}
+                  placeholder="Enter model IDs separated by commas or newlines (e.g. qwen2.5-coder:7b, llama3.3, claude-3-5-sonnet)"
+                  rows={2}
                   className="w-full rounded-md border border-border/80 bg-background p-2.5 font-mono text-xs text-foreground placeholder:text-muted-foreground/60 focus:border-foreground/50 focus:outline-hidden"
                 />
+
+                {loadedModels.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-[11px] font-medium text-muted-foreground">
+                      Discovered ({loadedModels.length}):
+                    </span>
+                    {loadedModels.slice(0, 8).map((m) => (
+                      <span
+                        key={m.id}
+                        className="rounded-md border border-border/80 bg-muted/40 px-2 py-0.5 font-mono text-[10px] text-foreground"
+                      >
+                        {m.id}
+                      </span>
+                    ))}
+                    {loadedModels.length > 8 && (
+                      <span className="text-[10px] text-muted-foreground">
+                        +{loadedModels.length - 8} more
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
 
-              {loadedModels.length > 0 && (
-                <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                  <span className="text-[11px] font-medium text-muted-foreground">
-                    Discovered ({loadedModels.length}):
-                  </span>
-                  {loadedModels.slice(0, 10).map((m) => (
-                    <span
-                      key={m.id}
-                      className="rounded-md border border-border/80 bg-muted/40 px-2 py-0.5 font-mono text-[10px] text-foreground"
-                    >
-                      {m.id}
-                    </span>
-                  ))}
-                  {loadedModels.length > 10 && (
-                    <span className="text-[10px] text-muted-foreground">
-                      +{loadedModels.length - 10} more
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Form Actions */}
-            <div className="flex items-center justify-end gap-2 border-t border-border/40 pt-4">
-              {editingProviderId && (
+              {/* Form Buttons */}
+              <div className="flex items-center justify-end gap-2 border-t border-border/40 pt-3">
                 <Button type="button" size="sm" variant="outline" onClick={resetForm}>
                   Cancel
                 </Button>
-              )}
-              <Button type="submit" size="sm">
-                <SparklesIcon className="size-3.5" />
-                {editingProviderId ? "Update Custom Provider" : "Save Custom Provider"}
-              </Button>
-            </div>
-          </form>
-        </SettingsSection>
+                <Button type="submit" size="sm" className="gap-1.5">
+                  <SparklesIcon className="size-3.5" />
+                  {editingProviderId ? "Update Provider" : "Save Provider"}
+                </Button>
+              </div>
+            </form>
+          )}
+        </div>
       </div>
+
+      {/* BOTTOM SECTION: Configured Providers as Collapsible Accordion List Tiles */}
+      <SettingsSection title="Configured Providers">
+        <p className="px-3 pb-2 text-xs text-muted-foreground sm:px-4">
+          All configured custom providers. Click any provider tile to expand its details, models,
+          and controls.
+        </p>
+
+        {providers.length === 0 ? (
+          <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border/80 bg-card/40 p-8 text-center">
+            <SlidersIcon className="mb-3 size-8 text-muted-foreground/50" />
+            <h3 className="text-sm font-medium text-foreground">
+              No custom providers configured yet
+            </h3>
+            <p className="mt-1 max-w-sm text-xs text-muted-foreground">
+              Click &quot;+ Add Custom Provider&quot; above to connect an endpoint.
+            </p>
+            <Button
+              size="xs"
+              variant="outline"
+              onClick={handleOpenAddForm}
+              className="mt-4 gap-1.5"
+            >
+              <PlusIcon className="size-3" />
+              Add Provider
+            </Button>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2.5">
+            {providers.map((p) => {
+              const isEditing = editingProviderId === p.id;
+              const isExpanded = expandedTileIds.has(p.id);
+              const formatLabel =
+                p.format === "anthropic"
+                  ? "Anthropic"
+                  : p.format === "gemini"
+                    ? "Gemini"
+                    : "OpenAI";
+
+              return (
+                <div
+                  key={p.id}
+                  className={cn(
+                    "flex flex-col rounded-xl border bg-card overflow-hidden transition-all duration-150 shadow-2xs",
+                    isEditing
+                      ? "border-primary/60 ring-1 ring-primary/30"
+                      : "border-border/80 hover:border-border",
+                    !p.enabled && "opacity-75 bg-muted/15",
+                  )}
+                >
+                  {/* Collapsible Tile Header Bar */}
+                  <div
+                    className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 cursor-pointer hover:bg-muted/20 transition-colors select-none"
+                    onClick={() => toggleTileExpand(p.id)}
+                  >
+                    {/* Left: Icon, Name, Format Badge, Status Badge, Model count */}
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border/70 bg-muted/30">
+                        <GlobeIcon className="size-4 text-foreground/70" />
+                      </div>
+                      <div className="flex min-w-0 flex-col">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-sm font-semibold text-foreground truncate">
+                            {p.name}
+                          </span>
+
+                          {/* Format Badge */}
+                          <span className="inline-flex items-center rounded-md border border-border/80 bg-muted/40 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground font-medium">
+                            {formatLabel}
+                          </span>
+
+                          {/* Active / Paused Badge */}
+                          <span
+                            className={cn(
+                              "inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium border",
+                              p.enabled
+                                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-500 dark:text-emerald-400"
+                                : "border-amber-500/30 bg-amber-500/10 text-amber-500 dark:text-amber-400",
+                            )}
+                          >
+                            {p.enabled ? "Active" : "Paused"}
+                          </span>
+
+                          {/* Model Count Badge */}
+                          <span className="rounded-md border border-border/60 bg-muted/30 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                            {p.models.length} model{p.models.length === 1 ? "" : "s"}
+                          </span>
+                        </div>
+
+                        {/* Subtitle: URL snippet */}
+                        <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
+                          <span className="truncate max-w-[280px] sm:max-w-md">{p.baseUrl}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right: Quick Action Buttons & Chevron */}
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      {/* Refresh Models Button */}
+                      <Button
+                        size="xs"
+                        variant="outline"
+                        disabled={refreshingTileId === p.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleTileRefreshModels(p);
+                        }}
+                        className="h-7 px-2 gap-1 text-[11px]"
+                        title="Reload models from endpoint"
+                      >
+                        <RefreshCwIcon
+                          className={cn("size-3", refreshingTileId === p.id && "animate-spin")}
+                        />
+                        <span className="hidden sm:inline">
+                          {refreshingTileId === p.id ? "Loading..." : "Refresh"}
+                        </span>
+                      </Button>
+
+                      {/* Edit Button */}
+                      <Button
+                        size="xs"
+                        variant="outline"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleStartEdit(p);
+                        }}
+                        className="h-7 px-2 gap-1 text-[11px]"
+                        title="Edit Provider configuration"
+                      >
+                        <Edit3Icon className="size-3" />
+                        <span className="hidden sm:inline">Edit</span>
+                      </Button>
+
+                      {/* Delete Button */}
+                      <Button
+                        size="xs"
+                        variant="destructive"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(p);
+                        }}
+                        className="h-7 px-2"
+                        title="Delete Provider"
+                      >
+                        <Trash2Icon className="size-3" />
+                      </Button>
+
+                      {/* Expand / Collapse Chevron */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleTileExpand(p.id);
+                        }}
+                        className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors cursor-pointer"
+                        title={isExpanded ? "Collapse" : "Expand details"}
+                      >
+                        <ChevronDownIcon
+                          className={cn(
+                            "size-4 transition-transform duration-200",
+                            isExpanded && "rotate-180",
+                          )}
+                        />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Expanded Details Tray (Accordion Content) */}
+                  {isExpanded && (
+                    <div className="border-t border-border/50 bg-muted/[0.04] p-4 flex flex-col gap-3.5 animate-in fade-in duration-150">
+                      {/* Base URL with 1-click Copy */}
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[11px] font-semibold text-muted-foreground">
+                          API Base URL:
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <code className="flex-1 rounded-md border border-border/70 bg-background px-2.5 py-1.5 font-mono text-xs text-foreground select-all break-all">
+                            {p.baseUrl}
+                          </code>
+                          <Button
+                            size="xs"
+                            variant="outline"
+                            onClick={() => handleCopyText(`url_${p.id}`, p.baseUrl)}
+                            className="shrink-0 gap-1"
+                            title="Copy Base URL"
+                          >
+                            {copiedId === `url_${p.id}` ? (
+                              <>
+                                <CheckIcon className="size-3 text-emerald-500" />
+                                <span>Copied</span>
+                              </>
+                            ) : (
+                              <>
+                                <CopyIcon className="size-3" />
+                                <span>Copy</span>
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* API Key & Status Row */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="flex flex-col gap-1">
+                          <span className="text-[11px] font-semibold text-muted-foreground">
+                            Authentication / API Key:
+                          </span>
+                          <div className="flex items-center gap-2 text-xs font-mono">
+                            {p.apiKey ? (
+                              <span className="inline-flex items-center gap-1 rounded border border-border/60 bg-muted/30 px-2 py-1 text-muted-foreground">
+                                <KeyIcon className="size-3" />
+                                •••••••••••••••• (Key Configured)
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground/70 italic text-[11px]">
+                                None (Unauthenticated / Local)
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Active Switch */}
+                        <div className="flex items-center justify-between sm:justify-end gap-3">
+                          <span className="text-xs font-medium text-foreground">
+                            Provider Status:
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground">
+                              {p.enabled ? "Active" : "Paused"}
+                            </span>
+                            <Switch
+                              checked={p.enabled}
+                              onCheckedChange={() => toggleCustomProvider(p.id)}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Custom Headers (if present) */}
+                      {p.headers && p.headers.length > 0 && (
+                        <div className="flex flex-col gap-1 border-t border-border/30 pt-2.5">
+                          <span className="text-[11px] font-semibold text-muted-foreground">
+                            Custom Headers ({p.headers.length}):
+                          </span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {p.headers.map((h, i) => (
+                              <span
+                                key={i}
+                                className="inline-flex items-center rounded border border-border/70 bg-muted/30 px-2 py-0.5 font-mono text-[10px] text-muted-foreground"
+                              >
+                                <span className="font-semibold text-foreground">{h.key}</span>:{" "}
+                                {h.value}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Models List & Refresh */}
+                      <div className="flex flex-col gap-1.5 border-t border-border/30 pt-2.5">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                            <LayersIcon className="size-3.5 text-muted-foreground" />
+                            <span>Configured Models ({p.models.length}):</span>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={refreshingTileId === p.id}
+                            onClick={() => handleTileRefreshModels(p)}
+                            className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50 cursor-pointer"
+                          >
+                            <RefreshCwIcon
+                              className={cn(
+                                "size-2.5",
+                                refreshingTileId === p.id && "animate-spin",
+                              )}
+                            />
+                            Refresh Models
+                          </button>
+                        </div>
+
+                        {p.models.length === 0 ? (
+                          <div className="flex items-center justify-between rounded-lg border border-dashed border-border/70 bg-muted/20 p-2.5">
+                            <span className="text-xs text-muted-foreground">
+                              No models configured. Click &quot;Refresh Models&quot; to
+                              auto-discover.
+                            </span>
+                            <Button
+                              size="xs"
+                              variant="outline"
+                              disabled={refreshingTileId === p.id}
+                              onClick={() => handleTileRefreshModels(p)}
+                              className="gap-1 font-medium"
+                            >
+                              <RefreshCwIcon
+                                className={cn(
+                                  "size-3",
+                                  refreshingTileId === p.id && "animate-spin",
+                                )}
+                              />
+                              {refreshingTileId === p.id ? "Loading..." : "Load Models"}
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto pr-1">
+                            {p.models.map((m) => (
+                              <span
+                                key={m.id}
+                                className="inline-flex items-center rounded-md border border-border/80 bg-background px-2 py-0.5 font-mono text-[11px] text-foreground shadow-2xs"
+                              >
+                                {m.id}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </SettingsSection>
     </SettingsPageContainer>
   );
 }

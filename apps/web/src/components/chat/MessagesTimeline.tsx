@@ -3125,20 +3125,34 @@ function CupertinoTimelineErrorCard({
 
   const errorInfo = parseErrorDetails(rawError, explicitModel);
 
-  const displayStatusCode = explicitStatusCode
-    ? explicitStatusCode.startsWith("HTTP") || explicitStatusCode === "Timeout"
+  const numericCode =
+    explicitStatusCode && /^\d{3}$/.test(explicitStatusCode)
       ? explicitStatusCode
-      : `HTTP ${explicitStatusCode}`
+      : errorInfo.statusCode && /^\d{3}$/.test(errorInfo.statusCode)
+        ? errorInfo.statusCode
+        : null;
+
+  const displayStatusCode = numericCode
+    ? `HTTP ${numericCode}`
     : errorInfo.statusCode
       ? errorInfo.statusCode.startsWith("HTTP") || errorInfo.statusCode === "Timeout"
         ? errorInfo.statusCode
         : `HTTP ${errorInfo.statusCode}`
-      : "Error";
+      : isWarning
+        ? "Warning"
+        : "Failed";
 
-  const resolvedType =
-    errorType || (isWarning ? "Usage limit reached" : errorInfo.shortReason || "Provider error");
+  const resolvedCategory = isWarning
+    ? "Usage Limit Reached"
+    : errorInfo.errorCategory ||
+      (errorType && !/^(turn_start_failure|turn failed|error)$/i.test(errorType)
+        ? errorType
+        : "Provider Error");
 
-  const subtitle = errorInfo.singleLineDetail || errorInfo.shortReason || "An error occurred";
+  const subtitle =
+    errorInfo.singleLineDetail ||
+    errorInfo.shortReason ||
+    "An error occurred during response generation";
 
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -3176,20 +3190,20 @@ function CupertinoTimelineErrorCard({
           />
           <span
             className={cn(
-              "shrink-0 font-mono text-[10px] font-medium px-1 py-0.2 rounded border leading-tight",
+              "shrink-0 font-mono text-[10px] font-semibold px-1.5 py-0.5 rounded border leading-tight",
               isWarning
                 ? "bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400"
-                : "bg-rose-500/[0.06] border-rose-500/15 text-rose-600/90 dark:text-rose-300/85",
+                : "bg-rose-500/[0.08] border-rose-500/20 text-rose-600 dark:text-rose-300",
             )}
           >
             {displayStatusCode}
           </span>
-          <span className="shrink-0 font-medium text-xs text-foreground/85 truncate">
-            {resolvedType}
+          <span className="shrink-0 font-medium text-xs text-foreground/90 truncate">
+            {resolvedCategory}
           </span>
           {errorInfo.shortModel ? (
             <span
-              className="shrink-0 font-mono text-[10px] px-1 py-0.2 rounded bg-muted/40 border border-border/30 text-muted-foreground/75 truncate max-w-[110px]"
+              className="shrink-0 font-mono text-[10px] px-1 py-0.2 rounded bg-muted/40 border border-border/30 text-muted-foreground/75 truncate max-w-[130px]"
               title={errorInfo.fullModel || errorInfo.shortModel}
             >
               {errorInfo.shortModel}
@@ -3288,9 +3302,16 @@ function CupertinoTimelineErrorCard({
 
       {/* Uncollapsed / Expanded details section */}
       {expanded ? (
-        <div className="border-t border-rose-500/10 bg-muted/15 px-3 py-2 ps-7.5 animate-in fade-in duration-150 select-text">
+        <div className="border-t border-rose-500/10 bg-muted/15 px-3 py-2.5 ps-7.5 animate-in fade-in duration-150 select-text space-y-2">
+          {errorInfo.recommendation ? (
+            <div className="rounded border border-amber-500/20 bg-amber-500/[0.08] p-2 text-[11px] text-amber-800 dark:text-amber-200">
+              <span className="font-semibold block mb-0.5">Recommended Resolution:</span>
+              <span>{errorInfo.recommendation}</span>
+            </div>
+          ) : null}
+
           {errorInfo.fullModel ? (
-            <div className="font-mono text-[10px] text-muted-foreground/80 mb-1">
+            <div className="font-mono text-[10px] text-muted-foreground/80">
               Model: <span className="text-foreground font-medium">{errorInfo.fullModel}</span>
             </div>
           ) : null}
@@ -3302,7 +3323,7 @@ function CupertinoTimelineErrorCard({
             <button
               type="button"
               onClick={handleCopy}
-              className="absolute top-1 right-1 opacity-0 group-hover/err-details:opacity-100 transition-opacity px-1 py-0.2 rounded bg-background/90 border border-border/50 text-[10px] text-muted-foreground hover:text-foreground cursor-pointer shadow-xs"
+              className="absolute top-1 right-1 opacity-0 group-hover/err-details:opacity-100 transition-opacity px-1.5 py-0.5 rounded bg-background/90 border border-border/50 text-[10px] text-muted-foreground hover:text-foreground cursor-pointer shadow-xs"
               title="Copy error details"
             >
               {copied ? "Copied" : "Copy"}
