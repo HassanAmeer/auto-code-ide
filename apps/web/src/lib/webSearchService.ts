@@ -28,6 +28,8 @@ export const DEFAULT_TINYFISH_CONFIG: TinyFishConfig = {
 };
 
 import { saveServerSetting } from "./serverSettingsSync";
+import { resolvePrimaryEnvironmentHttpUrl } from "~/environments/primary";
+import { getMcpServers } from "./mcpServers";
 
 const TINYFISH_STORAGE_KEY = "t3_tinyfish_config_v1";
 const COMPOSER_WEB_SEARCH_KEY = "t3_composer_web_search_enabled";
@@ -213,8 +215,103 @@ export async function fetchTinyFishUrl(
 }
 
 /**
+ * Brave Search MCP & Server Web Search Runner
+ */
+export async function searchBraveMcp(
+  query: string,
+  apiKey?: string,
+): Promise<{ success: boolean; results: WebSearchResultItem[]; error?: string }> {
+  try {
+    const res = await fetch(resolvePrimaryEnvironmentHttpUrl("/api/web/search"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query, apiKey }),
+    });
+    if (!res.ok) {
+      return { success: false, results: [], error: `HTTP ${res.status}` };
+    }
+    const data = (await res.json()) as any;
+    return {
+      success: Boolean(data?.ok),
+      results: Array.isArray(data?.results) ? data.results : [],
+      error: data?.error,
+    };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      results: [],
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+/**
+ * Fetch / URL Reader MCP Runner
+ */
+export async function fetchUrlMcp(
+  url: string,
+): Promise<{ success: boolean; title?: string; text?: string; error?: string }> {
+  try {
+    const res = await fetch(resolvePrimaryEnvironmentHttpUrl("/api/web/fetch"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url }),
+    });
+    if (!res.ok) {
+      return { success: false, error: `HTTP ${res.status}` };
+    }
+    const data = (await res.json()) as any;
+    return {
+      success: Boolean(data?.ok),
+      title: data?.title || url,
+      text: data?.text || "",
+      error: data?.error,
+    };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+export function isWebSearchSlashCommand(text: string): boolean {
+  return /^\/(?:search|web)(?:\s|$)/i.test(text.trim());
+}
+
+export function parseWebSearchSlashCommand(text: string): {
+  isSearch: boolean;
+  query?: string | undefined;
+} {
+  const trimmed = text.trim();
+  const match = /^\/(?:search|web)(?:\s+(.+))?$/i.exec(trimmed);
+  if (!match) return { isSearch: false };
+  return {
+    isSearch: true,
+    query: match[1]?.trim() || undefined,
+  };
+}
+
+export function isFetchSlashCommand(text: string): boolean {
+  return /^\/fetch(?:\s|$)/i.test(text.trim());
+}
+
+export function parseFetchSlashCommand(text: string): {
+  isFetch: boolean;
+  url?: string | undefined;
+} {
+  const trimmed = text.trim();
+  const match = /^\/fetch(?:\s+(.+))?$/i.exec(trimmed);
+  if (!match) return { isFetch: false };
+  return {
+    isFetch: true,
+    url: match[1]?.trim() || undefined,
+  };
+}
+
+/**
  * Universal live search / extraction runner
- * Resolves live data based on TinyFish and Web Research configs.
+ * Resolves live data based on Brave Search, Fetch MCP, and TinyFish.
  */
 export async function performLiveWebSearchOrFetch(promptText: string): Promise<string | null> {
   if (!promptText || !promptText.trim()) return null;
@@ -258,19 +355,32 @@ export async function performLiveWebSearchOrFetch(promptText: string): Promise<s
     return null;
   }
 
-  const tinyfish = getTinyFishConfig();
-
-  // 1. Detect if the prompt contains a direct web URL
+  // 1. Detect if the prompt contains a direct web URL (Fetch MCP)
   const urlMatch = promptText.match(/https?:\/\/[^\s]+/i);
   if (urlMatch) {
     const targetUrl = urlMatch[0];
-    const fetchResult = await fetchTinyFishUrl(targetUrl, tinyfish.apiKey);
+    const fetchResult = await fetchUrlMcp(targetUrl);
     if (fetchResult.success && fetchResult.text) {
-      return `[Live Webpage Content via TinyFish: ${targetUrl}]\nTitle: ${fetchResult.title || targetUrl}\n\n${fetchResult.text}`;
+      return `[Live Webpage Content via Fetch MCP: ${targetUrl}]\nTitle: ${fetchResult.title || targetUrl}\n\n${fetchResult.text}`;
     }
   }
 
-  // 2. Query TinyFish Search if enabled and API key is present
+  // 2. Query Brave Search MCP if enabled or API key configured
+  const mcpServers = getMcpServers();
+  const braveServer = mcpServers.find((s) => s.enabled && s.name.toLowerCase().includes("brave"));
+  const braveApiKey = braveServer?.headers?.find((h) => h.key === "BRAVE_API_KEY")?.value;
+
+  const braveRes = await searchBraveMcp(promptText.trim(), braveApiKey);
+  if (braveRes.success && braveRes.results.length > 0) {
+    const items = braveRes.results
+      .map((r, i) => `${i + 1}. **${r.title}**\n   URL: ${r.url}\n   Summary: ${r.snippet}`)
+      .join("\n\n");
+    return `[Live Web Search via Brave Search MCP]\nQuery: "${promptText.trim()}"\n\n${items}`;
+  }
+
+  const tinyfish = getTinyFishConfig();
+
+  // 3. Query TinyFish Search if enabled and API key is present
   if (tinyfish.enabled && tinyfish.apiKey) {
     const searchRes = await searchTinyFish(promptText.trim(), tinyfish.apiKey);
     if (searchRes.success && searchRes.results.length > 0) {

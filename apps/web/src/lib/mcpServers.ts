@@ -33,13 +33,6 @@ export interface McpTemplate {
 
 export const MCP_POPULAR_TEMPLATES: McpTemplate[] = [
   {
-    name: "GitHub Search & PRs",
-    type: "local",
-    command: "npx -y @modelcontextprotocol/server-github",
-    description: "Search repos, inspect pull requests, and manage issues directly from AI.",
-    headers: [{ key: "GITHUB_PERSONAL_ACCESS_TOKEN", value: "" }],
-  },
-  {
     name: "Brave Web Search",
     type: "local",
     command: "npx -y @modelcontextprotocol/server-brave-search",
@@ -47,17 +40,23 @@ export const MCP_POPULAR_TEMPLATES: McpTemplate[] = [
     headers: [{ key: "BRAVE_API_KEY", value: "" }],
   },
   {
+    name: "Fetch / URL Reader",
+    type: "local",
+    command: "npx -y @modelcontextprotocol/server-fetch",
+    description: "Extract clean Markdown and text content from any web page or documentation link.",
+  },
+  {
+    name: "GitHub Search & PRs",
+    type: "local",
+    command: "npx -y @modelcontextprotocol/server-github",
+    description: "Search repos, inspect pull requests, and manage issues directly from AI.",
+    headers: [{ key: "GITHUB_PERSONAL_ACCESS_TOKEN", value: "" }],
+  },
+  {
     name: "PostgreSQL Database Inspector",
     type: "local",
     command: "npx -y @modelcontextprotocol/server-postgres postgresql://localhost/mydb",
     description: "Read schemas, run SQL queries, and inspect database tables.",
-  },
-  {
-    name: "Figma Design Context",
-    type: "remote",
-    url: "https://api.figma.com/mcp",
-    description: "Inspect Figma UI design nodes, layout dimensions, and tokens.",
-    headers: [{ key: "X-Figma-Token", value: "" }],
   },
   {
     name: "SQLite Local Database",
@@ -71,23 +70,54 @@ export const MCP_POPULAR_TEMPLATES: McpTemplate[] = [
     command: "npx -y @modelcontextprotocol/server-puppeteer",
     description: "Headless browser navigation, taking screenshots, and interacting with pages.",
   },
+  {
+    name: "Figma Design Context",
+    type: "remote",
+    url: "https://api.figma.com/mcp",
+    description: "Inspect Figma UI design nodes, layout dimensions, and tokens.",
+    headers: [{ key: "X-Figma-Token", value: "" }],
+  },
+];
+
+export const DEFAULT_MCP_SERVERS: McpServerConfig[] = [
+  {
+    id: "mcp-brave-search",
+    name: "Brave Web Search",
+    type: "local",
+    command: "npx -y @modelcontextprotocol/server-brave-search",
+    description: "High-speed live web searching and URL fact checking.",
+    headers: [{ key: "BRAVE_API_KEY", value: "" }],
+    enabled: true,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  },
+  {
+    id: "mcp-fetch",
+    name: "Fetch / URL Reader",
+    type: "local",
+    command: "npx -y @modelcontextprotocol/server-fetch",
+    description: "Extract clean Markdown and text content from any web page or documentation link.",
+    enabled: true,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  },
 ];
 
 const STORAGE_KEY = "t3_mcp_servers_v1";
 const EVENT_KEY = "t3_mcp_servers_updated";
 
 export function getMcpServers(): McpServerConfig[] {
-  if (typeof window === "undefined") return [];
+  if (typeof window === "undefined") return DEFAULT_MCP_SERVERS;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      return [];
+      return DEFAULT_MCP_SERVERS;
     }
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : DEFAULT_MCP_SERVERS;
   } catch (err) {
     console.error("Failed to load MCP servers:", err);
-    return [];
+    return DEFAULT_MCP_SERVERS;
   }
 }
 

@@ -2760,6 +2760,20 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           label: "/db",
           description: "Database Schema & Query Inspector (/db [table|query])",
         },
+        {
+          id: "slash:web",
+          type: "slash-command",
+          command: "web",
+          label: "/web",
+          description: "Live Web Search via Brave Search MCP (/web <query>)",
+        },
+        {
+          id: "slash:fetch",
+          type: "slash-command",
+          command: "fetch",
+          label: "/fetch",
+          description: "Extract web page content via Fetch MCP (/fetch <url>)",
+        },
         ...(planModeUiEnabled
           ? ([
               {
@@ -4227,6 +4241,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           item.command === "debug" ||
           item.command === "pr" ||
           item.command === "db" ||
+          item.command === "web" ||
+          item.command === "fetch" ||
           item.command === "fork" ||
           item.command === "export" ||
           item.command === "coder" ||

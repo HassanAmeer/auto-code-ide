@@ -1,4 +1,4 @@
-// @effect-diagnostics globalDateInEffect:off globalRandomInEffect:off nodeBuiltinImport:off globalTimers:off preferSchemaOverJson:off globalDate:off
+// @effect-diagnostics globalDateInEffect:off globalRandomInEffect:off nodeBuiltinImport:off globalTimers:off preferSchemaOverJson:off globalDate:off globalFetchInEffect:off
 import * as NodeOS from "node:os";
 import * as NodeFS from "node:fs";
 import * as NodeChildProcess from "node:child_process";
@@ -2626,6 +2626,281 @@ export const layerDbInspectRoute = HttpRouter.add(
       ok: false,
       error:
         "No database detected in workspace (Checked for SQLite .db/.sqlite files, prisma/schema.prisma, and .env DATABASE_URL).",
+    });
+  }).pipe(
+    Effect.catchCause((cause) =>
+      Effect.succeed(HttpServerResponse.jsonUnsafe({ ok: false, error: Cause.pretty(cause) })),
+    ),
+  ),
+);
+
+export const layerMcpSyncRoute = HttpRouter.add(
+  "POST",
+  "/api/mcp/sync",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      servers?: Array<{
+        id: string;
+        name: string;
+        type: "remote" | "local";
+        command?: string;
+        url?: string;
+        headers?: Array<{ key: string; value: string }>;
+        enabled: boolean;
+      }>;
+      cwd?: string;
+    };
+
+    const targetCwd = (bodyJson?.cwd?.trim() || process.cwd()).replace(/\\/g, "/");
+    const servers = Array.isArray(bodyJson?.servers) ? bodyJson.servers : [];
+
+    const mcpServersRecord: Record<string, any> = {};
+
+    for (const s of servers) {
+      if (!s.enabled) continue;
+      const key = s.name.toLowerCase().replace(/[^a-z0-9_-]+/g, "-");
+      if (s.type === "local" && s.command?.trim()) {
+        const parts = s.command.trim().split(/\s+/);
+        const command = parts[0] || "npx";
+        const args = parts.slice(1);
+        const env: Record<string, string> = {};
+        if (s.headers) {
+          for (const h of s.headers) {
+            if (h.key && h.value) {
+              env[h.key] = h.value;
+            }
+          }
+        }
+        mcpServersRecord[key] = {
+          command,
+          ...(args.length > 0 ? { args } : {}),
+          ...(Object.keys(env).length > 0 ? { env } : {}),
+        };
+      } else if (s.type === "remote" && s.url?.trim()) {
+        const headers: Record<string, string> = {};
+        if (s.headers) {
+          for (const h of s.headers) {
+            if (h.key && h.value) {
+              headers[h.key] = h.value;
+            }
+          }
+        }
+        mcpServersRecord[key] = {
+          url: s.url.trim(),
+          ...(Object.keys(headers).length > 0 ? { headers } : {}),
+        };
+      }
+    }
+
+    const opencodeConfig = {
+      $schema: "https://opencode.ai/schema/opencode.json",
+      mcp: {
+        servers: mcpServersRecord,
+      },
+    };
+
+    const opencodePath = NodePath.join(targetCwd, "opencode.json");
+    const autocodeMcpDir = NodePath.join(targetCwd, ".autocode");
+    const autocodeMcpPath = NodePath.join(autocodeMcpDir, "mcp.json");
+
+    try {
+      NodeFS.writeFileSync(opencodePath, JSON.stringify(opencodeConfig, null, 2), "utf-8");
+      if (!NodeFS.existsSync(autocodeMcpDir)) {
+        NodeFS.mkdirSync(autocodeMcpDir, { recursive: true });
+      }
+      NodeFS.writeFileSync(autocodeMcpPath, JSON.stringify(opencodeConfig, null, 2), "utf-8");
+
+      return HttpServerResponse.jsonUnsafe({
+        ok: true,
+        synced: true,
+        serversCount: Object.keys(mcpServersRecord).length,
+        opencodePath,
+      });
+    } catch (err: any) {
+      return HttpServerResponse.jsonUnsafe({
+        ok: false,
+        error: `Failed to write opencode.json: ${err?.message || String(err)}`,
+      });
+    }
+  }).pipe(
+    Effect.catchCause((cause) =>
+      Effect.succeed(HttpServerResponse.jsonUnsafe({ ok: false, error: Cause.pretty(cause) })),
+    ),
+  ),
+);
+
+export const layerWebFetchRoute = HttpRouter.add(
+  "POST",
+  "/api/web/fetch",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      url?: string;
+    };
+
+    if (!bodyJson?.url || !/^https?:\/\//i.test(bodyJson.url.trim())) {
+      return HttpServerResponse.jsonUnsafe({
+        ok: false,
+        error: "Valid HTTP/HTTPS url is required.",
+      });
+    }
+
+    const targetUrl = bodyJson.url.trim();
+
+    try {
+      try {
+        const jinaRes = yield* Effect.promise(() =>
+          fetch(`https://r.jina.ai/${targetUrl}`, {
+            headers: { Accept: "text/markdown, text/plain" },
+          }),
+        );
+        if (jinaRes.ok) {
+          const text = yield* Effect.promise(() => jinaRes.text());
+          return HttpServerResponse.jsonUnsafe({
+            ok: true,
+            source: "jina",
+            url: targetUrl,
+            text: text.slice(0, 20000),
+          });
+        }
+      } catch {}
+
+      const res = yield* Effect.promise(() =>
+        fetch(targetUrl, {
+          headers: {
+            "User-Agent":
+              "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 AutoCodeBot/1.0",
+            Accept: "text/html,application/xhtml+xml,text/plain",
+          },
+        }),
+      );
+
+      if (!res.ok) {
+        return HttpServerResponse.jsonUnsafe({
+          ok: false,
+          error: `HTTP ${res.status}: ${res.statusText}`,
+        });
+      }
+
+      const html = yield* Effect.promise(() => res.text());
+      const cleanText = html
+        .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
+        .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      return HttpServerResponse.jsonUnsafe({
+        ok: true,
+        source: "direct",
+        url: targetUrl,
+        text: cleanText.slice(0, 15000),
+      });
+    } catch (err: any) {
+      return HttpServerResponse.jsonUnsafe({
+        ok: false,
+        error: `Fetch failed: ${err?.message || String(err)}`,
+      });
+    }
+  }).pipe(
+    Effect.catchCause((cause) =>
+      Effect.succeed(HttpServerResponse.jsonUnsafe({ ok: false, error: Cause.pretty(cause) })),
+    ),
+  ),
+);
+
+export const layerWebSearchRoute = HttpRouter.add(
+  "POST",
+  "/api/web/search",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      query?: string;
+      apiKey?: string;
+    };
+
+    const query = bodyJson?.query?.trim();
+    if (!query) {
+      return HttpServerResponse.jsonUnsafe({
+        ok: false,
+        error: "Search query is required.",
+      });
+    }
+
+    const braveKey = bodyJson?.apiKey?.trim() || process.env.BRAVE_API_KEY || "";
+
+    if (braveKey) {
+      try {
+        const braveUrl = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5`;
+        const res = yield* Effect.promise(() =>
+          fetch(braveUrl, {
+            headers: {
+              Accept: "application/json",
+              "Accept-Encoding": "gzip",
+              "X-Subscription-Token": braveKey,
+            },
+          }),
+        );
+
+        if (res.ok) {
+          const data = (yield* Effect.promise(() => res.json())) as any;
+          const rawResults = data?.web?.results || [];
+          const results = rawResults.slice(0, 5).map((r: any) => ({
+            title: r.title || query,
+            url: r.url || "",
+            snippet: r.description || "",
+          }));
+
+          return HttpServerResponse.jsonUnsafe({
+            ok: true,
+            source: "brave",
+            query,
+            results,
+          });
+        }
+      } catch {}
+    }
+
+    try {
+      const ddgUrl = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json`;
+      const res = yield* Effect.promise(() => fetch(ddgUrl));
+      if (res.ok) {
+        const data = (yield* Effect.promise(() => res.json())) as any;
+        const results: Array<{ title: string; url: string; snippet: string }> = [];
+        if (data.AbstractText) {
+          results.push({
+            title: data.Heading || query,
+            url: data.AbstractURL || "https://duckduckgo.com",
+            snippet: data.AbstractText,
+          });
+        }
+        if (Array.isArray(data.RelatedTopics)) {
+          for (const item of data.RelatedTopics.slice(0, 4)) {
+            if (item.Text && item.FirstURL) {
+              results.push({
+                title: item.Text.slice(0, 60),
+                url: item.FirstURL,
+                snippet: item.Text,
+              });
+            }
+          }
+        }
+        if (results.length > 0) {
+          return HttpServerResponse.jsonUnsafe({
+            ok: true,
+            source: "duckduckgo",
+            query,
+            results,
+          });
+        }
+      }
+    } catch {}
+
+    return HttpServerResponse.jsonUnsafe({
+      ok: false,
+      error:
+        "No search results returned. Configure a Brave Search API key in Settings -> MCP for live high-precision 2026 web search.",
     });
   }).pipe(
     Effect.catchCause((cause) =>

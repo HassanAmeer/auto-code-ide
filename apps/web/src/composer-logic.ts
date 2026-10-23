@@ -22,7 +22,9 @@ export type ComposerSlashCommand =
   | "coder"
   | "debug"
   | "pr"
-  | "db";
+  | "db"
+  | "web"
+  | "fetch";
 export type ComposerSubmissionIntent = "foreground" | "background" | "alternate";
 
 export interface ComposerTrigger {
