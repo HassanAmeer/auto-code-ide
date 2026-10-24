@@ -860,10 +860,10 @@ export const makeEnvironmentThreadState = Effect.fn("EnvironmentThreadState.make
               break;
             }
             case "missing": {
-              // Definitive HTTP 404: clear any stale cache and do not open or
-              // retry a socket subscription for this attempt.
-              yield* setDeleted();
-              return yield* Effect.never;
+              // Definitive HTTP 404 or draft in-flight: fall through to the socket path
+              // rather than permanently killing the subscription with Effect.never,
+              // so that a freshly submitted draft thread can receive its live creation events.
+              break;
             }
             case "unavailable": {
               // Transient HTTP failure: fall through to the socket path.

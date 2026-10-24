@@ -6571,7 +6571,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     };
 
     const handleSpeechText = (e: Event) => {
-      const customEvent = e as CustomEvent<{ text: string }>;
+      const customEvent = e as CustomEvent<{ text: string; autoSend?: boolean }>;
       const incoming = customEvent.detail?.text?.trim();
       if (!incoming) return;
       const currentPrompt = promptRef.current || "";
@@ -6580,6 +6580,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         insertComposerTextAtEnd(toInsert, {
           ensureLeadingBoundary: true,
         });
+      }
+      if (customEvent.detail?.autoSend) {
+        setTimeout(() => {
+          onSend();
+        }, 50);
       }
     };
 

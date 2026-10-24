@@ -15,6 +15,7 @@ import {
 
 import { cn } from "../../../lib/utils";
 import { useTerminalStore, terminalStore } from "./terminalStore";
+import { isNaturalLanguagePrompt, translatePromptToBashCommand } from "./terminalClient";
 import type { TerminalCommandRun } from "./terminalTypes";
 import { TerminalCommandsMenu } from "./TerminalCommandsMenu";
 import { toastManager } from "../../ui/toast";
@@ -69,6 +70,32 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
     const trimmed = command.trim();
     if (!trimmed || isRunning) return;
 
+    // Check if user input is natural language intended for AI thinking/tool-calling
+    const isNatural = isNaturalLanguagePrompt(trimmed);
+    const translated = isNatural
+      ? translatePromptToBashCommand(
+          trimmed,
+          effectiveCwd,
+          store.accessKeys.filter((k) => k.enabled),
+        )
+      : trimmed;
+
+    // If it's natural language and didn't map to a raw bash shortcut, route directly to AI Chat
+    if (isNatural && translated === trimmed) {
+      window.dispatchEvent(
+        new CustomEvent("t3:insert-speech-text", {
+          detail: { text: trimmed, autoSend: true },
+        }),
+      );
+      setCommand("");
+      toastManager.add({
+        type: "info",
+        title: "Sent to AI Assistant",
+        description: "Executing your request with AI assistant...",
+      });
+      return;
+    }
+
     setIsRunning(true);
     setHistoryIndex(null);
     try {
@@ -82,7 +109,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
       setIsRunning(false);
       inputRef.current?.focus();
     }
-  }, [command, isRunning, effectiveCwd]);
+  }, [command, isRunning, effectiveCwd, store.accessKeys]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {

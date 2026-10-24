@@ -2189,9 +2189,16 @@ export default function ChatView(props: ChatViewProps) {
     () => threadSupportsProviderHandoff(serverProjection),
     [serverProjection],
   );
-  const activeLatestRun = isServerThread ? serverLatestRun : (activeThread?.latestRun ?? null);
-  const activeActivityRun = isServerThread ? serverActivityRun : (activeThread?.latestRun ?? null);
-  const activeRuntime = isServerThread ? serverRuntime : (activeThread?.runtime ?? null);
+  const activeLatestRun =
+    isServerThread || serverLatestRun !== null
+      ? serverLatestRun
+      : (activeThread?.latestRun ?? null);
+  const activeActivityRun =
+    isServerThread || serverActivityRun !== null
+      ? serverActivityRun
+      : (activeThread?.latestRun ?? null);
+  const activeRuntime =
+    isServerThread || serverRuntime !== null ? serverRuntime : (activeThread?.runtime ?? null);
   const hasHeldQueuedRuns =
     isServerThread &&
     serverProjection?.runs.some((run) => run.status === "queued" && run.queueHeld === true) ===
@@ -2686,7 +2693,8 @@ export default function ChatView(props: ChatViewProps) {
   const handleNewTerminalThread = useCallback(() => {
     terminalStore.setQuickBarOpen(true);
     clearComposerDraftContent(composerDraftTarget);
-  }, [clearComposerDraftContent, composerDraftTarget]);
+    startNewThreadForProject(activeProjectRef, handleNewThread);
+  }, [activeProjectRef, clearComposerDraftContent, composerDraftTarget, handleNewThread]);
 
   const prevRunStatusRef = useRef<{
     runId: string | null;
@@ -4059,7 +4067,10 @@ export default function ChatView(props: ChatViewProps) {
       ),
     [optimisticUserMessages],
   );
-  const timelineEntries = isServerThread ? serverTimelineEntries : draftTimelineEntries;
+  const hasServerItems =
+    serverVisibleTurnItems.length > 0 || (serverProjection?.turnItems.length ?? 0) > 0;
+  const timelineEntries =
+    isServerThread || hasServerItems ? serverTimelineEntries : draftTimelineEntries;
   const timelineMessages = useMemo(
     () => timelineEntries.flatMap((entry) => (entry.kind === "message" ? [entry.message] : [])),
     [timelineEntries],
@@ -10192,6 +10203,9 @@ export default function ChatView(props: ChatViewProps) {
           ? scopeThreadRef(environmentId, threadIdForSend)
           : null;
       if (backgroundThreadRef) beginBackgroundDraftSubmissionByRef(backgroundThreadRef);
+      if (isLocalDraftThread) {
+        markPromotedDraftThreadByRef(scopeThreadRef(environmentId, threadIdForSend));
+      }
       const startPromise = startThreadTurn({
         environmentId,
         input: {
