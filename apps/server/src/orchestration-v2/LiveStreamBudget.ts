@@ -14,8 +14,8 @@ export class LiveStreamBufferError extends Schema.TaggedError<LiveStreamBufferEr
   { message: Schema.String },
 ) {}
 
-export const LIVE_STREAM_MAX_ITEMS = 1_000;
-const LIVE_STREAM_MAX_SERIALIZED_BYTES = 8 * 1024 * 1024;
+export const LIVE_STREAM_MAX_ITEMS = 5_000;
+const LIVE_STREAM_MAX_SERIALIZED_BYTES = 40 * 1024 * 1024;
 
 export interface RetainedLiveItem<A> {
   readonly value: A;

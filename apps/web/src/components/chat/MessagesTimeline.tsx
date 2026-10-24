@@ -3385,7 +3385,9 @@ function CupertinoErrorRow({
       rawError={presentation.detail || item.failure.message}
       errorType={presentation.label}
       explicitModel={runModel}
-      statusCode={item.failure.code ?? undefined}
+      statusCode={
+        item.failure.code && /^\d{3}$/.test(item.failure.code) ? item.failure.code : undefined
+      }
       isWarning={presentation.tone === "warning"}
       visibility={visibility}
       sourceThreadId={sourceThreadId}
