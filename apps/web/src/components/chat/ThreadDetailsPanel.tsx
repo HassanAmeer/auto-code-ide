@@ -106,7 +106,7 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
             separated={false}
             showHeading={false}
           >
-            <div className="flex flex-col">
+            <div className="flex flex-col gap-0.5">
               {density === "full" ? (
                 <BranchToolbar
                   layout="panel"
@@ -152,7 +152,7 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
               showHeading={false}
               separated={density === "full"}
             >
-              <div className="flex flex-col">
+              <div className="flex flex-col gap-0.5">
                 {props.isGitRepo ? (
                   <BranchToolbar layout="panel" panelSection="branch" {...branchToolbarProps} />
                 ) : null}

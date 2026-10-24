@@ -131,14 +131,15 @@ export interface BackgroundServicesWidgetProps {
 export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
   environmentId: propEnvironmentId,
   threadId,
+  initialExpanded = false,
   className,
 }: BackgroundServicesWidgetProps) {
   const activeEnvId = useActiveEnvironmentId();
   const primaryEnvId = usePrimaryEnvironmentId();
   const environmentId = propEnvironmentId ?? activeEnvId ?? primaryEnvId;
 
-  const [subagentsExpanded, setSubagentsExpanded] = useState(true);
-  const [tasksExpanded, setTasksExpanded] = useState(true);
+  const [subagentsExpanded, setSubagentsExpanded] = useState(initialExpanded);
+  const [tasksExpanded, setTasksExpanded] = useState(initialExpanded);
   const [busyTaskId, setBusyTaskId] = useState<string | null>(null);
   const [stoppingTerminalId, setStoppingTerminalId] = useState<string | null>(null);
 
@@ -318,7 +319,7 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
   const tasksCount = backgroundTasks.length;
 
   return (
-    <div className={cn("flex flex-col gap-3 py-2 px-1 text-zinc-300 select-none", className)}>
+    <div className={cn("flex flex-col gap-1 py-0.5 px-0.5 select-none", className)}>
       {/* 1. Subagents Section */}
       <div className="flex flex-col">
         <div
@@ -331,36 +332,38 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
               setSubagentsExpanded(!subagentsExpanded);
             }
           }}
-          className="flex items-center justify-between py-1.5 px-2 rounded-md hover:bg-white/[0.04] transition-colors cursor-pointer group/header"
+          className="flex h-7 items-center justify-between px-2 rounded-lg hover:bg-black/[0.035] dark:hover:bg-white/[0.08] transition-colors cursor-pointer group/header"
           aria-expanded={subagentsExpanded}
         >
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-zinc-300 group-hover/header:text-zinc-100 transition-colors">
+            <span className="text-xs font-medium text-foreground/85 group-hover/header:text-foreground transition-colors">
               Subagents
             </span>
-            <span className="text-zinc-500 font-mono text-xs">{subagentsCount}</span>
+            <span className="text-muted-foreground font-mono text-[11px]">{subagentsCount}</span>
           </div>
           <ChevronDownIcon
             className={cn(
-              "size-4 text-zinc-500 transition-transform duration-200",
+              "size-3.5 text-muted-foreground transition-transform duration-200",
               !subagentsExpanded && "-rotate-90",
             )}
           />
         </div>
 
         {subagentsExpanded && (
-          <div className="flex flex-col gap-1 pt-1 pl-1">
+          <div className="flex flex-col gap-0.5 pt-0.5 pl-1">
             {rawSubagents.length === 0 ? (
-              <div className="py-1 px-2 text-2xs text-zinc-500 font-mono">No active subagents</div>
+              <div className="py-1 px-2 text-[11px] text-muted-foreground font-mono">
+                No active subagents
+              </div>
             ) : (
               rawSubagents.map((agent) => (
                 <div
                   key={agent.id}
-                  className="flex items-center justify-between gap-2.5 py-1.5 px-2 rounded-md hover:bg-white/[0.04] transition-colors group cursor-default"
+                  className="flex h-7 items-center justify-between gap-2 px-2 rounded-md hover:bg-black/[0.035] dark:hover:bg-white/[0.08] transition-colors group cursor-default"
                 >
-                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                    <SubagentBotIcon className="size-4 shrink-0 text-zinc-400" />
-                    <span className="text-xs text-zinc-300 group-hover:text-zinc-100 font-normal truncate">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <SubagentBotIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                    <span className="text-xs text-foreground/85 group-hover:text-foreground font-normal truncate">
                       {(agent as any).agentRole ||
                         (agent as any).name ||
                         agent.driver ||
@@ -368,7 +371,7 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
                     </span>
                   </div>
                   {agent.status && (
-                    <span className="text-2xs font-mono text-zinc-500 uppercase">
+                    <span className="text-2xs font-mono text-muted-foreground uppercase">
                       {agent.status}
                     </span>
                   )}
@@ -391,27 +394,29 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
               setTasksExpanded(!tasksExpanded);
             }
           }}
-          className="flex items-center justify-between py-1.5 px-2 rounded-md hover:bg-white/[0.04] transition-colors cursor-pointer group/header"
+          className="flex h-7 items-center justify-between px-2 rounded-lg hover:bg-black/[0.035] dark:hover:bg-white/[0.08] transition-colors cursor-pointer group/header"
           aria-expanded={tasksExpanded}
         >
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-zinc-300 group-hover/header:text-zinc-100 transition-colors">
+            <span className="text-xs font-medium text-foreground/85 group-hover/header:text-foreground transition-colors">
               Background Tasks
             </span>
-            <span className="text-zinc-500 font-mono text-xs">{tasksCount}</span>
+            <span className="text-muted-foreground font-mono text-[11px]">{tasksCount}</span>
           </div>
           <ChevronDownIcon
             className={cn(
-              "size-4 text-zinc-500 transition-transform duration-200",
+              "size-3.5 text-muted-foreground transition-transform duration-200",
               !tasksExpanded && "-rotate-90",
             )}
           />
         </div>
 
         {tasksExpanded && (
-          <div className="flex flex-col gap-0.5 pt-1 max-h-72 overflow-y-auto pr-0.5">
+          <div className="flex flex-col gap-0.5 pt-0.5 max-h-60 overflow-y-auto pr-0.5">
             {backgroundTasks.length === 0 ? (
-              <div className="py-2 px-2 text-2xs text-zinc-500 font-mono">No background tasks</div>
+              <div className="py-1 px-2 text-[11px] text-muted-foreground font-mono">
+                No background tasks
+              </div>
             ) : (
               backgroundTasks.map((task) => {
                 const isRunning = task.status === "running";
@@ -422,25 +427,25 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
                 return (
                   <div
                     key={task.id}
-                    className="flex items-center justify-between gap-2.5 py-1.5 px-2 rounded-md hover:bg-white/[0.04] transition-colors group cursor-default"
+                    className="flex h-7 items-center justify-between gap-2 px-2 rounded-md hover:bg-black/[0.035] dark:hover:bg-white/[0.08] transition-colors group cursor-default"
                   >
-                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
                       {/* Left Status Icon strictly matching screenshot */}
                       {task.kind === "cancelled" ? (
-                        <CancelledCircleIcon className="size-4 shrink-0 text-zinc-400" />
+                        <CancelledCircleIcon className="size-3.5 shrink-0 text-muted-foreground" />
                       ) : task.kind === "timer" ? (
-                        <TimerIcon className="size-4 shrink-0 text-zinc-400" />
+                        <TimerIcon className="size-3.5 shrink-0 text-muted-foreground" />
                       ) : isRunning ? (
                         <div className="relative flex items-center justify-center shrink-0">
-                          <TerminalBoxIcon className="size-4 text-zinc-300" />
+                          <TerminalBoxIcon className="size-3.5 text-foreground/80" />
                           <span className="absolute -top-0.5 -right-0.5 size-1.5 rounded-full bg-emerald-400 animate-pulse" />
                         </div>
                       ) : (
-                        <TerminalBoxIcon className="size-4 shrink-0 text-zinc-400" />
+                        <TerminalBoxIcon className="size-3.5 shrink-0 text-muted-foreground" />
                       )}
 
                       <span
-                        className="text-xs text-zinc-300 group-hover:text-zinc-100 font-normal truncate leading-normal"
+                        className="text-xs text-foreground/85 group-hover:text-foreground font-normal truncate leading-normal"
                         title={task.title}
                       >
                         {task.title}
@@ -486,7 +491,7 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
                                   e.stopPropagation();
                                   handleRunTask(task.rawTask!);
                                 }}
-                                className="size-5 rounded hover:bg-white/10 text-zinc-400 hover:text-white flex items-center justify-center transition-colors"
+                                className="size-5 rounded hover:bg-white/10 text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors"
                                 aria-label={`Run ${task.title} now`}
                               >
                                 {isTaskBusy ? (
