@@ -790,12 +790,23 @@ export const terminalStore = {
     };
     notify();
 
-    // Execute via server using live streaming & cancellation support
-    const result = await executeTerminalCommandStream(executionId, commandToExecute, cwd, {
-      onChunk: (chunk, type) => {
-        terminalStore.appendRunChunk(runId, chunk, type);
-      },
-    });
+    // Execute via server using fast direct JSON execution with stream fallback
+    let result: TerminalExecResult;
+    try {
+      result = await executeTerminalCommand(commandToExecute, cwd, 60_000);
+      if (result.stdout) {
+        terminalStore.appendRunChunk(runId, result.stdout, "stdout");
+      }
+      if (result.stderr) {
+        terminalStore.appendRunChunk(runId, result.stderr, "stderr");
+      }
+    } catch {
+      result = await executeTerminalCommandStream(executionId, commandToExecute, cwd, {
+        onChunk: (chunk, type) => {
+          terminalStore.appendRunChunk(runId, chunk, type);
+        },
+      });
+    }
 
     // Auto-update CWD on successful `cd <path>` if local
     if (!isSshTarget && result.ok) {

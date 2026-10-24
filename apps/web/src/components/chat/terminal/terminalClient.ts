@@ -15,7 +15,14 @@ export async function executeTerminalCommand(
 ): Promise<TerminalExecResult> {
   const startTime = Date.now();
   try {
-    const response = await fetch(resolvePrimaryEnvironmentHttpUrl("/api/terminal/exec"), {
+    let url = "/api/terminal/exec";
+    try {
+      url = resolvePrimaryEnvironmentHttpUrl("/api/terminal/exec");
+    } catch {
+      url = "/api/terminal/exec";
+    }
+
+    const response = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -83,7 +90,14 @@ export async function executeTerminalCommandStream(
   }
 
   try {
-    const response = await fetch(resolvePrimaryEnvironmentHttpUrl("/api/terminal/stream"), {
+    let streamUrl = "/api/terminal/stream";
+    try {
+      streamUrl = resolvePrimaryEnvironmentHttpUrl("/api/terminal/stream");
+    } catch {
+      streamUrl = "/api/terminal/stream";
+    }
+
+    const response = await fetch(streamUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -188,7 +202,13 @@ export async function executeTerminalCommandStream(
  */
 export async function killTerminalExecution(executionId: string): Promise<boolean> {
   try {
-    const response = await fetch(resolvePrimaryEnvironmentHttpUrl("/api/terminal/kill"), {
+    let killUrl = "/api/terminal/kill";
+    try {
+      killUrl = resolvePrimaryEnvironmentHttpUrl("/api/terminal/kill");
+    } catch {
+      killUrl = "/api/terminal/kill";
+    }
+    const response = await fetch(killUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ executionId }),
