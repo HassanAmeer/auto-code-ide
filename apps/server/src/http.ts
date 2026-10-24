@@ -1910,8 +1910,8 @@ export const layerFsDownloadRoute = HttpRouter.add(
   "/api/fs/download",
   Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
-    const url = HttpServerRequest.toURL(request);
-    const targetPath = Option.getOrUndefined(url)?.searchParams.get("path")?.trim();
+    const url = new URL(request.url, "http://127.0.0.1");
+    const targetPath = url.searchParams.get("path")?.trim();
     if (!targetPath) {
       return HttpServerResponse.text("Missing file path parameter", { status: 400 });
     }

@@ -182,6 +182,7 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
   const [copied, setCopied] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
+  const [downloadingZipPath, setDownloadingZipPath] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
@@ -532,15 +533,53 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
   };
 
   const handleDownload = (filePath: string, fileName: string) => {
-    const downloadUrl = resolvePrimaryEnvironmentHttpUrl(
-      `/api/fs/download?path=${encodeURIComponent(filePath)}`,
-    );
-    const a = document.createElement("a");
-    a.href = downloadUrl;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    try {
+      const downloadUrl = resolvePrimaryEnvironmentHttpUrl("/api/fs/download", {
+        path: filePath,
+      });
+      const a = document.createElement("a");
+      a.href = downloadUrl;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch (err) {
+      toastManager.add({
+        type: "error",
+        title: "Download error",
+        description: err instanceof Error ? err.message : String(err),
+      });
+    }
+  };
+
+  const handleDownloadFolderZip = (folderPath: string, folderName?: string) => {
+    const safeName = folderName || folderPath.split("/").filter(Boolean).pop() || "folder";
+    setDownloadingZipPath(folderPath);
+    toastManager.add({
+      type: "info",
+      title: "Packaging ZIP",
+      description: `Converting folder "${safeName}" to clean ZIP archive...`,
+    });
+    try {
+      const downloadUrl = resolvePrimaryEnvironmentHttpUrl("/api/project/download-zip", {
+        workspaceRoot: folderPath,
+        name: safeName,
+      });
+      const a = document.createElement("a");
+      a.href = downloadUrl;
+      a.download = `${safeName}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch (err) {
+      toastManager.add({
+        type: "error",
+        title: "ZIP error",
+        description: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setTimeout(() => setDownloadingZipPath(null), 3000);
+    }
   };
 
   const handleCopyCode = () => {
@@ -949,6 +988,21 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
+                      handleDownloadFolderZip(subPath, dirName);
+                    }}
+                    title={`Download "${dirName}" as ZIP`}
+                    className="p-1 rounded-[3px] text-zinc-400 hover:text-amber-300 hover:bg-zinc-700/60"
+                  >
+                    {downloadingZipPath === subPath ? (
+                      <RotateCw className="size-3 animate-spin text-amber-400" />
+                    ) : (
+                      <Download className="size-3" />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
                       handleNavigatePath(subPath);
                     }}
                     title="Open this folder as root"
@@ -1121,6 +1175,21 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                 className="p-1.5 rounded-[5px] border border-zinc-700/80 text-zinc-300 hover:text-white hover:bg-zinc-800 bg-zinc-900 transition-colors cursor-pointer"
               >
                 <RotateCw className="size-3.5" />
+              </button>
+
+              {/* Download Current Folder as ZIP */}
+              <button
+                type="button"
+                onClick={() => handleDownloadFolderZip(rootPath)}
+                disabled={downloadingZipPath === rootPath}
+                title="Download current directory as ZIP archive"
+                className="p-1.5 rounded-[5px] border border-zinc-700/80 text-amber-400 hover:text-amber-300 hover:bg-zinc-800 bg-zinc-900 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {downloadingZipPath === rootPath ? (
+                  <RotateCw className="size-3.5 animate-spin text-amber-400" />
+                ) : (
+                  <FileArchive className="size-3.5 text-amber-400" />
+                )}
               </button>
             </div>
 

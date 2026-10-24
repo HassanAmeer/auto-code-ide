@@ -7,9 +7,10 @@ import { toastManager } from "~/components/ui/toast";
 export function downloadProjectZip(workspaceRoot: string, projectName?: string): void {
   if (!workspaceRoot) return;
   const safeName = projectName || workspaceRoot.split("/").filter(Boolean).pop() || "project";
-  const url = resolvePrimaryEnvironmentHttpUrl(
-    `/api/project/download-zip?workspaceRoot=${encodeURIComponent(workspaceRoot)}&name=${encodeURIComponent(safeName)}`,
-  );
+  const url = resolvePrimaryEnvironmentHttpUrl("/api/project/download-zip", {
+    workspaceRoot,
+    name: safeName,
+  });
 
   toastManager.add({
     type: "info",

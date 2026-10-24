@@ -299,10 +299,20 @@ export function resolvePrimaryEnvironmentHttpUrl(
     urlKind: "http-base-url",
   });
   const basePath = url.pathname.replace(/\/$/, "");
-  const cleanPathname = pathname.startsWith("/") ? pathname : `/${pathname}`;
+  // Separate pure path from any inline query string (?key=value) so url.pathname does not encode ? as %3F
+  const [purePath, rawSearch] = pathname.split("?", 2);
+  const cleanPathname = (purePath || "").startsWith("/") ? purePath! : `/${purePath || ""}`;
   url.pathname = `${basePath}${cleanPathname}`;
+
+  const params = new URLSearchParams(rawSearch || "");
   if (searchParams) {
-    url.search = new URLSearchParams(searchParams).toString();
+    for (const [key, value] of Object.entries(searchParams)) {
+      params.set(key, value);
+    }
+  }
+  const searchStr = params.toString();
+  if (searchStr) {
+    url.search = searchStr;
   }
   return url.toString();
 }
