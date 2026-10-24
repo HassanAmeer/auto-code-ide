@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { extractSpeechChunks, StreamingTtsPlayer } from "./streamingTtsPlayer";
-import { isFarewellOrEndCall } from "./useVoiceCallAssistant";
+import { isFarewellOrEndCall, containsInterruptCommand } from "./useVoiceCallAssistant";
 
 describe("VoiceCall Assistant & StreamingTtsPlayer", () => {
   it("extracts speech chunks cleanly and strips code blocks", () => {
@@ -28,6 +28,25 @@ describe("VoiceCall Assistant & StreamingTtsPlayer", () => {
 
     // Stop the player
     player.stop();
+  });
+
+  it("detects interrupt commands instantly across variants", () => {
+    expect(containsInterruptCommand("stop")).toBe(true);
+    expect(containsInterruptCommand("stop it")).toBe(true);
+    expect(containsInterruptCommand("please stop")).toBe(true);
+    expect(containsInterruptCommand("ruko")).toBe(true);
+    expect(containsInterruptCommand("ruk jao")).toBe(true);
+    expect(containsInterruptCommand("wait")).toBe(true);
+    expect(containsInterruptCommand("suno")).toBe(true);
+    expect(containsInterruptCommand("suno bhai")).toBe(true);
+    expect(containsInterruptCommand("سٹاپ")).toBe(true);
+    expect(containsInterruptCommand("روکو")).toBe(true);
+    expect(containsInterruptCommand("رک جاؤ")).toBe(true);
+    expect(containsInterruptCommand("سنو")).toBe(true);
+
+    // Regular speech should not trigger interrupt
+    expect(containsInterruptCommand("what is the weather")).toBe(false);
+    expect(containsInterruptCommand("database migration script")).toBe(false);
   });
 
   it("detects farewell and end call intents accurately", () => {
