@@ -485,7 +485,12 @@ import {
 } from "~/lib/sound/soundManager";
 import { AiTerminalHeaderStrip, AiTerminalCommandBar } from "./chat/terminal";
 import { useTerminalStore } from "./chat/terminal/terminalStore";
-import { translatePromptToBashCommand } from "./chat/terminal/terminalClient";
+import {
+  translatePromptToBashCommand,
+  isConversationalPrompt,
+  isNaturalLanguagePrompt,
+  isKnownUnixBinary,
+} from "./chat/terminal/terminalClient";
 import { ProjectFileExplorer } from "./chat/terminal/ProjectFileExplorer";
 import { ProviderSubagentBar } from "./chat/ProviderSubagentBar";
 import { getTriggerDisplayModelName } from "./chat/providerIconUtils";
@@ -9560,6 +9565,67 @@ export default function ChatView(props: ChatViewProps) {
         updatedAt: nowIso,
       };
 
+      // 1. Pure conversational greetings & acknowledgements (e.g. "hy", "hello", "ok", "theek hai")
+      if (isConversationalPrompt(userPromptText)) {
+        let conversationalReply = "";
+        const lower = userPromptText.trim().toLowerCase();
+        if (
+          lower === "ok" ||
+          lower === "okay" ||
+          lower === "okey" ||
+          lower === "theek" ||
+          lower === "theek hai" ||
+          lower === "thik hai" ||
+          lower === "thik he" ||
+          lower === "theek he" ||
+          lower === "acha" ||
+          lower === "achha" ||
+          lower === "done" ||
+          lower === "sahi" ||
+          lower === "sahi hai"
+        ) {
+          conversationalReply =
+            "Theek hai! Jab bhi aapko VPS terminal par koi command chalani ho ya system/files check karni ho, bas yahan bata dein.";
+        } else if (lower.includes("salam")) {
+          conversationalReply =
+            "Wa Alaikum Assalam! Main aapka AI Terminal Assistant hoon. Main aapke VPS terminal par commands execute kar sakta hoon aur files/system monitor kar sakta hoon. Aapko terminal mein kya check ya run karwana hai?";
+        } else if (
+          lower.includes("kaise ho") ||
+          lower.includes("how are you") ||
+          lower.includes("kese ho") ||
+          lower.includes("kya hal")
+        ) {
+          conversationalReply =
+            "Alhamdulillah, main bilkul theek hoon! VPS system active aur running hai. Aap mujhe koi bhi terminal command chalane ya inspect karne ko keh sakte hain.";
+        } else if (
+          lower.includes("who are you") ||
+          lower.includes("kaun ho") ||
+          lower.includes("kon ho")
+        ) {
+          conversationalReply =
+            "Main AutoCode ka AI Terminal Assistant hoon. Main aapke commands ko VPS terminal par chalata hoon, output monitor karta hoon aur report deta hoon.";
+        } else {
+          conversationalReply =
+            "Hello! Main aapka AI Terminal Assistant hoon. Main right-side VPS terminal par direct commands execute kar sakta hoon. Aap yahan English ya Roman Urdu mein pooch sakte hain, maslan: `check how many files and folders inside`, `free RAM check karo`, `git status`, ya direct koi bash command.";
+        }
+
+        const conversationalAssistantMsg: ChatMessage = {
+          id: assistantMessageId,
+          role: "assistant",
+          text: conversationalReply,
+          runId: null,
+          streaming: false,
+          createdAt: nowIso,
+          updatedAt: nowIso,
+        };
+
+        setOptimisticUserMessages((prev) => [...prev, userMsg, conversationalAssistantMsg]);
+        promptRef.current = "";
+        clearComposerDraftContent(composerDraftTarget);
+        composerRef.current?.resetCursorState();
+        return;
+      }
+
       const termState = terminalStore.getState();
       const currentTermTab = termState.terminalTabs.find((t) => t.id === termState.activeTabId);
       const effectiveTermCwd =
@@ -9576,6 +9642,33 @@ export default function ChatView(props: ChatViewProps) {
         activeKeys,
         selectedKeyId: termState.selectedKeyId,
       });
+
+      // 2. Prevent sending unrecognized English/Urdu conversational sentences into /bin/bash as invalid commands
+      const firstWord = userPromptText.trim().split(/\s+/)[0]?.toLowerCase() || "";
+      const isRecognizedBinary = isKnownUnixBinary(firstWord);
+      const hasShellPipesOrOps = /[|&;><]/.test(userPromptText);
+
+      if (
+        isNaturalLanguagePrompt(userPromptText) &&
+        bashCmd === userPromptText.trim() &&
+        !isRecognizedBinary &&
+        !hasShellPipesOrOps
+      ) {
+        const clarificationMsg: ChatMessage = {
+          id: assistantMessageId,
+          role: "assistant",
+          text: `Main aapki yeh request samajh nahi paya: \`${userPromptText}\`.\n\nMain sirf terminal tasks execute karta hoon. Baraye meharbani wazeh batayein keh aap terminal par kya karwana chahte hain, maslan:\n- 📁 \`check how many files and folders inside\` (Files aur folders check karna)\n- 💾 \`RAM check karo\` ya \`disk space dekho\`\n- ⚙️ \`autojobs service status\` ya \`restart service\`\n- ⚡ \`git status\` ya direct bash command jaise \`ls -la\`, \`pwd\`, \`uptime\` waghera.`,
+          runId: null,
+          streaming: false,
+          createdAt: nowIso,
+          updatedAt: nowIso,
+        };
+        setOptimisticUserMessages((prev) => [...prev, userMsg, clarificationMsg]);
+        promptRef.current = "";
+        clearComposerDraftContent(composerDraftTarget);
+        composerRef.current?.resetCursorState();
+        return;
+      }
 
       const initialAssistantMsg: ChatMessage = {
         id: assistantMessageId,
@@ -9608,24 +9701,38 @@ export default function ChatView(props: ChatViewProps) {
           (lowerPrompt.includes("file") ||
             lowerPrompt.includes("fiel") ||
             lowerPrompt.includes("folder") ||
+            lowerPrompt.includes("directory") ||
             lowerPrompt.includes("item")) &&
           (lowerPrompt.includes("total") ||
             lowerPrompt.includes("count") ||
+            lowerPrompt.includes("how much") ||
+            lowerPrompt.includes("how many") ||
+            lowerPrompt.includes("much") ||
+            lowerPrompt.includes("many") ||
             lowerPrompt.includes("kitni") ||
             lowerPrompt.includes("kitne") ||
-            lowerPrompt.includes("bata"));
+            lowerPrompt.includes("check") ||
+            lowerPrompt.includes("inside") ||
+            lowerPrompt.includes("inides") ||
+            lowerPrompt.includes("bata") ||
+            lowerPrompt.includes("show") ||
+            lowerPrompt.includes("list"));
 
         if (isFilesQuery) {
-          const countMatch =
+          const totalMatch = cleanStdout.match(/Total Items:\s*(\d+)\s*\(([^)]+)\)/i);
+          const legacyMatch =
             cleanStdout.match(/=== Total Files Count ===\s*(\d+)/i) || cleanStdout.match(/^(\d+)/m);
-          const totalCount = countMatch ? countMatch[1] : null;
           responseReport =
-            `Maine terminal ke andar files check karne ke liye command run kar di hai:\n\`${runResult.command}\`\n\n` +
+            `Maine terminal ke andar files aur folders check karne ke liye command run kar di hai:\n\`${runResult.command}\`\n\n` +
             `**Nateeja:**\n` +
-            (totalCount ? `- **Total Files / Folders:** ${totalCount}\n` : "") +
+            (totalMatch
+              ? `- **Total Items:** ${totalMatch[1]} (${totalMatch[2]})\n`
+              : legacyMatch
+                ? `- **Total Files / Folders:** ${legacyMatch[1]}\n`
+                : "") +
             `- **Directory:** \`${effectiveTermCwd}\`\n` +
-            `- **Status:** Kamiyabi se check kar liya hai (Exit 0)\n\n` +
-            `Aap right-side terminal window mein mukammal files list aur live output dekh saktay hain. Yeh task complete ho gaya hai.`;
+            `- **Status:** ✅ Kamiyabi se check kar liya hai (Exit 0)\n\n` +
+            `Aap right-side terminal window mein mukammal files list, sizes aur permissions dekh saktay hain. Yeh task complete ho gaya hai.`;
         } else if (lowerPrompt.includes("deploy") || lowerPrompt.includes("live karo")) {
           responseReport =
             `🚀 **Deployment Pipeline Status:**\n` +

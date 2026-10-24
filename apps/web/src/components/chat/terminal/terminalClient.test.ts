@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vite-plus/test";
-import { translatePromptToBashCommand, generateAiExplanation } from "./terminalClient";
+import {
+  translatePromptToBashCommand,
+  generateAiExplanation,
+  isConversationalPrompt,
+  isNaturalLanguagePrompt,
+} from "./terminalClient";
 
 describe("translatePromptToBashCommand", () => {
   it("passes raw shell commands through unchanged", () => {
@@ -19,14 +24,27 @@ describe("translatePromptToBashCommand", () => {
 
   it("translates file count queries in Roman Urdu and English", () => {
     const cmd1 = translatePromptToBashCommand("mujhy total fiels bataen kitni hen");
-    expect(cmd1).toContain("find .");
     expect(cmd1).toContain("wc -l");
 
     const cmd2 = translatePromptToBashCommand("total files kitni hain");
     expect(cmd2).toContain("wc -l");
 
-    const cmd3 = translatePromptToBashCommand("fiels bataen");
+    const cmd3 = translatePromptToBashCommand("check how much files and folders inides");
+    expect(cmd3).toContain("Total Items:");
     expect(cmd3).toContain("ls -lah");
+
+    const cmd4 = translatePromptToBashCommand("fiels bataen");
+    expect(cmd4).toContain("ls -lah");
+  });
+
+  it("identifies conversational prompts correctly", () => {
+    expect(isConversationalPrompt("hy")).toBe(true);
+    expect(isConversationalPrompt("hello")).toBe(true);
+    expect(isConversationalPrompt("ok")).toBe(true);
+    expect(isConversationalPrompt("theek hai")).toBe(true);
+    expect(isConversationalPrompt("salam")).toBe(true);
+    expect(isConversationalPrompt("check how much files and folders inides")).toBe(false);
+    expect(isConversationalPrompt("ls -la")).toBe(false);
   });
 
   it("translates port kill intent with extracted port number", () => {

@@ -726,11 +726,38 @@ export function translatePromptToBashCommand(
   }
 
   // 8. Files / Directory / Search
-  if (
-    (p.includes("total") || p.includes("count") || p.includes("kitni") || p.includes("kitne")) &&
-    (p.includes("file") || p.includes("fiel") || p.includes("folder") || p.includes("item"))
-  ) {
-    return `echo "=== Total Files Count ===" && find . -maxdepth 2 -not -path '*/.*' | wc -l && echo "=== Directory Listing (Top 20) ===" && ls -lah | head -n 22`;
+  const hasFileOrDirWord =
+    p.includes("file") ||
+    p.includes("fiel") ||
+    p.includes("folder") ||
+    p.includes("directory") ||
+    p.includes("dir") ||
+    p.includes("item") ||
+    p.includes("inides") ||
+    p.includes("inside") ||
+    p.includes("andar kya");
+
+  const hasCountOrCheckWord =
+    p.includes("total") ||
+    p.includes("count") ||
+    p.includes("how much") ||
+    p.includes("how many") ||
+    p.includes("much") ||
+    p.includes("many") ||
+    p.includes("kitni") ||
+    p.includes("kitne") ||
+    p.includes("check") ||
+    p.includes("list") ||
+    p.includes("show") ||
+    p.includes("dekho") ||
+    p.includes("bata") ||
+    p.includes("view") ||
+    p.includes("open") ||
+    p.includes("inides") ||
+    p.includes("inside");
+
+  if (hasFileOrDirWord && hasCountOrCheckWord) {
+    return `echo "=== Directory: $(pwd) ===" && ls -lah --color=auto && echo "" && echo "Total Items: $(ls -1A 2>/dev/null | wc -l) (Files: $(find . -maxdepth 1 -type f 2>/dev/null | wc -l), Folders: $(find . -maxdepth 1 -type d 2>/dev/null | grep -v '^\\.$' | wc -l))"`;
   }
   if (p.includes("largest") || p.includes("big file") || p.includes("heavy file")) {
     return `du -ah ${effectiveCwd} 2>/dev/null | sort -rh | head -n 12`;
@@ -741,7 +768,9 @@ export function translatePromptToBashCommand(
     p.includes("directory") ||
     p.includes("files dekho") ||
     p.includes("files bata") ||
-    p.includes("fiels bata")
+    p.includes("fiels bata") ||
+    p.includes("files") ||
+    p.includes("folders")
   ) {
     return "ls -lah --color=auto";
   }
@@ -825,6 +854,171 @@ export function translatePromptToBashCommand(
   return prompt.trim();
 }
 
+export const knownUnixBinaries = new Set([
+  "ls",
+  "cd",
+  "pwd",
+  "cat",
+  "mkdir",
+  "rm",
+  "cp",
+  "mv",
+  "touch",
+  "chmod",
+  "chown",
+  "grep",
+  "find",
+  "tail",
+  "head",
+  "less",
+  "more",
+  "df",
+  "free",
+  "top",
+  "htop",
+  "ps",
+  "kill",
+  "pkill",
+  "fuser",
+  "curl",
+  "wget",
+  "ssh",
+  "scp",
+  "ping",
+  "systemctl",
+  "service",
+  "journalctl",
+  "docker",
+  "docker-compose",
+  "pm2",
+  "npm",
+  "pnpm",
+  "yarn",
+  "bun",
+  "python",
+  "python3",
+  "node",
+  "git",
+  "echo",
+  "which",
+  "clear",
+  "cls",
+  "export",
+  "source",
+  "uptime",
+  "uname",
+  "ss",
+  "netstat",
+  "ip",
+  "ifconfig",
+  "lsof",
+  "du",
+  "tar",
+  "zip",
+  "unzip",
+  "sed",
+  "awk",
+  "nano",
+  "vim",
+  "vi",
+  "apt",
+  "apt-get",
+  "dpkg",
+  "crontab",
+  "date",
+  "whoami",
+  "id",
+  "history",
+  "sudo",
+]);
+
+export function isKnownUnixBinary(word: string): boolean {
+  return knownUnixBinaries.has(word.toLowerCase().trim());
+}
+
+/**
+ * Checks whether user input is purely conversational / greeting (e.g. "hy", "ok", "salam", "thanks")
+ * rather than an instruction intended for terminal execution.
+ */
+export function isConversationalPrompt(input: string): boolean {
+  const p = input
+    .trim()
+    .toLowerCase()
+    .replace(/[!?.,;:-]+$/, "");
+  if (!p) return false;
+
+  const greetings = [
+    "hy",
+    "hi",
+    "hey",
+    "helo",
+    "hello",
+    "salam",
+    "slaam",
+    "asalam",
+    "assalam",
+    "assalamu alaikum",
+    "assalam o alaikum",
+    "kese ho",
+    "kaise ho",
+    "how are you",
+    "kya hal hai",
+    "kia hal ha",
+    "hal chaal",
+    "kia scene hai",
+  ];
+
+  const acknowledgements = [
+    "ok",
+    "okay",
+    "okey",
+    "theek",
+    "theek hai",
+    "thik hai",
+    "thik he",
+    "theek he",
+    "acha",
+    "achha",
+    "acha theek hai",
+    "shukriya",
+    "thanks",
+    "thank you",
+    "thnx",
+    "done",
+    "g",
+    "jee",
+    "sahi",
+    "sahi hai",
+    "good",
+    "great",
+    "nice",
+    "perfect",
+  ];
+
+  const identityInquiries = [
+    "who are you",
+    "tum kaun ho",
+    "tum kon ho",
+    "aap kaun hain",
+    "aap kon ho",
+    "help",
+    "madad",
+    "kya kar sakte ho",
+    "what can you do",
+  ];
+
+  return (
+    greetings.includes(p) ||
+    acknowledgements.includes(p) ||
+    identityInquiries.includes(p) ||
+    p.startsWith("hy ") ||
+    p.startsWith("hi ") ||
+    p.startsWith("hello ") ||
+    p.startsWith("salam ") ||
+    p.startsWith("assalam ")
+  );
+}
+
 /**
  * Intelligent helper to detect whether an input string is a natural language command
  * (in Roman Urdu or English) vs a direct raw terminal shell command.
@@ -839,47 +1033,7 @@ export function isNaturalLanguagePrompt(input: string): boolean {
 
   // Single word known unix commands
   const firstWord = trimmed.split(/\s+/)[0]?.toLowerCase();
-  const knownBinaries = new Set([
-    "ls",
-    "cd",
-    "pwd",
-    "cat",
-    "mkdir",
-    "rm",
-    "cp",
-    "mv",
-    "touch",
-    "chmod",
-    "chown",
-    "grep",
-    "find",
-    "tail",
-    "head",
-    "less",
-    "more",
-    "df",
-    "free",
-    "top",
-    "htop",
-    "ps",
-    "kill",
-    "curl",
-    "wget",
-    "ssh",
-    "scp",
-    "ping",
-    "systemctl",
-    "journalctl",
-    "docker",
-    "docker-compose",
-    "pm2",
-    "npm",
-    "pnpm",
-    "yarn",
-    "bun",
-    "python",
-    "node",
-  ]);
+  const knownBinaries = knownUnixBinaries;
 
   // If it's literally just the binary name (e.g. "free", "top", "uptime", "pwd")
   if (
