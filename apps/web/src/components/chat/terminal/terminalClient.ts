@@ -82,6 +82,7 @@ export async function executeTerminalCommandStream(
   let stdoutAccum = "";
   let stderrAccum = "";
   let finalExitCode = 0;
+  let finalCwd = cwd;
 
   // Pre-check for interactive programs that require full TTY
   const firstWord = command.trim().split(/\s+/)[0]?.toLowerCase() || "";
@@ -164,6 +165,9 @@ export async function executeTerminalCommandStream(
             callbacks?.onChunk?.(parsed.data, "stderr");
           } else if (parsed.type === "exit") {
             finalExitCode = typeof parsed.exitCode === "number" ? parsed.exitCode : 0;
+            if (typeof (parsed as any).cwd === "string" && (parsed as any).cwd) {
+              finalCwd = (parsed as any).cwd;
+            }
             callbacks?.onExit?.(finalExitCode, parsed.durationMs ?? Date.now() - startTime);
           } else if (parsed.type === "error" && parsed.data) {
             stderrAccum += (stderrAccum ? "\n" : "") + parsed.data;
@@ -179,7 +183,7 @@ export async function executeTerminalCommandStream(
     return {
       ok: finalExitCode === 0,
       command,
-      cwd,
+      cwd: finalCwd,
       stdout: stdoutAccum,
       stderr: stderrAccum,
       exitCode: finalExitCode,

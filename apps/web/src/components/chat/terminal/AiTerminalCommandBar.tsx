@@ -76,10 +76,20 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
     (store.selectedProjectId ? store.activeCwd : null) ||
     "/root/autojobs/projects/autocode-storage/op";
 
-  const effectiveCwd = isRootScope ? "/" : projectPath || projectCwd || store.activeCwd || "/";
+  const activeTab = store.terminalTabs.find((t) => t.id === activeTabId);
+  const effectiveCwd =
+    activeTab?.cwd || store.activeCwd || (isRootScope ? "/" : projectPath || "/");
   const scopeName = isRootScope ? "vps" : projectTitle;
-  const cwdDisplay =
-    effectiveCwd === "/" ? "/" : effectiveCwd.split("/").filter(Boolean).pop() || effectiveCwd;
+
+  // Format prompt path like genuine Linux bash (e.g. / -> /, /root -> ~, /root/autojobs -> ~/autojobs, /dev -> /dev)
+  const formatPromptPath = useCallback((pathStr?: string | null): string => {
+    if (!pathStr || pathStr === "/") return "/";
+    if (pathStr === "/root") return "~";
+    if (pathStr.startsWith("/root/")) return "~" + pathStr.slice(5);
+    return pathStr;
+  }, []);
+
+  const cwdDisplay = formatPromptPath(effectiveCwd);
 
   const handleAskAiToFix = useCallback(() => {
     if (!latestRun) return;
@@ -108,18 +118,8 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
 
       setCommand("");
 
-      // Auto-elevate with sudo if command is marked as always-allowed or user is in full-access mode for systemctl/apt
-      let finalCommandToRun = trimmed;
-      if (
-        !finalCommandToRun.startsWith("sudo ") &&
-        (terminalStore.isCommandAlwaysAllowed(finalCommandToRun) ||
-          (store.permissionMode === "full-access" &&
-            (finalCommandToRun.startsWith("apt ") ||
-              finalCommandToRun.startsWith("systemctl ") ||
-              finalCommandToRun.startsWith("service "))))
-      ) {
-        finalCommandToRun = `sudo ${finalCommandToRun}`;
-      }
+      // Run command directly as requested (VPS execution operates with native host root privileges)
+      const finalCommandToRun = trimmed;
 
       const optimisticRun: TerminalCommandRun = {
         id: "temp_" + Date.now(),
@@ -648,7 +648,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
                 <div className="flex items-center justify-between text-zinc-400">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="text-emerald-400 font-semibold select-none">
-                      root@{scopeName}:{run.cwd === "/" ? "/" : cwdDisplay}#
+                      root@{scopeName}:{formatPromptPath(run.cwd)}#
                     </span>
                     <span className="text-white font-semibold select-text">{run.command}</span>
                   </div>
@@ -685,6 +685,11 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
                 {!run.stdout && !run.stderr && run.status === "success" && (
                   <div className="text-zinc-600 italic pl-2 text-4xs">
                     (Command executed with no output)
+                  </div>
+                )}
+                {!run.stdout && !run.stderr && run.status === "error" && (
+                  <div className="text-rose-400/80 italic pl-2 text-4xs">
+                    (Command exited with status code {run.exitCode ?? 1})
                   </div>
                 )}
                 {!run.stdout && !run.stderr && run.status === "running" && (

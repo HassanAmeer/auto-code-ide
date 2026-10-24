@@ -48,22 +48,39 @@ export function runBashCommandOnHost(
     let safeCwd = cwd;
     try {
       if (!safeCwd || !NodeFs.existsSync(safeCwd) || !NodeFs.statSync(safeCwd).isDirectory()) {
-        safeCwd = process.cwd();
+        safeCwd = "/";
       }
     } catch {
-      safeCwd = process.cwd();
+      safeCwd = "/";
     }
 
-    const child = NodeChildProcess.spawn("/bin/bash", ["-c", command], {
+    let finalCwd = safeCwd;
+    let cwdBuffer = "";
+
+    // Trap EXIT to always write pwd -P to file descriptor 3 without polluting stdout/stderr
+    const wrappedScript = `trap "pwd -P >&3 2>/dev/null" EXIT ; cd ${JSON.stringify(safeCwd)} 2>/dev/null || cd / ; ${command}`;
+
+    const child = NodeChildProcess.spawn("/bin/bash", ["-c", wrappedScript], {
       cwd: safeCwd,
+      stdio: ["pipe", "pipe", "pipe", "pipe"],
       env: {
         ...process.env,
         TERM: "xterm-256color",
         PAGER: "cat",
+        SYSTEMD_PAGER: "cat",
+        GIT_PAGER: "cat",
+        LESS: "-R",
         FORCE_COLOR: "1",
         GIT_TERMINAL_PROMPT: "0",
       },
     });
+
+    const cwdStream = (child.stdio as any)?.[3];
+    if (cwdStream?.on) {
+      cwdStream.on("data", (chunk: { toString(encoding: string): string }) => {
+        cwdBuffer += chunk.toString("utf8");
+      });
+    }
 
     const timer = setTimeout(() => {
       if (!finished) {
@@ -76,7 +93,7 @@ export function runBashCommandOnHost(
         resolve({
           ok: false,
           command,
-          cwd,
+          cwd: safeCwd,
           stdout,
           stderr: stderr + `\n[Execution timed out after ${Math.round(timeoutMs / 1000)}s]`,
           exitCode: 124,
@@ -106,7 +123,7 @@ export function runBashCommandOnHost(
       resolve({
         ok: false,
         command,
-        cwd,
+        cwd: safeCwd,
         stdout,
         stderr: (stderr ? stderr + "\n" : "") + err.message,
         exitCode: 1,
@@ -118,10 +135,14 @@ export function runBashCommandOnHost(
       if (finished) return;
       finished = true;
       clearTimeout(timer);
+      const reportedCwd = cwdBuffer.trim();
+      if (reportedCwd && NodeFs.existsSync(reportedCwd)) {
+        finalCwd = reportedCwd;
+      }
       resolve({
         ok: code === 0,
         command,
-        cwd,
+        cwd: finalCwd,
         stdout,
         stderr,
         exitCode: code ?? 0,
@@ -161,22 +182,39 @@ export function createTerminalEventStream(
   let safeCwd = cwd;
   try {
     if (!safeCwd || !NodeFs.existsSync(safeCwd) || !NodeFs.statSync(safeCwd).isDirectory()) {
-      safeCwd = process.cwd();
+      safeCwd = "/";
     }
   } catch {
-    safeCwd = process.cwd();
+    safeCwd = "/";
   }
 
-  const child = NodeChildProcess.spawn("/bin/bash", ["-c", command], {
+  let finalCwd = safeCwd;
+  let cwdBuffer = "";
+
+  // Trap EXIT to always write pwd -P to file descriptor 3
+  const wrappedScript = `trap "pwd -P >&3 2>/dev/null" EXIT ; cd ${JSON.stringify(safeCwd)} 2>/dev/null || cd / ; ${command}`;
+
+  const child = NodeChildProcess.spawn("/bin/bash", ["-c", wrappedScript], {
     cwd: safeCwd,
+    stdio: ["pipe", "pipe", "pipe", "pipe"],
     env: {
       ...process.env,
       TERM: "xterm-256color",
       PAGER: "cat",
+      SYSTEMD_PAGER: "cat",
+      GIT_PAGER: "cat",
+      LESS: "-R",
       FORCE_COLOR: "1",
       GIT_TERMINAL_PROMPT: "0",
     },
   });
+
+  const cwdStream = (child.stdio as any)?.[3];
+  if (cwdStream?.on) {
+    cwdStream.on("data", (chunk: { toString(enc: string): string }) => {
+      cwdBuffer += chunk.toString("utf8");
+    });
+  }
 
   const sendEvent = (event: Record<string, unknown>) => {
     try {
@@ -281,10 +319,15 @@ export function createTerminalEventStream(
     clearTimeout(timer);
     activeTerminalProcesses.delete(executionId);
     const exitCode = code !== null ? code : 0;
+    const reportedCwd = cwdBuffer.trim();
+    if (reportedCwd && NodeFs.existsSync(reportedCwd)) {
+      finalCwd = reportedCwd;
+    }
     sendEvent({
       type: "exit",
       exitCode,
       ok: exitCode === 0,
+      cwd: finalCwd,
       durationMs: Date.now() - startTime,
     });
     passThrough.end();

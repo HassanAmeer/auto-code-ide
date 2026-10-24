@@ -267,7 +267,21 @@ export const terminalStore = {
   },
 
   setActiveTabId(tabId: string) {
-    state = { ...state, activeTabId: tabId };
+    const targetTab = state.terminalTabs.find((t) => t.id === tabId);
+    state = {
+      ...state,
+      activeTabId: tabId,
+      activeCwd: targetTab?.cwd || state.activeCwd,
+    };
+    notify();
+  },
+
+  updateTabCwd(tabId: string, cwd: string) {
+    const updatedTabs = state.terminalTabs.map((t) => (t.id === tabId ? { ...t, cwd } : t));
+    state = { ...state, terminalTabs: updatedTabs, activeCwd: cwd };
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(STORAGE_KEY_CWD, cwd);
+    }
     notify();
   },
 
@@ -301,7 +315,7 @@ export const terminalStore = {
     if (!trimmed) return false;
     const base = trimmed.split(/\s+/)[0] || trimmed;
     return state.alwaysAllowedCommands.some(
-      (c) => c === trimmed || c === base || trimmed.startsWith(c),
+      (c) => Boolean(c && c.trim()) && (c === trimmed || c === base || trimmed.startsWith(c)),
     );
   },
 
@@ -728,10 +742,12 @@ export const terminalStore = {
       currentMode === "ai" || (modeOverride === undefined && isNaturalLanguagePrompt(trimmedInput));
     const resolvedMode: "bash" | "ai" = isNatural ? "ai" : "bash";
 
+    const currentTab = state.terminalTabs.find((t) => t.id === state.activeTabId);
     const cwd =
-      state.scopeMode === "root"
-        ? "/"
-        : customCwd || state.activeCwd || state.lastProjectPath || "/";
+      customCwd ||
+      currentTab?.cwd ||
+      state.activeCwd ||
+      (state.scopeMode === "root" ? "/" : state.lastProjectPath || "/");
     const activeKeys = state.accessKeys.filter((k) => k.enabled);
 
     // Translate if AI / natural mode with full awareness of project, git, keys, and notes
@@ -910,11 +926,19 @@ export const terminalStore = {
       }
     }
 
-    // Auto-update CWD on successful `cd <path>` if local
-    if (!isSshTarget && result.ok) {
+    // Auto-update CWD on successful command execution (e.g. `cd <dir>`, `cd ..`)
+    let nextCwd = cwd;
+    if (!isSshTarget && result.ok && result.cwd) {
+      nextCwd = result.cwd;
+      terminalStore.setActiveCwd(result.cwd);
+      if (state.activeTabId) {
+        terminalStore.updateTabCwd(state.activeTabId, result.cwd);
+      }
+    } else if (!isSshTarget && result.ok) {
       const cdMatch = actualCommand.match(/(?:^|[;&&|])\s*cd\s+([^;&|]+)/);
       if (cdMatch && cdMatch[1]) {
         let rawTarget = cdMatch[1].replace(/["']/g, "").trim();
+        if (rawTarget === "~" || rawTarget === "") rawTarget = "/root";
         if (rawTarget) {
           let resolvedSegments: string[] = [];
           if (rawTarget.startsWith("/")) {
@@ -931,7 +955,11 @@ export const terminalStore = {
             else if (segment !== ".") cleanParts.push(segment);
           }
           const normalizedCwd = "/" + cleanParts.join("/");
+          nextCwd = normalizedCwd;
           terminalStore.setActiveCwd(normalizedCwd);
+          if (state.activeTabId) {
+            terminalStore.updateTabCwd(state.activeTabId, normalizedCwd);
+          }
         }
       }
     }
@@ -947,7 +975,7 @@ export const terminalStore = {
       tabId: state.activeTabId,
       executionId,
       command: actualCommand,
-      cwd: result.cwd || cwd,
+      cwd: result.cwd || nextCwd || cwd,
       status: result.ok ? "success" : "error",
       exitCode: result.exitCode,
       stdout: result.stdout,

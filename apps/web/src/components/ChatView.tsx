@@ -2539,6 +2539,57 @@ export default function ChatView(props: ChatViewProps) {
     activeComposerTasksProgress && activePlan ? activePlan.steps : null;
   const terminalStoreState = useTerminalStore();
   const isTerminalQuickBarOpen = terminalStoreState.isQuickBarOpen;
+
+  const [terminalPaneWidth, setTerminalPaneWidth] = useState<number>(() => {
+    if (typeof window !== "undefined") {
+      const saved = window.localStorage.getItem("autocode_terminal_pane_width");
+      if (saved) {
+        const parsed = parseInt(saved, 10);
+        if (!isNaN(parsed) && parsed >= 280 && parsed <= 1800) {
+          return parsed;
+        }
+      }
+    }
+    return 560;
+  });
+  const [isResizingTerminal, setIsResizingTerminal] = useState(false);
+  const isResizingTerminalRef = useRef(false);
+
+  const handleTerminalDividerMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizingTerminalRef.current = true;
+    setIsResizingTerminal(true);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      if (!isResizingTerminalRef.current) return;
+      const containerWidth = window.innerWidth;
+      const rawWidth = containerWidth - moveEvent.clientX;
+      const minW = 280;
+      const maxW = Math.max(minW, containerWidth - 360);
+      const clampedWidth = Math.min(Math.max(rawWidth, minW), maxW);
+      setTerminalPaneWidth(clampedWidth);
+    };
+
+    const onMouseUp = () => {
+      isResizingTerminalRef.current = false;
+      setIsResizingTerminal(false);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+      setTerminalPaneWidth((latest) => {
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem("autocode_terminal_pane_width", String(latest));
+        }
+        return latest;
+      });
+    };
+
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+  }, []);
   const allProjects = useProjects();
   const directActiveProjectRef = useMemo(
     () =>
@@ -9510,8 +9561,11 @@ export default function ChatView(props: ChatViewProps) {
       };
 
       const termState = terminalStore.getState();
+      const currentTermTab = termState.terminalTabs.find((t) => t.id === termState.activeTabId);
       const effectiveTermCwd =
-        termState.scopeMode === "root" ? "/" : termState.activeCwd || gitCwd || "/";
+        currentTermTab?.cwd ||
+        termState.activeCwd ||
+        (termState.scopeMode === "root" ? "/" : gitCwd || "/");
       const activeKeys = termState.accessKeys.filter((k) => k.enabled);
 
       const bashCmd = translatePromptToBashCommand(userPromptText, effectiveTermCwd, activeKeys, {
@@ -12818,11 +12872,47 @@ export default function ChatView(props: ChatViewProps) {
           {/* RIGHT PANE: Split Studio Dedicated Linux Terminal */}
           {isTerminalQuickBarOpen && (
             <>
-              {/* Desktop Split Divider */}
-              <div className="hidden md:flex w-px bg-white/[0.08] hover:bg-emerald-500/50 cursor-col-resize select-none shrink-0 transition-colors" />
+              {/* Desktop Resizable Split Divider (Drag handle) */}
+              <div
+                onMouseDown={handleTerminalDividerMouseDown}
+                onDoubleClick={() => {
+                  setTerminalPaneWidth(560);
+                  if (typeof window !== "undefined") {
+                    window.localStorage.setItem("autocode_terminal_pane_width", "560");
+                  }
+                }}
+                className={cn(
+                  "hidden md:flex relative items-center justify-center w-2 -mx-1 cursor-col-resize select-none shrink-0 z-30 group transition-colors",
+                  isResizingTerminal ? "bg-emerald-500/80" : "hover:bg-emerald-500/40",
+                )}
+                title="Drag to resize terminal width, double-click to reset"
+              >
+                <div
+                  className={cn(
+                    "w-px h-full transition-colors",
+                    isResizingTerminal
+                      ? "bg-emerald-400"
+                      : "bg-white/[0.12] group-hover:bg-emerald-400",
+                  )}
+                />
+                <div
+                  className={cn(
+                    "absolute top-1/2 -translate-y-1/2 w-1.5 h-8 rounded-full transition-all",
+                    isResizingTerminal
+                      ? "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]"
+                      : "bg-white/20 group-hover:bg-emerald-400",
+                  )}
+                />
+              </div>
 
-              {/* Desktop Dedicated Right Terminal Studio Pane (42% width) */}
-              <div className="hidden md:flex flex-col w-[45%] lg:w-[42%] max-w-[650px] min-w-[340px] shrink-0 h-full z-20 transition-all duration-200">
+              {/* Desktop Dedicated Right Terminal Studio Pane (Resizable) */}
+              <div
+                style={{ width: `${terminalPaneWidth}px` }}
+                className={cn(
+                  "hidden md:flex flex-col shrink-0 h-full z-20",
+                  !isResizingTerminal && "transition-[width] duration-75",
+                )}
+              >
                 <AiTerminalCommandBar projectCwd={gitCwd ?? undefined} />
               </div>
 
