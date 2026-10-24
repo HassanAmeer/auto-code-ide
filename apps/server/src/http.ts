@@ -1537,8 +1537,8 @@ export const layerProjectDownloadZipRoute = HttpRouter.add(
     const safeName = (rawName || "project").replace(/[^a-zA-Z0-9_-]/g, "_");
     const tempZipFile = `/tmp/t3_dl_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.zip`;
 
-    // Build a clean zip: prune heavy dirs and ALL dot-prefixed files/folders.
-    // Only regular files (-type f) are passed to zip to avoid exit-12 on dir entries.
+    // Single-line shell command to build the zip — runBashCommandOnHost uses bash -c,
+    // so newlines break it. We concatenate with spaces/semicolons instead.
     const PRUNED = [
       "node_modules",
       ".git",
@@ -1560,16 +1560,8 @@ export const layerProjectDownloadZipRoute = HttpRouter.add(
       "tmp",
     ];
     const prunePart = PRUNED.map((d) => `-name "${d}"`).join(" -o ");
-    const zipCmd = [
-      `if [ -z "$(ls -A . 2>/dev/null)" ]; then`,
-      `  touch .t3_empty && zip -q "${tempZipFile}" .t3_empty && rm -f .t3_empty`,
-      `; else`,
-      `  find . -mindepth 1 \\( -type d \\( ${prunePart} \\) -prune \\) -o -type f -print`,
-      `  | grep -v '/\\.'`,
-      `  | zip -q "${tempZipFile}" -@`,
-      `  ; RC=$?; [ $RC -eq 0 ] || [ $RC -eq 12 ]`,
-      `; fi`,
-    ].join("\n");
+    // prettier-ignore
+    const zipCmd = `if [ -z "$(ls -A . 2>/dev/null)" ]; then touch .t3_empty && zip -q "${tempZipFile}" .t3_empty && rm -f .t3_empty; else find . -mindepth 1 \( -type d \( ${prunePart} \) -prune \) -o -type f -print | grep -v "/\\." | zip -q "${tempZipFile}" -@; RC=$?; [ "$RC" -eq 0 ] || [ "$RC" -eq 12 ]; fi`;
 
     const zipResult = yield* Effect.promise(() =>
       runBashCommandOnHost(zipCmd, workspaceRoot, 180_000),
