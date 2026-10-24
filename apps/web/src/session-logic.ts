@@ -12,8 +12,8 @@ import {
   type ToolActivitySurface,
   type ToolActivityIcon,
   type ToolActivitySource,
-  type ThreadId,
-  type TurnItemId,
+  ThreadId,
+  TurnItemId,
 } from "@t3tools/contracts";
 import { extractToolActivityPresentation } from "@t3tools/client-runtime/work-log/tool-presentation";
 import {
@@ -336,6 +336,7 @@ const STANDALONE_V2_ITEM_TYPES = new Set<OrchestrationV2ProjectedTurnItem["item"
 ]);
 
 const PERSISTENT_RESOURCE_V2_ITEM_TYPES = new Set<OrchestrationV2TurnItem["type"]>([
+  "error",
   "fork",
   "thread_created",
   // Still answerable after a steer supersedes the attempt that asked.
@@ -343,9 +344,20 @@ const PERSISTENT_RESOURCE_V2_ITEM_TYPES = new Set<OrchestrationV2TurnItem["type"
 ]);
 
 export function timelineEntryIsPersistentResourceCard(entry: TimelineEntry): boolean {
-  return (
-    entry.kind === "event" && PERSISTENT_RESOURCE_V2_ITEM_TYPES.has(entry.projectedItem.item.type)
-  );
+  if (entry.kind === "html-render" || entry.kind === "mcp-app") return true;
+  if (entry.kind === "event") {
+    return (
+      PERSISTENT_RESOURCE_V2_ITEM_TYPES.has(entry.projectedItem.item.type) &&
+      (entry.projectedItem.item.type !== "error" || entry.projectedItem.item.status === "failed")
+    );
+  }
+  if (entry.kind === "work") {
+    return (
+      (entry.entry.itemType === "error" && entry.entry.toolLifecycleStatus === "failed") ||
+      entry.entry.tone === "error"
+    );
+  }
+  return false;
 }
 
 function projectedItemCreatedAt(row: OrchestrationV2ProjectedTurnItem): string {
@@ -850,6 +862,92 @@ export function deriveTimelineEntriesFromVisibleTurnItems(
         kind: "message",
         createdAt: message.createdAt,
         message,
+      });
+    }
+  }
+
+  function getTimelineEntryRunId(entry: TimelineEntry): RunId | null {
+    if (entry.kind === "message") {
+      return entry.message.runId ?? null;
+    }
+    if (entry.kind === "proposed-plan") {
+      return entry.proposedPlan.runId;
+    }
+    if (entry.kind === "html-render" || entry.kind === "mcp-app") return entry.runId;
+    if (entry.kind === "event") {
+      return entry.projectedItem.item.runId ?? null;
+    }
+    return entry.kind === "work" ? (entry.entry.runId ?? null) : null;
+  }
+
+  // Fallback: If an attempt or run failed but no error card was emitted, ensure an error bubble is visible on the assistant side
+  const runIdsWithErrors = new Set<RunId>();
+  for (const entry of entries) {
+    const runId = getTimelineEntryRunId(entry);
+    const item =
+      entry.kind === "event"
+        ? entry.projectedItem.item
+        : entry.kind === "work"
+          ? entry.entry.projectedItem?.item
+          : null;
+    if (runId && item?.type === "error") {
+      runIdsWithErrors.add(runId);
+    }
+  }
+
+  for (const attempt of input.attempts ?? []) {
+    if (
+      attempt.status === "failed" &&
+      !runIdsWithErrors.has(attempt.runId) &&
+      !retriedRunIds.has(attempt.runId)
+    ) {
+      runIdsWithErrors.add(attempt.runId);
+      const createdAt = attempt.completedAt
+        ? DateTime.formatIso(attempt.completedAt)
+        : attempt.startedAt
+          ? DateTime.formatIso(attempt.startedAt)
+          : new Date().toISOString();
+      const fallbackThreadId =
+        nodeById.get(attempt.rootNodeId)?.threadId ??
+        input.visibleTurnItems[0]?.item.threadId ??
+        ThreadId.make("thread-fallback");
+      const fallbackItem: OrchestrationV2TurnItem = {
+        id: TurnItemId.make(`item-failure:${attempt.runId}`),
+        threadId: fallbackThreadId,
+        runId: attempt.runId,
+        nodeId: attempt.rootNodeId,
+        providerThreadId: attempt.providerThreadId,
+        providerTurnId: attempt.providerTurnId,
+        nativeItemRef: null,
+        parentItemId: null,
+        ordinal: 999999 as any,
+        status: "failed",
+        title: "Provider error",
+        startedAt: attempt.startedAt ?? DateTime.makeUnsafe(createdAt),
+        completedAt: attempt.completedAt ?? DateTime.makeUnsafe(createdAt),
+        updatedAt: attempt.completedAt ?? DateTime.makeUnsafe(createdAt),
+        type: "error",
+        failure: {
+          class: "provider_error",
+          message:
+            "The AI provider failed to generate a response or the request timed out. Please retry.",
+          code: "APIError",
+          retryable: true,
+        },
+      };
+      const projectedItem: OrchestrationV2ProjectedTurnItem = {
+        sourceItemId: fallbackItem.id,
+        sourceThreadId: fallbackThreadId,
+        visibility: "local",
+        item: fallbackItem,
+        position: entries.length,
+      };
+      entries.push({
+        id: fallbackItem.id,
+        kind: "work",
+        createdAt,
+        entry: projectedWorkEntry(projectedItem),
+        attempt,
       });
     }
   }

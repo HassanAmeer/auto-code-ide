@@ -37,7 +37,51 @@ const MAX_AI_MODEL_LOGS = 300;
 
 export const GLOBAL_AI_MODEL_LOGS: AiModelLogEntry[] = [];
 
+export interface CustomProviderLogMetadata {
+  readonly displayName: string;
+  readonly baseUrl: string;
+  readonly apiKeyMasked: string;
+}
+
+const CUSTOM_PROVIDER_LOG_METADATA = new Map<string, CustomProviderLogMetadata>();
+
+export function registerCustomProviderLogMetadata(
+  instanceId: string,
+  metadata: CustomProviderLogMetadata,
+): void {
+  const clean = instanceId.trim();
+  CUSTOM_PROVIDER_LOG_METADATA.set(clean, metadata);
+  CUSTOM_PROVIDER_LOG_METADATA.set(clean.replace(/^custom_/, ""), metadata);
+}
+
+export function getCustomProviderLogMetadata(
+  instanceId: string,
+): CustomProviderLogMetadata | undefined {
+  const clean = instanceId.trim();
+  return (
+    CUSTOM_PROVIDER_LOG_METADATA.get(clean) ??
+    CUSTOM_PROVIDER_LOG_METADATA.get(clean.replace(/^custom_/, ""))
+  );
+}
+
 export function recordAiModelLog(entry: AiModelLogEntry): void {
+  const customMeta = getCustomProviderLogMetadata(entry.providerInstanceId);
+  if (customMeta) {
+    if (!entry.provider || entry.provider === "OpenCode" || entry.provider === "Custom Provider") {
+      entry.provider = customMeta.displayName || entry.provider;
+    }
+    if (
+      !entry.baseUrl ||
+      entry.baseUrl.includes("127.0.0.1") ||
+      entry.baseUrl.includes("localhost")
+    ) {
+      entry.baseUrl = customMeta.baseUrl || entry.baseUrl;
+    }
+    if (!entry.apiKeyMasked || entry.apiKeyMasked === "(local server)") {
+      entry.apiKeyMasked = customMeta.apiKeyMasked || entry.apiKeyMasked;
+    }
+  }
+
   const existingIdx = GLOBAL_AI_MODEL_LOGS.findIndex((l) => l.id === entry.id);
   if (existingIdx !== -1) {
     GLOBAL_AI_MODEL_LOGS[existingIdx] = entry;
@@ -47,12 +91,26 @@ export function recordAiModelLog(entry: AiModelLogEntry): void {
   if (GLOBAL_AI_MODEL_LOGS.length > MAX_AI_MODEL_LOGS) {
     GLOBAL_AI_MODEL_LOGS.pop();
   }
+
+  // Live A-to-Z process logging
+  console.log(
+    `[AI-LOG] [START] Provider: ${entry.provider} (${entry.providerInstanceId}) | Model: ${entry.model} | URL: ${entry.baseUrl} | Prompt: "${(entry.userPrompt || "").slice(0, 80).replace(/\n/g, " ")}"`,
+  );
 }
 
 export function updateAiModelLog(id: string, updates: Partial<AiModelLogEntry>): void {
   const existing = GLOBAL_AI_MODEL_LOGS.find((l) => l.id === id);
   if (existing) {
     Object.assign(existing, updates);
+    if (updates.state === "error" || (updates.status && updates.status >= 400)) {
+      console.log(
+        `[AI-LOG] [ERROR ${updates.status ?? 500}] Provider: ${existing.provider} | Model: ${existing.model} | Status: ${updates.status ?? 500} (${updates.statusText ?? "Error"}) | Reason: ${updates.error ?? updates.statusText ?? "Request failed"}`,
+      );
+    } else if (updates.state === "completed" || updates.status === 200) {
+      console.log(
+        `[AI-LOG] [COMPLETED 200] Provider: ${existing.provider} | Model: ${existing.model} | Duration: ${updates.durationMs ?? existing.durationMs ?? 0}ms`,
+      );
+    }
   }
 }
 
@@ -60,6 +118,15 @@ export function updateAiModelLogByRunId(runId: string, updates: Partial<AiModelL
   const existing = GLOBAL_AI_MODEL_LOGS.find((l) => l.runId === runId);
   if (existing) {
     Object.assign(existing, updates);
+    if (updates.state === "error" || (updates.status && updates.status >= 400)) {
+      console.log(
+        `[AI-LOG] [ERROR ${updates.status ?? 500}] Provider: ${existing.provider} | Model: ${existing.model} | Status: ${updates.status ?? 500} (${updates.statusText ?? "Error"}) | Reason: ${updates.error ?? updates.statusText ?? "Request failed"}`,
+      );
+    } else if (updates.state === "completed" || updates.status === 200) {
+      console.log(
+        `[AI-LOG] [COMPLETED 200] Provider: ${existing.provider} | Model: ${existing.model} | Duration: ${updates.durationMs ?? existing.durationMs ?? 0}ms`,
+      );
+    }
     return true;
   }
   return false;

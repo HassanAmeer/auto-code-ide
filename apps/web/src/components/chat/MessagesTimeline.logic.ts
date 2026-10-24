@@ -1054,7 +1054,16 @@ function deriveTurnFolds(input: {
       input.unfoldedRunIds.has(runId) ||
       interruptedRunIds.has(runId) ||
       runlessFailedKeys.has(runId) ||
-      (input.runlessWorkActive && runId === runlessKey)
+      (input.runlessWorkActive && runId === runlessKey) ||
+      group.entries.some(
+        (e) =>
+          (e.kind === "work" &&
+            ((e.entry.itemType === "error" && e.entry.toolLifecycleStatus === "failed") ||
+              e.entry.tone === "error")) ||
+          (e.kind === "event" &&
+            e.projectedItem.item.type === "error" &&
+            e.projectedItem.item.status === "failed"),
+      )
     ) {
       continue;
     }
@@ -1082,7 +1091,13 @@ function deriveTurnFolds(input: {
       // launching run and stay visible after the surrounding work folds.
       if (
         timelineEntryIsPersistentResourceCard(entry) ||
-        input.liveSubagentEntryIds.has(entry.id)
+        input.liveSubagentEntryIds.has(entry.id) ||
+        (entry.kind === "work" &&
+          ((entry.entry.itemType === "error" && entry.entry.toolLifecycleStatus === "failed") ||
+            entry.entry.tone === "error")) ||
+        (entry.kind === "event" &&
+          entry.projectedItem.item.type === "error" &&
+          entry.projectedItem.item.status === "failed")
       ) {
         continue;
       }

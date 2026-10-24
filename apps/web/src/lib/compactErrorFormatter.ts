@@ -19,19 +19,41 @@ export interface FormattedCompactError {
  */
 export function extractSingleLineDetail(rawText: string | null | undefined): string {
   if (!rawText) return "An unexpected error occurred.";
+  let clean = rawText.trim();
+
+  // Try parsing JSON error structures first
+  try {
+    if (clean.startsWith("{") && clean.endsWith("}")) {
+      const parsed = JSON.parse(clean);
+      if (typeof parsed?.message === "string") {
+        clean = parsed.message.trim();
+      } else if (typeof parsed?.error?.message === "string") {
+        clean = parsed.error.message.trim();
+      } else if (typeof parsed?.error === "string") {
+        clean = parsed.error.trim();
+      }
+    }
+  } catch {}
+
   const firstNonEmpty =
-    rawText
+    clean
       .split("\n")
       .map((s) => s.trim())
-      .find((s) => s.length > 0 && !s.startsWith("```")) || rawText;
+      .find((s) => s.length > 0 && !s.startsWith("```")) || clean;
 
-  let clean = firstNonEmpty.trim();
+  clean = firstNonEmpty.trim();
 
-  // If there's a repeated "provider — Bad gateway..." or colon-chain pattern, extract the most specific part
-  const parts = clean.split(/(?::\s*|—\s*)/);
+  // If there's a repeated "provider: Bad gateway..." or colon-chain pattern, extract the most specific part
+  const parts = clean.split(/:\s+/);
   if (parts.length > 2) {
     const lastPart = parts[parts.length - 1]?.trim();
-    if (lastPart && lastPart.length > 8 && !/^(run|error|failed)$/i.test(lastPart)) {
+    if (
+      lastPart &&
+      lastPart.length > 8 &&
+      !/^(run|error|failed|server_error|api_error)$/i.test(lastPart) &&
+      !lastPart.startsWith("{") &&
+      !lastPart.endsWith("}")
+    ) {
       return lastPart;
     }
   }
@@ -41,7 +63,7 @@ export function extractSingleLineDetail(rawText: string | null | undefined): str
 }
 
 /**
- * Truncate long model names to 1-2 words + "..." (e.g., "claude-3.7...", "gpt-4o...").
+ * Truncate long model names to clean readable text (e.g. "Claude Opus 4.8", "GPT-4o...").
  */
 export function truncateModelName(modelName: string | null | undefined): string | null {
   if (!modelName) return null;
@@ -58,14 +80,8 @@ export function truncateModelName(modelName: string | null | undefined): string 
   // Clean up version numbers like 3-7 to 3.7 or 3-5 to 3.5
   clean = clean.replace(/(\d+)-(\d+)/g, "$1.$2");
 
-  // If still long, take first 1-2 words or truncate with ...
-  const parts = clean.split(/[-_ ]+/).filter(Boolean);
-  if (parts.length > 2) {
-    const candidate = `${parts[0]}-${parts[1]}...`;
-    return candidate.length > 15 ? `${candidate.slice(0, 13)}...` : candidate;
-  }
-  if (clean.length > 14) {
-    return `${clean.slice(0, 12)}...`;
+  if (clean.length > 20) {
+    return `${clean.slice(0, 18)}...`;
   }
   return clean;
 }
@@ -77,7 +93,21 @@ export function parseErrorDetails(
   rawError: string | null | undefined,
   explicitModel?: string | null,
 ): FormattedCompactError {
-  const text = (rawError || "").trim();
+  let text = (rawError || "").trim();
+
+  // Try parsing JSON error structures first to unwrap clean messages
+  try {
+    if (text.startsWith("{") && text.endsWith("}")) {
+      const parsed = JSON.parse(text);
+      if (typeof parsed?.message === "string") {
+        text = parsed.message.trim();
+      } else if (typeof parsed?.error?.message === "string") {
+        text = parsed.error.message.trim();
+      } else if (typeof parsed?.error === "string") {
+        text = parsed.error.trim();
+      }
+    }
+  } catch {}
 
   // 1. Detect status code
   let statusCode: string | null = null;
@@ -98,10 +128,14 @@ export function parseErrorDetails(
     statusCode = "404";
   } else if (/timeout|timed out|stalled|took too long/i.test(text)) {
     statusCode = "408";
+  } else if (/cooling down/i.test(text)) {
+    statusCode = "429";
   } else if (/rate limit|too many requests|quota (?:exhausted|exceeded)/i.test(text)) {
     statusCode = "429";
   } else if (
-    /circuit breaker|upstream unavailable|temporarily unavailable|overloaded/i.test(text)
+    /circuit breaker|upstream unavailable|temporarily unavailable|overloaded|resource pressure/i.test(
+      text,
+    )
   ) {
     statusCode = "503";
   } else if (/bad gateway/i.test(text)) {
@@ -164,16 +198,24 @@ export function parseErrorDetails(
     shortReason = "Timeout";
     recommendation =
       "Upstream server took too long to begin streaming. Retry or choose a faster model.";
+  } else if (/cooling down/i.test(text)) {
+    errorCategory = "Rate Limit (Cooldown)";
+    shortReason = "Cooling down";
+    recommendation =
+      "All credentials for this model are cooling down. Please wait a few seconds and retry.";
   } else if (statusCode === "429" || /429|rate limit|too many requests/i.test(text)) {
     errorCategory = "Rate Limit Exceeded";
     shortReason = "Rate limited";
     recommendation =
       "Rate limit reached on this model. Please wait a few seconds or switch to another free model.";
-  } else if (statusCode === "503" || /503|overloaded|circuit breaker|unavailable/i.test(text)) {
-    errorCategory = "Service Unavailable";
+  } else if (
+    statusCode === "503" ||
+    /503|overloaded|circuit breaker|unavailable|resource pressure/i.test(text)
+  ) {
+    errorCategory = "Service Temporarily Unavailable";
     shortReason = "Provider busy";
     recommendation =
-      "Upstream service is currently overloaded or circuit breaker tripped. Switch to 'auto' or retry shortly.";
+      "Upstream service is currently overloaded or circuit breaker tripped. Switch model or retry shortly.";
   } else if (
     statusCode === "500" ||
     statusCode === "502" ||

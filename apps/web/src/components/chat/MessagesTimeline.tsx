@@ -3185,20 +3185,23 @@ function CupertinoTimelineErrorCard({
           <CircleAlertIcon
             className={cn(
               "size-3.5 shrink-0",
-              isWarning ? "text-amber-500/80" : "text-rose-500/70 dark:text-rose-400/70",
+              isWarning ? "text-amber-500/80" : "text-red-500 dark:text-red-400",
             )}
           />
           <span
             className={cn(
-              "shrink-0 font-mono text-[10px] font-semibold px-1.5 py-0.5 rounded border leading-tight",
+              "shrink-0 font-mono text-xs font-bold px-1.5 py-0.5 rounded border leading-none",
               isWarning
-                ? "bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400"
-                : "bg-rose-500/[0.08] border-rose-500/20 text-rose-600 dark:text-rose-300",
+                ? "bg-amber-500/10 border-amber-500/20 text-amber-500 dark:text-amber-400"
+                : "bg-red-500/15 border-red-500/30 text-red-500 dark:text-red-400",
             )}
           >
             {displayStatusCode}
           </span>
-          <span className="shrink-0 font-medium text-xs text-foreground/90 truncate">
+          <span className="text-zinc-500 dark:text-zinc-400 font-mono text-xs font-bold shrink-0">
+            :
+          </span>
+          <span className="shrink-0 font-semibold text-xs text-zinc-100 dark:text-zinc-200 truncate">
             {resolvedCategory}
           </span>
           {errorInfo.shortModel ? (
@@ -3269,7 +3272,7 @@ function CupertinoTimelineErrorCard({
         </p>
       </div>
 
-      {/* Action / Retry Button Row: Prominent retry button directly below subtitle */}
+      {/* Action / Retry Button Row: Prominent small retry button directly below subtitle */}
       {onRetryTurn || retryAction ? (
         <div className="px-2.5 pb-2 pt-0.5 ps-5 flex items-center gap-1.5">
           <Button
@@ -3286,16 +3289,16 @@ function CupertinoTimelineErrorCard({
               }
             }}
             className={cn(
-              "h-5.5 px-2 gap-1 text-[11px] font-medium rounded shadow-none transition-colors cursor-pointer",
+              "h-6 px-2.5 gap-1.5 text-xs font-medium rounded shadow-none transition-colors cursor-pointer border",
               isWarning
-                ? "border-amber-500/25 bg-amber-500/[0.04] hover:bg-amber-500/[0.08] text-amber-700 dark:text-amber-300"
-                : "border-rose-500/20 bg-rose-500/[0.04] hover:bg-rose-500/[0.08] text-rose-600/90 dark:text-rose-300/90",
+                ? "border-amber-500/25 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300"
+                : "border-zinc-700/80 bg-zinc-800/90 hover:bg-zinc-700/90 text-zinc-200 hover:text-white",
               isWorking && "opacity-60 cursor-not-allowed",
             )}
-            title="Retry response in this chat"
+            title="Retry and generate a fresh response"
           >
-            <RotateCcwIcon className={cn("size-2.5", isWorking && "animate-spin")} />
-            <span>{isWorking ? "Retrying..." : retryAction?.label || "Retry Response"}</span>
+            <RotateCcwIcon className={cn("size-3 text-red-400", isWorking && "animate-spin")} />
+            <span>{isWorking ? "Retrying..." : retryAction?.label || "Retry"}</span>
           </Button>
         </div>
       ) : null}

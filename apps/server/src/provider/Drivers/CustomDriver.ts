@@ -37,6 +37,7 @@ import {
   GLOBAL_AI_MODEL_LOGS,
   recordAiModelLog,
   updateAiModelLog,
+  registerCustomProviderLogMetadata,
   type AiModelLogEntry,
 } from "@t3tools/provider-core/server/aiModelLog";
 import { makeProviderFailure } from "@t3tools/provider-core/server/failure";
@@ -2356,6 +2357,24 @@ export function syncCustomProviderToOpenCode(
       .trim()
       .toLowerCase()
       .replace(/[^a-z0-9_-]/g, "");
+
+    const maskedKey =
+      apiKey && apiKey !== "no-key"
+        ? `${apiKey.slice(0, 7)}...${apiKey.slice(-4)}`
+        : "(No API key)";
+
+    registerCustomProviderLogMetadata(cleanId, {
+      displayName: displayName || cleanId,
+      baseUrl,
+      apiKeyMasked: maskedKey,
+    });
+    if (cleanName && cleanName !== cleanId) {
+      registerCustomProviderLogMetadata(cleanName, {
+        displayName: displayName || cleanName,
+        baseUrl,
+        apiKeyMasked: maskedKey,
+      });
+    }
 
     const targetPaths = [
       "/root/all-ai-clis/third-party-provider/opencode.json",
