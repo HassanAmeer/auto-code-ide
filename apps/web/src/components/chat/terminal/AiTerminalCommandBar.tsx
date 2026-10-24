@@ -71,84 +71,89 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
   const effectiveCwd = isRootScope ? "/" : projectPath || projectCwd || store.activeCwd || "/";
   const scopeName = isRootScope ? "root" : projectTitle || "project";
 
-  const handleExecute = useCallback(async () => {
-    const trimmed = command.trim();
-    if (!trimmed || isRunning) return;
+  const handleExecute = useCallback(
+    async (overrideCommand?: string) => {
+      const raw = typeof overrideCommand === "string" ? overrideCommand : command;
+      const trimmed = raw.trim();
+      if (!trimmed || isRunning) return;
 
-    // Clear screen shortcut
-    if (trimmed === "clear" || trimmed === "cls") {
+      // Clear screen shortcut
+      if (trimmed === "clear" || trimmed === "cls") {
+        setCommand("");
+        setLatestRun(null);
+        terminalStore.clearRuns();
+        return;
+      }
+
+      // Check if user input is natural language intended for AI thinking/tool-calling
+      const isNatural = isNaturalLanguagePrompt(trimmed);
+      const translated = isNatural
+        ? translatePromptToBashCommand(
+            trimmed,
+            effectiveCwd,
+            store.accessKeys.filter((k) => k.enabled),
+          )
+        : trimmed;
+
+      // Clear command immediately so input feels responsive and doesn't get stuck in the field!
       setCommand("");
-      setLatestRun(null);
-      terminalStore.clearRuns();
-      return;
-    }
 
-    // Check if user input is natural language intended for AI thinking/tool-calling
-    const isNatural = isNaturalLanguagePrompt(trimmed);
-    const translated = isNatural
-      ? translatePromptToBashCommand(
-          trimmed,
-          effectiveCwd,
-          store.accessKeys.filter((k) => k.enabled),
-        )
-      : trimmed;
+      // If it's natural language and didn't map to a raw bash shortcut, route directly to AI Chat
+      if (isNatural && translated === trimmed) {
+        window.dispatchEvent(
+          new CustomEvent("t3:insert-speech-text", {
+            detail: { text: trimmed, autoSend: true },
+          }),
+        );
+        toastManager.add({
+          type: "info",
+          title: "Sent to AI Assistant",
+          description: "Executing your request with AI assistant...",
+        });
+        return;
+      }
 
-    // Clear command immediately so input feels responsive
-    setCommand("");
+      // Auto-elevate with sudo if command is marked as always-allowed or user is in full-access mode for root commands
+      let finalCommandToRun = translated || trimmed;
+      if (
+        !finalCommandToRun.startsWith("sudo ") &&
+        (store.isCommandAlwaysAllowed(finalCommandToRun) ||
+          (store.permissionMode === "full-access" &&
+            (finalCommandToRun.startsWith("apt ") ||
+              finalCommandToRun.startsWith("systemctl ") ||
+              finalCommandToRun.startsWith("service "))))
+      ) {
+        finalCommandToRun = `sudo ${finalCommandToRun}`;
+      }
 
-    // If it's natural language and didn't map to a raw bash shortcut, route directly to AI Chat
-    if (isNatural && translated === trimmed) {
-      window.dispatchEvent(
-        new CustomEvent("t3:insert-speech-text", {
-          detail: { text: trimmed, autoSend: true },
-        }),
-      );
-      toastManager.add({
-        type: "info",
-        title: "Sent to AI Assistant",
-        description: "Executing your request with AI assistant...",
-      });
-      return;
-    }
-
-    // Auto-elevate with sudo if command is marked as always-allowed or user is in full-access mode for root commands
-    let finalCommandToRun = translated || trimmed;
-    if (
-      !finalCommandToRun.startsWith("sudo ") &&
-      (store.isCommandAlwaysAllowed(finalCommandToRun) ||
-        (store.permissionMode === "full-access" &&
-          (finalCommandToRun.startsWith("apt ") ||
-            finalCommandToRun.startsWith("systemctl ") ||
-            finalCommandToRun.startsWith("service "))))
-    ) {
-      finalCommandToRun = `sudo ${finalCommandToRun}`;
-    }
-
-    setIsRunning(true);
-    setHistoryIndex(null);
-    try {
-      const run = await terminalStore.runCommand(finalCommandToRun, effectiveCwd);
-      setLatestRun(run);
+      setIsRunning(true);
       setIsOutputCollapsed(false);
-    } catch (err) {
-      console.error("Command execution error:", err);
-      toastManager.add({
-        type: "error",
-        title: "Execution Error",
-        description: err instanceof Error ? err.message : "Command failed to execute.",
-      });
-    } finally {
-      setIsRunning(false);
-      inputRef.current?.focus();
-    }
-  }, [
-    command,
-    isRunning,
-    effectiveCwd,
-    store.accessKeys,
-    store.permissionMode,
-    store.alwaysAllowedCommands,
-  ]);
+      setHistoryIndex(null);
+      try {
+        const run = await terminalStore.runCommand(finalCommandToRun, effectiveCwd);
+        setLatestRun(run);
+        setIsOutputCollapsed(false);
+      } catch (err) {
+        console.error("Command execution error:", err);
+        toastManager.add({
+          type: "error",
+          title: "Execution Error",
+          description: err instanceof Error ? err.message : "Command failed to execute.",
+        });
+      } finally {
+        setIsRunning(false);
+        inputRef.current?.focus();
+      }
+    },
+    [
+      command,
+      isRunning,
+      effectiveCwd,
+      store.accessKeys,
+      store.permissionMode,
+      store.alwaysAllowedCommands,
+    ],
+  );
 
   const handleKill = useCallback(async () => {
     if (!latestRun) return;
@@ -257,7 +262,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
     }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      void handleExecute();
+      void handleExecute(command);
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       if (store.history.length === 0) return;
@@ -460,6 +465,12 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
                   dangerouslySetInnerHTML={{ __html: parseAnsiToHtml(latestRun.stderr) }}
                 />
               )}
+              {!latestRun.stdout && !latestRun.stderr && latestRun.status === "running" && (
+                <div className="flex items-center gap-1.5 text-zinc-400 italic py-1 select-none">
+                  <Loader2 className="size-3 animate-spin text-emerald-400" />
+                  <span>Executing command...</span>
+                </div>
+              )}
               {!latestRun.stdout && !latestRun.stderr && latestRun.status === "success" && (
                 <span className="text-zinc-500 italic">(Command completed with no output)</span>
               )}
@@ -524,12 +535,12 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
           ) : (
             <button
               type="button"
-              onClick={() => void handleExecute()}
-              disabled={!command.trim()}
+              onClick={() => void handleExecute(command)}
+              disabled={!command.trim() || isRunning}
               title="Execute Command (Enter)"
               className={cn(
                 "inline-flex items-center justify-center size-[26px] rounded-[6px] transition-all cursor-pointer",
-                command.trim()
+                command.trim() && !isRunning
                   ? "bg-emerald-500 hover:bg-emerald-600 text-white shadow-xs active:scale-[0.96]"
                   : "text-zinc-600 hover:text-zinc-400 cursor-not-allowed",
               )}
@@ -555,10 +566,10 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
         isOpen={showCommandsMenu}
         onClose={() => setShowCommandsMenu(false)}
         onSelectCommand={(cmd, autoRun) => {
-          setCommand(cmd);
           if (autoRun) {
-            void handleExecute();
+            void handleExecute(cmd);
           } else {
+            setCommand(cmd);
             inputRef.current?.focus();
           }
         }}

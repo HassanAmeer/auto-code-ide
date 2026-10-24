@@ -107,14 +107,14 @@ if (typeof window !== "undefined") {
 let initialAccessKeys: TerminalAccessKey[] = [
   {
     id: "key_vps_default",
-    name: "Production Server (SSH)",
-    type: "ssh",
-    host: "201.18.218.29",
+    name: "Production Server (Direct Host)",
+    type: "server",
+    host: "localhost",
     user: "root",
     port: 22,
     secret: "",
     enabled: true,
-    notes: "Primary VPS Access",
+    notes: "Direct VPS Host Execution",
   },
   {
     id: "key_api_default",
@@ -167,7 +167,7 @@ let state: TerminalState = {
   isChatsSheetOpen: false,
   editingKeyId: null,
   isFileExplorerOpen: false,
-  activeTarget: initialSelectedKey ? `key_${initialSelectedKey}` : "local",
+  activeTarget: "local",
   sshProfiles: initialSshProfiles,
   accessKeys: initialAccessKeys,
   terminalChats: initialTerminalChats,
@@ -695,11 +695,26 @@ export const terminalStore = {
     let commandToExecute = effectiveCommand;
     let targetLabel =
       state.scopeMode === "root"
-        ? "Local VPS (Root)"
-        : `Local (${state.selectedProjectTitle || "Project"})`;
+        ? "VPS Host (Root)"
+        : `VPS Host (${state.selectedProjectTitle || "Project"})`;
 
     let isSshTarget = false;
-    // ONLY execute via SSH if user explicitly selected an SSH target / profile (not "local")
+    const currentHost = typeof window !== "undefined" ? window.location.hostname : "";
+    const isLoopbackOrSelfHost = (h?: string | null) => {
+      if (!h) return true;
+      const clean = h.trim().toLowerCase();
+      return (
+        clean === "" ||
+        clean === "localhost" ||
+        clean === "127.0.0.1" ||
+        clean === "::1" ||
+        clean === "0.0.0.0" ||
+        clean === "201.18.218.29" ||
+        (Boolean(currentHost) && clean === currentHost.toLowerCase())
+      );
+    };
+
+    // ONLY execute via SSH if user explicitly selected a remote SSH target / profile (not local or loopback)
     if (state.activeTarget && state.activeTarget !== "local") {
       const activeProfile = state.sshProfiles.find((p) => p.id === state.activeTarget);
       const activeKeyTarget = state.selectedKeyId
@@ -710,18 +725,29 @@ export const terminalStore = {
             )
           : null;
 
-      const safeSshCmd = effectiveCommand.replace(/'/g, "'\\''");
+      const targetHost = activeProfile?.host || activeKeyTarget?.host;
 
-      if (activeProfile && activeProfile.host) {
-        isSshTarget = true;
-        targetLabel = `SSH: ${activeProfile.label || activeProfile.host}`;
-        commandToExecute = `ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=10 -p ${activeProfile.port || 22} ${activeProfile.user ? `${activeProfile.user}@` : ""}${activeProfile.host} '${safeSshCmd}'`;
-      } else if (activeKeyTarget && activeKeyTarget.host) {
-        isSshTarget = true;
-        targetLabel = `SSH: ${activeKeyTarget.name} (${activeKeyTarget.user || "root"}@${activeKeyTarget.host})`;
-        const port = activeKeyTarget.port || 22;
-        const userPrefix = activeKeyTarget.user ? `${activeKeyTarget.user}@` : "";
-        commandToExecute = `ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=10 -p ${port} ${userPrefix}${activeKeyTarget.host} '${safeSshCmd}'`;
+      if (!isLoopbackOrSelfHost(targetHost)) {
+        const safeSshCmd = effectiveCommand.replace(/'/g, "'\\''");
+
+        if (activeProfile && activeProfile.host) {
+          isSshTarget = true;
+          targetLabel = `SSH: ${activeProfile.label || activeProfile.host}`;
+          commandToExecute = `ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=10 -p ${activeProfile.port || 22} ${activeProfile.user ? `${activeProfile.user}@` : ""}${activeProfile.host} '${safeSshCmd}'`;
+        } else if (activeKeyTarget && activeKeyTarget.host) {
+          isSshTarget = true;
+          targetLabel = `SSH: ${activeKeyTarget.name} (${activeKeyTarget.user || "root"}@${activeKeyTarget.host})`;
+          const port = activeKeyTarget.port || 22;
+          const userPrefix = activeKeyTarget.user ? `${activeKeyTarget.user}@` : "";
+          commandToExecute = `ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=10 -p ${port} ${userPrefix}${activeKeyTarget.host} '${safeSshCmd}'`;
+        }
+      } else {
+        isSshTarget = false;
+        targetLabel =
+          state.scopeMode === "root"
+            ? "VPS Host (Root)"
+            : `VPS Host (${state.selectedProjectTitle || "Project"})`;
+        commandToExecute = effectiveCommand;
       }
     }
 
