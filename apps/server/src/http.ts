@@ -1535,8 +1535,10 @@ export const layerProjectDownloadZipRoute = HttpRouter.add(
     }
 
     const tempZipFile = `/tmp/t3_dl_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.zip`;
-    // High-performance pruning zip: skips entering heavy folders (node_modules, .git, etc.) completely
-    const zipCmd = `if [ -z "$(find . -mindepth 1 -maxdepth 1 2>/dev/null)" ]; then touch .t3_empty && zip -q "${tempZipFile}" .t3_empty && rm -f .t3_empty; else find . -mindepth 1 -type d \\( -name "node_modules" -o -name ".git" -o -name "dist" -o -name ".next" -o -name "build" -o -name ".cache" -o -name ".turbo" -o -name ".venv" -o -name "__pycache__" -o -name ".t3" -o -name ".autocode" \\) -prune -o -print | zip -q "${tempZipFile}" -@ || ( [ $? -eq 12 ] && touch .t3_empty && zip -q "${tempZipFile}" .t3_empty && rm -f .t3_empty ); fi`;
+    // High-performance pruning zip: skips all dot-prefixed files and folders (e.g. .git, .env,
+    // .DS_Store) plus known heavy build artifacts (node_modules, dist, .next, etc.).
+    // The grep -v '/\.' pattern filters out any path component that starts with a dot.
+    const zipCmd = `if [ -z "$(find . -mindepth 1 -maxdepth 1 2>/dev/null)" ]; then touch .t3_empty && zip -q "${tempZipFile}" .t3_empty && rm -f .t3_empty; else find . -mindepth 1 \\( -type d \\( -name "node_modules" -o -name ".git" -o -name "dist" -o -name ".next" -o -name "build" -o -name ".cache" -o -name ".turbo" -o -name ".venv" -o -name "__pycache__" -o -name ".t3" -o -name ".autocode" -o -name ".nuxt" -o -name ".output" -o -name ".svelte-kit" -o -name ".parcel-cache" -o -name "coverage" -o -name ".nyc_output" \\) -prune \\) -o -print | grep -v '/\\.' | zip -q "${tempZipFile}" -@ || ( [ $? -eq 12 ] && touch .t3_empty && zip -q "${tempZipFile}" .t3_empty && rm -f .t3_empty ); fi`;
 
     const zipResult = yield* Effect.promise(() =>
       runBashCommandOnHost(zipCmd, workspaceRoot, 120_000),
@@ -1901,9 +1903,12 @@ export const layerFsDownloadRoute = HttpRouter.add(
       return HttpServerResponse.text("File not found or is a directory", { status: 404 });
     }
     const filename = pathService.basename(resolved);
+    // Detect MIME type for correct Content-Type header; fall back to binary stream
+    const mimeType = Option.getOrElse(Mime.getType(resolved), () => "application/octet-stream");
     return yield* HttpServerResponse.file(resolved, {
       headers: {
-        "Content-Disposition": `attachment; filename="${encodeURIComponent(filename)}"`,
+        "Content-Disposition": downloadContentDisposition(filename),
+        "Content-Type": mimeType,
       },
     });
   }).pipe(
