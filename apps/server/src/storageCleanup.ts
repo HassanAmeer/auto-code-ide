@@ -487,6 +487,28 @@ export const make = Effect.gen(function* () {
     yield* cleanFiles(config.logsDir, settings.logsAfterDays, now, true).pipe(
       Effect.catch((error) => Effect.logWarning("rotated log cleanup failed", { error })),
     );
+    yield* cleanDatabase().pipe(
+      Effect.catch((error) => Effect.logWarning("database cleanup failed", { error })),
+    );
+  });
+
+  const cleanDatabase = Effect.fn("StorageCleanup.cleanDatabase")(function* () {
+    yield* sql`PRAGMA wal_checkpoint(PASSIVE);`.pipe(
+      Effect.catch((error) => Effect.logWarning("wal checkpoint passive failed", { error })),
+    );
+    const rows = yield* sql<{ readonly freelist_count: number }>`PRAGMA freelist_count;`.pipe(
+      Effect.catch(() => Effect.succeed([{ freelist_count: 0 }])),
+    );
+    const freelistCount = rows[0]?.freelist_count ?? 0;
+    if (freelistCount >= 2560) {
+      yield* sql`VACUUM;`.pipe(
+        Effect.catch((error) => Effect.logWarning("sqlite vacuum failed", { error })),
+      );
+    } else {
+      yield* sql`PRAGMA optimize;`.pipe(
+        Effect.catch((error) => Effect.logWarning("sqlite optimize failed", { error })),
+      );
+    }
   });
   const worker = yield* makeDrainableWorker(() =>
     sweep().pipe(
