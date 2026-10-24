@@ -7261,7 +7261,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       {terminalState.isQuickBarOpen ? (
         <AiTerminalCommandBar projectCwd={gitCwd ?? undefined} />
       ) : null}
-      <div className="relative">
+      <div className={cn("relative", terminalState.isQuickBarOpen && "hidden")}>
         <ComposerSurface.Main
           ref={composerMainSurfaceRef}
           data-inline-resting-controls={restingControlsHost === null ? "true" : undefined}

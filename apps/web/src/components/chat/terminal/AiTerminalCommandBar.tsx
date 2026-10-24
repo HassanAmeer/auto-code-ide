@@ -9,6 +9,8 @@ import {
   ChevronDown,
   ChevronUp,
   Sparkles,
+  Folder,
+  ShieldAlert,
 } from "lucide-react";
 
 import { cn } from "../../../lib/utils";
@@ -55,17 +57,15 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
     }
   }, [store.runs]);
 
-  // Determine active CWD:
-  // When a project is selected: use store.activeCwd || projectCwd || "/"
-  // When NO project is selected: strictly root "/"!
-  const effectiveCwd = store.selectedProjectId
-    ? store.activeCwd && store.activeCwd !== "/"
-      ? store.activeCwd
-      : projectCwd || "/"
-    : "/";
+  // Determine active CWD and Scope Mode:
+  const isRootScope = store.scopeMode === "root";
+  const projectTitle = store.selectedProjectTitle;
+  const projectPath = store.lastProjectPath || (store.selectedProjectId ? store.activeCwd : null);
 
-  // Label for scope: "root" if unselected, or project title if selected
-  const scopeName = store.selectedProjectId ? store.selectedProjectTitle || "project" : "root";
+  const effectiveCwd = isRootScope ? "/" : projectPath || projectCwd || store.activeCwd || "/";
+
+  // Label for scope: "Root (/)" if root selected, or project title
+  const scopeName = isRootScope ? "Root (/)" : projectTitle || "Project";
 
   const handleExecute = useCallback(async () => {
     const trimmed = command.trim();
@@ -231,6 +231,59 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
         </div>
       )}
 
+      {/* Scope & Path Selector Strip (Root vs Project) */}
+      <div className="flex items-center justify-between px-2.5 py-1 bg-zinc-950/80 border border-zinc-800/80 rounded-xl text-3xs font-mono select-none backdrop-blur-xs">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="text-zinc-500 font-sans text-4xs uppercase tracking-wider font-semibold shrink-0">
+            Scope:
+          </span>
+
+          {/* Root Scope Button */}
+          <button
+            type="button"
+            onClick={() => terminalStore.setScopeMode("root")}
+            title="Switch to Root (/) - Full Root Access to manage, read, edit, delete, and run any system command"
+            className={cn(
+              "flex items-center gap-1 px-2 py-0.5 rounded-[5px] transition-all cursor-pointer border text-3xs shrink-0",
+              isRootScope
+                ? "bg-amber-500/15 text-amber-300 border-amber-500/40 font-semibold shadow-xs"
+                : "bg-zinc-900/60 text-zinc-400 hover:text-zinc-200 border-zinc-800",
+            )}
+          >
+            <ShieldAlert className="size-2.5 text-amber-400" />
+            <span>Root (/)</span>
+          </button>
+
+          {/* Project Scope Button */}
+          {(projectTitle || projectPath) && (
+            <button
+              type="button"
+              onClick={() => terminalStore.setScopeMode("project")}
+              title={`Switch to Project (${projectPath || effectiveCwd})`}
+              className={cn(
+                "flex items-center gap-1 px-2 py-0.5 rounded-[5px] transition-all cursor-pointer border text-3xs shrink-0 min-w-0",
+                !isRootScope
+                  ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/40 font-semibold shadow-xs"
+                  : "bg-zinc-900/60 text-zinc-400 hover:text-zinc-200 border-zinc-800",
+              )}
+            >
+              <Folder className="size-2.5 text-emerald-400 shrink-0" />
+              <span className="truncate max-w-[130px] sm:max-w-[200px]">
+                {projectTitle || "Project"}
+              </span>
+            </button>
+          )}
+        </div>
+
+        {/* Path Indicator */}
+        <div className="flex items-center gap-1 text-4xs text-zinc-400 truncate max-w-[180px] sm:max-w-[340px] ml-2 font-mono">
+          <span className="text-zinc-600 shrink-0">path:</span>
+          <span className="text-zinc-300 truncate" title={effectiveCwd}>
+            {effectiveCwd}
+          </span>
+        </div>
+      </div>
+
       {/* Sleek Single-Line Command Input Bar */}
       <div className="flex items-center gap-2 rounded-2xl border border-emerald-500/35 bg-card/90 px-3 py-1.5 shadow-sm focus-within:border-emerald-500/70 focus-within:ring-2 focus-within:ring-emerald-500/20 transition-all">
         {/* Dropdown Button with Scope Badge (root or Project Name) */}
@@ -253,7 +306,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
             className="font-mono text-3xs font-semibold text-muted-foreground hidden sm:inline"
             title={`CWD: ${effectiveCwd}`}
           >
-            {store.selectedProjectId ? `${scopeName}:` : "/:"}
+            {!isRootScope ? `${scopeName}:` : "/:"}
           </span>
         </div>
 
@@ -266,9 +319,9 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
           onKeyDown={handleKeyDown}
           disabled={isRunning}
           placeholder={
-            store.selectedProjectId
+            !isRootScope
               ? `Run command in ${scopeName} (${effectiveCwd})...`
-              : "Run command in root (/)..."
+              : "Run root command in / (full system access: read, edit, delete, admin)..."
           }
           className="flex-1 min-w-0 bg-transparent text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none font-mono"
         />

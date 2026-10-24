@@ -141,7 +141,18 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
           }}
           className="flex-1 flex items-center gap-2 overflow-x-auto py-0.5 px-0.5 scroll-smooth [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
         >
-          {/* 1. Terminal Chats History Icon Button (Opens 90% Width Right-Side Sheet) */}
+          {/* 1. New Terminal Chat Button */}
+          <button
+            type="button"
+            onClick={handleCreateNewChat}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 text-3xs font-medium shrink-0 cursor-pointer shadow-xs transition-all"
+            title="Start a Fresh Clean Terminal Chat"
+          >
+            <Plus className="size-3" />
+            <span className="font-semibold">New Chat</span>
+          </button>
+
+          {/* 2. Terminal Chats History Button (Opens 90% Width Right-Side Sheet) */}
           <button
             type="button"
             onClick={() => terminalStore.toggleChatsSheet()}
@@ -153,9 +164,9 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
             )}
             title="Open Terminal History & Sessions Sheet"
           >
-            <Terminal className="size-3 text-emerald-400 shrink-0" />
-            <span className="font-semibold truncate max-w-[130px] sm:max-w-[170px]">
-              {activeChat?.title || "Terminal Chats"}
+            <Clock className="size-3 text-emerald-400 shrink-0" />
+            <span className="font-semibold truncate max-w-[120px] sm:max-w-[160px]">
+              {activeChat?.title || "History"}
             </span>
             <span className="px-1.5 py-0.2 rounded-[5px] bg-zinc-800 text-zinc-400 font-mono text-4xs border border-zinc-700/60">
               {store.terminalChats.length}
@@ -165,14 +176,8 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
           {/* Divider */}
           <div className="w-px h-4 bg-zinc-800/80 shrink-0" />
 
-          {/* 2. Projects Section with Selection Counter Badge */}
-          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-[5px] bg-emerald-500/10 text-emerald-400 font-semibold text-3xs shrink-0 border border-emerald-500/20">
-            <Folder className="size-3 text-emerald-400" />
-            <span>Projects:</span>
-            <span className="px-1.5 py-0.2 rounded-[5px] bg-emerald-500/20 text-emerald-300 font-mono text-4xs">
-              {selectedProjectCount}
-            </span>
-          </div>
+          {/* 3. Projects Section: Plain grey text, no badge, no outline, no background */}
+          <span className="text-zinc-500 text-3xs font-medium shrink-0">Projects:</span>
 
           {uniqueProjects.length === 0 ? (
             <span className="text-3xs text-zinc-500 italic shrink-0 px-1">(No projects yet)</span>
@@ -203,14 +208,8 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
           {/* Divider */}
           <div className="w-px h-4 bg-zinc-800/80 shrink-0" />
 
-          {/* 3. SSH Servers List with Selection Counter Badge */}
-          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-[5px] bg-sky-500/10 text-sky-400 font-semibold text-3xs shrink-0 border border-sky-500/20">
-            <Server className="size-3 text-sky-400" />
-            <span>SSH Servers:</span>
-            <span className="px-1.5 py-0.2 rounded-[5px] bg-sky-500/20 text-sky-300 font-mono text-4xs">
-              {selectedSshCount}
-            </span>
-          </div>
+          {/* 4. SSH Servers Section: Plain grey text, no badge, no outline, no background */}
+          <span className="text-zinc-500 text-3xs font-medium shrink-0">SSH:</span>
 
           {store.accessKeys
             .filter((k) => k.type === "ssh" || k.host)

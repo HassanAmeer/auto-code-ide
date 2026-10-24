@@ -16,7 +16,10 @@ import {
 
 interface TerminalState {
   runs: TerminalCommandRun[];
+  runsByChat: Record<string, TerminalCommandRun[]>;
   activeCwd: string;
+  scopeMode: "root" | "project";
+  lastProjectPath: string | null;
   selectedProjectId: string | null;
   selectedProjectTitle: string | null;
   selectedKeyId: string | null;
@@ -44,6 +47,8 @@ const STORAGE_KEY_PROJECT_ID = "adc_terminal_selected_project_id";
 const STORAGE_KEY_PROJECT_TITLE = "adc_terminal_selected_project_title";
 const STORAGE_KEY_SELECTED_KEY = "adc_terminal_selected_key_id";
 const STORAGE_KEY_TERMINAL_CHATS = "adc_terminal_chats";
+const STORAGE_KEY_SCOPE_MODE = "adc_terminal_scope_mode";
+const STORAGE_KEY_LAST_PROJECT_PATH = "adc_terminal_last_project_path";
 
 const initialProjectId =
   typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY_PROJECT_ID) : null;
@@ -51,11 +56,17 @@ const initialProjectTitle =
   typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY_PROJECT_TITLE) : null;
 const initialSelectedKey =
   typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY_SELECTED_KEY) : null;
+const initialLastProjectPath =
+  typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY_LAST_PROJECT_PATH) : null;
+const initialScopeMode: "root" | "project" =
+  typeof window !== "undefined" && window.localStorage.getItem(STORAGE_KEY_SCOPE_MODE) === "project"
+    ? "project"
+    : "root";
 
 const initialCwd =
   typeof window !== "undefined"
-    ? initialProjectId
-      ? window.localStorage.getItem(STORAGE_KEY_CWD) || "/"
+    ? initialScopeMode === "project" && initialLastProjectPath
+      ? initialLastProjectPath
       : "/"
     : "/";
 
@@ -123,7 +134,10 @@ if (typeof window !== "undefined") {
 
 let state: TerminalState = {
   runs: [],
+  runsByChat: {},
   activeCwd: initialCwd,
+  scopeMode: initialScopeMode,
+  lastProjectPath: initialLastProjectPath,
   selectedProjectId: initialProjectId,
   selectedProjectTitle: initialProjectTitle,
   selectedKeyId: initialSelectedKey,
@@ -268,10 +282,13 @@ export const terminalStore = {
     workspaceRoot?: string | undefined,
   ) {
     const nextCwd = projectId && workspaceRoot ? workspaceRoot : "/";
+    const nextScope = projectId ? "project" : "root";
     state = {
       ...state,
       selectedProjectId: projectId,
       selectedProjectTitle: title,
+      lastProjectPath: workspaceRoot ?? state.lastProjectPath,
+      scopeMode: nextScope,
       activeCwd: nextCwd,
     };
     if (typeof window !== "undefined") {
@@ -281,6 +298,23 @@ export const terminalStore = {
       if (title) window.localStorage.setItem(STORAGE_KEY_PROJECT_TITLE, title);
       else window.localStorage.removeItem(STORAGE_KEY_PROJECT_TITLE);
 
+      if (workspaceRoot) window.localStorage.setItem(STORAGE_KEY_LAST_PROJECT_PATH, workspaceRoot);
+
+      window.localStorage.setItem(STORAGE_KEY_SCOPE_MODE, nextScope);
+      window.localStorage.setItem(STORAGE_KEY_CWD, nextCwd);
+    }
+    notify();
+  },
+
+  setScopeMode(mode: "root" | "project") {
+    const nextCwd = mode === "root" ? "/" : state.lastProjectPath || state.activeCwd || "/";
+    state = {
+      ...state,
+      scopeMode: mode,
+      activeCwd: nextCwd,
+    };
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(STORAGE_KEY_SCOPE_MODE, mode);
       window.localStorage.setItem(STORAGE_KEY_CWD, nextCwd);
     }
     notify();
@@ -365,7 +399,8 @@ export const terminalStore = {
   },
 
   setActiveChatId(id: string | null) {
-    state = { ...state, activeChatId: id };
+    const sessionRuns = id ? (state.runsByChat[id] ?? []) : [];
+    state = { ...state, activeChatId: id, runs: sessionRuns };
     notify();
   },
 
@@ -374,13 +409,12 @@ export const terminalStore = {
       ? state.accessKeys.find((k) => k.id === state.selectedKeyId)
       : state.accessKeys.find((k) => k.enabled && (k.type === "ssh" || k.host));
 
+    const newChatId = "term_chat_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6);
     const newChat: TerminalChatSession = {
-      id: "term_chat_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
+      id: newChatId,
       title:
         data?.title ||
-        (state.selectedProjectTitle
-          ? `${state.selectedProjectTitle} Auto-Deploy`
-          : "New Terminal Chat"),
+        (state.selectedProjectTitle ? `${state.selectedProjectTitle} Shell` : "New Terminal Chat"),
       createdAt: Date.now(),
       projectId: data?.projectId ?? state.selectedProjectId,
       projectName: data?.projectName ?? state.selectedProjectTitle,
@@ -396,6 +430,8 @@ export const terminalStore = {
       ...state,
       terminalChats: updated,
       activeChatId: newChat.id,
+      runs: [], // Fresh new chat screen is completely clear!
+      runsByChat: { ...state.runsByChat, [newChat.id]: [] },
       isQuickBarOpen: true,
     };
 
@@ -496,16 +532,26 @@ export const terminalStore = {
   },
 
   appendRunChunk(runId: string, chunk: string, type: "stdout" | "stderr") {
+    const updateRun = (r: TerminalCommandRun): TerminalCommandRun => {
+      if (r.id !== runId) return r;
+      return {
+        ...r,
+        stdout: type === "stdout" ? r.stdout + chunk : r.stdout,
+        stderr: type === "stderr" ? r.stderr + chunk : r.stderr,
+      };
+    };
+    const updatedRuns = state.runs.map(updateRun);
+    const updatedRunsByChat = state.activeChatId
+      ? {
+          ...state.runsByChat,
+          [state.activeChatId]: (state.runsByChat[state.activeChatId] || []).map(updateRun),
+        }
+      : state.runsByChat;
+
     state = {
       ...state,
-      runs: state.runs.map((r) => {
-        if (r.id !== runId) return r;
-        return {
-          ...r,
-          stdout: type === "stdout" ? r.stdout + chunk : r.stdout,
-          stderr: type === "stderr" ? r.stderr + chunk : r.stderr,
-        };
-      }),
+      runs: updatedRuns,
+      runsByChat: updatedRunsByChat,
     };
     notify();
   },
@@ -544,7 +590,10 @@ export const terminalStore = {
     }
 
     const currentMode = modeOverride ?? state.inputMode;
-    const cwd = state.selectedProjectId ? customCwd || state.activeCwd || "/" : "/";
+    const cwd =
+      state.scopeMode === "root"
+        ? "/"
+        : customCwd || state.activeCwd || state.lastProjectPath || "/";
     const activeKeys = state.accessKeys.filter((k) => k.enabled);
 
     // Translate if AI mode with knowledge of active keys
@@ -611,9 +660,18 @@ export const terminalStore = {
       activeKeys: activeKeys.length > 0 ? activeKeys : undefined,
     };
 
+    const updatedInitialRuns = [initialRun, ...state.runs];
+    const updatedInitialRunsByChat = state.activeChatId
+      ? {
+          ...state.runsByChat,
+          [state.activeChatId]: [initialRun, ...(state.runsByChat[state.activeChatId] || [])],
+        }
+      : state.runsByChat;
+
     state = {
       ...state,
-      runs: [initialRun, ...state.runs],
+      runs: updatedInitialRuns,
+      runsByChat: updatedInitialRunsByChat,
       history: nextHistory,
     };
     notify();
@@ -677,9 +735,20 @@ export const terminalStore = {
       activeKeys: activeKeys.length > 0 ? activeKeys : undefined,
     };
 
+    const updatedCompletedRuns = state.runs.map((r) => (r.id === runId ? completedRun : r));
+    const updatedCompletedRunsByChat = state.activeChatId
+      ? {
+          ...state.runsByChat,
+          [state.activeChatId]: (state.runsByChat[state.activeChatId] || []).map((r) =>
+            r.id === runId ? completedRun : r,
+          ),
+        }
+      : state.runsByChat;
+
     state = {
       ...state,
-      runs: state.runs.map((r) => (r.id === runId ? completedRun : r)),
+      runs: updatedCompletedRuns,
+      runsByChat: updatedCompletedRunsByChat,
     };
     notify();
 
