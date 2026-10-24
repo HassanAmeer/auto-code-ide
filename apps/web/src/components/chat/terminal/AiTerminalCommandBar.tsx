@@ -38,7 +38,9 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
   const [command, setCommand] = useState("");
   const [historyIndex, setHistoryIndex] = useState<number | null>(null);
   const [isRunning, setIsRunning] = useState(false);
-  const [latestRun, setLatestRun] = useState<TerminalCommandRun | null>(null);
+  const [latestRun, setLatestRun] = useState<TerminalCommandRun | null>(
+    () => store.runs[0] ?? null,
+  );
   const [isOutputCollapsed, setIsOutputCollapsed] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showCommandsMenu, setShowCommandsMenu] = useState(false);
@@ -268,15 +270,18 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
     if (e.key === "c" && (e.ctrlKey || e.metaKey)) {
       if (isRunning && latestRun) {
         e.preventDefault();
+        e.stopPropagation();
         void handleKill();
         return;
       }
     }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
+      e.stopPropagation();
       void handleExecute(command);
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
+      e.stopPropagation();
       if (store.history.length === 0) return;
       const nextIndex =
         historyIndex === null ? store.history.length - 1 : Math.max(0, historyIndex - 1);
@@ -285,6 +290,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
       if (histCmd) setCommand(histCmd);
     } else if (e.key === "ArrowDown") {
       e.preventDefault();
+      e.stopPropagation();
       if (historyIndex === null) return;
       const nextIndex = historyIndex + 1;
       if (nextIndex >= store.history.length) {
@@ -296,6 +302,8 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
         if (histCmd) setCommand(histCmd);
       }
     } else if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
       terminalStore.setQuickBarOpen(false);
     }
   };
@@ -371,7 +379,11 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
           ) : (
             <button
               type="button"
-              onClick={() => void handleExecute(command)}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                void handleExecute(command);
+              }}
               disabled={!command.trim() || isRunning}
               title="Execute Command (Enter)"
               className={cn(
