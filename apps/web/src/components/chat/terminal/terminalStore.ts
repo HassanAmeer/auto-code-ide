@@ -443,6 +443,18 @@ export const terminalStore = {
     return newChat;
   },
 
+  updateTerminalChatTitle(id: string, title: string) {
+    const updated = state.terminalChats.map((c) => (c.id === id ? { ...c, title } : c));
+    state = {
+      ...state,
+      terminalChats: updated,
+    };
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(STORAGE_KEY_TERMINAL_CHATS, JSON.stringify(updated));
+    }
+    notify();
+  },
+
   deleteTerminalChat(id: string) {
     const updated = state.terminalChats.filter((c) => c.id !== id);
     const nextActive = state.activeChatId === id ? (updated[0]?.id ?? null) : state.activeChatId;

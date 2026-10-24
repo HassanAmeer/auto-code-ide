@@ -2683,9 +2683,10 @@ export default function ChatView(props: ChatViewProps) {
     startNewThreadForProject(activeProjectRef, handleNewThread);
   }, [activeProjectRef, handleNewThread]);
 
-  useEffect(() => {
-    terminalStore.setQuickBarOpen(false);
-  }, [activeThreadId]);
+  const handleNewTerminalThread = useCallback(() => {
+    terminalStore.setQuickBarOpen(true);
+    clearComposerDraftContent(composerDraftTarget);
+  }, [clearComposerDraftContent, composerDraftTarget]);
 
   const prevRunStatusRef = useRef<{
     runId: string | null;
@@ -11954,7 +11955,7 @@ export default function ChatView(props: ChatViewProps) {
           <>
             <AiTerminalHeaderStrip
               activeProject={activeProject ?? null}
-              onNewTerminalThread={handleNewThreadInActiveProject}
+              onNewTerminalThread={handleNewTerminalThread}
             />
             <AiTerminalQuickActionsBar activeProject={activeProject ?? null} />
           </>

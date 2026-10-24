@@ -63,16 +63,17 @@ export const TerminalChatsSheet = memo(function TerminalChatsSheet({
   };
 
   const handleCreateNewChat = () => {
-    const projName = activeProject?.title || store.selectedProjectTitle || "Auto Deploy";
+    const projName = store.selectedProjectTitle || activeProject?.title || "Auto Deploy";
     const keyName = activeSshKey?.name || "Server";
     const newChat = terminalStore.createTerminalChat({
       title: `${projName} (${keyName})`,
-      projectId: activeProject?.id || store.selectedProjectId,
+      projectId: store.selectedProjectId || activeProject?.id,
       projectName: projName,
       sshKeyId: activeSshKey?.id,
       sshKeyName: keyName,
     });
     terminalStore.setActiveChatId(newChat.id);
+    terminalStore.setQuickBarOpen(true);
     terminalStore.setChatsSheetOpen(false);
 
     if (onNewTerminalThread) {
