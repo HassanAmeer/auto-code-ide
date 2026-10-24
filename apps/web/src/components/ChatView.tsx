@@ -2693,9 +2693,19 @@ export default function ChatView(props: ChatViewProps) {
   const handleNewTerminalThread = useCallback(() => {
     terminalStore.setQuickBarOpen(true);
     clearComposerDraftContent(composerDraftTarget);
-    // Open a fresh new chat session dedicated for AI Terminal (detached from project)
-    startNewThreadForProject(null, handleNewThread);
-  }, [clearComposerDraftContent, composerDraftTarget, handleNewThread]);
+    if (activeProjectRef) {
+      startNewThreadForProject(activeProjectRef, handleNewThread);
+    } else if (allProjects.length > 0) {
+      const proj = allProjects[allProjects.length - 1] ?? allProjects[0]!;
+      startNewThreadForProject(scopeProjectRef(proj.environmentId, proj.id), handleNewThread);
+    }
+  }, [
+    activeProjectRef,
+    allProjects,
+    clearComposerDraftContent,
+    composerDraftTarget,
+    handleNewThread,
+  ]);
 
   useEffect(() => {
     const onNewTerminalThreadEvent = () => {

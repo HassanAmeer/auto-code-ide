@@ -242,23 +242,24 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
 
   const handleTerminalClick = useCallback(() => {
     closeMobileSidebar();
-    if (
+    const isSpecialRoute =
       typeof window !== "undefined" &&
       (window.location.pathname.startsWith("/settings") ||
         window.location.pathname === "/usage" ||
-        window.location.pathname === "/pull-requests")
-    ) {
+        window.location.pathname === "/pull-requests");
+
+    if (isSpecialRoute) {
       void navigate({ to: "/" });
     }
+
     const isOpen = terminalStore.getState().isQuickBarOpen;
-    if (isOpen) {
+    if (isOpen && !isSpecialRoute) {
       terminalStore.setQuickBarOpen(false);
     } else {
       if (terminalStore.getState().terminalChats.length === 0) {
         terminalStore.createTerminalChat({ title: "AI Terminal Session" });
       }
       terminalStore.setQuickBarOpen(true);
-      void navigate({ to: "/" });
       window.dispatchEvent(new CustomEvent("t3:new-terminal-thread"));
     }
   }, [closeMobileSidebar, navigate]);
@@ -581,23 +582,24 @@ export const SidebarAiTerminalItem = memo(function SidebarAiTerminalItem() {
     if (isMobile) {
       setOpenMobile(false);
     }
-    if (
+    const isSpecialRoute =
       typeof window !== "undefined" &&
       (window.location.pathname.startsWith("/settings") ||
         window.location.pathname === "/usage" ||
-        window.location.pathname === "/pull-requests")
-    ) {
+        window.location.pathname === "/pull-requests");
+
+    if (isSpecialRoute) {
       void navigate({ to: "/" });
     }
+
     const isOpen = terminalStore.getState().isQuickBarOpen;
-    if (isOpen) {
+    if (isOpen && !isSpecialRoute) {
       terminalStore.setQuickBarOpen(false);
     } else {
       if (terminalStore.getState().terminalChats.length === 0) {
         terminalStore.createTerminalChat({ title: "AI Terminal Session" });
       }
       terminalStore.setQuickBarOpen(true);
-      void navigate({ to: "/" });
       window.dispatchEvent(new CustomEvent("t3:new-terminal-thread"));
     }
   }, [isMobile, navigate, setOpenMobile]);
