@@ -31,8 +31,17 @@ export interface TerminalAccessKey {
   notes?: string | undefined;
 }
 
+export interface TerminalTab {
+  id: string;
+  name: string;
+  type: "bash" | "logs";
+  cwd?: string | undefined;
+  createdAt: number;
+}
+
 export interface TerminalCommandRun {
   id: string;
+  tabId?: string | undefined;
   executionId?: string | undefined;
   command: string;
   cwd: string;

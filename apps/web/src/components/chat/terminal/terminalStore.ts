@@ -4,6 +4,7 @@ import type {
   SshProfile,
   TerminalAccessKey,
   TerminalChatSession,
+  TerminalTab,
 } from "./terminalTypes";
 import {
   executeTerminalCommand,
@@ -35,6 +36,8 @@ interface TerminalState {
   accessKeys: TerminalAccessKey[];
   terminalChats: TerminalChatSession[];
   activeChatId: string | null;
+  terminalTabs: TerminalTab[];
+  activeTabId: string;
   inputMode: "bash" | "ai";
   permissionMode: "full-access" | "ask";
   alwaysAllowedCommands: string[];
@@ -164,6 +167,11 @@ if (typeof window !== "undefined") {
   }
 }
 
+const initialTerminalTabs: TerminalTab[] = [
+  { id: "term_tab_1", name: "1: bash", type: "bash", createdAt: Date.now() },
+  { id: "term_tab_logs", name: "2: server logs", type: "logs", createdAt: Date.now() },
+];
+
 let state: TerminalState = {
   runs: initialRuns,
   runsByChat: {},
@@ -183,6 +191,8 @@ let state: TerminalState = {
   accessKeys: initialAccessKeys,
   terminalChats: initialTerminalChats,
   activeChatId: initialTerminalChats[0]?.id ?? null,
+  terminalTabs: initialTerminalTabs,
+  activeTabId: initialTerminalTabs[0].id,
   inputMode: "bash",
   permissionMode: initialPermissionMode,
   alwaysAllowedCommands: initialAlwaysAllowedCommands,
@@ -227,6 +237,45 @@ export const terminalStore = {
 
   toggleQuickBar() {
     this.setQuickBarOpen(!state.isQuickBarOpen);
+  },
+
+  addTerminalTab(name?: string, type: "bash" | "logs" = "bash"): string {
+    const bashCount = state.terminalTabs.filter((t) => t.type === "bash").length;
+    const tabName = name || (type === "logs" ? "server logs" : `${bashCount + 1}: bash`);
+    const newTab: TerminalTab = {
+      id: "term_tab_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
+      name: tabName,
+      type,
+      cwd: state.activeCwd,
+      createdAt: Date.now(),
+    };
+    state = {
+      ...state,
+      terminalTabs: [...state.terminalTabs, newTab],
+      activeTabId: newTab.id,
+    };
+    notify();
+    return newTab.id;
+  },
+
+  closeTerminalTab(tabId: string) {
+    if (state.terminalTabs.length <= 1) return;
+    const remaining = state.terminalTabs.filter((t) => t.id !== tabId);
+    const nextActive =
+      state.activeTabId === tabId
+        ? remaining[remaining.length - 1]?.id || remaining[0].id
+        : state.activeTabId;
+    state = {
+      ...state,
+      terminalTabs: remaining,
+      activeTabId: nextActive,
+    };
+    notify();
+  },
+
+  setActiveTabId(tabId: string) {
+    state = { ...state, activeTabId: tabId };
+    notify();
   },
 
   setInputMode(mode: "bash" | "ai") {
@@ -728,45 +777,54 @@ export const terminalStore = {
         clean === "::1" ||
         clean === "0.0.0.0" ||
         clean === "201.18.218.29" ||
+        clean.includes("autojobs") ||
+        clean.includes("tokendeal") ||
         (Boolean(currentHost) && clean === currentHost.toLowerCase())
       );
     };
 
-    // ONLY execute via SSH if user explicitly selected a remote SSH target / profile (not local or loopback)
-    if (state.activeTarget && state.activeTarget !== "local") {
-      const activeProfile = state.sshProfiles.find((p) => p.id === state.activeTarget);
-      const activeKeyTarget = state.selectedKeyId
-        ? state.accessKeys.find((k) => k.id === state.selectedKeyId)
-        : state.activeTarget.startsWith("key_")
-          ? state.accessKeys.find(
-              (k) => `key_${k.id}` === state.activeTarget || k.id === state.activeTarget,
-            )
-          : null;
+    // Check if target is explicitly remote vs local host
+    const activeKeyTarget = state.selectedKeyId
+      ? state.accessKeys.find((k) => k.id === state.selectedKeyId)
+      : null;
+    const activeProfile =
+      state.activeTarget && state.activeTarget !== "local"
+        ? state.sshProfiles.find((p) => p.id === state.activeTarget)
+        : null;
 
-      const targetHost = activeProfile?.host || activeKeyTarget?.host;
+    const isDirectLocalHost =
+      !activeProfile &&
+      (!activeKeyTarget ||
+        activeKeyTarget.id === "key_vps_default" ||
+        activeKeyTarget.type === "server" ||
+        activeKeyTarget.name?.toLowerCase().includes("production server") ||
+        activeKeyTarget.name?.toLowerCase().includes("direct host") ||
+        isLoopbackOrSelfHost(activeKeyTarget.host));
 
-      if (!isLoopbackOrSelfHost(targetHost)) {
-        const safeSshCmd = effectiveCommand.replace(/'/g, "'\\''");
-
-        if (activeProfile && activeProfile.host) {
-          isSshTarget = true;
-          targetLabel = `SSH: ${activeProfile.label || activeProfile.host}`;
-          commandToExecute = `ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=10 -p ${activeProfile.port || 22} ${activeProfile.user ? `${activeProfile.user}@` : ""}${activeProfile.host} '${safeSshCmd}'`;
-        } else if (activeKeyTarget && activeKeyTarget.host) {
-          isSshTarget = true;
-          targetLabel = `SSH: ${activeKeyTarget.name} (${activeKeyTarget.user || "root"}@${activeKeyTarget.host})`;
-          const port = activeKeyTarget.port || 22;
-          const userPrefix = activeKeyTarget.user ? `${activeKeyTarget.user}@` : "";
-          commandToExecute = `ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=10 -p ${port} ${userPrefix}${activeKeyTarget.host} '${safeSshCmd}'`;
-        }
-      } else {
-        isSshTarget = false;
-        targetLabel =
-          state.scopeMode === "root"
-            ? "VPS Host (Root)"
-            : `VPS Host (${state.selectedProjectTitle || "Project"})`;
-        commandToExecute = effectiveCommand;
+    if (
+      !isDirectLocalHost &&
+      (activeProfile?.host ||
+        (activeKeyTarget?.host && !isLoopbackOrSelfHost(activeKeyTarget.host)))
+    ) {
+      const safeSshCmd = effectiveCommand.replace(/'/g, "'\\''");
+      if (activeProfile?.host) {
+        isSshTarget = true;
+        targetLabel = `SSH: ${activeProfile.label || activeProfile.host}`;
+        commandToExecute = `ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=10 -p ${activeProfile.port || 22} ${activeProfile.user ? `${activeProfile.user}@` : ""}${activeProfile.host} '${safeSshCmd}'`;
+      } else if (activeKeyTarget?.host) {
+        isSshTarget = true;
+        targetLabel = `SSH: ${activeKeyTarget.name} (${activeKeyTarget.user || "root"}@${activeKeyTarget.host})`;
+        const port = activeKeyTarget.port || 22;
+        const userPrefix = activeKeyTarget.user ? `${activeKeyTarget.user}@` : "";
+        commandToExecute = `ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=10 -p ${port} ${userPrefix}${activeKeyTarget.host} '${safeSshCmd}'`;
       }
+    } else {
+      isSshTarget = false;
+      targetLabel =
+        state.scopeMode === "root"
+          ? "VPS Host (Root)"
+          : `VPS Host (${state.selectedProjectTitle || "Project"})`;
+      commandToExecute = effectiveCommand;
     }
 
     // Update history
@@ -777,6 +835,7 @@ export const terminalStore = {
 
     const initialRun: TerminalCommandRun = {
       id: runId,
+      tabId: state.activeTabId,
       executionId,
       command: actualCommand,
       cwd,
@@ -812,6 +871,17 @@ export const terminalStore = {
     let result: TerminalExecResult;
     try {
       result = await executeTerminalCommand(commandToExecute, cwd, 60_000);
+      // Auto-fallback: If SSH wrapper failed, automatically fallback to direct local host execution!
+      if (
+        !result.ok &&
+        isSshTarget &&
+        (result.stderr.toLowerCase().includes("permission denied") || result.exitCode === 255)
+      ) {
+        console.warn(
+          "SSH command wrapper failed, automatically falling back to direct host execution...",
+        );
+        result = await executeTerminalCommand(effectiveCommand, cwd, 60_000);
+      }
       if (result.stdout) {
         terminalStore.appendRunChunk(runId, result.stdout, "stdout");
       }
@@ -860,6 +930,7 @@ export const terminalStore = {
 
     const completedRun: TerminalCommandRun = {
       id: runId,
+      tabId: state.activeTabId,
       executionId,
       command: actualCommand,
       cwd: result.cwd || cwd,

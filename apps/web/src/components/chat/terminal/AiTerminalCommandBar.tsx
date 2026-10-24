@@ -6,27 +6,18 @@ import {
   X,
   Check,
   Copy,
-  ChevronDown,
-  ChevronUp,
   Sparkles,
-  Folder,
   ShieldAlert,
-  ShieldCheck,
   Zap,
-  Key,
   Square,
-  Maximize2,
-  Minimize2,
   Plus,
-  Play,
   RotateCcw,
 } from "lucide-react";
 
 import { cn } from "../../../lib/utils";
 import { useTerminalStore, terminalStore } from "./terminalStore";
-import { translatePromptToBashCommand, executeTerminalCommand } from "./terminalClient";
+import { executeTerminalCommand } from "./terminalClient";
 import type { TerminalCommandRun } from "./terminalTypes";
-import { TerminalCommandsMenu } from "./TerminalCommandsMenu";
 import { toastManager } from "../../ui/toast";
 import { parseAnsiToHtml } from "./ansiParser";
 
@@ -41,30 +32,30 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
 }: AiTerminalCommandBarProps) {
   const store = useTerminalStore();
   const [command, setCommand] = useState("");
-  const [rawTerminalInput, setRawTerminalInput] = useState("");
   const [historyIndex, setHistoryIndex] = useState<number | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [latestRun, setLatestRun] = useState<TerminalCommandRun | null>(
     () => store.runs[0] ?? null,
   );
-  const [isTrayCollapsed, setIsTrayCollapsed] = useState(false);
-  const [isTrayMaximized, setIsTrayMaximized] = useState(false);
-  const [activeTab, setActiveTab] = useState<"bash" | "logs">("bash");
   const [logsOutput, setLogsOutput] = useState<string | null>(null);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [showCommandsMenu, setShowCommandsMenu] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
-  const rawTerminalInputRef = useRef<HTMLInputElement>(null);
   const terminalScreenRef = useRef<HTMLDivElement>(null);
+
+  // Active Tab from store or fallback
+  const activeTabId = store.activeTabId || store.terminalTabs[0]?.id || "term_tab_1";
+  const activeTabObj =
+    store.terminalTabs.find((t) => t.id === activeTabId) || store.terminalTabs[0];
+  const isLogsTab = activeTabObj?.type === "logs";
 
   // Auto-scroll terminal screen to bottom on new run or chunk
   useEffect(() => {
     if (terminalScreenRef.current) {
       terminalScreenRef.current.scrollTop = terminalScreenRef.current.scrollHeight;
     }
-  }, [store.runs, latestRun?.stdout, latestRun?.stderr, isRunning]);
+  }, [store.runs, latestRun?.stdout, latestRun?.stderr, isRunning, activeTabId]);
 
   // Update latestRun when runs change
   useEffect(() => {
@@ -79,18 +70,20 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
   const projectPath = store.lastProjectPath || (store.selectedProjectId ? store.activeCwd : null);
 
   const effectiveCwd = isRootScope ? "/" : projectPath || projectCwd || store.activeCwd || "/";
-  const scopeName = isRootScope ? "root" : projectTitle || "project";
+  const scopeName = isRootScope ? "root" : projectTitle || "op";
+  const cwdDisplay =
+    effectiveCwd === "/" ? "/" : effectiveCwd.split("/").filter(Boolean).pop() || effectiveCwd;
 
   const handleAskAiToFix = useCallback(() => {
     if (!latestRun) return;
-    const prompt = `I ran the terminal command:\n\`${latestRun.command}\`\n\nIt failed with exit code ${latestRun.exitCode ?? "error"}.\nError / Output:\n\`\`\`\n${latestRun.stderr || latestRun.stdout || "Command failed with no output"}\n\`\`\`\nPlease diagnose the cause of this error and tell me how to fix it or give me the fixed command to run.`;
+    const prompt = `I ran the terminal command in ${scopeName}:\n\`${latestRun.command}\`\n\nIt failed with exit code ${latestRun.exitCode ?? "error"}.\nError Output:\n\`\`\`\n${latestRun.stderr || latestRun.stdout || "Command failed with no output"}\n\`\`\`\nPlease diagnose the cause of this error and tell me how to fix it or give me the fixed command to run.`;
     window.dispatchEvent(new CustomEvent("t3:insert-speech-text", { detail: { text: prompt } }));
     toastManager.add({
       type: "info",
       title: "Sent to AI Chat",
-      description: "Terminal error diagnosis prompt inserted into composer.",
+      description: "Terminal error diagnosis prompt inserted into conversation.",
     });
-  }, [latestRun]);
+  }, [latestRun, scopeName]);
 
   const handleExecute = useCallback(
     async (overrideCommand?: string) => {
@@ -101,25 +94,16 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
       // Clear screen shortcut
       if (trimmed === "clear" || trimmed === "cls") {
         setCommand("");
-        setRawTerminalInput("");
         setLatestRun(null);
         terminalStore.clearRuns();
         return;
       }
 
-      // Translate Roman Urdu or natural shortcut (e.g. "free ram dekho" -> "free -h", "deploy" -> deploy pipeline)
-      const translated = translatePromptToBashCommand(
-        trimmed,
-        effectiveCwd,
-        store.accessKeys.filter((k) => k.enabled),
-      );
-
-      // Clear commands immediately so input feels responsive
+      // Clear command input immediately so user sees responsiveness
       setCommand("");
-      setRawTerminalInput("");
 
-      // Auto-elevate with sudo if command is marked as always-allowed or user is in full-access mode for root commands
-      let finalCommandToRun = translated || trimmed;
+      // Auto-elevate with sudo if command is marked as always-allowed or user is in full-access mode for systemctl/apt
+      let finalCommandToRun = trimmed;
       if (
         !finalCommandToRun.startsWith("sudo ") &&
         (store.isCommandAlwaysAllowed(finalCommandToRun) ||
@@ -133,6 +117,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
 
       const optimisticRun: TerminalCommandRun = {
         id: "temp_" + Date.now(),
+        tabId: activeTabId,
         command: finalCommandToRun,
         cwd: effectiveCwd,
         status: "running",
@@ -146,19 +131,17 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
       };
       setLatestRun(optimisticRun);
       setIsRunning(true);
-      setIsTrayCollapsed(false);
       setHistoryIndex(null);
-      setActiveTab("bash");
 
       try {
         const run = await terminalStore.runCommand(finalCommandToRun, effectiveCwd);
         setLatestRun(run);
-        setIsTrayCollapsed(false);
       } catch (err) {
         console.error("Command execution error:", err);
         const errMsg = err instanceof Error ? err.message : String(err);
         const failedRun: TerminalCommandRun = {
           id: "err_" + Date.now(),
+          tabId: activeTabId,
           command: finalCommandToRun,
           cwd: effectiveCwd,
           status: "error",
@@ -171,7 +154,6 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
           mode: "bash",
         };
         setLatestRun(failedRun);
-        setIsTrayCollapsed(false);
         toastManager.add({
           type: "error",
           title: "Execution Error",
@@ -186,9 +168,9 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
       command,
       isRunning,
       effectiveCwd,
-      store.accessKeys,
       store.permissionMode,
-      store.alwaysAllowedCommands,
+      store.isCommandAlwaysAllowed,
+      activeTabId,
       isRootScope,
       scopeName,
     ],
@@ -208,9 +190,8 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
     }
   }, [latestRun]);
 
-  // Load journalctl server logs for Tab 2
+  // Load journalctl server logs for Logs Tab
   const handleLoadLogs = useCallback(async () => {
-    setActiveTab("logs");
     setIsLoadingLogs(true);
     try {
       const res = await executeTerminalCommand(
@@ -239,10 +220,9 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
         const sudoCmd = cmd.trim().startsWith("sudo ") ? cmd.trim() : `sudo ${cmd.trim()}`;
         const run = await terminalStore.runCommand(sudoCmd, effectiveCwd);
         setLatestRun(run);
-        setIsTrayCollapsed(false);
         toastManager.add({
           type: "success",
-          title: "Allowed & Executed with Sudo",
+          title: "Executed with Sudo",
           description: `Ran '${sudoCmd}' successfully with elevated permissions.`,
         });
       } catch (err) {
@@ -269,7 +249,6 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
         const sudoCmd = cmd.trim().startsWith("sudo ") ? cmd.trim() : `sudo ${cmd.trim()}`;
         const run = await terminalStore.runCommand(sudoCmd, effectiveCwd);
         setLatestRun(run);
-        setIsTrayCollapsed(false);
         toastManager.add({
           type: "success",
           title: "Saved: Always Allowed",
@@ -356,14 +335,6 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
     }
   };
 
-  const handleRawTerminalKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      e.stopPropagation();
-      void handleExecute(rawTerminalInput);
-    }
-  };
-
   const handleCopyOutput = () => {
     if (!latestRun) return;
     const text = [latestRun.stdout, latestRun.stderr].filter(Boolean).join("\n");
@@ -372,18 +343,25 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Quick Action Chips definitions
-  const quickChips = [
-    { label: "📁 ls -la", cmd: "ls -la" },
-    { label: "💾 free -h", cmd: "free -h" },
-    { label: "⚡ git status", cmd: "git status" },
-    { label: "⏱ uptime", cmd: "uptime" },
-    { label: "⚙️ autojobs status", cmd: "systemctl status autojobs.service --no-pager" },
-    { label: "💿 df -h /", cmd: "df -h /" },
+  // 2-Line Smart Action Suggestions (Title on top, muted exact bash command below)
+  const smartSuggestions = [
+    { title: "📁 List Directory", cmd: "ls -la", desc: "View all files & folders" },
+    { title: "💾 Check Free RAM", cmd: "free -h", desc: "RAM usage & buffer" },
+    { title: "⚡ Git Status", cmd: "git status", desc: "Branch & modified files" },
+    { title: "⏱ VPS Uptime", cmd: "uptime", desc: "Server load & uptime" },
+    {
+      title: "⚙️ AutoJobs Service",
+      cmd: "systemctl status autojobs.service --no-pager",
+      desc: "Check service health",
+    },
+    { title: "💿 Disk Usage", cmd: "df -h /", desc: "Available root storage" },
+    { title: "🔄 Pull Latest Code", cmd: "git pull origin main", desc: "Fetch & pull latest code" },
+    { title: "🔍 Active Ports", cmd: "ss -tulpn", desc: "List listening ports" },
+    { title: "🧹 Clear Screen", cmd: "clear", desc: "Clear console history" },
   ];
 
-  // History runs to display chronologically in the terminal screen
-  const runsToDisplay = store.runs.slice(0, 8).reverse();
+  // Runs to display chronologically in the terminal screen
+  const runsToDisplay = store.runs.slice(0, 15).reverse();
 
   return (
     <div
@@ -393,83 +371,103 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
       )}
     >
       {/* ============================================================== */}
-      {/* 1. TOP TAB & ACTION CONTROLS BAR (SPLIT STUDIO HEADER)         */}
+      {/* 1. MULTI-TERMINAL TAB BAR & ACTION CONTROLS                    */}
       {/* ============================================================== */}
-      <div className="flex items-center justify-between px-3 h-10 bg-[#111116] border-b border-white/[0.08] select-none text-xs shrink-0">
-        {/* Left Tabs */}
-        <div className="flex items-center gap-1.5 min-w-0">
-          {/* Tab 1: bash */}
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab("bash");
-            }}
-            className={cn(
-              "flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] font-mono text-3xs font-semibold border transition-all cursor-pointer active:scale-95",
-              activeTab === "bash"
-                ? "bg-[#1f1f28] text-emerald-400 border-white/[0.14] shadow-xs"
-                : "text-zinc-400 hover:text-zinc-200 border-transparent",
-            )}
-          >
-            <span className="size-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]" />
-            <span>1: bash ({scopeName})</span>
-          </button>
+      <div className="flex items-center justify-between px-3 h-10 bg-[#101015] border-b border-white/[0.08] select-none text-xs shrink-0">
+        {/* Dynamic Multi-Terminal Tabs */}
+        <div className="flex items-center gap-1.5 min-w-0 overflow-x-auto [scrollbar-width:none]">
+          {store.terminalTabs.map((tab) => {
+            const isActive = tab.id === activeTabId;
+            return (
+              <div
+                key={tab.id}
+                onClick={() => {
+                  terminalStore.setActiveTabId(tab.id);
+                  if (tab.type === "logs") {
+                    void handleLoadLogs();
+                  }
+                }}
+                className={cn(
+                  "group flex items-center gap-1.5 px-2.5 py-1 rounded-[6px] font-mono text-3xs font-semibold border transition-all cursor-pointer active:scale-95 shrink-0",
+                  isActive
+                    ? tab.type === "logs"
+                      ? "bg-[#1c1c28] text-sky-400 border-sky-500/40 shadow-xs"
+                      : "bg-[#181822] text-emerald-400 border-emerald-500/40 shadow-xs"
+                    : "text-zinc-400 hover:text-zinc-200 border-white/[0.04] hover:bg-white/[0.04]",
+                )}
+              >
+                <span
+                  className={cn(
+                    "size-1.5 rounded-full shrink-0",
+                    isActive
+                      ? tab.type === "logs"
+                        ? "bg-sky-400 shadow-[0_0_6px_rgba(56,189,248,0.8)]"
+                        : "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]"
+                      : "bg-zinc-600",
+                  )}
+                />
+                <span className="truncate max-w-[110px]">{tab.name}</span>
+                {store.terminalTabs.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      terminalStore.closeTerminalTab(tab.id);
+                    }}
+                    title="Close Terminal Tab"
+                    className="opacity-0 group-hover:opacity-100 p-0.5 hover:text-rose-400 transition-opacity ml-0.5"
+                  >
+                    <X className="size-2.5" />
+                  </button>
+                )}
+              </div>
+            );
+          })}
 
-          {/* Tab 2: server logs */}
+          {/* Plus Tab: Add New Terminal Instance */}
           <button
             type="button"
             onClick={() => {
-              void handleLoadLogs();
-            }}
-            className={cn(
-              "flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] font-mono text-3xs font-medium border transition-all cursor-pointer active:scale-95",
-              activeTab === "logs"
-                ? "bg-[#1f1f28] text-sky-400 border-white/[0.14] shadow-xs"
-                : "text-zinc-400 hover:text-zinc-200 border-transparent",
-            )}
-          >
-            <span>2: server logs</span>
-          </button>
-
-          {/* Plus Tab (Focus Input) */}
-          <button
-            type="button"
-            onClick={() => {
-              setCommand("");
-              setRawTerminalInput("");
+              const newTabId = terminalStore.addTerminalTab();
               inputRef.current?.focus();
+              toastManager.add({
+                type: "info",
+                title: "New Terminal Opened",
+                description: `Created dedicated session: Terminal ${store.terminalTabs.length + 1}`,
+              });
             }}
-            title="Focus Terminal Prompt"
-            className="p-1 rounded-[4px] text-zinc-400 hover:text-white hover:bg-white/[0.06] transition-colors cursor-pointer"
+            title="Open New Terminal Session (+)"
+            className="flex items-center gap-1 px-2 py-1 rounded-[6px] text-zinc-400 hover:text-white bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] text-3xs font-mono transition-all cursor-pointer shrink-0"
           >
             <Plus className="size-3" />
+            <span className="hidden sm:inline">New Terminal</span>
           </button>
         </div>
 
         {/* Right Action Controls */}
-        <div className="flex items-center gap-1.5 text-zinc-400 shrink-0">
-          {/* Simulated Loading Status during execution */}
+        <div className="flex items-center gap-1.5 text-zinc-400 shrink-0 ml-2">
+          {/* Live Spinner when running */}
           {isRunning && (
             <div className="flex items-center gap-1.5 text-emerald-400 font-mono text-4xs font-medium mr-1 animate-pulse">
               <Loader2 className="size-3 animate-spin text-emerald-400" />
-              <span className="hidden sm:inline">Executing on VPS...</span>
+              <span className="hidden sm:inline">Executing...</span>
             </div>
           )}
 
-          {/* Stop Button if process is running */}
+          {/* Stop Button (Ctrl+C) */}
           {isRunning && (
             <button
               type="button"
               onClick={() => void handleKill()}
               title="Stop running process (Ctrl+C)"
-              className="flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 font-medium text-4xs transition-all cursor-pointer mr-0.5 active:scale-95"
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 font-medium text-4xs transition-all cursor-pointer active:scale-95"
             >
               <Square className="size-2 fill-current" />
               <span>Stop</span>
             </button>
           )}
 
-          {/* Ask AI to Fix Button if command failed */}
+          {/* Ask AI to Fix Button (on error) */}
           {(latestRun?.status === "error" ||
             (latestRun?.exitCode !== undefined && latestRun?.exitCode !== 0) ||
             (latestRun?.stderr && latestRun.stderr.length > 0)) && (
@@ -477,7 +475,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
               type="button"
               onClick={handleAskAiToFix}
               title="Ask AI in Left Pane to diagnose and fix this error"
-              className="flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 border border-purple-500/40 font-medium text-4xs transition-all cursor-pointer shadow-xs mr-0.5 active:scale-95"
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 border border-purple-500/40 font-medium text-4xs transition-all cursor-pointer shadow-xs active:scale-95"
             >
               <Sparkles className="size-2.5 text-purple-400" />
               <span>✨ Fix with AI</span>
@@ -502,17 +500,17 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
               setLatestRun(null);
               setLogsOutput(null);
             }}
-            title="Clear Terminal Output"
+            title="Clear Console Output"
             className="px-1.5 py-0.5 rounded-[4px] text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] text-4xs font-mono transition-colors cursor-pointer"
           >
             Clear
           </button>
 
-          {/* Close Entire Studio Pane */}
+          {/* Close Panel Button */}
           <button
             type="button"
             onClick={() => terminalStore.setQuickBarOpen(false)}
-            title="Close Terminal Pane"
+            title="Close Terminal Studio"
             className="p-1 rounded-[4px] text-zinc-400 hover:text-white hover:bg-white/[0.08] transition-colors cursor-pointer ml-1"
           >
             <X className="size-3.5" />
@@ -521,7 +519,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
       </div>
 
       {/* ============================================================== */}
-      {/* 2. DEDICATED MONOSPACE TERMINAL SCREEN BODY (FULL HEIGHT)       */}
+      {/* 2. DEDICATED FULL-HEIGHT TERMINAL CONSOLE SCREEN               */}
       {/* ============================================================== */}
       <div
         ref={terminalScreenRef}
@@ -530,13 +528,13 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
         {/* Banner line */}
         <div className="text-zinc-500 pb-1.5 border-b border-white/[0.06] select-none flex items-center justify-between text-4xs">
           <span>
-            AutoCode Linux VPS Terminal v2.4 (Host: {isRootScope ? "VPS Root" : scopeName})
+            AutoCode Linux VPS Terminal v2.5 (Host: {isRootScope ? "VPS Root" : scopeName})
           </span>
           <span className="text-zinc-600">cwd: {effectiveCwd}</span>
         </div>
 
-        {/* TAB 1: BASH RUNS & INTERACTIVE PROMPT */}
-        {activeTab === "bash" && (
+        {/* TAB: BASH EXECUTION SCREEN */}
+        {!isLogsTab && (
           <>
             {/* Sudo Permission Required Prompt Card */}
             {isPermissionError && (
@@ -555,7 +553,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
                   <code className="text-amber-300 font-mono bg-black/40 px-1 py-0.5 rounded text-4xs">
                     {effectiveCwd}
                   </code>
-                  . You can allow it once or save permission permanently.
+                  .
                 </p>
                 <div className="flex items-center gap-2 pt-0.5">
                   <button
@@ -591,9 +589,9 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
 
             {/* Render recent runs chronologically */}
             {runsToDisplay.length === 0 ? (
-              <div className="text-zinc-600 italic py-3 text-center">
-                Terminal ready. Type a command below or click a quick run chip to execute directly
-                on VPS host.
+              <div className="text-zinc-600 italic py-4 text-center">
+                Terminal ready. Select a suggestion card below or type any command to run on VPS
+                host.
               </div>
             ) : (
               runsToDisplay.map((run) => (
@@ -601,7 +599,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
                   <div className="flex items-center justify-between text-zinc-400">
                     <div className="flex items-center gap-1.5">
                       <span className="text-emerald-400 font-semibold">
-                        root@{scopeName}:{effectiveCwd}#
+                        root@{scopeName}:{effectiveCwd === "/" ? "/" : cwdDisplay}#
                       </span>
                       <span className="text-white font-semibold">{run.command}</span>
                     </div>
@@ -637,40 +635,23 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
                   )}
                   {!run.stdout && !run.stderr && run.status === "success" && (
                     <div className="text-zinc-500 italic pl-2">
-                      (Command completed with no output)
+                      (Command executed with no output)
                     </div>
                   )}
                   {!run.stdout && !run.stderr && run.status === "running" && (
                     <div className="flex items-center gap-1.5 text-zinc-400 italic py-0.5 pl-2">
                       <Loader2 className="size-3 animate-spin text-emerald-400" />
-                      <span>Executing command on host...</span>
+                      <span>Executing command on VPS host...</span>
                     </div>
                   )}
                 </div>
               ))
             )}
-
-            {/* Direct Command Input Line inside Terminal */}
-            <div className="flex items-center gap-1.5 pt-2 border-t border-white/[0.06]">
-              <span className="text-emerald-400 font-semibold shrink-0 select-none">
-                root@{scopeName}:#
-              </span>
-              <input
-                ref={rawTerminalInputRef}
-                type="text"
-                value={rawTerminalInput}
-                onChange={(e) => setRawTerminalInput(e.target.value)}
-                onKeyDown={handleRawTerminalKeyDown}
-                placeholder="Type raw bash command here (Enter to run)..."
-                disabled={isRunning}
-                className="flex-1 bg-transparent text-3xs font-mono text-zinc-100 placeholder:text-zinc-600 focus:outline-none"
-              />
-            </div>
           </>
         )}
 
-        {/* TAB 2: SERVER SYSTEMD LOGS */}
-        {activeTab === "logs" && (
+        {/* TAB: SYSTEMD JOURNALCTL LOGS */}
+        {isLogsTab && (
           <div className="space-y-1">
             <div className="flex items-center justify-between pb-1 border-b border-white/[0.06] text-zinc-400">
               <span className="text-sky-400 font-semibold">
@@ -683,7 +664,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
                 className="flex items-center gap-1 px-2 py-0.5 rounded bg-white/[0.06] hover:bg-white/[0.1] text-zinc-300 text-4xs font-mono cursor-pointer"
               >
                 <RotateCcw className={cn("size-2.5", isLoadingLogs && "animate-spin")} />
-                <span>Refresh</span>
+                <span>Refresh Logs</span>
               </button>
             </div>
             {isLoadingLogs ? (
@@ -698,7 +679,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
               />
             ) : (
               <div className="text-zinc-500 italic py-2">
-                Click Refresh to fetch service journalctl logs.
+                Click Refresh Logs to fetch service journalctl logs.
               </div>
             )}
           </div>
@@ -706,48 +687,34 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
       </div>
 
       {/* ============================================================== */}
-      {/* 3. BOTTOM ACTION & INPUT DOCK (SPLIT STUDIO BOTTOM)           */}
+      {/* 3. 2-LINE SMART SUGGESTIONS & SINGLE DIRECT TERMINAL PROMPT    */}
       {/* ============================================================== */}
-      <div className="p-2.5 bg-[#0d0d12] border-t border-white/[0.08] shrink-0 space-y-2">
-        {/* Quick Action Chips */}
-        <div className="flex items-center gap-1 overflow-x-auto py-0.5 px-0.5 text-xs select-none [scrollbar-width:none]">
-          <span className="text-4xs text-zinc-500 font-mono uppercase font-semibold shrink-0 mr-0.5">
-            QUICK:
-          </span>
-          {quickChips.map((chip) => (
+      <div className="p-2.5 bg-[#0e0e14] border-t border-white/[0.08] shrink-0 space-y-2">
+        {/* Horizontal Scrollable 2-Line Smart Action Cards */}
+        <div className="flex items-center gap-2 overflow-x-auto py-0.5 px-0.5 [scrollbar-width:thin] select-none">
+          {smartSuggestions.map((item) => (
             <button
-              key={chip.cmd}
+              key={item.cmd}
               type="button"
-              onClick={() => void handleExecute(chip.cmd)}
+              onClick={() => void handleExecute(item.cmd)}
               disabled={isRunning}
-              className="flex items-center gap-1 px-2 py-0.5 rounded-[5px] bg-[#1a1a22] hover:bg-[#252530] text-zinc-300 hover:text-white font-mono text-4xs border border-white/[0.07] transition-all cursor-pointer shrink-0 active:scale-95 shadow-xs"
+              className="flex flex-col text-left px-2.5 py-1.5 rounded-lg bg-[#15151e] hover:bg-[#20202d] border border-white/[0.08] hover:border-emerald-500/50 transition-all cursor-pointer shrink-0 active:scale-95 group shadow-xs"
             >
-              {chip.label}
+              <span className="text-3xs font-semibold text-zinc-200 group-hover:text-emerald-400 transition-colors">
+                {item.title}
+              </span>
+              <span className="text-4xs font-mono text-zinc-500 group-hover:text-zinc-400">
+                $ {item.cmd}
+              </span>
             </button>
           ))}
         </div>
 
-        {/* Sleek Command Input Bar */}
-        <div className="flex items-center gap-1.5 rounded-[8px] border border-white/[0.12] bg-[#15151a] px-2 py-1 shadow-md focus-within:border-emerald-500/60 focus-within:ring-1 focus-within:ring-emerald-500/20 transition-all">
-          {/* Dropdown Button with Scope Badge */}
-          <button
-            type="button"
-            onClick={() => setShowCommandsMenu(true)}
-            title={`Common Commands & Shortcuts (${scopeName})`}
-            className="flex items-center gap-1 px-1.5 h-[22px] rounded-[5px] bg-[#22222a] hover:bg-[#2a2a35] text-zinc-300 border border-white/[0.08] transition-all cursor-pointer shrink-0 shadow-xs active:scale-[0.98]"
-          >
-            <span className="font-mono text-4xs font-semibold max-w-[100px] truncate text-emerald-400">
-              {scopeName}
-            </span>
-            <ChevronDown className="size-2.5 shrink-0 opacity-80 text-zinc-400" />
-          </button>
-
-          {/* Terminal Prompt Prefix */}
-          <span className="font-mono text-4xs font-semibold text-emerald-400 shrink-0 select-none">
-            root@{scopeName}:#
+        {/* The ONLY Clean Direct Terminal Input Prompt (No Duplicate Boxes!) */}
+        <div className="flex items-center gap-2 rounded-lg bg-[#08080c] border border-white/[0.12] px-2.5 py-1.5 focus-within:border-emerald-500/60 focus-within:ring-1 focus-within:ring-emerald-500/20 transition-all shadow-md">
+          <span className="text-emerald-400 font-mono font-bold text-xs select-none shrink-0">
+            root@{scopeName}:{cwdDisplay}#
           </span>
-
-          {/* Input field */}
           <input
             ref={inputRef}
             type="text"
@@ -755,62 +722,36 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
             onChange={(e) => setCommand(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={isRunning}
-            placeholder={
-              store.selectedProjectId && !isRootScope
-                ? `Run command in ${scopeName}...`
-                : "Run command in root (/)..."
-            }
-            className="flex-1 min-w-0 bg-transparent text-[12px] text-zinc-100 placeholder:text-zinc-500 focus:outline-none font-mono"
+            placeholder="Type command (e.g. ls, free -h, git status) and press Enter..."
+            className="flex-1 min-w-0 bg-transparent text-xs font-mono text-white placeholder:text-zinc-600 focus:outline-none"
           />
-
-          {/* Action Button: Send or Stop */}
-          <div className="flex items-center gap-1 shrink-0">
-            {isRunning ? (
-              <button
-                type="button"
-                onClick={() => void handleKill()}
-                title="Stop running command (Ctrl+C)"
-                className="inline-flex items-center justify-center size-[24px] rounded-[5px] bg-rose-500 hover:bg-rose-600 text-white shadow-xs transition-all cursor-pointer active:scale-[0.96]"
-              >
-                <Square className="size-2.5 fill-current" />
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  void handleExecute(command);
-                }}
-                disabled={!command.trim() || isRunning}
-                title="Execute Command (Enter)"
-                className={cn(
-                  "inline-flex items-center justify-center size-[24px] rounded-[5px] transition-all cursor-pointer",
-                  command.trim() && !isRunning
-                    ? "bg-emerald-500 hover:bg-emerald-600 text-white shadow-xs active:scale-[0.96]"
-                    : "text-zinc-600 hover:text-zinc-400 cursor-not-allowed",
-                )}
-              >
-                <SendHorizontal className="size-3" />
-              </button>
-            )}
-          </div>
+          {isRunning ? (
+            <button
+              type="button"
+              onClick={() => void handleKill()}
+              title="Stop running command (Ctrl+C)"
+              className="p-1 rounded bg-rose-500/30 hover:bg-rose-500 text-rose-300 hover:text-white transition-all cursor-pointer shrink-0 active:scale-95"
+            >
+              <Square className="size-3 fill-current" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void handleExecute(command)}
+              disabled={!command.trim() || isRunning}
+              title="Run Command (Enter)"
+              className={cn(
+                "p-1 rounded transition-all cursor-pointer shrink-0",
+                command.trim() && !isRunning
+                  ? "bg-emerald-500 hover:bg-emerald-400 text-black shadow-xs font-bold active:scale-95"
+                  : "text-zinc-600 cursor-not-allowed",
+              )}
+            >
+              <SendHorizontal className="size-3" />
+            </button>
+          )}
         </div>
       </div>
-
-      {/* Categorized Common Commands Modal */}
-      <TerminalCommandsMenu
-        isOpen={showCommandsMenu}
-        onClose={() => setShowCommandsMenu(false)}
-        onSelectCommand={(cmd, autoRun) => {
-          if (autoRun) {
-            void handleExecute(cmd);
-          } else {
-            setCommand(cmd);
-            inputRef.current?.focus();
-          }
-        }}
-      />
     </div>
   );
 });
