@@ -7,6 +7,7 @@ import {
   Server,
   Key,
   Plus,
+  MessageSquare,
   Trash2,
   Check,
   Terminal,
@@ -142,15 +143,15 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
           }}
           className="flex-1 flex items-center gap-1.5 overflow-x-auto py-0.5 px-0.5 scroll-smooth [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
         >
-          {/* 1. New Terminal Chat Button */}
+          {/* 1. New Terminal Chat Button: Plus icon and Chat icon only */}
           <button
             type="button"
             onClick={handleCreateNewChat}
-            className="flex items-center gap-1 px-2 py-0.5 rounded-[5px] bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 text-3xs font-medium shrink-0 cursor-pointer shadow-xs transition-all active:scale-[0.98]"
+            className="flex items-center gap-1 px-1.5 py-0.5 rounded-[5px] bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 text-3xs font-medium shrink-0 cursor-pointer shadow-xs transition-all active:scale-[0.96]"
             title="Start a Fresh Clean Terminal Chat"
           >
             <Plus className="size-2.5" />
-            <span className="font-semibold text-4xs">New Chat</span>
+            <MessageSquare className="size-3" />
           </button>
 
           {/* 2. Terminal Chats History Button */}
