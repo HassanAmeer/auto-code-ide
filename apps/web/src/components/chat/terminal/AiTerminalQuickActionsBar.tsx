@@ -152,7 +152,7 @@ export const AiTerminalQuickActionsBar = memo(function AiTerminalQuickActionsBar
     <div
       className={cn(
         isHero
-          ? "w-full max-w-xl mx-auto flex items-center gap-1 p-1 rounded-[10px] bg-[#141416]/95 backdrop-blur-xl border border-white/[0.09] shadow-xl select-none transition-all"
+          ? "w-full max-w-xl mx-auto flex items-center gap-1 p-0.5 bg-transparent border-none shadow-none select-none transition-all"
           : "w-full bg-[#111113]/90 backdrop-blur-xl border-b border-white/[0.06] select-none flex items-center gap-1 px-2 py-1 transition-all z-10",
         className,
       )}

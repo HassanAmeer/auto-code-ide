@@ -148,7 +148,7 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
             type="button"
             onClick={handleCreateNewChat}
             className="flex items-center gap-1 px-1.5 py-0.5 rounded-[5px] bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 text-3xs font-medium shrink-0 cursor-pointer shadow-xs transition-all active:scale-[0.96]"
-            title="Start a Fresh Clean Terminal Chat"
+            title="Start New Chat"
           >
             <Plus className="size-2.5" />
             <MessageSquare className="size-3" />
@@ -256,7 +256,7 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
                     <Check className="size-2" />
                   </button>
 
-                  {/* Center: Key Name & Host Info */}
+                  {/* Center: Key Title (max 10-12 chars + ..) */}
                   <button
                     type="button"
                     onClick={() => terminalStore.setSelectedKey(key.id)}
@@ -264,12 +264,12 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
                     className="flex items-center gap-1 cursor-pointer text-left"
                   >
                     <Key className="size-2 text-sky-400 shrink-0" />
-                    <span className="truncate max-w-[90px] sm:max-w-[130px]">{key.name}</span>
-                    {key.host && (
-                      <span className="text-4xs opacity-70 font-mono hidden md:inline">
-                        ({key.user || "root"}@{key.host})
-                      </span>
-                    )}
+                    <span>
+                      {(() => {
+                        const title = (key.name || key.notes || "SSH").trim();
+                        return title.length > 12 ? `${title.slice(0, 10)}..` : title;
+                      })()}
+                    </span>
                   </button>
 
                   {/* Right Side: Edit Icon Button */}

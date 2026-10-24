@@ -2,6 +2,7 @@ import { memo, useState, useEffect, useMemo } from "react";
 import {
   X,
   Plus,
+  MessageSquare,
   Trash2,
   Terminal,
   Clock,
@@ -123,10 +124,11 @@ export const TerminalChatsSheet = memo(function TerminalChatsSheet({
             <button
               type="button"
               onClick={handleCreateNewChat}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs transition-all shadow-xs cursor-pointer"
+              className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs transition-all shadow-xs cursor-pointer active:scale-[0.96]"
+              title="Start New Chat"
             >
               <Plus className="size-3.5" />
-              <span>New Chat</span>
+              <MessageSquare className="size-3.5" />
             </button>
             <button
               type="button"
