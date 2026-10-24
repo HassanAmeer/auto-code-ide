@@ -385,23 +385,37 @@ export function diagnoseCommandFailure(
   };
 }
 
+export interface PromptTranslationContext {
+  cwd?: string | undefined;
+  scopeMode?: "root" | "project" | undefined;
+  projectName?: string | null | undefined;
+  projectPath?: string | null | undefined;
+  activeKeys?: TerminalAccessKey[] | undefined;
+  selectedKeyId?: string | null | undefined;
+  notes?: string | null | undefined;
+}
+
 /**
  * Intelligent prompt-to-command translator for natural language (Urdu & English)
+ * Fully context-aware of selected project, git status, SSH keys, notes, and VPS root.
  */
 export function translatePromptToBashCommand(
   prompt: string,
   cwd: string = "/",
   activeKeys: TerminalAccessKey[] = [],
+  context?: PromptTranslationContext,
 ): string {
   const p = prompt.trim().toLowerCase();
+  const effectiveCwd = context?.projectPath || cwd || "/";
+  const effectiveKeys = context?.activeKeys ?? activeKeys;
 
-  // If active keys exist, see if prompt asks to connect, ping, or execute on one of them
-  const sshOrServerKey = activeKeys.find((k) => k.type === "ssh" || k.type === "server");
-  const apiKey = activeKeys.find((k) => k.type === "api");
-  const targetedKey = activeKeys.find((k) => k.name && p.includes(k.name.toLowerCase()));
+  // 1. SSH & Remote Server Targeting
+  const sshOrServerKey = effectiveKeys.find((k) => k.type === "ssh" || k.type === "server");
+  const apiKey = effectiveKeys.find((k) => k.type === "api");
+  const targetedKey = effectiveKeys.find((k) => k.name && p.includes(k.name.toLowerCase()));
   const effectiveKey = targetedKey ?? sshOrServerKey;
 
-  // Remote SSH connection requests (e.g. "connect to server", "ssh karo", "login to vps", or remote command execution)
+  // Remote SSH connection requests (e.g. "connect to server", "ssh karo", "login to vps")
   if (
     effectiveKey &&
     effectiveKey.host &&
@@ -433,7 +447,7 @@ export function translatePromptToBashCommand(
     return `ping -c 4 ${effectiveKey.host} || nc -zv -w 3 ${effectiveKey.host} ${effectiveKey.port || 22}`;
   }
 
-  // Remote command execution on targeted server (e.g. "vps par disk check karo", "server disk space")
+  // Remote command execution on targeted server
   if (
     effectiveKey &&
     effectiveKey.host &&
@@ -463,53 +477,211 @@ export function translatePromptToBashCommand(
     return `curl -s -H "Authorization: Bearer ${apiKey.secret}" "https://${targetHost}"`;
   }
 
-  // If already a shell command, return directly
+  // 2. SSH Keys & Notes Context Queries
   if (
-    p.startsWith("ls") ||
-    p.startsWith("cd ") ||
-    p.startsWith("df") ||
-    p.startsWith("free") ||
-    p.startsWith("git ") ||
-    p.startsWith("npm ") ||
-    p.startsWith("docker ") ||
-    p.startsWith("pm2 ") ||
-    p.startsWith("curl ") ||
-    p.startsWith("cat ") ||
-    p.startsWith("grep ") ||
-    p.startsWith("tail ") ||
-    p.startsWith("systemctl ") ||
-    p.startsWith("ps ") ||
-    p.startsWith("top") ||
-    p.startsWith("htop") ||
-    p.startsWith("ss ") ||
-    p.startsWith("netstat") ||
-    p.includes("|") ||
-    p.includes(">")
+    p.includes("ssh key") ||
+    p.includes("keys dekho") ||
+    p.includes("keys list") ||
+    p.includes("active keys") ||
+    p.includes("server list") ||
+    (p.includes("key") && (p.includes("kya") || p.includes("show") || p.includes("list")))
   ) {
-    return prompt.trim();
+    if (effectiveKeys.length === 0) {
+      return `echo "No SSH or API access keys are currently stored. Click '+ SSH' in header to add one."`;
+    }
+    const keySummaries = effectiveKeys
+      .map(
+        (k, i) =>
+          `[${i + 1}] ${k.name} (${k.type.toUpperCase()}) -> ${k.user || "root"}@${k.host || "localhost"}:${k.port || 22}${k.notes ? ` (Notes: ${k.notes.replace(/["\n]/g, " ")})` : ""}`,
+      )
+      .join("\n");
+    return `echo "${keySummaries}"`;
   }
 
-  // Disk space
+  if (
+    p.includes("notes") ||
+    p.includes("note dekho") ||
+    p.includes("notes check") ||
+    p.includes("notes kya")
+  ) {
+    const notesWithKeys = effectiveKeys.filter((k) => k.notes);
+    let out = "=== Stored Notes & Credentials ===\n";
+    if (notesWithKeys.length > 0) {
+      out += notesWithKeys.map((k) => `• ${k.name}: ${k.notes?.replace(/["\n]/g, " ")}`).join("\n");
+    } else {
+      out += "No notes attached to current SSH keys.";
+    }
+    return `echo "${out}"`;
+  }
+
+  // 3. Git Inspection: Last Commit / Previous Changes / What Changed / Errors
+  // (e.g. "last changes check karo", "last commit kya thi", "pichli commit mein kya galti hui", "what changed")
+  if (
+    p.includes("last change") ||
+    p.includes("pichli commit") ||
+    p.includes("last commit") ||
+    p.includes("kya galti") ||
+    p.includes("pichla code") ||
+    p.includes("previous commit") ||
+    p.includes("kya change hua") ||
+    p.includes("what changed") ||
+    p.includes("last modification")
+  ) {
+    return "git log -1 -p --stat";
+  }
+
+  // Git uncommitted changes / what is edited currently
+  if (
+    p.includes("git status") ||
+    p.includes("changes dekho") ||
+    p.includes("kya edit") ||
+    p.includes("uncommitted") ||
+    p.includes("current change") ||
+    p.includes("status check karo")
+  ) {
+    return "git status --short && echo '--- RECENT DIFF STATS ---' && git diff --stat";
+  }
+
+  // Full Git diff
+  if (
+    p.includes("git diff") ||
+    p.includes("code diff") ||
+    p.includes("diff dekho") ||
+    p.includes("show diff")
+  ) {
+    return "git diff";
+  }
+
+  // Push to GitHub (e.g. "github per push karo", "push to github", "git push")
+  if (
+    p.includes("push") &&
+    (p.includes("git") || p.includes("github") || p.includes("karo") || p.includes("code"))
+  ) {
+    return `git status --short && git add -A && git commit -m "feat: updates via AI Terminal [$(date +'%Y-%m-%d %H:%M:%S')]" && git push origin HEAD`;
+  }
+
+  // Pull from GitHub
+  if (
+    p.includes("pull") &&
+    (p.includes("git") || p.includes("github") || p.includes("karo") || p.includes("code"))
+  ) {
+    return "git pull";
+  }
+
+  // Git commits history / log
+  if (
+    p.includes("git log") ||
+    p.includes("commit history") ||
+    p.includes("commits dekho") ||
+    p.includes("history check")
+  ) {
+    return "git log -n 6 --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset'";
+  }
+
+  // Git branches / remote
+  if (p.includes("git branch") || p.includes("branches dekho") || p.includes("branch check")) {
+    return "git branch -a && git status -sb";
+  }
+  if (p.includes("remote") && (p.includes("git") || p.includes("repo") || p.includes("origin"))) {
+    return "git remote -v && git branch -vv";
+  }
+
+  // 4. Project Deployment & Build Pipelines
+  // (e.g. "deploy karo", "project deploy karo", "production deploy")
+  if (
+    p.includes("deploy") ||
+    p.includes("production deploy") ||
+    p.includes("live karo") ||
+    p.includes("deploy project")
+  ) {
+    return `echo "=== Step 1: Checking Git status ===" && git status --short && echo "=== Step 2: Building project ===" && (pnpm --filter @t3tools/web build || npm run build) && echo "=== Step 3: Restarting autojobs service ===" && systemctl restart autojobs.service && sleep 2 && systemctl is-active autojobs.service && echo "=== Safe Deployment Complete & Active! ==="`;
+  }
+
+  // Build commands
+  if (
+    p.includes("build") &&
+    (p.includes("karo") || p.includes("check") || p.includes("run") || p.includes("test"))
+  ) {
+    return "pnpm --filter @t3tools/web build || npm run build";
+  }
+
+  // Package dependencies install
+  if (
+    p.includes("install") &&
+    (p.includes("package") || p.includes("dep") || p.includes("npm") || p.includes("pnpm"))
+  ) {
+    return "pnpm install || npm install";
+  }
+
+  // 5. System Services & VPS Process Management
+  // (e.g. "service restart karo", "autojobs status", "service logs dekho", "journalctl")
+  if (
+    p.includes("restart") &&
+    (p.includes("service") || p.includes("autojobs") || p.includes("jobi") || p.includes("server"))
+  ) {
+    return "systemctl restart autojobs.service && sleep 2 && systemctl is-active autojobs.service && systemctl status autojobs.service --no-pager";
+  }
+
+  if (
+    p.includes("service status") ||
+    p.includes("autojobs status") ||
+    p.includes("jobi status") ||
+    (p.includes("status") && p.includes("service"))
+  ) {
+    return "systemctl status autojobs.service --no-pager";
+  }
+
+  if (
+    p.includes("service log") ||
+    p.includes("crash log") ||
+    p.includes("error log") ||
+    p.includes("journalctl") ||
+    (p.includes("logs") && (p.includes("dekho") || p.includes("check")))
+  ) {
+    return "journalctl -u autojobs.service -n 50 --no-pager";
+  }
+
+  if (p.includes("nginx")) {
+    if (p.includes("restart"))
+      return "nginx -t && systemctl restart nginx && systemctl status nginx --no-pager";
+    return "nginx -t 2>/dev/null && systemctl status nginx --no-pager";
+  }
+
+  // 6. Hardware & Resources (Swap, RAM, Disk, CPU, Uptime)
+  // (e.g. "swap memory check karo", "ram check karo", "nvme space", "top processes")
+  if (p.includes("swap") || p.includes("swap memory") || p.includes("swappiness")) {
+    return "free -h && echo '--- SWAP ACTIVE ---' && swapon --show && echo '--- SYSCTL TUNING ---' && sysctl vm.swappiness vm.vfs_cache_pressure";
+  }
+
+  if (p.includes("ram") || p.includes("memory") || p.includes("free ram")) {
+    return "free -h";
+  }
+
   if (
     p.includes("disk") ||
     p.includes("storage") ||
     p.includes("space") ||
-    p.includes("hard drive")
+    p.includes("hard drive") ||
+    p.includes("nvme")
   ) {
-    return "df -h";
+    return "df -h /";
   }
 
-  // Memory / RAM
-  if (p.includes("ram") || p.includes("memory") || p.includes("free memory")) {
-    return "free -h || free -m";
+  if (
+    p.includes("process") ||
+    p.includes("top process") ||
+    p.includes("high ram") ||
+    p.includes("heavy process") ||
+    p.includes("ram kaun le raha")
+  ) {
+    return "ps aux --sort=-%mem | head -n 12";
   }
 
-  // CPU / Load / Uptime
   if (p.includes("cpu") || p.includes("load") || p.includes("uptime") || p.includes("specs")) {
     return "uptime && lscpu 2>/dev/null | head -n 15 || cat /proc/cpuinfo | grep 'model name' | head -n 2";
   }
 
-  // Ports / Listening services
+  // 7. Ports & Networking
   if (p.includes("port") && (p.includes("kill") || p.includes("stop") || p.includes("free"))) {
     const portMatch = p.match(/\b\d{2,5}\b/);
     if (portMatch) {
@@ -519,62 +691,184 @@ export function translatePromptToBashCommand(
   if (p.includes("port") || p.includes("listening") || p.includes("network listen")) {
     return "ss -tulpn 2>/dev/null || netstat -tulpn 2>/dev/null || lsof -i -P -n | grep LISTEN";
   }
-
-  // Processes / High RAM / High CPU
-  if (
-    p.includes("process") ||
-    p.includes("top process") ||
-    p.includes("high ram") ||
-    p.includes("heavy")
-  ) {
-    return "ps aux --sort=-%mem | head -n 15";
+  if (p.includes("ip") || p.includes("network") || p.includes("internet")) {
+    return "ip -brief address show || ifconfig 2>/dev/null || curl -s ifconfig.me";
   }
 
-  // PM2
-  if (p.includes("pm2")) {
-    if (p.includes("restart")) return "pm2 restart all";
-    if (p.includes("log")) return "pm2 logs --lines 50 --nostream";
-    return "pm2 status";
-  }
-
-  // Docker
-  if (p.includes("docker")) {
-    if (p.includes("stat")) return "docker stats --no-stream";
-    if (p.includes("container") || p.includes("run") || p.includes("ps")) return "docker ps -a";
-    if (p.includes("image")) return "docker images";
-    return "docker ps -a";
-  }
-
-  // Git
-  if (p.includes("git") || p.includes("branch") || p.includes("commit") || p.includes("changes")) {
-    return "git status && git log -n 5 --oneline";
-  }
-
-  // Files / Directory / Largest files
+  // 8. Files / Directory / Search
   if (p.includes("largest") || p.includes("big file") || p.includes("heavy file")) {
-    return `du -ah ${cwd} 2>/dev/null | sort -rh | head -n 12`;
+    return `du -ah ${effectiveCwd} 2>/dev/null | sort -rh | head -n 12`;
   }
   if (
     p.includes("list file") ||
     p.includes("show file") ||
     p.includes("directory") ||
-    p.includes("files")
+    p.includes("files dekho")
   ) {
-    return "ls -la";
+    return "ls -la --color=auto";
+  }
+  if (p.includes("package.json") || p.includes("dependencies dekho")) {
+    return "cat package.json 2>/dev/null | head -n 40 || ls -la";
   }
 
-  // System logs / error logs
-  if (p.includes("log") || p.includes("error") || p.includes("journal")) {
-    return "journalctl -p 3 -xb --no-pager -n 30 2>/dev/null || dmesg -T | tail -n 25";
-  }
-
-  // IP / Network
-  if (p.includes("ip") || p.includes("network") || p.includes("internet")) {
-    return "ip -brief address show || ifconfig 2>/dev/null || curl -s ifconfig.me";
+  // If already a shell command, return directly
+  if (
+    p.startsWith("ls") ||
+    p.startsWith("cd ") ||
+    p.startsWith("df") ||
+    p.startsWith("free") ||
+    p.startsWith("git ") ||
+    p.startsWith("npm ") ||
+    p.startsWith("pnpm ") ||
+    p.startsWith("docker ") ||
+    p.startsWith("pm2 ") ||
+    p.startsWith("curl ") ||
+    p.startsWith("cat ") ||
+    p.startsWith("grep ") ||
+    p.startsWith("tail ") ||
+    p.startsWith("head ") ||
+    p.startsWith("systemctl ") ||
+    p.startsWith("journalctl ") ||
+    p.startsWith("ps ") ||
+    p.startsWith("top") ||
+    p.startsWith("htop") ||
+    p.startsWith("ss ") ||
+    p.startsWith("netstat") ||
+    p.includes("|") ||
+    p.includes(">") ||
+    p.includes("&&")
+  ) {
+    return prompt.trim();
   }
 
   // Default fallback: return prompt trimmed
   return prompt.trim();
+}
+
+/**
+ * Intelligent helper to detect whether an input string is a natural language command
+ * (in Roman Urdu or English) vs a direct raw terminal shell command.
+ */
+export function isNaturalLanguagePrompt(input: string): boolean {
+  const trimmed = input.trim();
+  if (!trimmed) return false;
+
+  // Obvious shell command indicators: starts with binary + flags or contains shell operators
+  if (/^[a-zA-Z0-9_\-\.\/]+\s+-[a-zA-Z0-9]/.test(trimmed)) return false;
+  if (/[|&;><]/.test(trimmed)) return false;
+
+  // Single word known unix commands
+  const firstWord = trimmed.split(/\s+/)[0]?.toLowerCase();
+  const knownBinaries = new Set([
+    "ls",
+    "cd",
+    "pwd",
+    "cat",
+    "mkdir",
+    "rm",
+    "cp",
+    "mv",
+    "touch",
+    "chmod",
+    "chown",
+    "grep",
+    "find",
+    "tail",
+    "head",
+    "less",
+    "more",
+    "df",
+    "free",
+    "top",
+    "htop",
+    "ps",
+    "kill",
+    "curl",
+    "wget",
+    "ssh",
+    "scp",
+    "ping",
+    "systemctl",
+    "journalctl",
+    "docker",
+    "docker-compose",
+    "pm2",
+    "npm",
+    "pnpm",
+    "yarn",
+    "bun",
+    "python",
+    "node",
+  ]);
+
+  // If it's literally just the binary name (e.g. "free", "top", "uptime", "pwd")
+  if (
+    firstWord &&
+    knownBinaries.has(firstWord) &&
+    trimmed.split(/\s+/).length <= 2 &&
+    !trimmed.includes("karo") &&
+    !trimmed.includes("dekho")
+  ) {
+    return false;
+  }
+
+  const p = trimmed.toLowerCase();
+
+  // Roman Urdu and English natural language keywords
+  const naturalKeywords = [
+    "karo",
+    "dekho",
+    "batao",
+    "dhundo",
+    "chalao",
+    "kya",
+    "hai",
+    "hain",
+    "kis",
+    "kaun",
+    "kaise",
+    "galti",
+    "pichli",
+    "last",
+    "check",
+    "dikhao",
+    "theek",
+    "how",
+    "what",
+    "why",
+    "where",
+    "show",
+    "list",
+    "find",
+    "restart",
+    "deploy",
+    "status",
+    "push",
+    "pull",
+    "commit",
+    "changes",
+    "fix",
+    "memory",
+    "swap",
+    "notes",
+    "server",
+    "keys",
+    "error",
+    "logs",
+  ];
+
+  for (const kw of naturalKeywords) {
+    if (new RegExp(`\\b${kw}\\b`, "i").test(p)) {
+      return true;
+    }
+  }
+
+  // If multi-word without shell syntax and not starting with a known binary, treat as natural prompt
+  if (trimmed.split(/\s+/).length >= 3 && (!firstWord || !knownBinaries.has(firstWord))) {
+    return true;
+  }
+
+  return false;
 }
 
 /**

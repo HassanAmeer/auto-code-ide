@@ -30,16 +30,16 @@ export interface AiTerminalTimelineProps {
 }
 
 const QUICK_COMMANDS = [
-  { label: "Memory & Swap", cmd: "free -h", icon: Cpu },
-  { label: "Disk Space", cmd: "df -h", icon: HardDrive },
-  { label: "System Uptime", cmd: "uptime", icon: Clock },
+  { label: "Last Changes & Diff", cmd: "git log -1 -p --stat", icon: Folder },
+  { label: "Memory & 10GB Swap", cmd: "free -h && swapon --show", icon: Cpu },
   {
     label: "Jobi Service Status",
     cmd: "systemctl status autojobs.service --no-pager",
     icon: Activity,
   },
-  { label: "Top Memory Processes", cmd: "ps aux --sort=-%mem | head -n 10", icon: Layers },
-  { label: "Git Status", cmd: "git status", icon: Folder },
+  { label: "Disk Space (NVMe)", cmd: "df -h /", icon: HardDrive },
+  { label: "Top RAM Processes", cmd: "ps aux --sort=-%mem | head -n 10", icon: Layers },
+  { label: "System Uptime", cmd: "uptime", icon: Clock },
 ];
 
 export const AiTerminalTimeline = memo(function AiTerminalTimeline({
@@ -206,6 +206,17 @@ export const AiTerminalTimeline = memo(function AiTerminalTimeline({
               key={run.id}
               className="rounded-2xl border border-zinc-800/90 bg-zinc-950/90 shadow-sm overflow-hidden backdrop-blur-sm transition-all"
             >
+              {/* Natural Language AI Prompt Banner (if triggered via AI Commander) */}
+              {run.aiPrompt && (
+                <div className="flex items-center gap-2 px-3.5 py-1.5 bg-purple-950/40 border-b border-purple-800/30 text-3xs font-medium text-purple-200 select-none">
+                  <Sparkles className="size-3 text-purple-400 shrink-0" />
+                  <span className="text-zinc-400 font-sans text-4xs uppercase tracking-wider font-semibold">
+                    AI Intent:
+                  </span>
+                  <span className="text-purple-200 truncate font-mono">"{run.aiPrompt}"</span>
+                </div>
+              )}
+
               {/* Card Header: Command & Status */}
               <div className="flex items-center justify-between px-3.5 py-2 bg-zinc-900/60 border-b border-zinc-800/80 select-none">
                 <div className="flex items-center gap-2 min-w-0">

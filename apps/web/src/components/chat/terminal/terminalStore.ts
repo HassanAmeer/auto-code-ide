@@ -12,6 +12,7 @@ import {
   diagnoseCommandFailure,
   generateAiExplanation,
   translatePromptToBashCommand,
+  isNaturalLanguagePrompt,
 } from "./terminalClient";
 
 interface TerminalState {
@@ -590,17 +591,27 @@ export const terminalStore = {
     }
 
     const currentMode = modeOverride ?? state.inputMode;
+    const isNatural =
+      currentMode === "ai" || (modeOverride === undefined && isNaturalLanguagePrompt(trimmedInput));
+    const resolvedMode: "bash" | "ai" = isNatural ? "ai" : "bash";
+
     const cwd =
       state.scopeMode === "root"
         ? "/"
         : customCwd || state.activeCwd || state.lastProjectPath || "/";
     const activeKeys = state.accessKeys.filter((k) => k.enabled);
 
-    // Translate if AI mode with knowledge of active keys
-    const actualCommand =
-      currentMode === "ai"
-        ? translatePromptToBashCommand(trimmedInput, cwd, activeKeys)
-        : trimmedInput;
+    // Translate if AI / natural mode with full awareness of project, git, keys, and notes
+    const actualCommand = isNatural
+      ? translatePromptToBashCommand(trimmedInput, cwd, activeKeys, {
+          cwd,
+          scopeMode: state.scopeMode,
+          projectName: state.selectedProjectTitle,
+          projectPath: state.lastProjectPath,
+          activeKeys,
+          selectedKeyId: state.selectedKeyId,
+        })
+      : trimmedInput;
 
     const runId = "term_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
     const executionId = "exec_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
@@ -655,8 +666,8 @@ export const terminalStore = {
       durationMs: 0,
       timestamp: Date.now(),
       targetHost: targetLabel,
-      mode: currentMode,
-      aiPrompt: currentMode === "ai" ? trimmedInput : undefined,
+      mode: resolvedMode,
+      aiPrompt: isNatural ? trimmedInput : undefined,
       activeKeys: activeKeys.length > 0 ? activeKeys : undefined,
     };
 
