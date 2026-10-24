@@ -484,7 +484,6 @@ import {
   stopWaitingWaveSound,
 } from "~/lib/sound/soundManager";
 import { AiTerminalHeaderStrip } from "./chat/terminal/AiTerminalHeaderStrip";
-import { AiTerminalQuickActionsBar } from "./chat/terminal/AiTerminalQuickActionsBar";
 import { useTerminalStore } from "./chat/terminal/terminalStore";
 import { ProjectFileExplorer } from "./chat/terminal/ProjectFileExplorer";
 import { ProviderSubagentBar } from "./chat/ProviderSubagentBar";
@@ -11987,18 +11986,10 @@ export default function ChatView(props: ChatViewProps) {
 
         {/* Top Header Patti for Projects, SSH Keys & Terminal Chats - ONLY when AI Terminal is active */}
         {isTerminalQuickBarOpen && (
-          <>
-            <AiTerminalHeaderStrip
-              activeProject={activeProject ?? null}
-              onNewTerminalThread={handleNewTerminalThread}
-            />
-            {!isDraftHeroState && (
-              <AiTerminalQuickActionsBar
-                activeProject={activeProject ?? null}
-                variant="top-strip"
-              />
-            )}
-          </>
+          <AiTerminalHeaderStrip
+            activeProject={activeProject ?? null}
+            onNewTerminalThread={handleNewTerminalThread}
+          />
         )}
 
         {/* Project File Explorer & Editor */}
@@ -12246,16 +12237,6 @@ export default function ChatView(props: ChatViewProps) {
                           activeProjectRef={activeProjectRef}
                           activeProjectTitle={activeProject?.title ?? null}
                         />
-
-                        {/* Directly under "What should we build in [project]?" */}
-                        {isTerminalQuickBarOpen && (
-                          <div className="mt-3.5 flex justify-center w-full px-2">
-                            <AiTerminalQuickActionsBar
-                              activeProject={activeProject ?? null}
-                              variant="hero"
-                            />
-                          </div>
-                        )}
                       </div>
                     </div>
                   ) : null}
