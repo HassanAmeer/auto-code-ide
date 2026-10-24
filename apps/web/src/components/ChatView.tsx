@@ -11876,6 +11876,16 @@ export default function ChatView(props: ChatViewProps) {
     <PanelLayoutControls
       {...panelToggleControlProps}
       showThreadPanelControl={!inlineRightPanelOwnsTitleBar}
+      isServerThread={false}
+    />
+  );
+  const headerPanelLayoutControls = (
+    <PanelLayoutControls
+      {...panelToggleControlProps}
+      showThreadPanelControl={!inlineRightPanelOwnsTitleBar}
+      isServerThread={isServerThread}
+      onForkCurrentThread={handleForkCurrentSession}
+      onExportCurrentThread={handleExportCurrentSession}
     />
   );
   const threadPanelHeaderControl = (
@@ -11921,7 +11931,9 @@ export default function ChatView(props: ChatViewProps) {
           />
         </span>
       ) : null}
-      <div className="pointer-events-auto flex h-full items-center">{panelToggleControls}</div>
+      <div className="pointer-events-auto flex h-full items-center">
+        {headerPanelLayoutControls}
+      </div>
     </div>
   );
   const workspaceFileDropHandlers = makeWorkspaceFileDropHandlers({

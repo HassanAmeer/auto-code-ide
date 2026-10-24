@@ -122,13 +122,13 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   --glass-opacity: 80%;
   --glass-saturation: 1.14;
   --desktop-window-right-resize-inset: 0px;
-  --workspace-topbar-height: 52px;
+  --workspace-topbar-height: 32px;
   --workspace-controls-top: 0px;
-  --workspace-controls-left: calc(env(safe-area-inset-left) + 0.75rem);
-  --workspace-controls-right: calc(env(safe-area-inset-right) + 0.75rem);
+  --workspace-controls-left: calc(env(safe-area-inset-left) + 0.5rem);
+  --workspace-controls-right: calc(env(safe-area-inset-right) + 0.5rem);
   --workspace-native-controls-inset: 0px;
   --workspace-titlebar-control-size: 1.75rem;
-  --workspace-titlebar-control-gap: 0.75rem;
+  --workspace-titlebar-control-gap: 0.25rem;
   --workspace-titlebar-scroll-fade-height: 1.5rem;
   --chat-content-max-width: 46rem;
   --thread-details-panel-width: 17.5rem;
@@ -154,7 +154,7 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
 }
 
 .wco {
-  --workspace-topbar-height: max(40px, env(titlebar-area-height, 52px));
+  --workspace-topbar-height: max(32px, env(titlebar-area-height, 32px));
   --workspace-controls-top: env(titlebar-area-y, 0px);
   --workspace-controls-left: calc(env(titlebar-area-x, 0px) + 0.75rem);
   --workspace-controls-right: calc(
