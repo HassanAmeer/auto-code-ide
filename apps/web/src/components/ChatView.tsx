@@ -11957,7 +11957,12 @@ export default function ChatView(props: ChatViewProps) {
               activeProject={activeProject ?? null}
               onNewTerminalThread={handleNewTerminalThread}
             />
-            <AiTerminalQuickActionsBar activeProject={activeProject ?? null} />
+            {!isDraftHeroState && (
+              <AiTerminalQuickActionsBar
+                activeProject={activeProject ?? null}
+                variant="top-strip"
+              />
+            )}
           </>
         )}
 
@@ -12206,6 +12211,16 @@ export default function ChatView(props: ChatViewProps) {
                           activeProjectRef={activeProjectRef}
                           activeProjectTitle={activeProject?.title ?? null}
                         />
+
+                        {/* Directly under "What should we build in [project]?" */}
+                        {isTerminalQuickBarOpen && (
+                          <div className="mt-3.5 flex justify-center w-full px-2">
+                            <AiTerminalQuickActionsBar
+                              activeProject={activeProject ?? null}
+                              variant="hero"
+                            />
+                          </div>
+                        )}
                       </div>
                     </div>
                   ) : null}

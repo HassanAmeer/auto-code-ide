@@ -18,6 +18,7 @@ import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 
 export interface AiTerminalQuickActionsBarProps {
   activeProject?: EnvironmentProject | null;
+  variant?: "top-strip" | "hero";
   className?: string;
 }
 
@@ -112,6 +113,7 @@ const QUICK_ACTIONS: QuickActionItem[] = [
 
 export const AiTerminalQuickActionsBar = memo(function AiTerminalQuickActionsBar({
   activeProject,
+  variant = "top-strip",
   className = "",
 }: AiTerminalQuickActionsBarProps) {
   const store = useTerminalStore();
@@ -144,10 +146,14 @@ export const AiTerminalQuickActionsBar = memo(function AiTerminalQuickActionsBar
     }
   };
 
+  const isHero = variant === "hero";
+
   return (
     <div
       className={cn(
-        "w-full bg-[#111113]/90 backdrop-blur-xl border-b border-white/[0.06] select-none flex items-center gap-1 px-2 py-1 transition-all z-10",
+        isHero
+          ? "w-full max-w-xl mx-auto flex items-center gap-1 p-1 rounded-[10px] bg-[#141416]/95 backdrop-blur-xl border border-white/[0.09] shadow-xl select-none transition-all"
+          : "w-full bg-[#111113]/90 backdrop-blur-xl border-b border-white/[0.06] select-none flex items-center gap-1 px-2 py-1 transition-all z-10",
         className,
       )}
     >
@@ -181,7 +187,7 @@ export const AiTerminalQuickActionsBar = memo(function AiTerminalQuickActionsBar
                 onClick={() => handleRunQuickCommand(item.cmd, item.label)}
                 title={`${item.label}\n${item.tooltip}\nCommand: $ ${item.cmd}`}
                 className={cn(
-                  "group flex items-center gap-1.5 h-[26px] px-2.5 rounded-[6px] bg-[#1a1a1d]/85 hover:bg-[#252528] active:scale-[0.98] border border-white/[0.07] text-zinc-300 hover:text-white transition-all cursor-pointer shadow-xs whitespace-nowrap",
+                  "group flex items-center gap-1.5 h-[26px] px-2.5 rounded-[6px] bg-[#1c1c20]/90 hover:bg-[#28282e] active:scale-[0.98] border border-white/[0.07] text-zinc-300 hover:text-white transition-all cursor-pointer shadow-xs whitespace-nowrap",
                   item.accentBorder,
                 )}
               >
