@@ -1537,8 +1537,6 @@ export const layerProjectDownloadZipRoute = HttpRouter.add(
     const safeName = (rawName || "project").replace(/[^a-zA-Z0-9_-]/g, "_");
     const tempZipFile = `/tmp/t3_dl_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.zip`;
 
-    // Single-line shell command to build the zip — runBashCommandOnHost uses bash -c,
-    // so newlines break it. We concatenate with spaces/semicolons instead.
     const PRUNED = [
       "node_modules",
       ".git",
@@ -1561,7 +1559,7 @@ export const layerProjectDownloadZipRoute = HttpRouter.add(
     ];
     const prunePart = PRUNED.map((d) => `-name "${d}"`).join(" -o ");
     // prettier-ignore
-    const zipCmd = `if [ -z "$(ls -A . 2>/dev/null)" ]; then touch .t3_empty && zip -q "${tempZipFile}" .t3_empty && rm -f .t3_empty; else find . -mindepth 1 \( -type d \( ${prunePart} \) -prune \) -o -type f -print | grep -v "/\\." | zip -q "${tempZipFile}" -@; RC=$?; [ "$RC" -eq 0 ] || [ "$RC" -eq 12 ]; fi`;
+    const zipCmd = `if [ -z "$(ls -A . 2>/dev/null)" ]; then touch .t3_empty && zip -q "${tempZipFile}" .t3_empty && rm -f .t3_empty; else find . -mindepth 1 \\( -type d \\( ${prunePart} \\) -prune \\) -o -type f -print 2>/dev/null | grep -v "/\\." | zip -q "${tempZipFile}" -@; RC=$?; [ "$RC" -eq 0 ] || [ "$RC" -eq 12 ]; fi`;
 
     const zipResult = yield* Effect.promise(() =>
       runBashCommandOnHost(zipCmd, workspaceRoot, 180_000),
@@ -1573,7 +1571,6 @@ export const layerProjectDownloadZipRoute = HttpRouter.add(
       );
     }
 
-    // Get file size so browser shows download progress.
     const zipStat = yield* fileSystem.stat(tempZipFile).pipe(Effect.option);
     if (Option.isNone(zipStat) || zipStat.value.type !== "File") {
       yield* fileSystem.remove(tempZipFile).pipe(Effect.ignore);
@@ -1582,32 +1579,23 @@ export const layerProjectDownloadZipRoute = HttpRouter.add(
         { status: 500 },
       );
     }
-    const zipSizeBytes = zipStat.value.size;
 
-    // Stream the ZIP from disk so large projects never OOM the server.
-    const catProc = NodeChildProcess.spawn("cat", [tempZipFile], {
-      stdio: ["ignore", "pipe", "ignore"],
+    const response = yield* HttpServerResponse.file(tempZipFile, {
+      contentType: "application/zip",
+      headers: {
+        "Content-Disposition": downloadContentDisposition(`${safeName}.zip`),
+      },
     });
-    catProc.stdout?.once("end", () => {
+
+    // Schedule cleanup of temp zip after 10 minutes
+    setTimeout(() => {
       NodeChildProcess.spawn("rm", ["-f", tempZipFile], {
         stdio: "ignore",
         detached: true,
       }).unref();
-    });
+    }, 600_000);
 
-    return HttpServerResponse.stream(
-      Stream.fromReadableStream(
-        () => catProc.stdout as NodeJS.ReadableStream,
-        (e) => new Error(String(e)),
-      ),
-      {
-        contentType: "application/zip",
-        headers: {
-          "Content-Disposition": downloadContentDisposition(`${safeName}.zip`),
-          "Content-Length": String(zipSizeBytes),
-        },
-      },
-    );
+    return response;
   }).pipe(
     Effect.catchCause((cause) =>
       Effect.succeed(HttpServerResponse.jsonUnsafe({ ok: false, error: Cause.pretty(cause) })),

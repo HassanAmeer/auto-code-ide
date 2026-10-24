@@ -1,4 +1,5 @@
 import { resolvePrimaryEnvironmentHttpUrl } from "~/environments/primary";
+import { toastManager } from "~/components/ui/toast";
 
 /**
  * Downloads the project as a clean .zip archive (excluding node_modules, .git, etc.)
@@ -9,6 +10,12 @@ export function downloadProjectZip(workspaceRoot: string, projectName?: string):
   const url = resolvePrimaryEnvironmentHttpUrl(
     `/api/project/download-zip?workspaceRoot=${encodeURIComponent(workspaceRoot)}&name=${encodeURIComponent(safeName)}`,
   );
+
+  toastManager.add({
+    type: "info",
+    title: "Packaging ZIP",
+    description: `Preparing clean ${safeName}.zip without hidden/dot files...`,
+  });
 
   // Trigger browser download via invisible link
   const link = document.createElement("a");
