@@ -19,7 +19,7 @@ import {
 
 import { cn } from "../../../lib/utils";
 import { useTerminalStore, terminalStore } from "./terminalStore";
-import { isNaturalLanguagePrompt, translatePromptToBashCommand } from "./terminalClient";
+import { translatePromptToBashCommand } from "./terminalClient";
 import type { TerminalCommandRun } from "./terminalTypes";
 import { TerminalCommandsMenu } from "./TerminalCommandsMenu";
 import { toastManager } from "../../ui/toast";
@@ -85,33 +85,15 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
         return;
       }
 
-      // Check if user input is natural language intended for AI thinking/tool-calling
-      const isNatural = isNaturalLanguagePrompt(trimmed);
-      const translated = isNatural
-        ? translatePromptToBashCommand(
-            trimmed,
-            effectiveCwd,
-            store.accessKeys.filter((k) => k.enabled),
-          )
-        : trimmed;
+      // Translate Roman Urdu or natural shortcut (e.g. "free ram dekho" -> "free -h", "deploy" -> deploy pipeline)
+      const translated = translatePromptToBashCommand(
+        trimmed,
+        effectiveCwd,
+        store.accessKeys.filter((k) => k.enabled),
+      );
 
       // Clear command immediately so input feels responsive and doesn't get stuck in the field!
       setCommand("");
-
-      // If it's natural language and didn't map to a raw bash shortcut, route directly to AI Chat
-      if (isNatural && translated === trimmed) {
-        window.dispatchEvent(
-          new CustomEvent("t3:insert-speech-text", {
-            detail: { text: trimmed, autoSend: true },
-          }),
-        );
-        toastManager.add({
-          type: "info",
-          title: "Sent to AI Assistant",
-          description: "Executing your request with AI assistant...",
-        });
-        return;
-      }
 
       // Auto-elevate with sudo if command is marked as always-allowed or user is in full-access mode for root commands
       let finalCommandToRun = translated || trimmed;
@@ -149,10 +131,26 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
         setIsOutputCollapsed(false);
       } catch (err) {
         console.error("Command execution error:", err);
+        const errMsg = err instanceof Error ? err.message : String(err);
+        const failedRun: TerminalCommandRun = {
+          id: "err_" + Date.now(),
+          command: finalCommandToRun,
+          cwd: effectiveCwd,
+          status: "error",
+          exitCode: 1,
+          stdout: "",
+          stderr: errMsg || "Failed to execute command.",
+          durationMs: 0,
+          timestamp: Date.now(),
+          targetHost: isRootScope ? "VPS Host (Root)" : `VPS Host (${scopeName})`,
+          mode: "bash",
+        };
+        setLatestRun(failedRun);
+        setIsOutputCollapsed(false);
         toastManager.add({
           type: "error",
           title: "Execution Error",
-          description: err instanceof Error ? err.message : "Command failed to execute.",
+          description: errMsg || "Command failed to execute.",
         });
       } finally {
         setIsRunning(false);
@@ -548,10 +546,10 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
           )}
 
           {!isOutputCollapsed && (
-            <div className="p-2.5 max-h-48 overflow-y-auto font-mono text-3xs leading-relaxed space-y-1 bg-black/60 select-text">
+            <div className="p-3 max-h-60 sm:max-h-72 overflow-y-auto font-mono text-3xs leading-relaxed space-y-1 bg-black/75 border-t border-white/[0.08] select-text">
               {latestRun.stdout && (
                 <div
-                  className="text-zinc-200 whitespace-pre-wrap break-all"
+                  className="text-zinc-100 whitespace-pre-wrap break-all"
                   dangerouslySetInnerHTML={{ __html: parseAnsiToHtml(latestRun.stdout) }}
                 />
               )}
@@ -562,13 +560,20 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
                 />
               )}
               {!latestRun.stdout && !latestRun.stderr && latestRun.status === "running" && (
-                <div className="flex items-center gap-1.5 text-zinc-400 italic py-1 select-none">
-                  <Loader2 className="size-3 animate-spin text-emerald-400" />
-                  <span>Executing command...</span>
+                <div className="flex items-center gap-1.5 text-zinc-300 italic py-1 select-none">
+                  <Loader2 className="size-3.5 animate-spin text-emerald-400" />
+                  <span>Executing command on VPS host...</span>
                 </div>
               )}
               {!latestRun.stdout && !latestRun.stderr && latestRun.status === "success" && (
-                <span className="text-zinc-500 italic">(Command completed with no output)</span>
+                <span className="text-zinc-500 italic">
+                  (Command completed successfully with no output)
+                </span>
+              )}
+              {!latestRun.stdout && !latestRun.stderr && latestRun.status === "error" && (
+                <span className="text-rose-400 italic">
+                  (Command exited with error code {latestRun.exitCode ?? 1})
+                </span>
               )}
             </div>
           )}

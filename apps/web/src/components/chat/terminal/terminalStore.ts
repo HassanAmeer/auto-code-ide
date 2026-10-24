@@ -54,12 +54,23 @@ const STORAGE_KEY_SCOPE_MODE = "adc_terminal_scope_mode";
 const STORAGE_KEY_LAST_PROJECT_PATH = "adc_terminal_last_project_path";
 const STORAGE_KEY_PERMISSION_MODE = "adc_terminal_permission_mode";
 const STORAGE_KEY_ALWAYS_ALLOWED_COMMANDS = "adc_terminal_always_allowed_commands";
+const STORAGE_KEY_RUNS = "adc_terminal_latest_runs";
 
 const initialPermissionMode: "full-access" | "ask" =
   typeof window !== "undefined" &&
   window.localStorage.getItem(STORAGE_KEY_PERMISSION_MODE) === "ask"
     ? "ask"
     : "full-access";
+
+let initialRuns: TerminalCommandRun[] = [];
+if (typeof window !== "undefined") {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY_RUNS);
+    if (raw) initialRuns = JSON.parse(raw);
+  } catch {
+    // ignore
+  }
+}
 
 let initialAlwaysAllowedCommands: string[] = [];
 if (typeof window !== "undefined") {
@@ -154,7 +165,7 @@ if (typeof window !== "undefined") {
 }
 
 let state: TerminalState = {
-  runs: [],
+  runs: initialRuns,
   runsByChat: {},
   activeCwd: initialCwd,
   scopeMode: initialScopeMode,
@@ -283,14 +294,21 @@ export const terminalStore = {
 
   clearRuns() {
     state = { ...state, runs: [] };
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(STORAGE_KEY_RUNS);
+    }
     notify();
   },
 
   removeRun(id: string) {
+    const nextRuns = state.runs.filter((r) => r.id !== id);
     state = {
       ...state,
-      runs: state.runs.filter((r) => r.id !== id),
+      runs: nextRuns,
     };
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(STORAGE_KEY_RUNS, JSON.stringify(nextRuns.slice(0, 20)));
+    }
     notify();
   },
 
@@ -875,6 +893,16 @@ export const terminalStore = {
       runs: updatedCompletedRuns,
       runsByChat: updatedCompletedRunsByChat,
     };
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem(
+          STORAGE_KEY_RUNS,
+          JSON.stringify(updatedCompletedRuns.slice(0, 20)),
+        );
+      } catch {
+        // ignore storage quota errors
+      }
+    }
     notify();
 
     return completedRun;
