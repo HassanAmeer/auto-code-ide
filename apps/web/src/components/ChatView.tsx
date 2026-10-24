@@ -484,6 +484,7 @@ import {
   stopWaitingWaveSound,
 } from "~/lib/sound/soundManager";
 import { AiTerminalHeaderStrip } from "./chat/terminal/AiTerminalHeaderStrip";
+import { AiTerminalQuickActionsBar } from "./chat/terminal/AiTerminalQuickActionsBar";
 import { useTerminalStore } from "./chat/terminal/terminalStore";
 import { ProjectFileExplorer } from "./chat/terminal/ProjectFileExplorer";
 import { ProviderSubagentBar } from "./chat/ProviderSubagentBar";
@@ -11950,10 +11951,13 @@ export default function ChatView(props: ChatViewProps) {
 
         {/* Top Header Patti for Projects, SSH Keys & Terminal Chats - ONLY when AI Terminal is active */}
         {isTerminalQuickBarOpen && (
-          <AiTerminalHeaderStrip
-            activeProject={activeProject ?? null}
-            onNewTerminalThread={handleNewThreadInActiveProject}
-          />
+          <>
+            <AiTerminalHeaderStrip
+              activeProject={activeProject ?? null}
+              onNewTerminalThread={handleNewThreadInActiveProject}
+            />
+            <AiTerminalQuickActionsBar activeProject={activeProject ?? null} />
+          </>
         )}
 
         {/* Project File Explorer & Editor */}

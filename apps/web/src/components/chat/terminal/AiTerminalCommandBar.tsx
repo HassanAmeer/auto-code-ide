@@ -130,20 +130,20 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
     >
       {/* Latest Execution Output Drawer */}
       {latestRun && (
-        <div className="rounded-2xl border border-border/70 bg-card/95 shadow-md overflow-hidden backdrop-blur-sm transition-all text-xs">
-          <div className="flex items-center justify-between px-3 py-1.5 bg-muted/40 border-b border-border/40 select-none">
-            <div className="flex items-center gap-2 min-w-0">
+        <div className="rounded-[8px] border border-white/[0.08] bg-[#141416]/95 shadow-md overflow-hidden backdrop-blur-xl transition-all text-xs">
+          <div className="flex items-center justify-between px-2.5 py-1 bg-white/[0.03] border-b border-white/[0.06] select-none">
+            <div className="flex items-center gap-1.5 min-w-0">
               <span className="font-mono text-3xs font-semibold text-emerald-400 flex items-center gap-1">
                 <span className="size-1.5 rounded-full bg-emerald-400" />$ {latestRun.command}
               </span>
               <span
                 className={cn(
-                  "text-3xs font-mono px-1.5 py-0.2 rounded-full",
+                  "text-4xs font-mono px-1.5 py-0.2 rounded-[4px]",
                   latestRun.status === "success"
                     ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
                     : latestRun.status === "error"
                       ? "bg-destructive/15 text-destructive border border-destructive/30"
-                      : "bg-muted text-muted-foreground",
+                      : "bg-white/[0.06] text-zinc-400",
                 )}
               >
                 {latestRun.status === "running"
@@ -163,9 +163,9 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
                   type="button"
                   onClick={handleAskAiToFix}
                   title="Ask AI to diagnose and fix this terminal error"
-                  className="flex items-center gap-1 px-2 py-0.5 rounded-[5px] bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 border border-purple-500/40 font-medium text-3xs transition-all cursor-pointer shadow-xs mr-1"
+                  className="flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 border border-purple-500/40 font-medium text-4xs transition-all cursor-pointer shadow-xs mr-0.5"
                 >
-                  <Sparkles className="size-3 text-purple-400" />
+                  <Sparkles className="size-2.5 text-purple-400" />
                   <span>Fix with AI</span>
                 </button>
               )}
@@ -173,7 +173,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
                 type="button"
                 onClick={handleCopyOutput}
                 title="Copy output"
-                className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer"
+                className="p-1 rounded-[4px] text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] transition-colors cursor-pointer"
               >
                 {copied ? (
                   <Check className="size-3 text-emerald-400" />
@@ -185,7 +185,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
                 type="button"
                 onClick={() => setIsOutputCollapsed(!isOutputCollapsed)}
                 title={isOutputCollapsed ? "Expand output" : "Collapse output"}
-                className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer"
+                className="p-1 rounded-[4px] text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] transition-colors cursor-pointer"
               >
                 {isOutputCollapsed ? (
                   <ChevronDown className="size-3" />
@@ -200,7 +200,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
                   setLatestRun(null);
                 }}
                 title="Dismiss output"
-                className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer"
+                className="p-1 rounded-[4px] text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] transition-colors cursor-pointer"
               >
                 <X className="size-3" />
               </button>
@@ -208,7 +208,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
           </div>
 
           {!isOutputCollapsed && (
-            <div className="p-3 max-h-48 overflow-y-auto font-mono text-3xs leading-relaxed space-y-1 bg-black/40">
+            <div className="p-2.5 max-h-44 overflow-y-auto font-mono text-3xs leading-relaxed space-y-1 bg-black/50">
               {latestRun.stdout && (
                 <pre className="text-zinc-200 whitespace-pre-wrap break-all select-text">
                   {latestRun.stdout}
@@ -220,35 +220,33 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
                 </pre>
               )}
               {!latestRun.stdout && !latestRun.stderr && latestRun.status === "success" && (
-                <span className="text-muted-foreground italic">
-                  (Command completed with no output)
-                </span>
+                <span className="text-zinc-500 italic">(Command completed with no output)</span>
               )}
             </div>
           )}
         </div>
       )}
 
-      {/* Sleek Single-Line Command Input Bar */}
-      <div className="flex items-center gap-2 rounded-2xl border border-emerald-500/35 bg-card/90 px-3 py-1.5 shadow-sm focus-within:border-emerald-500/70 focus-within:ring-2 focus-within:ring-emerald-500/20 transition-all">
+      {/* Sleek Single-Line Command Input Bar - Cupertino iOS Style */}
+      <div className="flex items-center gap-1.5 rounded-[9px] border border-white/[0.12] bg-[#18181b]/95 backdrop-blur-xl px-2 py-1 shadow-md focus-within:border-emerald-500/60 focus-within:ring-1 focus-within:ring-emerald-500/20 transition-all">
         {/* Dropdown Button with Scope Badge (root or Project Name) */}
         <button
           type="button"
           onClick={() => setShowCommandsMenu(true)}
           title={`Common Commands & Directory Shortcuts (${scopeName})`}
-          className="flex items-center gap-1.5 px-2 h-6 rounded-[5px] bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition-all cursor-pointer shrink-0 shadow-xs"
+          className="flex items-center gap-1 px-1.5 h-[22px] rounded-[5px] bg-[#242428] hover:bg-[#2e2e33] text-zinc-300 border border-white/[0.08] transition-all cursor-pointer shrink-0 shadow-xs active:scale-[0.98]"
         >
-          <span className="font-mono text-3xs font-semibold max-w-[120px] sm:max-w-[150px] truncate">
+          <span className="font-mono text-4xs font-semibold max-w-[120px] sm:max-w-[150px] truncate text-emerald-400">
             {scopeName}
           </span>
-          <ChevronDown className="size-3 shrink-0 opacity-80" />
+          <ChevronDown className="size-2.5 shrink-0 opacity-80 text-zinc-400" />
         </button>
 
         {/* Terminal Icon & Prompt */}
-        <div className="flex items-center gap-1.5 shrink-0 select-none text-emerald-400">
-          <Terminal className="size-3.5" />
+        <div className="flex items-center gap-1 shrink-0 select-none text-emerald-400">
+          <Terminal className="size-3" />
           <span
-            className="font-mono text-3xs font-semibold text-muted-foreground hidden sm:inline"
+            className="font-mono text-4xs font-semibold text-zinc-500 hidden sm:inline"
             title={`CWD: ${effectiveCwd}`}
           >
             {store.selectedProjectId && !isRootScope ? `${scopeName}:` : "/:"}
@@ -265,10 +263,10 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
           disabled={isRunning}
           placeholder={
             store.selectedProjectId && !isRootScope
-              ? `Run command in ${scopeName} (${effectiveCwd})...`
+              ? `Run command in ${scopeName}...`
               : "Run command in root (/)..."
           }
-          className="flex-1 min-w-0 bg-transparent text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none font-mono"
+          className="flex-1 min-w-0 bg-transparent text-[12px] text-zinc-100 placeholder:text-zinc-500 focus:outline-none font-mono"
         />
 
         {/* Send / Run Button */}
@@ -279,16 +277,16 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
             disabled={!command.trim() || isRunning}
             title="Execute Command (Enter)"
             className={cn(
-              "inline-flex items-center justify-center size-7 rounded-xl transition-all cursor-pointer",
+              "inline-flex items-center justify-center size-[26px] rounded-[6px] transition-all cursor-pointer",
               command.trim() && !isRunning
-                ? "bg-emerald-500 hover:bg-emerald-600 text-white shadow-xs"
-                : "text-muted-foreground/40 hover:text-muted-foreground cursor-not-allowed",
+                ? "bg-emerald-500 hover:bg-emerald-600 text-white shadow-xs active:scale-[0.96]"
+                : "text-zinc-600 hover:text-zinc-400 cursor-not-allowed",
             )}
           >
             {isRunning ? (
-              <Loader2 className="size-3.5 animate-spin" />
+              <Loader2 className="size-3 animate-spin" />
             ) : (
-              <SendHorizontal className="size-3.5" />
+              <SendHorizontal className="size-3" />
             )}
           </button>
 
@@ -297,9 +295,9 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
             type="button"
             onClick={() => terminalStore.setQuickBarOpen(false)}
             title="Close Terminal Bar"
-            className="inline-flex items-center justify-center size-7 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer"
+            className="inline-flex items-center justify-center size-[26px] rounded-[6px] text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] transition-colors cursor-pointer"
           >
-            <X className="size-3.5" />
+            <X className="size-3" />
           </button>
         </div>
       </div>

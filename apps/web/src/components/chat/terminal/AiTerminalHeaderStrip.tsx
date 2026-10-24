@@ -117,7 +117,7 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
     <>
       <div
         className={cn(
-          "w-full bg-[#121214] border-b border-zinc-800/80 backdrop-blur-md px-2 py-1 select-none flex items-center gap-1.5 transition-all text-2xs z-20 font-sans",
+          "w-full bg-[#121214]/90 border-b border-white/[0.06] backdrop-blur-xl px-2 py-0.5 select-none flex items-center gap-1 transition-all text-2xs z-20 font-sans",
           className,
         )}
       >
@@ -126,9 +126,9 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
           type="button"
           onClick={scrollLeft}
           title="Scroll Left"
-          className="shrink-0 p-1 rounded-[5px] text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/60 transition-colors cursor-pointer"
+          className="shrink-0 p-1 rounded-[5px] text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] transition-colors cursor-pointer"
         >
-          <ChevronLeft className="size-3.5" />
+          <ChevronLeft className="size-3" />
         </button>
 
         {/* Scrollable Patti Container */}
@@ -139,48 +139,48 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
               scrollContainerRef.current.scrollLeft += e.deltaY;
             }
           }}
-          className="flex-1 flex items-center gap-2 overflow-x-auto py-0.5 px-0.5 scroll-smooth [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+          className="flex-1 flex items-center gap-1.5 overflow-x-auto py-0.5 px-0.5 scroll-smooth [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
         >
           {/* 1. New Terminal Chat Button */}
           <button
             type="button"
             onClick={handleCreateNewChat}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 text-3xs font-medium shrink-0 cursor-pointer shadow-xs transition-all"
+            className="flex items-center gap-1 px-2 py-0.5 rounded-[5px] bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 text-3xs font-medium shrink-0 cursor-pointer shadow-xs transition-all active:scale-[0.98]"
             title="Start a Fresh Clean Terminal Chat"
           >
-            <Plus className="size-3" />
-            <span className="font-semibold">New Chat</span>
+            <Plus className="size-2.5" />
+            <span className="font-semibold text-4xs">New Chat</span>
           </button>
 
-          {/* 2. Terminal Chats History Button (Opens 90% Width Right-Side Sheet) */}
+          {/* 2. Terminal Chats History Button */}
           <button
             type="button"
             onClick={() => terminalStore.toggleChatsSheet()}
             className={cn(
-              "flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] text-3xs font-medium border transition-all cursor-pointer shadow-xs shrink-0",
+              "flex items-center gap-1 px-2 py-0.5 rounded-[5px] text-3xs font-medium border transition-all cursor-pointer shadow-xs shrink-0 active:scale-[0.98]",
               store.isChatsSheetOpen
-                ? "bg-zinc-800 text-zinc-100 border-zinc-700 ring-1 ring-zinc-700/50"
-                : "bg-zinc-900/80 hover:bg-zinc-800/80 text-zinc-300 border-zinc-800/80",
+                ? "bg-[#252528] text-zinc-100 border-white/[0.15]"
+                : "bg-[#18181b]/80 hover:bg-[#222225] text-zinc-300 border-white/[0.08]",
             )}
             title="Open Terminal History & Sessions Sheet"
           >
-            <Clock className="size-3 text-emerald-400 shrink-0" />
-            <span className="font-semibold truncate max-w-[120px] sm:max-w-[160px]">
+            <Clock className="size-2.5 text-emerald-400 shrink-0" />
+            <span className="font-semibold text-4xs truncate max-w-[110px] sm:max-w-[150px]">
               {activeChat?.title || "History"}
             </span>
-            <span className="px-1.5 py-0.2 rounded-[5px] bg-zinc-800 text-zinc-400 font-mono text-4xs border border-zinc-700/60">
+            <span className="px-1 py-0.2 rounded-[4px] bg-white/[0.06] text-zinc-400 font-mono text-4xs border border-white/[0.06]">
               {store.terminalChats.length}
             </span>
           </button>
 
           {/* Divider */}
-          <div className="w-px h-4 bg-zinc-800/80 shrink-0" />
+          <div className="w-px h-3.5 bg-white/[0.08] shrink-0" />
 
-          {/* 3. Projects Section: Plain grey text, no badge, no outline, no background */}
-          <span className="text-zinc-500 text-3xs font-medium shrink-0">Projects:</span>
+          {/* 3. Projects Section */}
+          <span className="text-zinc-500 text-4xs font-medium shrink-0">Projects:</span>
 
           {uniqueProjects.length === 0 ? (
-            <span className="text-3xs text-zinc-500 italic shrink-0 px-1">(No projects yet)</span>
+            <span className="text-4xs text-zinc-500 italic shrink-0 px-1">(No projects)</span>
           ) : (
             uniqueProjects.map((project: EnvironmentProject) => {
               const isSelected = store.selectedProjectId === project.id;
@@ -191,25 +191,25 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
                   onClick={() => handleToggleProject(project)}
                   title={`Project: ${project.title}\nPath: ${project.workspaceRoot}\nClick to ${isSelected ? "unselect" : "select"}`}
                   className={cn(
-                    "flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] text-3xs font-medium shrink-0 transition-all cursor-pointer border",
+                    "flex items-center gap-1 px-2 py-0.5 rounded-[5px] text-4xs font-medium shrink-0 transition-all cursor-pointer border active:scale-[0.98]",
                     isSelected
-                      ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-xs ring-1 ring-emerald-500/20 font-semibold"
-                      : "bg-zinc-900/60 hover:bg-zinc-800/70 text-zinc-400 hover:text-zinc-200 border-zinc-800/60",
+                      ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-xs font-semibold"
+                      : "bg-[#18181b]/70 hover:bg-[#222225] text-zinc-400 hover:text-zinc-200 border-white/[0.07]",
                   )}
                 >
-                  <Folder className="size-3 text-emerald-400 shrink-0" />
-                  <span className="truncate max-w-[120px] sm:max-w-[160px]">{project.title}</span>
-                  {isSelected && <Check className="size-2.5 text-emerald-400 shrink-0" />}
+                  <Folder className="size-2.5 text-emerald-400 shrink-0" />
+                  <span className="truncate max-w-[110px] sm:max-w-[150px]">{project.title}</span>
+                  {isSelected && <Check className="size-2 text-emerald-400 shrink-0" />}
                 </button>
               );
             })
           )}
 
           {/* Divider */}
-          <div className="w-px h-4 bg-zinc-800/80 shrink-0" />
+          <div className="w-px h-3.5 bg-white/[0.08] shrink-0" />
 
-          {/* 4. SSH Servers Section: Plain grey text, no badge, no outline, no background */}
-          <span className="text-zinc-500 text-3xs font-medium shrink-0">SSH:</span>
+          {/* 4. SSH Servers Section */}
+          <span className="text-zinc-500 text-4xs font-medium shrink-0">SSH:</span>
 
           {store.accessKeys
             .filter((k) => k.type === "ssh" || k.host)
@@ -219,10 +219,10 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
                 <div
                   key={key.id}
                   className={cn(
-                    "flex items-center gap-1 px-2 py-0.5 rounded-[5px] text-3xs font-medium shrink-0 transition-all border group",
+                    "flex items-center gap-1 px-1.5 py-0.5 rounded-[5px] text-4xs font-medium shrink-0 transition-all border group",
                     isSelected
-                      ? "bg-sky-500/20 text-sky-200 border-sky-500/50 shadow-xs ring-1 ring-sky-500/25 font-semibold"
-                      : "bg-zinc-900/60 hover:bg-zinc-800/70 text-zinc-400 hover:text-zinc-200 border-zinc-800/60",
+                      ? "bg-sky-500/20 text-sky-200 border-sky-500/50 shadow-xs font-semibold"
+                      : "bg-[#18181b]/70 hover:bg-[#222225] text-zinc-400 hover:text-zinc-200 border-white/[0.07]",
                   )}
                 >
                   {/* Left Side: Checkmark Toggle Button */}
@@ -235,13 +235,13 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
                         : "Click to select this server for AI operations"
                     }
                     className={cn(
-                      "flex items-center justify-center size-3.5 rounded-[3px] border transition-colors cursor-pointer",
+                      "flex items-center justify-center size-3 rounded-[3px] border transition-colors cursor-pointer",
                       isSelected
                         ? "bg-sky-500 text-white border-sky-400"
                         : "border-zinc-600 hover:border-sky-400 bg-zinc-950/60 text-transparent hover:text-zinc-400",
                     )}
                   >
-                    <Check className="size-2.5" />
+                    <Check className="size-2" />
                   </button>
 
                   {/* Center: Key Name & Host Info */}
@@ -251,8 +251,8 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
                     title={`SSH Server: ${key.name}\nHost: ${key.user || "root"}@${key.host}:${key.port || 22}\nNotes: ${key.notes || "None"}`}
                     className="flex items-center gap-1 cursor-pointer text-left"
                   >
-                    <Key className="size-2.5 text-sky-400 shrink-0" />
-                    <span className="truncate max-w-[100px] sm:max-w-[140px]">{key.name}</span>
+                    <Key className="size-2 text-sky-400 shrink-0" />
+                    <span className="truncate max-w-[90px] sm:max-w-[130px]">{key.name}</span>
                     {key.host && (
                       <span className="text-4xs opacity-70 font-mono hidden md:inline">
                         ({key.user || "root"}@{key.host})
@@ -268,22 +268,22 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
                       terminalStore.openSshSheetWithKey(key.id);
                     }}
                     title={`Edit credentials & details for ${key.name}`}
-                    className="p-1 rounded-[3px] text-zinc-400 hover:text-sky-300 hover:bg-sky-500/20 transition-all cursor-pointer ml-0.5"
+                    className="p-0.5 rounded-[3px] text-zinc-400 hover:text-sky-300 hover:bg-sky-500/20 transition-all cursor-pointer ml-0.5"
                   >
-                    <Pencil className="size-2.5" />
+                    <Pencil className="size-2" />
                   </button>
                 </div>
               );
             })}
 
-          {/* Add / Manage SSH Button (Opens Sheet in Add Mode) */}
+          {/* Add / Manage SSH Button */}
           <button
             type="button"
             onClick={() => terminalStore.openSshSheetWithKey(null)}
             title="Add New Server Credentials / SSH Key"
-            className="flex items-center gap-1 px-2 py-1 rounded-[5px] bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-500/40 text-3xs font-medium shrink-0 cursor-pointer transition-all shadow-xs"
+            className="flex items-center gap-1 px-1.5 py-0.5 rounded-[5px] bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-500/40 text-4xs font-medium shrink-0 cursor-pointer transition-all shadow-xs active:scale-[0.98]"
           >
-            <Plus className="size-3" />
+            <Plus className="size-2.5" />
             <span>Add Server</span>
           </button>
         </div>
@@ -293,9 +293,9 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
           type="button"
           onClick={scrollRight}
           title="Scroll Right"
-          className="shrink-0 p-1 rounded-[5px] text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/60 transition-colors cursor-pointer"
+          className="shrink-0 p-1 rounded-[5px] text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] transition-colors cursor-pointer"
         >
-          <ChevronRight className="size-3.5" />
+          <ChevronRight className="size-3" />
         </button>
       </div>
 
