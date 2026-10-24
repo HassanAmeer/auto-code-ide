@@ -57,16 +57,13 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
     }
   }, [store.runs]);
 
-  // Determine active CWD, Scope Mode, and Input Mode:
+  // Determine active CWD and Scope Mode:
   const isRootScope = store.scopeMode === "root";
-  const isAiMode = store.inputMode === "ai";
   const projectTitle = store.selectedProjectTitle;
   const projectPath = store.lastProjectPath || (store.selectedProjectId ? store.activeCwd : null);
 
   const effectiveCwd = isRootScope ? "/" : projectPath || projectCwd || store.activeCwd || "/";
-
-  // Label for scope: "Root (/)" if root selected, or project title
-  const scopeName = isRootScope ? "Root (/)" : projectTitle || "Project";
+  const scopeName = isRootScope ? "root" : projectTitle || "project";
 
   const handleExecute = useCallback(async () => {
     const trimmed = command.trim();
@@ -75,7 +72,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
     setIsRunning(true);
     setHistoryIndex(null);
     try {
-      const run = await terminalStore.runCommand(trimmed, effectiveCwd, store.inputMode);
+      const run = await terminalStore.runCommand(trimmed, effectiveCwd);
       setLatestRun(run);
       setIsOutputCollapsed(false);
       setCommand("");
@@ -85,7 +82,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
       setIsRunning(false);
       inputRef.current?.focus();
     }
-  }, [command, isRunning, effectiveCwd, store.inputMode]);
+  }, [command, isRunning, effectiveCwd]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -232,111 +229,14 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
         </div>
       )}
 
-      {/* Scope & Mode Selector Strip */}
-      <div className="flex flex-wrap items-center justify-between gap-1.5 px-2.5 py-1 bg-zinc-950/80 border border-zinc-800/80 rounded-xl text-3xs font-mono select-none backdrop-blur-xs">
-        <div className="flex flex-wrap items-center gap-1.5 min-w-0">
-          <span className="text-zinc-500 font-sans text-4xs uppercase tracking-wider font-semibold shrink-0">
-            Scope:
-          </span>
-
-          {/* Root Scope Button */}
-          <button
-            type="button"
-            onClick={() => terminalStore.setScopeMode("root")}
-            title="Switch to Root (/) - Full Root Access to manage, read, edit, delete, and run any system command"
-            className={cn(
-              "flex items-center gap-1 px-2 py-0.5 rounded-[5px] transition-all cursor-pointer border text-3xs shrink-0",
-              isRootScope
-                ? "bg-amber-500/15 text-amber-300 border-amber-500/40 font-semibold shadow-xs"
-                : "bg-zinc-900/60 text-zinc-400 hover:text-zinc-200 border-zinc-800",
-            )}
-          >
-            <ShieldAlert className="size-2.5 text-amber-400" />
-            <span>Root (/)</span>
-          </button>
-
-          {/* Project Scope Button */}
-          {(projectTitle || projectPath) && (
-            <button
-              type="button"
-              onClick={() => terminalStore.setScopeMode("project")}
-              title={`Switch to Project (${projectPath || effectiveCwd})`}
-              className={cn(
-                "flex items-center gap-1 px-2 py-0.5 rounded-[5px] transition-all cursor-pointer border text-3xs shrink-0 min-w-0",
-                !isRootScope
-                  ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/40 font-semibold shadow-xs"
-                  : "bg-zinc-900/60 text-zinc-400 hover:text-zinc-200 border-zinc-800",
-              )}
-            >
-              <Folder className="size-2.5 text-emerald-400 shrink-0" />
-              <span className="truncate max-w-[110px] sm:max-w-[180px]">
-                {projectTitle || "Project"}
-              </span>
-            </button>
-          )}
-
-          {/* Mode Switcher: Direct Bash vs AI Commander */}
-          <div className="flex items-center gap-1 ml-1 pl-1.5 border-l border-zinc-800 shrink-0">
-            <button
-              type="button"
-              onClick={() => terminalStore.setInputMode("bash")}
-              title="Direct Bash Shell Execution (commands run verbatim)"
-              className={cn(
-                "flex items-center gap-1 px-2 py-0.5 rounded-[5px] transition-all cursor-pointer border text-3xs shrink-0",
-                !isAiMode
-                  ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/40 font-semibold shadow-xs"
-                  : "bg-zinc-900/60 text-zinc-400 hover:text-zinc-200 border-zinc-800",
-              )}
-            >
-              <Terminal className="size-2.5" />
-              <span>Direct Bash</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => terminalStore.setInputMode("ai")}
-              title="AI Commander Mode: Natural language prompts (Roman Urdu/English) are translated & executed"
-              className={cn(
-                "flex items-center gap-1 px-2 py-0.5 rounded-[5px] transition-all cursor-pointer border text-3xs shrink-0",
-                isAiMode
-                  ? "bg-purple-500/20 text-purple-200 border-purple-500/50 font-semibold shadow-xs"
-                  : "bg-zinc-900/60 text-zinc-400 hover:text-zinc-200 border-zinc-800",
-              )}
-            >
-              <Sparkles className="size-2.5 text-purple-400" />
-              <span>AI Commander</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Path Indicator */}
-        <div className="flex items-center gap-1 text-4xs text-zinc-400 truncate max-w-[150px] sm:max-w-[280px] ml-auto font-mono">
-          <span className="text-zinc-600 shrink-0">path:</span>
-          <span className="text-zinc-300 truncate" title={effectiveCwd}>
-            {effectiveCwd}
-          </span>
-        </div>
-      </div>
-
       {/* Sleek Single-Line Command Input Bar */}
-      <div
-        className={cn(
-          "flex items-center gap-2 rounded-2xl bg-card/90 px-3 py-1.5 shadow-sm transition-all border",
-          isAiMode
-            ? "border-purple-500/40 focus-within:border-purple-500/70 focus-within:ring-2 focus-within:ring-purple-500/20"
-            : "border-emerald-500/35 focus-within:border-emerald-500/70 focus-within:ring-2 focus-within:ring-emerald-500/20",
-        )}
-      >
+      <div className="flex items-center gap-2 rounded-2xl border border-emerald-500/35 bg-card/90 px-3 py-1.5 shadow-sm focus-within:border-emerald-500/70 focus-within:ring-2 focus-within:ring-emerald-500/20 transition-all">
         {/* Dropdown Button with Scope Badge (root or Project Name) */}
         <button
           type="button"
           onClick={() => setShowCommandsMenu(true)}
-          title={`Common Commands Dropdown (${scopeName})`}
-          className={cn(
-            "flex items-center gap-1.5 px-2 h-6 rounded-[5px] border transition-all cursor-pointer shrink-0 shadow-xs",
-            isAiMode
-              ? "bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border-purple-500/30"
-              : "bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
-          )}
+          title={`Common Commands & Directory Shortcuts (${scopeName})`}
+          className="flex items-center gap-1.5 px-2 h-6 rounded-[5px] bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition-all cursor-pointer shrink-0 shadow-xs"
         >
           <span className="font-mono text-3xs font-semibold max-w-[120px] sm:max-w-[150px] truncate">
             {scopeName}
@@ -344,23 +244,14 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
           <ChevronDown className="size-3 shrink-0 opacity-80" />
         </button>
 
-        {/* Terminal or AI Icon & Prompt */}
-        <div
-          className={cn(
-            "flex items-center gap-1.5 shrink-0 select-none",
-            isAiMode ? "text-purple-400" : "text-emerald-400",
-          )}
-        >
-          {isAiMode ? (
-            <Sparkles className="size-3.5 animate-pulse" />
-          ) : (
-            <Terminal className="size-3.5" />
-          )}
+        {/* Terminal Icon & Prompt */}
+        <div className="flex items-center gap-1.5 shrink-0 select-none text-emerald-400">
+          <Terminal className="size-3.5" />
           <span
             className="font-mono text-3xs font-semibold text-muted-foreground hidden sm:inline"
             title={`CWD: ${effectiveCwd}`}
           >
-            {isAiMode ? "ai:" : !isRootScope ? `${scopeName}:` : "/:"}
+            {store.selectedProjectId && !isRootScope ? `${scopeName}:` : "/:"}
           </span>
         </div>
 
@@ -373,13 +264,9 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
           onKeyDown={handleKeyDown}
           disabled={isRunning}
           placeholder={
-            isAiMode
-              ? !isRootScope
-                ? `Ask AI to check, deploy, or run in ${scopeName} (e.g. 'last commit dekho', 'deploy karo', 'push to git')...`
-                : "Ask AI to manage VPS root (e.g. 'swap memory check karo', 'autojobs restart karo', 'storage dekho')..."
-              : !isRootScope
-                ? `Run command in ${scopeName} (${effectiveCwd})...`
-                : "Run root command in / (full system access: read, edit, delete, admin)..."
+            store.selectedProjectId && !isRootScope
+              ? `Run command in ${scopeName} (${effectiveCwd})...`
+              : "Run command in root (/)..."
           }
           className="flex-1 min-w-0 bg-transparent text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none font-mono"
         />
@@ -390,20 +277,16 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
             type="button"
             onClick={handleExecute}
             disabled={!command.trim() || isRunning}
-            title={isAiMode ? "Execute with AI (Enter)" : "Execute Command (Enter)"}
+            title="Execute Command (Enter)"
             className={cn(
               "inline-flex items-center justify-center size-7 rounded-xl transition-all cursor-pointer",
               command.trim() && !isRunning
-                ? isAiMode
-                  ? "bg-purple-600 hover:bg-purple-700 text-white shadow-xs"
-                  : "bg-emerald-500 hover:bg-emerald-600 text-white shadow-xs"
+                ? "bg-emerald-500 hover:bg-emerald-600 text-white shadow-xs"
                 : "text-muted-foreground/40 hover:text-muted-foreground cursor-not-allowed",
             )}
           >
             {isRunning ? (
               <Loader2 className="size-3.5 animate-spin" />
-            ) : isAiMode ? (
-              <Sparkles className="size-3.5" />
             ) : (
               <SendHorizontal className="size-3.5" />
             )}

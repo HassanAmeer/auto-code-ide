@@ -8,4 +8,3 @@ export * from "./AiTerminalHeaderStrip";
 export * from "./SshKeysSheet";
 export * from "./TerminalChatsSheet";
 export * from "./ProjectFileExplorer";
-export * from "./AiTerminalTimeline";

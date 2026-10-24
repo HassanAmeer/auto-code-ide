@@ -1,7 +1,19 @@
 import { useState, useMemo, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { Sparkles, Search, X, Play, ArrowRight, Plus, Trash2, Bookmark } from "lucide-react";
+import {
+  Sparkles,
+  Search,
+  X,
+  Play,
+  ArrowRight,
+  Plus,
+  Trash2,
+  Bookmark,
+  Folder,
+  ShieldAlert,
+} from "lucide-react";
 import { QUICK_COMMANDS_LIST, QUICK_COMMAND_CATEGORIES } from "./terminalCommandsData";
+import { useTerminalStore, terminalStore } from "./terminalStore";
 
 export interface TerminalCommandsMenuProps {
   isOpen: boolean;
@@ -23,6 +35,11 @@ export function TerminalCommandsMenu({
   onClose,
   onSelectCommand,
 }: TerminalCommandsMenuProps) {
+  const store = useTerminalStore();
+  const isRootScope = store.scopeMode === "root";
+  const projectTitle = store.selectedProjectTitle;
+  const projectPath = store.lastProjectPath || (store.selectedProjectId ? store.activeCwd : null);
+
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [customSnippets, setCustomSnippets] = useState<CustomSnippet[]>([]);
@@ -219,6 +236,72 @@ export function TerminalCommandsMenu({
                 <X className="size-3" />
               </button>
             )}
+          </div>
+
+          {/* Working Directory / Path Scope Selection (Root vs Project) */}
+          <div className="p-2.5 rounded-lg bg-zinc-900/90 border border-zinc-800 space-y-1.5">
+            <div className="flex items-center justify-between text-3xs font-mono">
+              <span className="text-zinc-400 font-sans font-semibold uppercase tracking-wider text-4xs flex items-center gap-1">
+                <Folder className="size-3 text-emerald-400" /> Working Directory / Path:
+              </span>
+              <span
+                className="text-zinc-400 truncate max-w-[170px]"
+                title={isRootScope ? "/" : projectPath || "/"}
+              >
+                active:{" "}
+                <span className="text-emerald-400 font-medium">
+                  {isRootScope ? "Root (/)" : projectTitle || "Project"}
+                </span>
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              {/* Root Directory Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  terminalStore.setScopeMode("root");
+                  onSelectCommand("cd /", false);
+                  onClose();
+                }}
+                className={`flex items-center gap-2 p-2 rounded-lg border text-left transition-all cursor-pointer ${
+                  isRootScope
+                    ? "bg-amber-500/15 text-amber-300 border-amber-500/40 font-semibold shadow-xs"
+                    : "bg-zinc-800/60 hover:bg-zinc-800 text-zinc-300 border-zinc-750"
+                }`}
+              >
+                <ShieldAlert className="size-3.5 text-amber-400 shrink-0" />
+                <div className="min-w-0">
+                  <div className="text-xs font-medium">Root (/)</div>
+                  <div className="text-4xs text-zinc-400 font-mono truncate">Full VPS access</div>
+                </div>
+              </button>
+
+              {/* Project Directory Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  terminalStore.setScopeMode("project");
+                  if (projectPath) {
+                    onSelectCommand(`cd ${projectPath}`, false);
+                  }
+                  onClose();
+                }}
+                className={`flex items-center gap-2 p-2 rounded-lg border text-left transition-all cursor-pointer ${
+                  !isRootScope
+                    ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/40 font-semibold shadow-xs"
+                    : "bg-zinc-800/60 hover:bg-zinc-800 text-zinc-300 border-zinc-750"
+                }`}
+              >
+                <Folder className="size-3.5 text-emerald-400 shrink-0" />
+                <div className="min-w-0">
+                  <div className="text-xs font-medium truncate">{projectTitle || "Project"}</div>
+                  <div className="text-4xs text-zinc-400 font-mono truncate">
+                    {projectPath || "Project root"}
+                  </div>
+                </div>
+              </button>
+            </div>
           </div>
 
           {/* Category Tabs */}
