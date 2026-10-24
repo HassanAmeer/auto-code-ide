@@ -19,6 +19,8 @@ import { StreamingTtsPlayer, extractSpeechChunks } from "./streamingTtsPlayer";
 import type { VoiceCallStatus } from "./VoiceVisualizerWaves";
 import type { ChatMessage, SessionPhase } from "~/types";
 
+const ACOUSTIC_ECHO_COOLDOWN_MS = 600;
+
 const END_CALL_TRIGGERS = [
   "end call",
   "stop call",

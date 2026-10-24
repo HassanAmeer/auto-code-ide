@@ -8,10 +8,14 @@ import {
   Copy,
   Sparkles,
   ShieldAlert,
+  ShieldCheck,
   Zap,
   Square,
   Plus,
   RotateCcw,
+  FolderGit2,
+  Server,
+  Key,
 } from "lucide-react";
 
 import { cn } from "../../../lib/utils";
@@ -20,6 +24,7 @@ import { executeTerminalCommand } from "./terminalClient";
 import type { TerminalCommandRun } from "./terminalTypes";
 import { toastManager } from "../../ui/toast";
 import { parseAnsiToHtml } from "./ansiParser";
+import { SshKeysSheet } from "./SshKeysSheet";
 
 export interface AiTerminalCommandBarProps {
   projectCwd?: string | undefined;
@@ -41,7 +46,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const inputRef = useRef<HTMLInputElement>(null);
+  const promptInputRef = useRef<HTMLInputElement>(null);
   const terminalScreenRef = useRef<HTMLDivElement>(null);
 
   // Active Tab from store or fallback
@@ -55,35 +60,37 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
     if (terminalScreenRef.current) {
       terminalScreenRef.current.scrollTop = terminalScreenRef.current.scrollHeight;
     }
-  }, [store.runs, latestRun?.stdout, latestRun?.stderr, isRunning, activeTabId]);
+  }, [store.runs, latestRun?.stdout, latestRun?.stderr, isRunning, activeTabId, command]);
 
-  // Update latestRun when runs change
+  // Update latestRun when runs change or activeTab changes
   useEffect(() => {
-    if (store.runs.length > 0) {
-      setLatestRun(store.runs[0] ?? null);
-    }
-  }, [store.runs]);
+    const tabRuns = store.runs.filter((r) => !r.tabId || r.tabId === activeTabId);
+    setLatestRun(tabRuns[0] ?? null);
+  }, [store.runs, activeTabId]);
 
-  // Determine active CWD and Scope Mode:
+  // By default, terminal opens in root ("/")
   const isRootScope = store.scopeMode === "root";
-  const projectTitle = store.selectedProjectTitle;
-  const projectPath = store.lastProjectPath || (store.selectedProjectId ? store.activeCwd : null);
+  const projectTitle = store.selectedProjectTitle || "op";
+  const projectPath =
+    store.lastProjectPath ||
+    (store.selectedProjectId ? store.activeCwd : null) ||
+    "/root/autojobs/projects/autocode-storage/op";
 
   const effectiveCwd = isRootScope ? "/" : projectPath || projectCwd || store.activeCwd || "/";
-  const scopeName = isRootScope ? "root" : projectTitle || "op";
+  const scopeName = isRootScope ? "vps" : projectTitle;
   const cwdDisplay =
     effectiveCwd === "/" ? "/" : effectiveCwd.split("/").filter(Boolean).pop() || effectiveCwd;
 
   const handleAskAiToFix = useCallback(() => {
     if (!latestRun) return;
-    const prompt = `I ran the terminal command in ${scopeName}:\n\`${latestRun.command}\`\n\nIt failed with exit code ${latestRun.exitCode ?? "error"}.\nError Output:\n\`\`\`\n${latestRun.stderr || latestRun.stdout || "Command failed with no output"}\n\`\`\`\nPlease diagnose the cause of this error and tell me how to fix it or give me the fixed command to run.`;
+    const prompt = `I ran the terminal command in ${scopeName} (${effectiveCwd}):\n\`${latestRun.command}\`\n\nIt failed with exit code ${latestRun.exitCode ?? "error"}.\nError Output:\n\`\`\`\n${latestRun.stderr || latestRun.stdout || "Command failed with no output"}\n\`\`\`\nPlease diagnose the cause of this error and tell me how to fix it or give me the fixed command to run.`;
     window.dispatchEvent(new CustomEvent("t3:insert-speech-text", { detail: { text: prompt } }));
     toastManager.add({
       type: "info",
       title: "Sent to AI Chat",
       description: "Terminal error diagnosis prompt inserted into conversation.",
     });
-  }, [latestRun, scopeName]);
+  }, [latestRun, scopeName, effectiveCwd]);
 
   const handleExecute = useCallback(
     async (overrideCommand?: string) => {
@@ -99,14 +106,13 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
         return;
       }
 
-      // Clear command input immediately so user sees responsiveness
       setCommand("");
 
       // Auto-elevate with sudo if command is marked as always-allowed or user is in full-access mode for systemctl/apt
       let finalCommandToRun = trimmed;
       if (
         !finalCommandToRun.startsWith("sudo ") &&
-        (store.isCommandAlwaysAllowed(finalCommandToRun) ||
+        (terminalStore.isCommandAlwaysAllowed(finalCommandToRun) ||
           (store.permissionMode === "full-access" &&
             (finalCommandToRun.startsWith("apt ") ||
               finalCommandToRun.startsWith("systemctl ") ||
@@ -161,19 +167,10 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
         });
       } finally {
         setIsRunning(false);
-        inputRef.current?.focus();
+        promptInputRef.current?.focus();
       }
     },
-    [
-      command,
-      isRunning,
-      effectiveCwd,
-      store.permissionMode,
-      store.isCommandAlwaysAllowed,
-      activeTabId,
-      isRootScope,
-      scopeName,
-    ],
+    [command, isRunning, effectiveCwd, store.permissionMode, activeTabId, isRootScope, scopeName],
   );
 
   const handleKill = useCallback(async () => {
@@ -234,7 +231,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
         });
       } finally {
         setIsRunning(false);
-        inputRef.current?.focus();
+        promptInputRef.current?.focus();
       }
     },
     [effectiveCwd, isRunning],
@@ -263,7 +260,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
         });
       } finally {
         setIsRunning(false);
-        inputRef.current?.focus();
+        promptInputRef.current?.focus();
       }
     },
     [effectiveCwd, isRunning],
@@ -345,35 +342,39 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
 
   // 2-Line Smart Action Suggestions (Title on top, muted exact bash command below)
   const smartSuggestions = [
-    { title: "📁 List Directory", cmd: "ls -la", desc: "View all files & folders" },
-    { title: "💾 Check Free RAM", cmd: "free -h", desc: "RAM usage & buffer" },
-    { title: "⚡ Git Status", cmd: "git status", desc: "Branch & modified files" },
-    { title: "⏱ VPS Uptime", cmd: "uptime", desc: "Server load & uptime" },
-    {
-      title: "⚙️ AutoJobs Service",
-      cmd: "systemctl status autojobs.service --no-pager",
-      desc: "Check service health",
-    },
-    { title: "💿 Disk Usage", cmd: "df -h /", desc: "Available root storage" },
-    { title: "🔄 Pull Latest Code", cmd: "git pull origin main", desc: "Fetch & pull latest code" },
-    { title: "🔍 Active Ports", cmd: "ss -tulpn", desc: "List listening ports" },
-    { title: "🧹 Clear Screen", cmd: "clear", desc: "Clear console history" },
+    { title: "📁 List Directory", cmd: "ls -la" },
+    { title: "💾 Check Free RAM", cmd: "free -h" },
+    { title: "⚡ Git Status", cmd: "git status" },
+    { title: "⏱ VPS Uptime", cmd: "uptime" },
+    { title: "⚙️ AutoJobs Service", cmd: "systemctl status autojobs.service --no-pager" },
+    { title: "💿 Disk Usage", cmd: "df -h /" },
+    { title: "🔄 Pull Latest Code", cmd: "git pull origin main" },
+    { title: "🔍 Active Ports", cmd: "ss -tulpn" },
+    { title: "🧹 Clear Screen", cmd: "clear" },
   ];
 
-  // Runs to display chronologically in the terminal screen
-  const runsToDisplay = store.runs.slice(0, 15).reverse();
+  // Runs to display chronologically in the terminal screen for active tab
+  const activeTabRuns = store.runs.filter((r) => !r.tabId || r.tabId === activeTabId);
+  const baseRuns = activeTabRuns.slice(0, 30).reverse();
+  const runsToDisplay =
+    latestRun &&
+    (!latestRun.tabId || latestRun.tabId === activeTabId) &&
+    !baseRuns.some((r) => r.id === latestRun.id)
+      ? [...baseRuns, latestRun]
+      : baseRuns;
 
   return (
     <div
       className={cn(
-        "w-full h-full flex flex-col bg-[#07070a] text-zinc-100 font-sans select-none overflow-hidden",
+        "w-full h-full flex flex-col bg-[#07070a] text-zinc-100 font-mono select-none overflow-hidden border-l border-white/[0.08]",
         className,
       )}
+      onClick={() => promptInputRef.current?.focus()}
     >
       {/* ============================================================== */}
-      {/* 1. MULTI-TERMINAL TAB BAR & ACTION CONTROLS                    */}
+      {/* 1. AUTHENTIC TERMINAL WINDOW TOP BAR & TABS                    */}
       {/* ============================================================== */}
-      <div className="flex items-center justify-between px-3 h-10 bg-[#101015] border-b border-white/[0.08] select-none text-xs shrink-0">
+      <div className="flex items-center justify-between px-3 h-10 bg-[#0d0d12] border-b border-white/[0.08] select-none text-xs shrink-0">
         {/* Dynamic Multi-Terminal Tabs */}
         <div className="flex items-center gap-1.5 min-w-0 overflow-x-auto [scrollbar-width:none]">
           {store.terminalTabs.map((tab) => {
@@ -381,18 +382,20 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
             return (
               <div
                 key={tab.id}
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
                   terminalStore.setActiveTabId(tab.id);
                   if (tab.type === "logs") {
                     void handleLoadLogs();
                   }
+                  promptInputRef.current?.focus();
                 }}
                 className={cn(
-                  "group flex items-center gap-1.5 px-2.5 py-1 rounded-[6px] font-mono text-3xs font-semibold border transition-all cursor-pointer active:scale-95 shrink-0",
+                  "group flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] text-3xs font-semibold border transition-all cursor-pointer active:scale-95 shrink-0",
                   isActive
                     ? tab.type === "logs"
-                      ? "bg-[#1c1c28] text-sky-400 border-sky-500/40 shadow-xs"
-                      : "bg-[#181822] text-emerald-400 border-emerald-500/40 shadow-xs"
+                      ? "bg-[#181824] text-sky-400 border-sky-500/40 shadow-xs"
+                      : "bg-[#141816] text-emerald-400 border-emerald-500/40 shadow-xs"
                     : "text-zinc-400 hover:text-zinc-200 border-white/[0.04] hover:bg-white/[0.04]",
                 )}
               >
@@ -427,9 +430,10 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
           {/* Plus Tab: Add New Terminal Instance */}
           <button
             type="button"
-            onClick={() => {
-              const newTabId = terminalStore.addTerminalTab();
-              inputRef.current?.focus();
+            onClick={(e) => {
+              e.stopPropagation();
+              terminalStore.addTerminalTab();
+              promptInputRef.current?.focus();
               toastManager.add({
                 type: "info",
                 title: "New Terminal Opened",
@@ -437,35 +441,54 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
               });
             }}
             title="Open New Terminal Session (+)"
-            className="flex items-center gap-1 px-2 py-1 rounded-[6px] text-zinc-400 hover:text-white bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] text-3xs font-mono transition-all cursor-pointer shrink-0"
+            className="flex items-center gap-1 px-2 py-1 rounded-[5px] text-zinc-400 hover:text-white bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] text-3xs transition-all cursor-pointer shrink-0"
           >
             <Plus className="size-3" />
-            <span className="hidden sm:inline">New Terminal</span>
+            <span className="hidden sm:inline">New</span>
           </button>
         </div>
 
-        {/* Right Action Controls */}
+        {/* Right Action Controls: Scope Pill + Clear + Copy + Close */}
         <div className="flex items-center gap-1.5 text-zinc-400 shrink-0 ml-2">
-          {/* Live Spinner when running */}
-          {isRunning && (
-            <div className="flex items-center gap-1.5 text-emerald-400 font-mono text-4xs font-medium mr-1 animate-pulse">
-              <Loader2 className="size-3 animate-spin text-emerald-400" />
-              <span className="hidden sm:inline">Executing...</span>
-            </div>
-          )}
-
-          {/* Stop Button (Ctrl+C) */}
-          {isRunning && (
-            <button
-              type="button"
-              onClick={() => void handleKill()}
-              title="Stop running process (Ctrl+C)"
-              className="flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 font-medium text-4xs transition-all cursor-pointer active:scale-95"
-            >
-              <Square className="size-2 fill-current" />
-              <span>Stop</span>
-            </button>
-          )}
+          {/* Scope indicator badge (Default: Root /) */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              const nextMode = isRootScope ? "project" : "root";
+              terminalStore.setScopeMode(nextMode);
+              toastManager.add({
+                type: "info",
+                title:
+                  nextMode === "root"
+                    ? "Switched to Root (/)"
+                    : `Switched to Project (${projectTitle})`,
+                description:
+                  nextMode === "root"
+                    ? "Commands will execute from Linux VPS root (/)."
+                    : `Commands will execute in ${projectPath}`,
+              });
+            }}
+            title={`Current Scope: ${isRootScope ? "Root (/)" : `Project (${projectTitle})`}. Click to toggle.`}
+            className={cn(
+              "flex items-center gap-1 px-2 py-0.5 rounded-[5px] text-4xs font-semibold transition-all cursor-pointer border active:scale-95 shrink-0",
+              isRootScope
+                ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+                : "bg-sky-500/15 text-sky-400 border-sky-500/30",
+            )}
+          >
+            {isRootScope ? (
+              <>
+                <Server className="size-2.5 shrink-0 text-emerald-400" />
+                <span>root@vps (/)</span>
+              </>
+            ) : (
+              <>
+                <FolderGit2 className="size-2.5 shrink-0 text-sky-400" />
+                <span>{projectTitle}</span>
+              </>
+            )}
+          </button>
 
           {/* Ask AI to Fix Button (on error) */}
           {(latestRun?.status === "error" ||
@@ -473,35 +496,56 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
             (latestRun?.stderr && latestRun.stderr.length > 0)) && (
             <button
               type="button"
-              onClick={handleAskAiToFix}
-              title="Ask AI in Left Pane to diagnose and fix this error"
-              className="flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 border border-purple-500/40 font-medium text-4xs transition-all cursor-pointer shadow-xs active:scale-95"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleAskAiToFix();
+              }}
+              title="Ask AI to fix this terminal error"
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 border border-purple-500/40 text-4xs transition-all cursor-pointer active:scale-95"
             >
               <Sparkles className="size-2.5 text-purple-400" />
-              <span>✨ Fix with AI</span>
+              <span>Fix with AI</span>
             </button>
           )}
 
           {/* Copy Output */}
           <button
             type="button"
-            onClick={handleCopyOutput}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleCopyOutput();
+            }}
             title="Copy Terminal Output"
             className="p-1 rounded-[4px] text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] transition-colors cursor-pointer"
           >
             {copied ? <Check className="size-3 text-emerald-400" /> : <Copy className="size-3" />}
           </button>
 
+          {/* SSH Keys trigger */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              terminalStore.setSshSheetOpen(true);
+            }}
+            title="Manage SSH Keys & Remote Servers"
+            className="flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-white/[0.04] hover:bg-white/[0.08] text-zinc-300 hover:text-white border border-white/[0.06] text-4xs transition-colors cursor-pointer"
+          >
+            <Key className="size-2.5 text-amber-400" />
+            <span>SSH</span>
+          </button>
+
           {/* Clear Console */}
           <button
             type="button"
-            onClick={() => {
-              terminalStore.clearRuns();
+            onClick={(e) => {
+              e.stopPropagation();
+              terminalStore.clearRuns(activeTabId);
               setLatestRun(null);
               setLogsOutput(null);
             }}
             title="Clear Console Output"
-            className="px-1.5 py-0.5 rounded-[4px] text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] text-4xs font-mono transition-colors cursor-pointer"
+            className="px-1.5 py-0.5 rounded-[4px] text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] text-4xs transition-colors cursor-pointer"
           >
             Clear
           </button>
@@ -509,9 +553,12 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
           {/* Close Panel Button */}
           <button
             type="button"
-            onClick={() => terminalStore.setQuickBarOpen(false)}
+            onClick={(e) => {
+              e.stopPropagation();
+              terminalStore.setQuickBarOpen(false);
+            }}
             title="Close Terminal Studio"
-            className="p-1 rounded-[4px] text-zinc-400 hover:text-white hover:bg-white/[0.08] transition-colors cursor-pointer ml-1"
+            className="p-1 rounded-[4px] text-zinc-400 hover:text-white hover:bg-white/[0.08] transition-colors cursor-pointer ml-0.5"
           >
             <X className="size-3.5" />
           </button>
@@ -519,17 +566,16 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
       </div>
 
       {/* ============================================================== */}
-      {/* 2. DEDICATED FULL-HEIGHT TERMINAL CONSOLE SCREEN               */}
+      {/* 2. PROPER TERMINAL SCREEN (WITH INLINE ACTIVE SHELL PROMPT)    */}
       {/* ============================================================== */}
       <div
         ref={terminalScreenRef}
-        className="flex-1 p-3 overflow-y-auto font-mono text-3xs leading-relaxed space-y-2.5 bg-[#050508] text-zinc-200 select-text [scrollbar-width:thin] scroll-smooth"
+        className="flex-1 p-3 overflow-y-auto text-3xs leading-relaxed space-y-2 bg-[#050508] text-zinc-200 select-text [scrollbar-width:thin] scroll-smooth font-mono cursor-text"
+        onClick={() => promptInputRef.current?.focus()}
       >
-        {/* Banner line */}
+        {/* Terminal Header Banner */}
         <div className="text-zinc-500 pb-1.5 border-b border-white/[0.06] select-none flex items-center justify-between text-4xs">
-          <span>
-            AutoCode Linux VPS Terminal v2.5 (Host: {isRootScope ? "VPS Root" : scopeName})
-          </span>
+          <span>AutoCode Linux VPS Terminal v2.5 (Host: root@{scopeName})</span>
           <span className="text-zinc-600">cwd: {effectiveCwd}</span>
         </div>
 
@@ -538,115 +584,151 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
           <>
             {/* Sudo Permission Required Prompt Card */}
             {isPermissionError && (
-              <div className="p-2.5 rounded-[8px] bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-transparent border border-amber-500/35 flex flex-col gap-2 shadow-sm animate-in fade-in duration-200">
+              <div
+                onClick={(e) => e.stopPropagation()}
+                className="p-2.5 rounded-[6px] bg-amber-500/10 border border-amber-500/30 flex flex-col gap-1.5 shadow-sm animate-in fade-in duration-200"
+              >
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5 text-amber-400 font-semibold text-2xs">
                     <ShieldAlert className="size-3.5 shrink-0 text-amber-400" />
-                    <span>Permission Elevation Required</span>
+                    <span>Permission Required (Exit {latestRun?.exitCode})</span>
                   </div>
-                  <span className="text-4xs text-amber-300/80 font-mono bg-amber-500/20 px-1.5 py-0.5 rounded border border-amber-500/30">
-                    Exit {latestRun?.exitCode}
-                  </span>
                 </div>
-                <p className="text-3xs text-zinc-300 font-sans leading-relaxed">
-                  This command requires elevated system rights to execute in{" "}
+                <p className="text-4xs text-zinc-300 font-sans leading-relaxed">
+                  This command requires root elevation in{" "}
                   <code className="text-amber-300 font-mono bg-black/40 px-1 py-0.5 rounded text-4xs">
                     {effectiveCwd}
                   </code>
-                  .
                 </p>
                 <div className="flex items-center gap-2 pt-0.5">
                   <button
                     type="button"
                     onClick={() => latestRun && handleAllowOnce(latestRun.command)}
                     disabled={isRunning}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[5px] bg-emerald-500 hover:bg-emerald-600 text-white font-medium text-3xs shadow-xs active:scale-95 transition-all cursor-pointer"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500 hover:bg-emerald-600 text-white font-medium text-4xs shadow-xs active:scale-95 transition-all cursor-pointer"
                   >
-                    <Check className="size-3" />
-                    <span>Allow (Run with Sudo)</span>
+                    <Check className="size-2.5" />
+                    <span>Run with Sudo</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => latestRun && handleAllowAlways(latestRun.command)}
                     disabled={isRunning}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[5px] bg-sky-600 hover:bg-sky-500 text-white font-medium text-3xs shadow-xs active:scale-95 transition-all cursor-pointer"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-sky-600 hover:bg-sky-500 text-white font-medium text-4xs shadow-xs active:scale-95 transition-all cursor-pointer"
                   >
-                    <Zap className="size-3" />
-                    <span>Allow Always</span>
+                    <Zap className="size-2.5" />
+                    <span>Always Allow</span>
                   </button>
                   <button
                     type="button"
                     onClick={handleDeny}
                     disabled={isRunning}
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-[5px] bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-3xs border border-white/[0.08] active:scale-95 transition-all cursor-pointer"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-4xs border border-white/[0.08] active:scale-95 transition-all cursor-pointer"
                   >
-                    <X className="size-3" />
-                    <span>Deny</span>
+                    <X className="size-2.5" />
+                    <span>Dismiss</span>
                   </button>
                 </div>
               </div>
             )}
 
-            {/* Render recent runs chronologically */}
-            {runsToDisplay.length === 0 ? (
-              <div className="text-zinc-600 italic py-4 text-center">
-                Terminal ready. Select a suggestion card below or type any command to run on VPS
-                host.
-              </div>
-            ) : (
-              runsToDisplay.map((run) => (
-                <div key={run.id} className="space-y-1 pt-1.5 border-t border-white/[0.04]">
-                  <div className="flex items-center justify-between text-zinc-400">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-emerald-400 font-semibold">
-                        root@{scopeName}:{effectiveCwd === "/" ? "/" : cwdDisplay}#
-                      </span>
-                      <span className="text-white font-semibold">{run.command}</span>
-                    </div>
-                    <span
-                      className={cn(
-                        "text-4xs px-1.5 py-0.2 rounded-[4px] font-mono",
-                        run.status === "success"
-                          ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
-                          : run.status === "error"
-                            ? "bg-rose-500/15 text-rose-400 border border-rose-500/30"
-                            : "bg-white/[0.06] text-zinc-400",
-                      )}
-                    >
-                      {run.status === "running"
-                        ? "running..."
-                        : run.exitCode !== undefined
-                          ? `exit ${run.exitCode} (${run.durationMs}ms)`
-                          : run.status}
-                    </span>
-                  </div>
-
-                  {run.stdout && (
-                    <div
-                      className="text-zinc-100 whitespace-pre-wrap break-all pl-2 font-mono"
-                      dangerouslySetInnerHTML={{ __html: parseAnsiToHtml(run.stdout) }}
-                    />
-                  )}
-                  {run.stderr && (
-                    <div
-                      className="text-rose-400 whitespace-pre-wrap break-all pl-2 font-mono"
-                      dangerouslySetInnerHTML={{ __html: parseAnsiToHtml(run.stderr) }}
-                    />
-                  )}
-                  {!run.stdout && !run.stderr && run.status === "success" && (
-                    <div className="text-zinc-500 italic pl-2">
-                      (Command executed with no output)
-                    </div>
-                  )}
-                  {!run.stdout && !run.stderr && run.status === "running" && (
-                    <div className="flex items-center gap-1.5 text-zinc-400 italic py-0.5 pl-2">
-                      <Loader2 className="size-3 animate-spin text-emerald-400" />
-                      <span>Executing command on VPS host...</span>
-                    </div>
-                  )}
+            {/* Introductory notice if empty */}
+            {runsToDisplay.length === 0 && (
+              <div className="text-zinc-600 py-3 select-none text-4xs space-y-0.5">
+                <div>
+                  Terminal ready in {isRootScope ? "Root (/)" : `Project (${projectTitle})`}.
                 </div>
-              ))
+                <div>Type any bash command at the prompt below or click a quick action.</div>
+              </div>
             )}
+
+            {/* Historical completed runs */}
+            {runsToDisplay.map((run) => (
+              <div key={run.id} className="space-y-1 pt-1 border-t border-white/[0.04]">
+                <div className="flex items-center justify-between text-zinc-400">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-emerald-400 font-semibold select-none">
+                      root@{scopeName}:{run.cwd === "/" ? "/" : cwdDisplay}#
+                    </span>
+                    <span className="text-white font-semibold select-text">{run.command}</span>
+                  </div>
+                  <span
+                    className={cn(
+                      "text-4xs px-1.5 py-0.2 rounded font-mono shrink-0 select-none",
+                      run.status === "success"
+                        ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
+                        : run.status === "error"
+                          ? "bg-rose-500/15 text-rose-400 border border-rose-500/30"
+                          : "bg-white/[0.06] text-zinc-400",
+                    )}
+                  >
+                    {run.status === "running"
+                      ? "running..."
+                      : run.exitCode !== undefined
+                        ? `exit ${run.exitCode} (${run.durationMs}ms)`
+                        : run.status}
+                  </span>
+                </div>
+
+                {run.stdout && (
+                  <div
+                    className="text-zinc-100 whitespace-pre-wrap break-all pl-2 font-mono"
+                    dangerouslySetInnerHTML={{ __html: parseAnsiToHtml(run.stdout) }}
+                  />
+                )}
+                {run.stderr && (
+                  <div
+                    className="text-rose-400 whitespace-pre-wrap break-all pl-2 font-mono"
+                    dangerouslySetInnerHTML={{ __html: parseAnsiToHtml(run.stderr) }}
+                  />
+                )}
+                {!run.stdout && !run.stderr && run.status === "success" && (
+                  <div className="text-zinc-600 italic pl-2 text-4xs">
+                    (Command executed with no output)
+                  </div>
+                )}
+                {!run.stdout && !run.stderr && run.status === "running" && (
+                  <div className="flex items-center gap-1.5 text-zinc-400 italic py-0.5 pl-2">
+                    <Loader2 className="size-3 animate-spin text-emerald-400" />
+                    <span>Executing on VPS host...</span>
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {/* ACTIVE INLINE PROMPT (Authentic CLI prompt directly inside the terminal) */}
+            <div className="pt-2 flex items-center gap-1.5 text-zinc-200">
+              <span className="text-emerald-400 font-mono font-bold select-none shrink-0">
+                root@{scopeName}:{cwdDisplay}#
+              </span>
+              <input
+                ref={promptInputRef}
+                type="text"
+                value={command}
+                onChange={(e) => setCommand(e.target.value)}
+                onKeyDown={handleKeyDown}
+                disabled={isRunning}
+                autoFocus
+                spellCheck={false}
+                autoComplete="off"
+                className="flex-1 min-w-0 bg-transparent text-3xs font-mono text-zinc-100 placeholder:text-zinc-700 focus:outline-none"
+                placeholder={isRunning ? "Executing..." : ""}
+              />
+              {isRunning && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void handleKill();
+                  }}
+                  title="Stop execution (Ctrl+C)"
+                  className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-500/30 hover:bg-rose-500 text-rose-300 hover:text-white transition-all cursor-pointer shrink-0 text-4xs font-mono"
+                >
+                  <Square className="size-2 fill-current" />
+                  <span>Stop</span>
+                </button>
+              )}
+            </div>
           </>
         )}
 
@@ -659,7 +741,10 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
               </span>
               <button
                 type="button"
-                onClick={() => void handleLoadLogs()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void handleLoadLogs();
+                }}
                 disabled={isLoadingLogs}
                 className="flex items-center gap-1 px-2 py-0.5 rounded bg-white/[0.06] hover:bg-white/[0.1] text-zinc-300 text-4xs font-mono cursor-pointer"
               >
@@ -678,7 +763,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
                 dangerouslySetInnerHTML={{ __html: parseAnsiToHtml(logsOutput) }}
               />
             ) : (
-              <div className="text-zinc-500 italic py-2">
+              <div className="text-zinc-500 italic py-2 text-4xs">
                 Click Refresh Logs to fetch service journalctl logs.
               </div>
             )}
@@ -687,71 +772,34 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
       </div>
 
       {/* ============================================================== */}
-      {/* 3. 2-LINE SMART SUGGESTIONS & SINGLE DIRECT TERMINAL PROMPT    */}
+      {/* 3. BOTTOM SUGGESTIONS ROW (NO INPUT FIELD UNDERNEATH!)          */}
       {/* ============================================================== */}
-      <div className="p-2.5 bg-[#0e0e14] border-t border-white/[0.08] shrink-0 space-y-2">
-        {/* Horizontal Scrollable 2-Line Smart Action Cards */}
-        <div className="flex items-center gap-2 overflow-x-auto py-0.5 px-0.5 [scrollbar-width:thin] select-none">
+      <div
+        className="px-2.5 py-2 bg-[#0c0c11] border-t border-white/[0.08] shrink-0 select-none"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none] py-0.5">
           {smartSuggestions.map((item) => (
             <button
               key={item.cmd}
               type="button"
               onClick={() => void handleExecute(item.cmd)}
               disabled={isRunning}
-              className="flex flex-col text-left px-2.5 py-1.5 rounded-lg bg-[#15151e] hover:bg-[#20202d] border border-white/[0.08] hover:border-emerald-500/50 transition-all cursor-pointer shrink-0 active:scale-95 group shadow-xs"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[6px] bg-[#14141d] hover:bg-[#1f1f2d] border border-white/[0.08] hover:border-emerald-500/40 text-left transition-all cursor-pointer shrink-0 active:scale-95 group shadow-xs"
             >
-              <span className="text-3xs font-semibold text-zinc-200 group-hover:text-emerald-400 transition-colors">
+              <span className="text-3xs font-medium text-zinc-300 group-hover:text-emerald-400 transition-colors">
                 {item.title}
               </span>
               <span className="text-4xs font-mono text-zinc-500 group-hover:text-zinc-400">
-                $ {item.cmd}
+                ${item.cmd.length > 20 ? item.cmd.slice(0, 18) + "..." : item.cmd}
               </span>
             </button>
           ))}
         </div>
-
-        {/* The ONLY Clean Direct Terminal Input Prompt (No Duplicate Boxes!) */}
-        <div className="flex items-center gap-2 rounded-lg bg-[#08080c] border border-white/[0.12] px-2.5 py-1.5 focus-within:border-emerald-500/60 focus-within:ring-1 focus-within:ring-emerald-500/20 transition-all shadow-md">
-          <span className="text-emerald-400 font-mono font-bold text-xs select-none shrink-0">
-            root@{scopeName}:{cwdDisplay}#
-          </span>
-          <input
-            ref={inputRef}
-            type="text"
-            value={command}
-            onChange={(e) => setCommand(e.target.value)}
-            onKeyDown={handleKeyDown}
-            disabled={isRunning}
-            placeholder="Type command (e.g. ls, free -h, git status) and press Enter..."
-            className="flex-1 min-w-0 bg-transparent text-xs font-mono text-white placeholder:text-zinc-600 focus:outline-none"
-          />
-          {isRunning ? (
-            <button
-              type="button"
-              onClick={() => void handleKill()}
-              title="Stop running command (Ctrl+C)"
-              className="p-1 rounded bg-rose-500/30 hover:bg-rose-500 text-rose-300 hover:text-white transition-all cursor-pointer shrink-0 active:scale-95"
-            >
-              <Square className="size-3 fill-current" />
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => void handleExecute(command)}
-              disabled={!command.trim() || isRunning}
-              title="Run Command (Enter)"
-              className={cn(
-                "p-1 rounded transition-all cursor-pointer shrink-0",
-                command.trim() && !isRunning
-                  ? "bg-emerald-500 hover:bg-emerald-400 text-black shadow-xs font-bold active:scale-95"
-                  : "text-zinc-600 cursor-not-allowed",
-              )}
-            >
-              <SendHorizontal className="size-3" />
-            </button>
-          )}
-        </div>
       </div>
+
+      {/* SSH Keys & Remote Servers Management Sheet */}
+      <SshKeysSheet />
     </div>
   );
 });

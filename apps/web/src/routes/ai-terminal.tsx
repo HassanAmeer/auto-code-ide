@@ -5,6 +5,8 @@ import { terminalStore } from "../components/chat/terminal";
 function AiTerminalRouteHandler() {
   const navigate = useNavigate();
   useEffect(() => {
+    terminalStore.setScopeMode("root");
+    terminalStore.setActiveCwd("/");
     terminalStore.setQuickBarOpen(true);
     void navigate({ to: "/" });
   }, [navigate]);

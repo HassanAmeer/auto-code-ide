@@ -5,6 +5,7 @@ import type {
   TerminalAccessKey,
   TerminalChatSession,
   TerminalTab,
+  TerminalExecResult,
 } from "./terminalTypes";
 import {
   executeTerminalCommand,
@@ -93,17 +94,9 @@ const initialSelectedKey =
   typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY_SELECTED_KEY) : null;
 const initialLastProjectPath =
   typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY_LAST_PROJECT_PATH) : null;
-const initialScopeMode: "root" | "project" =
-  typeof window !== "undefined" && window.localStorage.getItem(STORAGE_KEY_SCOPE_MODE) === "project"
-    ? "project"
-    : "root";
+const initialScopeMode: "root" | "project" = "root";
 
-const initialCwd =
-  typeof window !== "undefined"
-    ? initialScopeMode === "project" && initialLastProjectPath
-      ? initialLastProjectPath
-      : "/"
-    : "/";
+const initialCwd = "/";
 
 const initialOpen =
   typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY_OPEN) === "true" : false;
@@ -192,7 +185,7 @@ let state: TerminalState = {
   terminalChats: initialTerminalChats,
   activeChatId: initialTerminalChats[0]?.id ?? null,
   terminalTabs: initialTerminalTabs,
-  activeTabId: initialTerminalTabs[0].id,
+  activeTabId: initialTerminalTabs[0]?.id || "term_tab_1",
   inputMode: "bash",
   permissionMode: initialPermissionMode,
   alwaysAllowedCommands: initialAlwaysAllowedCommands,
@@ -263,7 +256,7 @@ export const terminalStore = {
     const remaining = state.terminalTabs.filter((t) => t.id !== tabId);
     const nextActive =
       state.activeTabId === tabId
-        ? remaining[remaining.length - 1]?.id || remaining[0].id
+        ? remaining[remaining.length - 1]?.id || remaining[0]?.id || "term_tab_1"
         : state.activeTabId;
     state = {
       ...state,
@@ -341,10 +334,15 @@ export const terminalStore = {
     notify();
   },
 
-  clearRuns() {
-    state = { ...state, runs: [] };
+  clearRuns(tabId?: string) {
+    const nextRuns = tabId ? state.runs.filter((r) => r.tabId && r.tabId !== tabId) : [];
+    state = { ...state, runs: nextRuns };
     if (typeof window !== "undefined") {
-      window.localStorage.removeItem(STORAGE_KEY_RUNS);
+      if (nextRuns.length === 0) {
+        window.localStorage.removeItem(STORAGE_KEY_RUNS);
+      } else {
+        window.localStorage.setItem(STORAGE_KEY_RUNS, JSON.stringify(nextRuns.slice(0, 20)));
+      }
     }
     notify();
   },
@@ -875,7 +873,9 @@ export const terminalStore = {
       if (
         !result.ok &&
         isSshTarget &&
-        (result.stderr.toLowerCase().includes("permission denied") || result.exitCode === 255)
+        (result.stderr.toLowerCase().includes("permission denied") ||
+          result.stderr.toLowerCase().includes("host key") ||
+          result.exitCode === 255)
       ) {
         console.warn(
           "SSH command wrapper failed, automatically falling back to direct host execution...",
@@ -888,12 +888,26 @@ export const terminalStore = {
       if (result.stderr) {
         terminalStore.appendRunChunk(runId, result.stderr, "stderr");
       }
-    } catch {
-      result = await executeTerminalCommandStream(executionId, commandToExecute, cwd, {
-        onChunk: (chunk, type) => {
-          terminalStore.appendRunChunk(runId, chunk, type);
-        },
-      });
+    } catch (directErr) {
+      console.warn("Direct execution failed, attempting stream execution...", directErr);
+      try {
+        result = await executeTerminalCommandStream(executionId, commandToExecute, cwd, {
+          onChunk: (chunk, type) => {
+            terminalStore.appendRunChunk(runId, chunk, type);
+          },
+        });
+      } catch (streamErr) {
+        const failMessage = streamErr instanceof Error ? streamErr.message : String(streamErr);
+        result = {
+          ok: false,
+          command: actualCommand,
+          cwd,
+          stdout: "",
+          stderr: `Execution failed: ${failMessage}`,
+          exitCode: 1,
+          durationMs: 0,
+        };
+      }
     }
 
     // Auto-update CWD on successful `cd <path>` if local

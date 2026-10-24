@@ -16,10 +16,12 @@ export async function executeTerminalCommand(
   const startTime = Date.now();
   try {
     let url = "/api/terminal/exec";
-    try {
-      url = resolvePrimaryEnvironmentHttpUrl("/api/terminal/exec");
-    } catch {
-      url = "/api/terminal/exec";
+    if (typeof window === "undefined") {
+      try {
+        url = resolvePrimaryEnvironmentHttpUrl("/api/terminal/exec");
+      } catch {
+        url = "/api/terminal/exec";
+      }
     }
 
     const response = await fetch(url, {
@@ -91,10 +93,12 @@ export async function executeTerminalCommandStream(
 
   try {
     let streamUrl = "/api/terminal/stream";
-    try {
-      streamUrl = resolvePrimaryEnvironmentHttpUrl("/api/terminal/stream");
-    } catch {
-      streamUrl = "/api/terminal/stream";
+    if (typeof window === "undefined") {
+      try {
+        streamUrl = resolvePrimaryEnvironmentHttpUrl("/api/terminal/stream");
+      } catch {
+        streamUrl = "/api/terminal/stream";
+      }
     }
 
     const response = await fetch(streamUrl, {
@@ -203,10 +207,12 @@ export async function executeTerminalCommandStream(
 export async function killTerminalExecution(executionId: string): Promise<boolean> {
   try {
     let killUrl = "/api/terminal/kill";
-    try {
-      killUrl = resolvePrimaryEnvironmentHttpUrl("/api/terminal/kill");
-    } catch {
-      killUrl = "/api/terminal/kill";
+    if (typeof window === "undefined") {
+      try {
+        killUrl = resolvePrimaryEnvironmentHttpUrl("/api/terminal/kill");
+      } catch {
+        killUrl = "/api/terminal/kill";
+      }
     }
     const response = await fetch(killUrl, {
       method: "POST",
@@ -716,6 +722,12 @@ export function translatePromptToBashCommand(
   }
 
   // 8. Files / Directory / Search
+  if (
+    (p.includes("total") || p.includes("count") || p.includes("kitni") || p.includes("kitne")) &&
+    (p.includes("file") || p.includes("fiel") || p.includes("folder") || p.includes("item"))
+  ) {
+    return `echo "=== Total Files Count ===" && find . -maxdepth 2 -not -path '*/.*' | wc -l && echo "=== Directory Listing (Top 20) ===" && ls -lah | head -n 22`;
+  }
   if (p.includes("largest") || p.includes("big file") || p.includes("heavy file")) {
     return `du -ah ${effectiveCwd} 2>/dev/null | sort -rh | head -n 12`;
   }
@@ -723,9 +735,53 @@ export function translatePromptToBashCommand(
     p.includes("list file") ||
     p.includes("show file") ||
     p.includes("directory") ||
-    p.includes("files dekho")
+    p.includes("files dekho") ||
+    p.includes("files bata") ||
+    p.includes("fiels bata")
   ) {
-    return "ls -la --color=auto";
+    return "ls -lah --color=auto";
+  }
+  // 9. Codebase Research & File Search
+  if (p.includes("find file") || p.includes("file dhundo") || p.includes("locate file")) {
+    const fileMatch = prompt.match(/(?:find file|file dhundo|locate file)\s+["']?([^"']+)["']?/i);
+    const filename = fileMatch?.[1]?.replace(/karo|mein|ko|hai/gi, "").trim();
+    if (filename) {
+      return `find . -not -path '*/.*' -not -path '*/node_modules/*' -iname "*${filename}*" | head -n 25`;
+    }
+  }
+
+  if (
+    p.includes("search") ||
+    p.includes("find in code") ||
+    p.includes("code search") ||
+    p.includes("dhundo") ||
+    p.includes("kahan hai") ||
+    p.includes("research")
+  ) {
+    const match = prompt.match(
+      /(?:search for|search|research|dhundo|find|check)\s+["']?([^"']+)["']?/i,
+    );
+    const query = match?.[1]?.replace(/karo|mein|ko|hai|codebase|code/gi, "").trim();
+    if (query && query.length > 1) {
+      return `echo "=== Searching for '${query}' in codebase ===" && grep -rnI --exclude-dir={node_modules,.git,dist,build,.next} "${query}" . 2>/dev/null | head -n 30`;
+    }
+    return `git status --short && ls -la`;
+  }
+
+  if (
+    p.includes("database") ||
+    p.includes("db inspect") ||
+    p.includes("db check") ||
+    p.includes("tables dekho")
+  ) {
+    return `ls -lah *db* *sqlite* prisma/ migrations/ 2>/dev/null || echo "Checking database files in $(pwd)..." && find . -maxdepth 3 -name "*.sqlite" -o -name "*.db" 2>/dev/null`;
+  }
+
+  if (p.includes("whoami") || p.includes("current user") || p.includes("user kaun")) {
+    return "whoami && id";
+  }
+  if (p.includes("pwd") || p.includes("current path") || p.includes("path kya")) {
+    return "pwd";
   }
   if (p.includes("package.json") || p.includes("dependencies dekho")) {
     return "cat package.json 2>/dev/null | head -n 40 || ls -la";
@@ -875,6 +931,15 @@ export function isNaturalLanguagePrompt(input: string): boolean {
     "keys",
     "error",
     "logs",
+    "mujhe",
+    "mujhy",
+    "fiels",
+    "bataen",
+    "hen",
+    "kitni",
+    "kitne",
+    "total",
+    "count",
   ];
 
   for (const kw of naturalKeywords) {

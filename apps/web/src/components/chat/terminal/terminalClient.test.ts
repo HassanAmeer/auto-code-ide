@@ -17,6 +17,18 @@ describe("translatePromptToBashCommand", () => {
     expect(translatePromptToBashCommand("check ram")).toMatch(/free -h/);
   });
 
+  it("translates file count queries in Roman Urdu and English", () => {
+    const cmd1 = translatePromptToBashCommand("mujhy total fiels bataen kitni hen");
+    expect(cmd1).toContain("find .");
+    expect(cmd1).toContain("wc -l");
+
+    const cmd2 = translatePromptToBashCommand("total files kitni hain");
+    expect(cmd2).toContain("wc -l");
+
+    const cmd3 = translatePromptToBashCommand("fiels bataen");
+    expect(cmd3).toContain("ls -lah");
+  });
+
   it("translates port kill intent with extracted port number", () => {
     expect(translatePromptToBashCommand("kill port 3000")).toContain("3000");
   });
