@@ -476,7 +476,6 @@ import { PullRequestThreadDialog } from "./PullRequestThreadDialog";
 import type { AssistantCitationRequest } from "./chat/AssistantCitationSource";
 import { MessagesTimeline, type MessagesTimelineHistoryControls } from "./chat/MessagesTimeline";
 import { isVoiceCallActive } from "./chat/voiceCall";
-import { terminalStore } from "./chat/terminal/terminalStore";
 import {
   playResponseDoneSound,
   playErrorSound,
@@ -484,7 +483,7 @@ import {
   stopWaitingWaveSound,
 } from "~/lib/sound/soundManager";
 import { AiTerminalHeaderStrip, AiTerminalCommandBar } from "./chat/terminal";
-import { useTerminalStore } from "./chat/terminal/terminalStore";
+import { useTerminalStore, terminalStore } from "./chat/terminal/terminalStore";
 import {
   translatePromptToBashCommand,
   isConversationalPrompt,
@@ -4193,6 +4192,26 @@ export default function ChatView(props: ChatViewProps) {
   useEffect(() => {
     setHeldWorktreeSetup(null);
   }, [routeThreadKey]);
+
+  // Mirror AI Agent Tool Calls and Terminal Executions live into the Right-Side Terminal
+  useEffect(() => {
+    if (!isTerminalQuickBarOpen || !displayedTimeline?.entries) return;
+    for (const entry of displayedTimeline.entries) {
+      if (entry.kind === "work" && entry.entry) {
+        const w = entry.entry;
+        const cmd = w.command || w.rawCommand || (w.tone === "tool" ? w.label : null);
+        if (cmd) {
+          terminalStore.recordAiToolRun({
+            id: `ai_tool_${w.toolCallId || w.id}`,
+            command: cmd,
+            stdout: w.detail || "",
+            status: w.tone === "error" ? "error" : "success",
+            exitCode: w.tone === "error" ? 1 : 0,
+          });
+        }
+      }
+    }
+  }, [isTerminalQuickBarOpen, displayedTimeline?.entries]);
   const { snapshot: liveWorktreeSetup, isPreparingWorktree } = resolveWorktreeSetupProgress({
     threadId: setupTarget.threadId,
     localPreparing: isLocallyPreparingWorktree,
@@ -9546,302 +9565,15 @@ export default function ChatView(props: ChatViewProps) {
       )
       .trim();
 
-    // ==============================================================
-    // AI TERMINAL MODE: Autonomous execution in right terminal & live reporting in left chat
-    // ==============================================================
-    if (isTerminalQuickBarOpen && messageTextForSend) {
-      const userPromptText = messageTextForSend;
-      const userMessageId = newMessageId();
-      const assistantMessageId = newMessageId();
-      const nowIso = new Date().toISOString();
-
-      const userMsg: ChatMessage = {
-        id: userMessageId,
-        role: "user",
-        text: userPromptText,
-        runId: null,
-        streaming: false,
-        createdAt: nowIso,
-        updatedAt: nowIso,
-      };
-
-      // 1. Pure conversational greetings & acknowledgements (e.g. "hy", "hello", "ok", "theek hai")
-      if (isConversationalPrompt(userPromptText)) {
-        let conversationalReply = "";
-        const lower = userPromptText.trim().toLowerCase();
-        if (
-          lower === "ok" ||
-          lower === "okay" ||
-          lower === "okey" ||
-          lower === "theek" ||
-          lower === "theek hai" ||
-          lower === "thik hai" ||
-          lower === "thik he" ||
-          lower === "theek he" ||
-          lower === "acha" ||
-          lower === "achha" ||
-          lower === "done" ||
-          lower === "sahi" ||
-          lower === "sahi hai"
-        ) {
-          conversationalReply =
-            "Theek hai! Jab bhi aapko VPS terminal par koi command chalani ho ya system/files check karni ho, bas yahan bata dein.";
-        } else if (lower.includes("salam")) {
-          conversationalReply =
-            "Wa Alaikum Assalam! Main aapka AI Terminal Assistant hoon. Main aapke VPS terminal par commands execute kar sakta hoon aur files/system monitor kar sakta hoon. Aapko terminal mein kya check ya run karwana hai?";
-        } else if (
-          lower.includes("kaise ho") ||
-          lower.includes("how are you") ||
-          lower.includes("kese ho") ||
-          lower.includes("kya hal")
-        ) {
-          conversationalReply =
-            "Alhamdulillah, main bilkul theek hoon! VPS system active aur running hai. Aap mujhe koi bhi terminal command chalane ya inspect karne ko keh sakte hain.";
-        } else if (
-          lower.includes("who are you") ||
-          lower.includes("kaun ho") ||
-          lower.includes("kon ho")
-        ) {
-          conversationalReply =
-            "Main AutoCode ka AI Terminal Assistant hoon. Main aapke commands ko VPS terminal par chalata hoon, output monitor karta hoon aur report deta hoon.";
-        } else {
-          conversationalReply =
-            "Hello! Main aapka AI Terminal Assistant hoon. Main right-side VPS terminal par direct commands execute kar sakta hoon. Aap yahan English ya Roman Urdu mein pooch sakte hain, maslan: `check how many files and folders inside`, `free RAM check karo`, `git status`, ya direct koi bash command.";
-        }
-
-        const conversationalAssistantMsg: ChatMessage = {
-          id: assistantMessageId,
-          role: "assistant",
-          text: conversationalReply,
-          runId: null,
-          streaming: false,
-          createdAt: nowIso,
-          updatedAt: nowIso,
-        };
-
-        setOptimisticUserMessages((prev) => [...prev, userMsg, conversationalAssistantMsg]);
-        promptRef.current = "";
-        clearComposerDraftContent(composerDraftTarget);
-        composerRef.current?.resetCursorState();
-        return;
-      }
-
+    // In AI Terminal Studio Mode, enrich prompt context with active Linux VPS host working directory
+    if (isTerminalQuickBarOpen && messageTextForSend && !messageTextForSend.startsWith("/")) {
       const termState = terminalStore.getState();
       const currentTermTab = termState.terminalTabs.find((t) => t.id === termState.activeTabId);
-      const effectiveTermCwd =
+      const activeCwd =
         currentTermTab?.cwd ||
         termState.activeCwd ||
         (termState.scopeMode === "root" ? "/" : gitCwd || "/");
-      const activeKeys = termState.accessKeys.filter((k) => k.enabled);
-
-      const bashCmd = translatePromptToBashCommand(userPromptText, effectiveTermCwd, activeKeys, {
-        cwd: effectiveTermCwd,
-        scopeMode: termState.scopeMode,
-        projectName: termState.selectedProjectTitle,
-        projectPath: termState.lastProjectPath,
-        activeKeys,
-        selectedKeyId: termState.selectedKeyId,
-      });
-
-      // 2. Prevent sending unrecognized English/Urdu conversational sentences into /bin/bash as invalid commands
-      const firstWord = userPromptText.trim().split(/\s+/)[0]?.toLowerCase() || "";
-      const isRecognizedBinary = isKnownUnixBinary(firstWord);
-      const hasShellPipesOrOps = /[|&;><]/.test(userPromptText);
-
-      if (
-        isNaturalLanguagePrompt(userPromptText) &&
-        bashCmd === userPromptText.trim() &&
-        !isRecognizedBinary &&
-        !hasShellPipesOrOps
-      ) {
-        const clarificationMsg: ChatMessage = {
-          id: assistantMessageId,
-          role: "assistant",
-          text: `Main aapki yeh request samajh nahi paya: \`${userPromptText}\`.\n\nMain sirf terminal tasks execute karta hoon. Baraye meharbani wazeh batayein keh aap terminal par kya karwana chahte hain, maslan:\n- 📁 \`check how many files and folders inside\` (Files aur folders check karna)\n- 💾 \`RAM check karo\` ya \`disk space dekho\`\n- ⚙️ \`autojobs service status\` ya \`restart service\`\n- ⚡ \`git status\` ya direct bash command jaise \`ls -la\`, \`pwd\`, \`uptime\` waghera.`,
-          runId: null,
-          streaming: false,
-          createdAt: nowIso,
-          updatedAt: nowIso,
-        };
-        setOptimisticUserMessages((prev) => [...prev, userMsg, clarificationMsg]);
-        promptRef.current = "";
-        clearComposerDraftContent(composerDraftTarget);
-        composerRef.current?.resetCursorState();
-        return;
-      }
-
-      const initialAssistantMsg: ChatMessage = {
-        id: assistantMessageId,
-        role: "assistant",
-        text: `⚡ **AI Terminal Agent:**\nMaine terminal ke andar yeh command daal di hai:\n\`${bashCmd}\`\n\nYeh abhi VPS par execute ho rahi hai... Baraye meharbani right-side terminal window mein live output check karein.`,
-        runId: null,
-        streaming: true,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-
-      setOptimisticUserMessages((prev) => [...prev, userMsg, initialAssistantMsg]);
-
-      promptRef.current = "";
-      clearComposerDraftContent(composerDraftTarget);
-      composerRef.current?.resetCursorState();
-
-      try {
-        const runResult = await terminalStore.runCommand(bashCmd, effectiveTermCwd, "bash");
-
-        let responseReport = "";
-        const cleanStdout = (runResult.stdout || "").trim();
-        const cleanStderr = (runResult.stderr || "").trim();
-        const isSuccess =
-          runResult.status === "success" &&
-          (runResult.exitCode === 0 || runResult.exitCode === null);
-
-        const lowerPrompt = userPromptText.toLowerCase();
-        const isFilesQuery =
-          (lowerPrompt.includes("file") ||
-            lowerPrompt.includes("fiel") ||
-            lowerPrompt.includes("folder") ||
-            lowerPrompt.includes("directory") ||
-            lowerPrompt.includes("item")) &&
-          (lowerPrompt.includes("total") ||
-            lowerPrompt.includes("count") ||
-            lowerPrompt.includes("how much") ||
-            lowerPrompt.includes("how many") ||
-            lowerPrompt.includes("much") ||
-            lowerPrompt.includes("many") ||
-            lowerPrompt.includes("kitni") ||
-            lowerPrompt.includes("kitne") ||
-            lowerPrompt.includes("check") ||
-            lowerPrompt.includes("inside") ||
-            lowerPrompt.includes("inides") ||
-            lowerPrompt.includes("bata") ||
-            lowerPrompt.includes("show") ||
-            lowerPrompt.includes("list"));
-
-        if (isFilesQuery) {
-          const totalMatch = cleanStdout.match(/Total Items:\s*(\d+)\s*\(([^)]+)\)/i);
-          const legacyMatch =
-            cleanStdout.match(/=== Total Files Count ===\s*(\d+)/i) || cleanStdout.match(/^(\d+)/m);
-          responseReport =
-            `Maine terminal ke andar files aur folders check karne ke liye command run kar di hai:\n\`${runResult.command}\`\n\n` +
-            `**Nateeja:**\n` +
-            (totalMatch
-              ? `- **Total Items:** ${totalMatch[1]} (${totalMatch[2]})\n`
-              : legacyMatch
-                ? `- **Total Files / Folders:** ${legacyMatch[1]}\n`
-                : "") +
-            `- **Directory:** \`${effectiveTermCwd}\`\n` +
-            `- **Status:** ✅ Kamiyabi se check kar liya hai (Exit 0)\n\n` +
-            `Aap right-side terminal window mein mukammal files list, sizes aur permissions dekh saktay hain. Yeh task complete ho gaya hai.`;
-        } else if (lowerPrompt.includes("deploy") || lowerPrompt.includes("live karo")) {
-          responseReport =
-            `🚀 **Deployment Pipeline Status:**\n` +
-            `Maine project deploy karne ke liye terminal mein yeh pipeline execute kar di hai:\n\`${runResult.command}\`\n\n` +
-            `**Status:** ${isSuccess ? "✅ Deployment kamiyabi se mukammal aur Service Active hai!" : "❌ Build/Deployment mein masla pesh aaya"}\n\n` +
-            (cleanStdout
-              ? `**Build & Service Status:**\n\`\`\`\n${cleanStdout.slice(-500)}\n\`\`\`\n\n`
-              : "") +
-            `Right-side terminal window mein step-by-step build logs render ho chuke hain.`;
-        } else if (
-          lowerPrompt.includes("search") ||
-          lowerPrompt.includes("dhundo") ||
-          lowerPrompt.includes("find in code")
-        ) {
-          responseReport =
-            `🔍 **Codebase Search Report:**\n` +
-            `Maine codebase mein search karne ke liye command run kar di hai:\n\`${runResult.command}\`\n\n` +
-            `**Status:** ${isSuccess ? "✅ Search Complete" : "Completed with notices"}\n\n` +
-            (cleanStdout
-              ? `**Matching Results:**\n\`\`\`\n${cleanStdout.slice(0, 500)}\n\`\`\`\n\n`
-              : "Koi matching results nahi mile.\n\n") +
-            `Mukammal results right-side terminal window mein render ho chuke hain.`;
-        } else if (lowerPrompt === "ls" || lowerPrompt.startsWith("ls ")) {
-          responseReport =
-            `Maine right-side terminal mein \`${runResult.command}\` execute kar diya hai.\n\n` +
-            `**Directory:** \`${effectiveTermCwd}\`\n` +
-            `**Status:** Directory listing terminal mein render ho chuki hai. Aap right side par files aur permissions dekh saktay hain.`;
-        } else if (
-          lowerPrompt.includes("free -h") ||
-          lowerPrompt.includes("ram") ||
-          lowerPrompt.includes("memory")
-        ) {
-          responseReport =
-            `Maine terminal ke andar RAM check karne ke liye \`free -h\` run kar diya hai:\n\n` +
-            (cleanStdout ? `\`\`\`\n${cleanStdout}\n\`\`\`\n\n` : "") +
-            `Live details right side terminal window mein visible hain.`;
-        } else if (
-          lowerPrompt.includes("df -h") ||
-          lowerPrompt.includes("disk") ||
-          lowerPrompt.includes("storage")
-        ) {
-          responseReport =
-            `Maine terminal ke andar Disk storage check karne ke liye \`df -h\` run kar diya hai:\n\n` +
-            (cleanStdout ? `\`\`\`\n${cleanStdout}\n\`\`\`\n\n` : "") +
-            `Live details right side terminal window mein visible hain.`;
-        } else if (
-          lowerPrompt.includes("ssh") ||
-          lowerPrompt.includes("server") ||
-          lowerPrompt.includes("connect")
-        ) {
-          responseReport =
-            `🌐 **Server & SSH Execution:**\n` +
-            `Maine target server par command run kar di hai:\n\`${runResult.command}\`\n\n` +
-            `**Status:** ${isSuccess ? "✅ Connected & Executed" : "❌ Execution Notice"}\n\n` +
-            (cleanStdout ? `\`\`\`\n${cleanStdout.slice(0, 450)}\n\`\`\`\n\n` : "") +
-            `Aap right-side terminal window mein live output check kar saktay hain.`;
-        } else if (lowerPrompt.includes("git") || lowerPrompt.includes("branch")) {
-          responseReport =
-            `⚡ **Git Repository Action:**\n` +
-            `Maine git command execute kar di hai:\n\`${runResult.command}\`\n\n` +
-            `**Status:** ${isSuccess ? "✅ Complete" : "Notice"}\n\n` +
-            (cleanStdout ? `\`\`\`\n${cleanStdout.slice(0, 450)}\n\`\`\`\n\n` : "") +
-            `Right-side terminal window mein details check kar saktay hain.`;
-        } else if (isSuccess) {
-          const preview =
-            cleanStdout.length > 500
-              ? cleanStdout.slice(0, 500) + "\n... (baqi output terminal mein dekhein)"
-              : cleanStdout;
-          responseReport =
-            `Maine terminal ke andar yeh command execute kar di hai:\n\`${runResult.command}\`\n\n` +
-            `**Status:** Successful (Exit ${runResult.exitCode ?? 0}, ${runResult.durationMs}ms)\n` +
-            (preview ? `**Output Preview:**\n\`\`\`\n${preview}\n\`\`\`\n\n` : "") +
-            `Aap right-side terminal window mein mukammal live output dekh saktay hain. Yeh task maine kar liya hai.`;
-        } else {
-          responseReport =
-            `Command run karte waqt error pesh aaya:\n\`${runResult.command}\` (Exit Code: ${runResult.exitCode ?? 1})\n\n` +
-            (cleanStderr ? `**Error Output:**\n\`\`\`\n${cleanStderr}\n\`\`\`\n\n` : "") +
-            `Aap right-side terminal mein details dekh saktay hain ya 'Fix with AI' use kar saktay hain.`;
-        }
-
-        const finalAssistantMsg: ChatMessage = {
-          id: assistantMessageId,
-          role: "assistant",
-          text: responseReport,
-          runId: null,
-          streaming: false,
-          createdAt: nowIso,
-          updatedAt: new Date().toISOString(),
-        };
-
-        setOptimisticUserMessages((prev) =>
-          prev.map((m) => (m.id === assistantMessageId ? finalAssistantMsg : m)),
-        );
-      } catch (err) {
-        const errMsg = err instanceof Error ? err.message : String(err);
-        const errorAssistantMsg: ChatMessage = {
-          id: assistantMessageId,
-          role: "assistant",
-          text: `Command run karte waqt masla aaya: ${errMsg}\nBaraye meharbani right side terminal check karein.`,
-          runId: null,
-          streaming: false,
-          createdAt: nowIso,
-          updatedAt: new Date().toISOString(),
-        };
-        setOptimisticUserMessages((prev) =>
-          prev.map((m) => (m.id === assistantMessageId ? errorAssistantMsg : m)),
-        );
-      }
-      return;
+      messageTextForSend = `${messageTextForSend}\n\n[AI Terminal Environment: Running on Linux VPS host. Active working directory: \`${activeCwd}\`. Execute necessary commands via tools and explain actions concisely.]`;
     }
 
     if (isAutoDebugCommand(messageTextForSend)) {

@@ -361,6 +361,43 @@ export const terminalStore = {
     notify();
   },
 
+  recordAiToolRun(toolRun: {
+    id: string;
+    command: string;
+    stdout?: string;
+    stderr?: string;
+    exitCode?: number | null;
+    status?: "running" | "success" | "error";
+    cwd?: string;
+  }) {
+    const existingIndex = state.runs.findIndex((r) => r.id === toolRun.id);
+    const runCwd = toolRun.cwd || state.activeCwd || "/";
+    const run: TerminalCommandRun = {
+      id: toolRun.id,
+      tabId: state.activeTabId,
+      command: toolRun.command,
+      cwd: runCwd,
+      status: toolRun.status ?? "success",
+      exitCode: toolRun.exitCode ?? 0,
+      stdout: toolRun.stdout || "",
+      stderr: toolRun.stderr || "",
+      durationMs: 0,
+      timestamp: Date.now(),
+      targetHost: "AI Tool Execution",
+      mode: "ai",
+    };
+
+    let updatedRuns: TerminalCommandRun[];
+    if (existingIndex >= 0) {
+      updatedRuns = state.runs.map((r, i) => (i === existingIndex ? { ...r, ...run } : r));
+    } else {
+      updatedRuns = [run, ...state.runs];
+    }
+
+    state = { ...state, runs: updatedRuns };
+    notify();
+  },
+
   removeRun(id: string) {
     const nextRuns = state.runs.filter((r) => r.id !== id);
     state = {
