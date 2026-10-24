@@ -2693,8 +2693,19 @@ export default function ChatView(props: ChatViewProps) {
   const handleNewTerminalThread = useCallback(() => {
     terminalStore.setQuickBarOpen(true);
     clearComposerDraftContent(composerDraftTarget);
-    startNewThreadForProject(activeProjectRef, handleNewThread);
-  }, [activeProjectRef, clearComposerDraftContent, composerDraftTarget, handleNewThread]);
+    // Open a fresh new chat session dedicated for AI Terminal (detached from project)
+    startNewThreadForProject(null, handleNewThread);
+  }, [clearComposerDraftContent, composerDraftTarget, handleNewThread]);
+
+  useEffect(() => {
+    const onNewTerminalThreadEvent = () => {
+      handleNewTerminalThread();
+    };
+    window.addEventListener("t3:new-terminal-thread", onNewTerminalThreadEvent);
+    return () => {
+      window.removeEventListener("t3:new-terminal-thread", onNewTerminalThreadEvent);
+    };
+  }, [handleNewTerminalThread]);
 
   const prevRunStatusRef = useRef<{
     runId: string | null;

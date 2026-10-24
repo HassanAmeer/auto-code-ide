@@ -361,29 +361,28 @@ export function DraftHeroHeadline({
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col items-center">
-      {activeProjectDisplayName || activeProjectTitle ? (
-        <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3.5 py-1 text-xs font-medium text-primary shadow-xs">
-          <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span>
-            Selected Project:{" "}
-            <strong className="font-semibold">
-              {activeProjectDisplayName ?? activeProjectTitle}
-            </strong>
-          </span>
-        </div>
-      ) : null}
-      <h1
-        aria-label={headingLabel}
-        className="w-full text-center font-normal text-2xl text-foreground tracking-tight sm:text-3xl"
-      >
+      <h1 aria-label={headingLabel} className="w-full text-center font-normal tracking-tight">
         {isScratchDraft ? (
-          <>What should we work on?</>
+          <span className="text-zinc-400 text-lg sm:text-xl font-normal">
+            What should we work on?
+          </span>
         ) : hasResolvedProject ? (
-          <>What should we build in {projectSelector}?</>
+          <>
+            <span className="text-zinc-400 text-lg sm:text-xl font-normal">
+              What should we build in{" "}
+            </span>
+            <span className="text-foreground text-lg sm:text-xl font-medium">
+              {projectSelector}?
+            </span>
+          </>
         ) : canChooseProject ? (
-          <>{projectSelector} to start</>
+          <span className="text-lg sm:text-xl font-medium text-foreground">
+            {projectSelector} to start
+          </span>
         ) : (
-          <>Add a project to start</>
+          <span className="text-zinc-400 text-lg sm:text-xl font-normal">
+            Add a project to start
+          </span>
         )}
       </h1>
       {/* Reserved whenever threads can skip a project, so the heading does not

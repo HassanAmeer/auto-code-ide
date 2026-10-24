@@ -255,9 +255,11 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
       terminalStore.setQuickBarOpen(false);
     } else {
       if (terminalStore.getState().terminalChats.length === 0) {
-        terminalStore.createTerminalChat();
+        terminalStore.createTerminalChat({ title: "AI Terminal Session" });
       }
       terminalStore.setQuickBarOpen(true);
+      void navigate({ to: "/" });
+      window.dispatchEvent(new CustomEvent("t3:new-terminal-thread"));
     }
   }, [closeMobileSidebar, navigate]);
 
@@ -592,9 +594,11 @@ export const SidebarAiTerminalItem = memo(function SidebarAiTerminalItem() {
       terminalStore.setQuickBarOpen(false);
     } else {
       if (terminalStore.getState().terminalChats.length === 0) {
-        terminalStore.createTerminalChat();
+        terminalStore.createTerminalChat({ title: "AI Terminal Session" });
       }
       terminalStore.setQuickBarOpen(true);
+      void navigate({ to: "/" });
+      window.dispatchEvent(new CustomEvent("t3:new-terminal-thread"));
     }
   }, [isMobile, navigate, setOpenMobile]);
 
