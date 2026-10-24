@@ -1534,14 +1534,45 @@ export const layerProjectDownloadZipRoute = HttpRouter.add(
       );
     }
 
+    const safeName = (rawName || "project").replace(/[^a-zA-Z0-9_-]/g, "_");
     const tempZipFile = `/tmp/t3_dl_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.zip`;
-    // High-performance pruning zip: skips all dot-prefixed files and folders (e.g. .git, .env,
-    // .DS_Store) plus known heavy build artifacts (node_modules, dist, .next, etc.).
-    // The grep -v '/\.' pattern filters out any path component that starts with a dot.
-    const zipCmd = `if [ -z "$(find . -mindepth 1 -maxdepth 1 2>/dev/null)" ]; then touch .t3_empty && zip -q "${tempZipFile}" .t3_empty && rm -f .t3_empty; else find . -mindepth 1 \\( -type d \\( -name "node_modules" -o -name ".git" -o -name "dist" -o -name ".next" -o -name "build" -o -name ".cache" -o -name ".turbo" -o -name ".venv" -o -name "__pycache__" -o -name ".t3" -o -name ".autocode" -o -name ".nuxt" -o -name ".output" -o -name ".svelte-kit" -o -name ".parcel-cache" -o -name "coverage" -o -name ".nyc_output" \\) -prune \\) -o -print | grep -v '/\\.' | zip -q "${tempZipFile}" -@ || ( [ $? -eq 12 ] && touch .t3_empty && zip -q "${tempZipFile}" .t3_empty && rm -f .t3_empty ); fi`;
+
+    // Build a clean zip: prune heavy dirs and ALL dot-prefixed files/folders.
+    // Only regular files (-type f) are passed to zip to avoid exit-12 on dir entries.
+    const PRUNED = [
+      "node_modules",
+      ".git",
+      "dist",
+      ".next",
+      "build",
+      ".cache",
+      ".turbo",
+      ".venv",
+      "__pycache__",
+      ".t3",
+      ".autocode",
+      ".nuxt",
+      ".output",
+      ".svelte-kit",
+      ".parcel-cache",
+      "coverage",
+      ".nyc_output",
+      "tmp",
+    ];
+    const prunePart = PRUNED.map((d) => `-name "${d}"`).join(" -o ");
+    const zipCmd = [
+      `if [ -z "$(ls -A . 2>/dev/null)" ]; then`,
+      `  touch .t3_empty && zip -q "${tempZipFile}" .t3_empty && rm -f .t3_empty`,
+      `; else`,
+      `  find . -mindepth 1 \\( -type d \\( ${prunePart} \\) -prune \\) -o -type f -print`,
+      `  | grep -v '/\\.'`,
+      `  | zip -q "${tempZipFile}" -@`,
+      `  ; RC=$?; [ $RC -eq 0 ] || [ $RC -eq 12 ]`,
+      `; fi`,
+    ].join("\n");
 
     const zipResult = yield* Effect.promise(() =>
-      runBashCommandOnHost(zipCmd, workspaceRoot, 120_000),
+      runBashCommandOnHost(zipCmd, workspaceRoot, 180_000),
     );
     if (zipResult.exitCode !== 0) {
       return HttpServerResponse.jsonUnsafe(
@@ -1550,24 +1581,41 @@ export const layerProjectDownloadZipRoute = HttpRouter.add(
       );
     }
 
-    const zipBytes = yield* fileSystem.readFile(tempZipFile).pipe(Effect.orElseSucceed(() => null));
-    yield* fileSystem.remove(tempZipFile).pipe(Effect.ignore);
-
-    if (!zipBytes) {
+    // Get file size so browser shows download progress.
+    const zipStat = yield* fileSystem.stat(tempZipFile).pipe(Effect.option);
+    if (Option.isNone(zipStat) || zipStat.value.type !== "File") {
+      yield* fileSystem.remove(tempZipFile).pipe(Effect.ignore);
       return HttpServerResponse.jsonUnsafe(
-        { ok: false, error: "Could not read generated zip file" },
+        { ok: false, error: "ZIP generation produced no output" },
         { status: 500 },
       );
     }
+    const zipSizeBytes = zipStat.value.size;
 
-    const safeName = (rawName || "project").replace(/[^a-zA-Z0-9_-]/g, "_");
-    return HttpServerResponse.raw(zipBytes, {
-      contentType: "application/zip",
-      headers: {
-        "Content-Disposition": downloadContentDisposition(`${safeName}.zip`),
-        "Content-Length": String(zipBytes.byteLength),
-      },
+    // Stream the ZIP from disk so large projects never OOM the server.
+    const catProc = NodeChildProcess.spawn("cat", [tempZipFile], {
+      stdio: ["ignore", "pipe", "ignore"],
     });
+    catProc.stdout?.once("end", () => {
+      NodeChildProcess.spawn("rm", ["-f", tempZipFile], {
+        stdio: "ignore",
+        detached: true,
+      }).unref();
+    });
+
+    return HttpServerResponse.stream(
+      Stream.fromReadableStream(
+        () => catProc.stdout as NodeJS.ReadableStream,
+        (e) => new Error(String(e)),
+      ),
+      {
+        contentType: "application/zip",
+        headers: {
+          "Content-Disposition": downloadContentDisposition(`${safeName}.zip`),
+          "Content-Length": String(zipSizeBytes),
+        },
+      },
+    );
   }).pipe(
     Effect.catchCause((cause) =>
       Effect.succeed(HttpServerResponse.jsonUnsafe({ ok: false, error: Cause.pretty(cause) })),
