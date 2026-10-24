@@ -141,7 +141,7 @@ export function CommandPaletteVirtualizedResults(props: CommandPaletteVirtualize
             />
           )
         }
-        estimatedItemSize={40}
+        estimatedItemSize={52}
         drawDistance={400}
         onLayout={updateScrollFade}
         onScroll={updateScrollFade}
@@ -203,6 +203,12 @@ function CommandPaletteResultRow(props: {
       {...(props.index === undefined ? {} : { index: props.index })}
       value={props.item.value}
       active={props.isActive}
+      className={cn(
+        "group relative flex items-center gap-3 rounded-lg px-2.5 py-1.5 my-0.5 transition-all duration-150 cursor-pointer select-none",
+        props.isActive
+          ? "bg-zinc-800/90 text-zinc-100 shadow-xs ring-1 ring-white/10"
+          : "hover:bg-zinc-800/40 text-zinc-300 hover:text-zinc-100",
+      )}
       onMouseDown={(event) => {
         event.preventDefault();
       }}
@@ -210,10 +216,19 @@ function CommandPaletteResultRow(props: {
         props.onExecuteItem(props.item);
       }}
     >
-      {props.item.icon}
+      <div
+        className={cn(
+          "flex size-7 shrink-0 items-center justify-center rounded-md transition-colors",
+          props.isActive
+            ? "bg-sky-500/15 text-sky-400 ring-1 ring-sky-500/30"
+            : "bg-zinc-800/60 text-zinc-400 group-hover:bg-zinc-800 group-hover:text-zinc-300",
+        )}
+      >
+        {props.item.icon}
+      </div>
       {props.item.description || props.item.threadContentMatch ? (
-        <span className="flex min-w-0 flex-1 flex-col">
-          <span className="flex min-w-0 items-center gap-1.5 text-sm text-foreground">
+        <span className="flex min-w-0 flex-1 flex-col justify-center">
+          <span className="flex min-w-0 items-center gap-1.5 text-sm font-medium text-zinc-100">
             {props.item.titleLeadingContent}
             <span className="truncate">{props.item.title}</span>
           </span>
@@ -221,26 +236,29 @@ function CommandPaletteResultRow(props: {
             <ThreadSearchMatchExcerpt match={props.item.threadContentMatch} />
           ) : null}
           {props.item.description ? (
-            <span className="min-w-0 text-muted-foreground/70 text-xs">
-              {props.item.description}
-            </span>
+            <span className="min-w-0 text-xs text-zinc-400 mt-0.5">{props.item.description}</span>
           ) : null}
         </span>
       ) : (
-        <span className="flex min-w-0 flex-1 items-center gap-1.5 text-sm text-foreground">
+        <span className="flex min-w-0 flex-1 items-center gap-1.5 text-sm font-medium text-zinc-100">
           {props.item.titleLeadingContent}
           <span className="truncate">{props.item.title}</span>
         </span>
       )}
       {props.item.titleTrailingContent}
       {props.item.timestamp ? (
-        <span className="min-w-12 shrink-0 text-right text-xs tabular-nums text-muted-foreground/70">
+        <span
+          className={cn(
+            "min-w-12 shrink-0 text-right text-xs font-mono tabular-nums transition-colors",
+            props.isActive ? "text-zinc-300" : "text-zinc-500",
+          )}
+        >
           {props.item.timestamp}
         </span>
       ) : null}
       {shortcutLabel ? <CommandShortcut>{shortcutLabel}</CommandShortcut> : null}
       {props.item.kind === "submenu" ? (
-        <ChevronRightIcon className="-me-0.5 ms-auto size-4 shrink-0 text-muted-foreground/70" />
+        <ChevronRightIcon className="-me-0.5 ms-auto size-4 shrink-0 text-zinc-500 group-hover:text-zinc-300" />
       ) : null}
     </CommandItem>
   );
