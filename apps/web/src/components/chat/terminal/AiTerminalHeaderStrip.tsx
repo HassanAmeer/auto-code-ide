@@ -211,6 +211,16 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
           {/* 4. SSH Servers Section */}
           <span className="text-zinc-500 text-4xs font-medium shrink-0">SSH:</span>
 
+          {/* Icon-only outlined Plus button right after "SSH:" */}
+          <button
+            type="button"
+            onClick={() => terminalStore.openSshSheetWithKey(null)}
+            title="Add New Server Credentials / SSH Key"
+            className="flex items-center justify-center size-5 rounded-[4px] border border-white/[0.12] hover:border-sky-400/50 bg-[#18181b]/70 hover:bg-sky-500/15 text-zinc-400 hover:text-sky-300 transition-all cursor-pointer shrink-0 shadow-xs active:scale-[0.96]"
+          >
+            <Plus className="size-2.5" />
+          </button>
+
           {store.accessKeys
             .filter((k) => k.type === "ssh" || k.host)
             .map((key) => {
@@ -275,17 +285,6 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
                 </div>
               );
             })}
-
-          {/* Add / Manage SSH Button */}
-          <button
-            type="button"
-            onClick={() => terminalStore.openSshSheetWithKey(null)}
-            title="Add New Server Credentials / SSH Key"
-            className="flex items-center gap-1 px-1.5 py-0.5 rounded-[5px] bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-500/40 text-4xs font-medium shrink-0 cursor-pointer transition-all shadow-xs active:scale-[0.98]"
-          >
-            <Plus className="size-2.5" />
-            <span>Add Server</span>
-          </button>
         </div>
 
         {/* Right Scroll Arrow */}
