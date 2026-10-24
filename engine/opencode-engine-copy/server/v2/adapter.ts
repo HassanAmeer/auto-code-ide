@@ -784,7 +784,7 @@ const isProviderAdapterError = Schema.is(ProviderAdapter.ProviderAdapterV2Error)
  * default while T3 records the requested model.
  */
 const modelRef = (selection: ProviderAdapter.ProviderAdapterV2TurnInput["modelSelection"]) => {
-  const parsed = OpenCodeRuntime.parseOpenCodeModelSlug(selection.model);
+  const parsed = OpenCodeRuntime.parseOpenCodeModelSlug(selection.model, selection.instanceId);
   if (parsed === null) return undefined;
   const variant = getModelSelectionStringOptionValue(selection, "variant");
   return Model.Ref.make({
@@ -868,6 +868,8 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (
     selection: ProviderAdapter.ProviderAdapterV2TurnInput["modelSelection"],
   ): Model.Ref => {
     const rawModel = (selection?.model || "").trim();
+    const inst = String(selection?.instanceId || "").trim();
+    const isCustomInst = Boolean(inst && inst !== "opencode" && inst !== "opencodebypasssetup");
     const variant = getModelSelectionStringOptionValue(selection, "variant");
     const makeRef = (providerID: string, id: string) =>
       Model.Ref.make({
@@ -876,31 +878,85 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (
         ...(variant === undefined ? {} : { variant: Model.VariantID.make(variant) }),
       });
 
+    const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const rawNorm = norm(rawModel);
+
+    // If a custom instance is selected, it MUST resolve to that custom instance!
+    if (isCustomInst) {
+      // 1. If model has prefix of the instance: e.g. "oxionai/gpt-5.6-sol"
+      if (rawModel.startsWith(`${inst}/`)) {
+        return makeRef(inst, rawModel.slice(inst.length + 1));
+      }
+
+      // 2. Check if globalDiscoveredModels has this model under the selected instance
+      for (const m of globalDiscoveredModels.values()) {
+        if (
+          (m.providerID === inst || inst.includes(m.providerID) || m.providerID.includes(inst)) &&
+          (m.id === rawModel ||
+            m.name === rawModel ||
+            norm(m.id) === rawNorm ||
+            (m.name && norm(m.name) === rawNorm))
+        ) {
+          return makeRef(m.providerID, m.id);
+        }
+      }
+
+      // 3. Check opencode.json for the selected instance specifically
+      try {
+        const diskPaths = [
+          NodePath.join(NodeOS.homedir(), ".config/opencode/opencode.json"),
+          "/root/all-ai-clis/third-party-provider/opencode.json",
+          NodePath.join(process.cwd(), "opencode.json"),
+        ];
+        for (const dp of diskPaths) {
+          if (NodeFS.existsSync(dp)) {
+            const cfg = JSON.parse(NodeFS.readFileSync(dp, "utf-8"));
+            if (cfg?.provider) {
+              const matchedPKey = Object.keys(cfg.provider).find(
+                (pKey) =>
+                  pKey === inst ||
+                  inst.includes(pKey) ||
+                  pKey.includes(inst) ||
+                  cfg.provider[pKey]?.name?.toLowerCase() === inst.toLowerCase(),
+              );
+              if (matchedPKey) {
+                const pData = cfg.provider[matchedPKey];
+                if (pData?.models) {
+                  for (const [mId, mData] of Object.entries<any>(pData.models)) {
+                    if (
+                      mId === rawModel ||
+                      mData?.name === rawModel ||
+                      norm(mId) === rawNorm ||
+                      (mData?.name && norm(mData.name) === rawNorm)
+                    ) {
+                      return makeRef(matchedPKey, mId);
+                    }
+                  }
+                }
+                return makeRef(matchedPKey, rawModel);
+              }
+            }
+          }
+        }
+      } catch {}
+
+      return makeRef(inst, rawModel);
+    }
+
     // 1. Direct match in globalDiscoveredModels: `${providerID}/${id}`
     const exact = globalDiscoveredModels.get(rawModel);
     if (exact) {
       return makeRef(exact.providerID, exact.id);
     }
 
-    // 2. If selection.instanceId matches a providerID, check if model exists under that provider
-    for (const m of globalDiscoveredModels.values()) {
-      if (
-        (m.providerID === selection.instanceId ||
-          String(selection.instanceId).includes(m.providerID)) &&
-        (m.id === rawModel || m.name === rawModel)
-      ) {
-        return makeRef(m.providerID, m.id);
-      }
-    }
-
-    // 3. Search for model ID matching rawModel across any provider
+    // 2. Search for model ID matching rawModel across any provider
     for (const m of globalDiscoveredModels.values()) {
       if (m.id === rawModel || m.name === rawModel) {
         return makeRef(m.providerID, m.id);
       }
     }
 
-    // 4. Try stripping provider prefix if present (e.g. cheaprouter/antseed/glm-5.3-flash -> antseed/glm-5.3-flash)
+    // 3. Try stripping provider prefix if present (e.g. cheaprouter/antseed/glm-5.3-flash -> antseed/glm-5.3-flash)
     const stripped = rawModel.replace(/^[a-zA-Z0-9_\-\.]+\//, "");
     if (stripped !== rawModel) {
       for (const m of globalDiscoveredModels.values()) {
@@ -910,9 +966,7 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (
       }
     }
 
-    // 4b. Normalized slug matching (ignores case, dashes, spaces, slashes)
-    const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
-    const rawNorm = norm(rawModel);
+    // 4. Normalized slug matching (ignores case, dashes, spaces, slashes)
     for (const m of globalDiscoveredModels.values()) {
       if (
         norm(m.id) === rawNorm ||
@@ -923,7 +977,7 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (
       }
     }
 
-    // 4c. Inspect opencode.json directly if globalDiscoveredModels didn't match yet
+    // 5. Inspect opencode.json directly if globalDiscoveredModels didn't match yet
     try {
       const diskPaths = [
         NodePath.join(NodeOS.homedir(), ".config/opencode/opencode.json"),
@@ -955,16 +1009,10 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (
       // ignore
     }
 
-    // 5. If rawModel has slash and matches a parsed provider
-    const parsed = OpenCodeRuntime.parseOpenCodeModelSlug(rawModel);
+    // 6. If rawModel has slash and matches a parsed provider
+    const parsed = OpenCodeRuntime.parseOpenCodeModelSlug(rawModel, selection?.instanceId);
     if (parsed !== null) {
       return makeRef(parsed.providerID, parsed.modelID);
-    }
-
-    // 6. Fallback: if selection.instanceId is custom or bypass, use it
-    const inst = String(selection.instanceId || "");
-    if (inst && inst !== "opencode" && inst !== "opencodebypasssetup") {
-      return makeRef(inst, rawModel);
     }
 
     // 7. Ultimate fallback: default to cheaprouter or opencode

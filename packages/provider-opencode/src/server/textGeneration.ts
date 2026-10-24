@@ -160,7 +160,10 @@ export const makeOpenCodeTextGeneration = Effect.fn("makeOpenCodeTextGeneration"
   const runOpenCodeJson = Effect.fn("runOpenCodeJson")(function* <S extends Schema.Top>(
     input: TextGenerationOperations.Request<S>,
   ) {
-    const parsedModel = OpenCodeRuntime.parseOpenCodeModelSlug(input.modelSelection.model);
+    const parsedModel = OpenCodeRuntime.parseOpenCodeModelSlug(
+      input.modelSelection.model,
+      input.modelSelection.instanceId,
+    );
     if (!parsedModel) {
       return yield* new TextGenerationError({
         operation: input.operation,

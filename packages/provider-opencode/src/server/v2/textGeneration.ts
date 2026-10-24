@@ -44,7 +44,10 @@ const runOnServer = (
 ) =>
   Effect.gen(function* () {
     const { client } = connection;
-    const parsed = OpenCodeRuntime.parseOpenCodeModelSlug(input.modelSelection.model);
+    const parsed = OpenCodeRuntime.parseOpenCodeModelSlug(
+      input.modelSelection.model,
+      input.modelSelection.instanceId,
+    );
     if (parsed === null) {
       return yield* new TextGenerationError({
         operation: input.operation,

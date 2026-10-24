@@ -546,37 +546,30 @@ export function parseOpenCodeModelSlug(
     // ignore
   }
 
-  // If candidateInstance is a known custom provider (e.g. OpenRouter, TokenDealer)
+  // If candidateInstance is a custom provider
   // and the model is selected while using that provider, keep it routed to that provider!
   if (isCustomCandidate) {
-    const candidatePrefix = candidateInstance.toLowerCase();
-    if (
-      candidatePrefix.includes("openrouter") ||
-      candidatePrefix.startsWith("custom_") ||
-      candidatePrefix.includes("tokendeal")
-    ) {
-      let knownOtherProviderPrefix = false;
-      try {
-        for (const dp of diskPaths) {
-          if (NodeFS.existsSync(dp)) {
-            const cfg = JSON.parse(NodeFS.readFileSync(dp, "utf-8"));
-            if (cfg?.provider) {
-              for (const pId of Object.keys(cfg.provider)) {
-                if (pId !== candidateInstance && trimmed.startsWith(`${pId}/`)) {
-                  knownOtherProviderPrefix = true;
-                  break;
-                }
+    let knownOtherProviderPrefix = false;
+    try {
+      for (const dp of diskPaths) {
+        if (NodeFS.existsSync(dp)) {
+          const cfg = JSON.parse(NodeFS.readFileSync(dp, "utf-8"));
+          if (cfg?.provider) {
+            for (const pId of Object.keys(cfg.provider)) {
+              if (pId !== candidateInstance && trimmed.startsWith(`${pId}/`)) {
+                knownOtherProviderPrefix = true;
+                break;
               }
             }
           }
         }
-      } catch {}
-      if (!knownOtherProviderPrefix) {
-        return {
-          providerID: candidateInstance,
-          modelID: trimmed,
-        };
       }
+    } catch {}
+    if (!knownOtherProviderPrefix) {
+      return {
+        providerID: candidateInstance,
+        modelID: trimmed,
+      };
     }
   }
 
@@ -651,33 +644,40 @@ export function parseOpenCodeModelSlug(
     // ignore
   }
 
-  const lower = trimmed.toLowerCase();
-  if (
-    lower.includes("claude") ||
-    lower.includes("gpt") ||
-    lower.includes("opus") ||
-    lower.includes("sonnet") ||
-    lower.includes("haiku")
-  ) {
+  if (isCustomCandidate) {
     return {
-      providerID: "custom_1792333307552_d2pwo",
-      modelID: trimmed,
-    };
-  }
-  if (
-    lower.includes("glm") ||
-    lower.includes("qwen") ||
-    lower.includes("deepseek") ||
-    lower.includes("llama")
-  ) {
-    return {
-      providerID: "cheaprouter",
+      providerID: candidateInstance,
       modelID: trimmed,
     };
   }
 
+  // Look for default model in opencode.json if available
+  try {
+    for (const dp of diskPaths) {
+      if (NodeFS.existsSync(dp)) {
+        const cfg = JSON.parse(NodeFS.readFileSync(dp, "utf-8"));
+        if (cfg?.model && typeof cfg.model === "string" && cfg.model.includes("/")) {
+          const parts = cfg.model.split("/");
+          return {
+            providerID: parts[0],
+            modelID: parts.slice(1).join("/"),
+          };
+        }
+        if (cfg?.provider) {
+          const firstProvider = Object.keys(cfg.provider)[0];
+          if (firstProvider) {
+            return {
+              providerID: firstProvider,
+              modelID: trimmed,
+            };
+          }
+        }
+      }
+    }
+  } catch {}
+
   return {
-    providerID: "custom_1792333307552_d2pwo",
+    providerID: "cheaprouter",
     modelID: trimmed,
   };
 }
