@@ -83,6 +83,9 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
         )
       : trimmed;
 
+    // Clear command immediately so input feels responsive
+    setCommand("");
+
     // If it's natural language and didn't map to a raw bash shortcut, route directly to AI Chat
     if (isNatural && translated === trimmed) {
       window.dispatchEvent(
@@ -90,7 +93,6 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
           detail: { text: trimmed, autoSend: true },
         }),
       );
-      setCommand("");
       toastManager.add({
         type: "info",
         title: "Sent to AI Assistant",
@@ -118,9 +120,13 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
       const run = await terminalStore.runCommand(finalCommandToRun, effectiveCwd);
       setLatestRun(run);
       setIsOutputCollapsed(false);
-      setCommand("");
     } catch (err) {
       console.error("Command execution error:", err);
+      toastManager.add({
+        type: "error",
+        title: "Execution Error",
+        description: err instanceof Error ? err.message : "Command failed to execute.",
+      });
     } finally {
       setIsRunning(false);
       inputRef.current?.focus();
@@ -451,7 +457,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
         <div className="flex items-center gap-1 shrink-0">
           <button
             type="button"
-            onClick={handleExecute}
+            onClick={() => void handleExecute()}
             disabled={!command.trim() || isRunning}
             title="Execute Command (Enter)"
             className={cn(

@@ -679,14 +679,6 @@ export const terminalStore = {
     const runId = "term_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
     const executionId = "exec_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
 
-    // Check if target is remote SSH profile or selected SSH access key
-    const activeProfile = state.sshProfiles.find((p) => p.id === state.activeTarget);
-    const activeKeyTarget = state.selectedKeyId
-      ? state.accessKeys.find((k) => k.id === state.selectedKeyId)
-      : state.accessKeys.find(
-          (k) => (k.type === "ssh" || k.type === "server") && k.enabled && k.host,
-        );
-
     // Check for interactive commands that hang without TTY
     const firstWord = actualCommand.trim().split(/\s+/)[0]?.toLowerCase() || "";
     let effectiveCommand = actualCommand;
@@ -696,19 +688,33 @@ export const terminalStore = {
     }
 
     let commandToExecute = effectiveCommand;
-    let targetLabel = "Local VPS (Root)";
+    let targetLabel =
+      state.scopeMode === "root"
+        ? "Local VPS (Root)"
+        : `Local (${state.selectedProjectTitle || "Project"})`;
 
-    // Safe single-quote escape for SSH remote execution
-    const safeSshCmd = effectiveCommand.replace(/'/g, "'\\''");
+    // ONLY execute via SSH if user explicitly selected an SSH target / profile (not "local")
+    if (state.activeTarget && state.activeTarget !== "local") {
+      const activeProfile = state.sshProfiles.find((p) => p.id === state.activeTarget);
+      const activeKeyTarget = state.selectedKeyId
+        ? state.accessKeys.find((k) => k.id === state.selectedKeyId)
+        : state.activeTarget.startsWith("key_")
+          ? state.accessKeys.find(
+              (k) => `key_${k.id}` === state.activeTarget || k.id === state.activeTarget,
+            )
+          : null;
 
-    if (activeProfile) {
-      targetLabel = `SSH: ${activeProfile.label || activeProfile.host}`;
-      commandToExecute = `ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -p ${activeProfile.port || 22} ${activeProfile.user ? `${activeProfile.user}@` : ""}${activeProfile.host} '${safeSshCmd}'`;
-    } else if (activeKeyTarget && activeKeyTarget.host) {
-      targetLabel = `SSH: ${activeKeyTarget.name} (${activeKeyTarget.user || "root"}@${activeKeyTarget.host})`;
-      const port = activeKeyTarget.port || 22;
-      const userPrefix = activeKeyTarget.user ? `${activeKeyTarget.user}@` : "";
-      commandToExecute = `ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -p ${port} ${userPrefix}${activeKeyTarget.host} '${safeSshCmd}'`;
+      const safeSshCmd = effectiveCommand.replace(/'/g, "'\\''");
+
+      if (activeProfile && activeProfile.host) {
+        targetLabel = `SSH: ${activeProfile.label || activeProfile.host}`;
+        commandToExecute = `ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=10 -p ${activeProfile.port || 22} ${activeProfile.user ? `${activeProfile.user}@` : ""}${activeProfile.host} '${safeSshCmd}'`;
+      } else if (activeKeyTarget && activeKeyTarget.host) {
+        targetLabel = `SSH: ${activeKeyTarget.name} (${activeKeyTarget.user || "root"}@${activeKeyTarget.host})`;
+        const port = activeKeyTarget.port || 22;
+        const userPrefix = activeKeyTarget.user ? `${activeKeyTarget.user}@` : "";
+        commandToExecute = `ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=10 -p ${port} ${userPrefix}${activeKeyTarget.host} '${safeSshCmd}'`;
+      }
     }
 
     // Update history
