@@ -323,95 +323,9 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
         className,
       )}
     >
-      {/* Sleek Single-Line Command Input Bar - Cupertino iOS Style */}
-      <div className="flex items-center gap-1.5 rounded-[9px] border border-white/[0.12] bg-[#18181b]/95 backdrop-blur-xl px-2 py-1 shadow-md focus-within:border-emerald-500/60 focus-within:ring-1 focus-within:ring-emerald-500/20 transition-all">
-        {/* Dropdown Button with Scope Badge (root or Project Name) */}
-        <button
-          type="button"
-          onClick={() => setShowCommandsMenu(true)}
-          title={`Common Commands & Directory Shortcuts (${scopeName})`}
-          className="flex items-center gap-1 px-1.5 h-[22px] rounded-[5px] bg-[#242428] hover:bg-[#2e2e33] text-zinc-300 border border-white/[0.08] transition-all cursor-pointer shrink-0 shadow-xs active:scale-[0.98]"
-        >
-          <span className="font-mono text-4xs font-semibold max-w-[120px] sm:max-w-[150px] truncate text-emerald-400">
-            {scopeName}
-          </span>
-          <ChevronDown className="size-2.5 shrink-0 opacity-80 text-zinc-400" />
-        </button>
-
-        {/* Terminal Icon & Prompt */}
-        <div className="flex items-center gap-1 shrink-0 select-none text-emerald-400">
-          <Terminal className="size-3" />
-          <span
-            className="font-mono text-4xs font-semibold text-zinc-500 hidden sm:inline"
-            title={`CWD: ${effectiveCwd}`}
-          >
-            {store.selectedProjectId && !isRootScope ? `${scopeName}:` : "/:"}
-          </span>
-        </div>
-
-        {/* Command Input Field */}
-        <input
-          ref={inputRef}
-          type="text"
-          value={command}
-          onChange={(e) => setCommand(e.target.value)}
-          onKeyDown={handleKeyDown}
-          disabled={isRunning}
-          placeholder={
-            store.selectedProjectId && !isRootScope
-              ? `Run command in ${scopeName}...`
-              : "Run command in root (/)..."
-          }
-          className="flex-1 min-w-0 bg-transparent text-[12px] text-zinc-100 placeholder:text-zinc-500 focus:outline-none font-mono"
-        />
-
-        {/* Send / Run or Stop Button */}
-        <div className="flex items-center gap-1 shrink-0">
-          {isRunning ? (
-            <button
-              type="button"
-              onClick={() => void handleKill()}
-              title="Stop running command (Ctrl+C)"
-              className="inline-flex items-center justify-center size-[26px] rounded-[6px] bg-rose-500 hover:bg-rose-600 text-white shadow-xs transition-all cursor-pointer active:scale-[0.96]"
-            >
-              <Square className="size-2.5 fill-current" />
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                void handleExecute(command);
-              }}
-              disabled={!command.trim() || isRunning}
-              title="Execute Command (Enter)"
-              className={cn(
-                "inline-flex items-center justify-center size-[26px] rounded-[6px] transition-all cursor-pointer",
-                command.trim() && !isRunning
-                  ? "bg-emerald-500 hover:bg-emerald-600 text-white shadow-xs active:scale-[0.96]"
-                  : "text-zinc-600 hover:text-zinc-400 cursor-not-allowed",
-              )}
-            >
-              <SendHorizontal className="size-3" />
-            </button>
-          )}
-
-          {/* Close Bar Button */}
-          <button
-            type="button"
-            onClick={() => terminalStore.setQuickBarOpen(false)}
-            title="Close Terminal Bar"
-            className="inline-flex items-center justify-center size-[26px] rounded-[6px] text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] transition-colors cursor-pointer"
-          >
-            <X className="size-3" />
-          </button>
-        </div>
-      </div>
-
-      {/* Latest Execution Output Drawer - Rendered directly underneath the Command Input Bar */}
+      {/* Latest Execution Output Drawer - Rendered ABOVE the Command Input Bar */}
       {latestRun && (
-        <div className="rounded-[8px] border border-white/[0.12] bg-[#141416]/95 shadow-lg overflow-hidden backdrop-blur-xl transition-all text-xs animate-in fade-in-50 duration-150">
+        <div className="rounded-[8px] border border-white/[0.12] bg-[#141416]/95 shadow-xl overflow-hidden backdrop-blur-xl transition-all text-xs animate-in fade-in-50 duration-150">
           <div className="flex items-center justify-between px-2.5 py-1.5 bg-white/[0.04] border-b border-white/[0.06] select-none">
             <div className="flex items-center gap-1.5 min-w-0">
               <span className="font-mono text-3xs font-semibold text-emerald-400 flex items-center gap-1">
@@ -591,6 +505,92 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
           )}
         </div>
       )}
+
+      {/* Sleek Single-Line Command Input Bar - Cupertino iOS Style */}
+      <div className="flex items-center gap-1.5 rounded-[9px] border border-white/[0.12] bg-[#18181b]/95 backdrop-blur-xl px-2 py-1 shadow-md focus-within:border-emerald-500/60 focus-within:ring-1 focus-within:ring-emerald-500/20 transition-all">
+        {/* Dropdown Button with Scope Badge (root or Project Name) */}
+        <button
+          type="button"
+          onClick={() => setShowCommandsMenu(true)}
+          title={`Common Commands & Directory Shortcuts (${scopeName})`}
+          className="flex items-center gap-1 px-1.5 h-[22px] rounded-[5px] bg-[#242428] hover:bg-[#2e2e33] text-zinc-300 border border-white/[0.08] transition-all cursor-pointer shrink-0 shadow-xs active:scale-[0.98]"
+        >
+          <span className="font-mono text-4xs font-semibold max-w-[120px] sm:max-w-[150px] truncate text-emerald-400">
+            {scopeName}
+          </span>
+          <ChevronDown className="size-2.5 shrink-0 opacity-80 text-zinc-400" />
+        </button>
+
+        {/* Terminal Icon & Prompt */}
+        <div className="flex items-center gap-1 shrink-0 select-none text-emerald-400">
+          <Terminal className="size-3" />
+          <span
+            className="font-mono text-4xs font-semibold text-zinc-500 hidden sm:inline"
+            title={`CWD: ${effectiveCwd}`}
+          >
+            {store.selectedProjectId && !isRootScope ? `${scopeName}:` : "/:"}
+          </span>
+        </div>
+
+        {/* Command Input Field */}
+        <input
+          ref={inputRef}
+          type="text"
+          value={command}
+          onChange={(e) => setCommand(e.target.value)}
+          onKeyDown={handleKeyDown}
+          disabled={isRunning}
+          placeholder={
+            store.selectedProjectId && !isRootScope
+              ? `Run command in ${scopeName}...`
+              : "Run command in root (/)..."
+          }
+          className="flex-1 min-w-0 bg-transparent text-[12px] text-zinc-100 placeholder:text-zinc-500 focus:outline-none font-mono"
+        />
+
+        {/* Send / Run or Stop Button */}
+        <div className="flex items-center gap-1 shrink-0">
+          {isRunning ? (
+            <button
+              type="button"
+              onClick={() => void handleKill()}
+              title="Stop running command (Ctrl+C)"
+              className="inline-flex items-center justify-center size-[26px] rounded-[6px] bg-rose-500 hover:bg-rose-600 text-white shadow-xs transition-all cursor-pointer active:scale-[0.96]"
+            >
+              <Square className="size-2.5 fill-current" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                void handleExecute(command);
+              }}
+              disabled={!command.trim() || isRunning}
+              title="Execute Command (Enter)"
+              className={cn(
+                "inline-flex items-center justify-center size-[26px] rounded-[6px] transition-all cursor-pointer",
+                command.trim() && !isRunning
+                  ? "bg-emerald-500 hover:bg-emerald-600 text-white shadow-xs active:scale-[0.96]"
+                  : "text-zinc-600 hover:text-zinc-400 cursor-not-allowed",
+              )}
+            >
+              <SendHorizontal className="size-3" />
+            </button>
+          )}
+
+          {/* Close Bar Button */}
+          <button
+            type="button"
+            onClick={() => terminalStore.setQuickBarOpen(false)}
+            title="Close Terminal Bar"
+            className="inline-flex items-center justify-center size-[26px] rounded-[6px] text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] transition-colors cursor-pointer"
+          >
+            <X className="size-3" />
+          </button>
+        </div>
+      </div>
 
       {/* Categorized Common Commands Modal */}
       <TerminalCommandsMenu
