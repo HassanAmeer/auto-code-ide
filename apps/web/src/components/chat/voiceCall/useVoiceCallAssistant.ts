@@ -27,11 +27,69 @@ const END_CALL_TRIGGERS = [
   "call khatam karo",
   "call band kar do",
   "call kato",
+  "call kaat do",
+  "call kat do",
   "hang up",
   "disconnect call",
   "call disconnect",
   "call close",
   "bye call",
+];
+
+const FAREWELL_END_CALL_TRIGGERS = [
+  // Roman Urdu / Hindi farewells
+  "allah hafiz",
+  "allah hafez",
+  "khuda hafiz",
+  "khuda hafez",
+  "rab rakha",
+  "alvida",
+  "alwida",
+  "bye",
+  "bye bye",
+  "by bye",
+  "byby",
+  "goodbye",
+  "good bye",
+  "ok bye",
+  "okay bye",
+  "acha bye",
+  "accha bye",
+  "chalo bye",
+  "theek hai bye",
+  "thik hai bye",
+  "see you",
+  "see you later",
+  "see ya",
+  "tata",
+  "phir milenge",
+  "phir milte hain",
+  "phir baat hogi",
+  // Call termination commands (Urdu / Roman Urdu)
+  "call kato",
+  "call kaat do",
+  "call kat do",
+  "call band",
+  "call band karo",
+  "call band kar do",
+  "call band kr do",
+  "call khatam",
+  "call khatam karo",
+  "call khatam kr do",
+  "call end",
+  "call end karo",
+  "call cut karo",
+  "call disconnect karo",
+  "call close karo",
+  // English commands
+  "end call",
+  "stop call",
+  "hang up",
+  "disconnect call",
+  "disconnect",
+  "close call",
+  "exit call",
+  "terminate call",
 ];
 
 const INTERRUPT_COMMAND_TRIGGERS = [
@@ -46,6 +104,16 @@ const INTERRUPT_COMMAND_TRIGGERS = [
   "stop karo",
   "stop kar do",
   "stop ho jao",
+  "ruko",
+  "ruk jao",
+  "ruk jao please",
+  "thamb jao",
+  "ek second",
+  "ek sec",
+  "one second",
+  "wait",
+  "wait please",
+  "please wait",
   // "listen" variants:
   "listen",
   "listen to me",
@@ -60,8 +128,13 @@ const INTERRUPT_COMMAND_TRIGGERS = [
   "ek minute suno",
   // Urdu script:
   "سٹاپ",
+  "روکو",
+  "رک جاؤ",
   "سنو",
   "سنیں",
+  "ایک سیکنڈ",
+  "ایک منٹ",
+  "ٹھہرو",
 ];
 
 const FILLERS = [
@@ -81,7 +154,7 @@ const FILLERS = [
 ];
 
 const SILENCE_TIMEOUT_MS = 2000;
-const ACOUSTIC_ECHO_COOLDOWN_MS = 600;
+const ACOUSTIC_ECHO_COOLDOWN_MS = 2000;
 
 function cleanForComparison(text: string): string {
   return text
@@ -89,6 +162,60 @@ function cleanForComparison(text: string): string {
     .replace(/[.,/#!$%^&*;:{}=\-_`~()?"'۔،؟]/g, "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+export function isFarewellOrEndCall(text: string): {
+  isFarewell: boolean;
+  phrase: string;
+  isUrdu: boolean;
+} {
+  const clean = cleanForComparison(text);
+  if (!clean) return { isFarewell: false, phrase: "", isUrdu: false };
+
+  // 1. Urdu script checks
+  const urduPatterns = [
+    { regex: /اللہ\s*حافظ/, phrase: "اللہ حافظ", isUrdu: true },
+    { regex: /اللہ\s*نگہبان/, phrase: "اللہ نگہبان", isUrdu: true },
+    { regex: /خدا\s*حافظ/, phrase: "خدا حافظ", isUrdu: true },
+    { regex: /الوداع/, phrase: "الوداع", isUrdu: true },
+    { regex: /(?:^|\s)بائے(?:\s|$)/, phrase: "بائے", isUrdu: true },
+    { regex: /کال\s*(?:بند|کاٹ|ختم)/, phrase: "کال بند", isUrdu: true },
+    { regex: /فون\s*بند/, phrase: "فون بند", isUrdu: true },
+  ];
+  for (const item of urduPatterns) {
+    if (item.regex.test(text)) {
+      return { isFarewell: true, phrase: item.phrase, isUrdu: true };
+    }
+  }
+
+  // 2. Exact word or phrase matches for Roman Urdu & English
+  for (const trigger of FAREWELL_END_CALL_TRIGGERS) {
+    const cleanTrigger = cleanForComparison(trigger);
+    if (!cleanTrigger) continue;
+
+    const isUrduTrigger =
+      cleanTrigger.includes("allah") ||
+      cleanTrigger.includes("khuda") ||
+      cleanTrigger.includes("kato") ||
+      cleanTrigger.includes("band") ||
+      cleanTrigger.includes("khatam") ||
+      cleanTrigger.includes("alvida") ||
+      cleanTrigger.includes("rab");
+
+    // Short single words like "bye" or "tata" must match as whole word
+    if (cleanTrigger.length <= 4) {
+      const wordRegex = new RegExp(`(?:^|\\s)${cleanTrigger}(?:\\s|$)`, "i");
+      if (wordRegex.test(clean)) {
+        return { isFarewell: true, phrase: trigger, isUrdu: isUrduTrigger };
+      }
+    } else {
+      if (clean.includes(cleanTrigger)) {
+        return { isFarewell: true, phrase: trigger, isUrdu: isUrduTrigger };
+      }
+    }
+  }
+
+  return { isFarewell: false, phrase: "", isUrdu: false };
 }
 
 function isPureInterruptCommand(text: string): boolean {
@@ -206,6 +333,12 @@ export function useVoiceCallAssistant({
   // Acoustic echo isolation timestamps: prevents microphone from capturing laptop speakers
   const lastTtsEndedTimestampRef = useRef<number>(0);
 
+  // Memory of recent AI spoken phrases & words to detect and eliminate acoustic echo
+  const recentAiSpokenPhrasesRef = useRef<string[]>([]);
+  const recentAiSpokenWordsSetRef = useRef<Set<string>>(new Set());
+  const processedChunksSetRef = useRef<Set<string>>(new Set());
+  const isEndingCallRef = useRef<boolean>(false);
+
   // Store latest state in refs for stable timer/recognition callbacks
   const isCallActiveRef = useRef(false);
   const callStatusRef = useRef<VoiceCallStatus>("idle");
@@ -302,6 +435,10 @@ export function useVoiceCallAssistant({
     manualBaselineRef.current = "";
     lastTranscribedTextRef.current = "";
     preTurnMessageIdsRef.current.clear();
+    isEndingCallRef.current = false;
+    recentAiSpokenPhrasesRef.current = [];
+    recentAiSpokenWordsSetRef.current.clear();
+    processedChunksSetRef.current.clear();
 
     setVoiceCallActiveState(false, null);
     stopMobileVoiceKeepAlive();
@@ -342,6 +479,107 @@ export function useVoiceCallAssistant({
     updateCallStatus("idle");
     setIsCallActive(false);
   }, [clearRestartTimer, clearTtsCooldownTimer, cleanupRecognition, updateCallStatus]);
+
+  const addAiSpokenPhrase = useCallback((phrase: string) => {
+    if (!phrase) return;
+    const clean = cleanForComparison(phrase);
+    if (!clean || clean.length < 3) return;
+
+    const phrases = recentAiSpokenPhrasesRef.current;
+    phrases.push(clean);
+    if (phrases.length > 25) {
+      phrases.shift();
+    }
+
+    const words = clean.split(/\s+/).filter((w) => w.length > 2);
+    for (const w of words) {
+      recentAiSpokenWordsSetRef.current.add(w);
+    }
+    if (recentAiSpokenWordsSetRef.current.size > 250) {
+      recentAiSpokenWordsSetRef.current.clear();
+      for (const p of phrases) {
+        for (const w of p.split(/\s+/).filter((w) => w.length > 2)) {
+          recentAiSpokenWordsSetRef.current.add(w);
+        }
+      }
+    }
+  }, []);
+
+  const isAcousticEchoOfAi = useCallback((text: string): boolean => {
+    const clean = cleanForComparison(text);
+    if (!clean) return false;
+
+    // 1. Direct substring or reverse substring match with recent AI spoken phrases
+    for (const phrase of recentAiSpokenPhrasesRef.current) {
+      if (phrase.length >= 6 && (phrase.includes(clean) || clean.includes(phrase))) {
+        return true;
+      }
+    }
+
+    // 2. Tokenized word overlap check
+    const words = clean.split(/\s+/).filter((w) => w.length > 2);
+    if (words.length >= 2) {
+      let matches = 0;
+      for (const w of words) {
+        if (recentAiSpokenWordsSetRef.current.has(w)) {
+          matches++;
+        }
+      }
+      if (matches / words.length >= 0.35) {
+        return true;
+      }
+    }
+
+    // 3. Post-TTS acoustic cooldown check: within 2 seconds of TTS ending, if ANY word matches
+    const timeSinceTts = Date.now() - lastTtsEndedTimestampRef.current;
+    if (timeSinceTts < ACOUSTIC_ECHO_COOLDOWN_MS) {
+      for (const w of words) {
+        if (recentAiSpokenWordsSetRef.current.has(w)) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }, []);
+
+  const handleFarewellAndEndCall = useCallback(
+    (triggerPhrase: string, isUrdu: boolean) => {
+      if (!isCallActiveRef.current || isEndingCallRef.current) return;
+      isEndingCallRef.current = true;
+
+      // Clear composer transcript immediately so farewell text is never sent
+      promptRef.current = "";
+      lastTranscribedTextRef.current = "";
+      manualBaselineRef.current = "";
+      hasPendingSpeechRef.current = false;
+      onTranscriptChangeRef.current("");
+
+      // Stop ambient sound & pause recognition
+      thinkingAmbientSound.stop();
+      cleanupRecognition();
+
+      const farewellMessage = isUrdu
+        ? "Allah Hafiz! Apna khayal rakhiyega."
+        : "Goodbye! Have a great day.";
+
+      updateCallStatus("speaking");
+      isTtsActiveRef.current = true;
+
+      let hasEnded = false;
+      const safeEnd = () => {
+        if (!hasEnded) {
+          hasEnded = true;
+          endCall();
+          isEndingCallRef.current = false;
+        }
+      };
+
+      speakText(farewellMessage, undefined, safeEnd);
+      setTimeout(safeEnd, 2200);
+    },
+    [cleanupRecognition, endCall, updateCallStatus],
+  );
 
   // Creates and starts a fresh SpeechRecognition instance
   const startFreshRecognition = useCallback(() => {
@@ -406,23 +644,35 @@ export function useVoiceCallAssistant({
 
         const processedSpeech = formatSttTranscript(rawSpeech, sttSettings.language);
 
-        // 1. Check for end call triggers in both the formatted and raw transcript
-        const endCallCandidates = [processedSpeech.toLowerCase(), rawSpeech.toLowerCase()];
-        for (const trigger of END_CALL_TRIGGERS) {
-          if (endCallCandidates.some((candidate) => candidate.includes(trigger))) {
-            endCall();
+        // 1. Check for farewell / end call triggers first
+        const farewellCheck = isFarewellOrEndCall(processedSpeech).isFarewell
+          ? isFarewellOrEndCall(processedSpeech)
+          : isFarewellOrEndCall(rawSpeech);
+
+        if (farewellCheck.isFarewell) {
+          if (!isAcousticEchoOfAi(processedSpeech) && !isAcousticEchoOfAi(rawSpeech)) {
+            handleFarewellAndEndCall(farewellCheck.phrase, farewellCheck.isUrdu);
             return;
           }
         }
 
-        const currentStatus = callStatusRef.current;
+        const isSpeakingNow =
+          isTtsActiveRef.current || callStatusRef.current === "speaking" || isCurrentlySpeaking();
 
-        // --- 1. Assistant is actively SPEAKING: only listen for interrupt command ("stop", "ruko", etc.) ---
-        if (currentStatus === "speaking" || isCurrentlySpeaking()) {
+        const isInEchoCooldown =
+          Date.now() - lastTtsEndedTimestampRef.current < ACOUSTIC_ECHO_COOLDOWN_MS;
+
+        // --- 1. Assistant is actively SPEAKING or in echo cooldown: only accept genuine user interrupts ---
+        if (isSpeakingNow || isInEchoCooldown) {
           const isInterrupt =
             containsInterruptCommand(processedSpeech) || containsInterruptCommand(rawSpeech);
-          if (!isInterrupt) {
-            // Speaker feedback or ambient non-interrupt chatter: ignore completely to prevent corrupting input
+
+          if (
+            !isInterrupt ||
+            isAcousticEchoOfAi(processedSpeech) ||
+            isAcousticEchoOfAi(rawSpeech)
+          ) {
+            // Speaker feedback / AI self-transcription: discard completely!
             return;
           }
 
@@ -447,6 +697,8 @@ export function useVoiceCallAssistant({
           return;
         }
 
+        const currentStatus = callStatusRef.current;
+
         // --- 2. Assistant is THINKING / EXECUTING ---
         if (currentStatus === "thinking") {
           if (isPureInterruptCommand(processedSpeech) || isPureInterruptCommand(rawSpeech)) {
@@ -461,6 +713,10 @@ export function useVoiceCallAssistant({
             promptRef.current = "";
             hasPendingSpeechRef.current = false;
             onTranscriptChangeRef.current("");
+            return;
+          }
+
+          if (isAcousticEchoOfAi(processedSpeech) || isAcousticEchoOfAi(rawSpeech)) {
             return;
           }
 
@@ -481,6 +737,11 @@ export function useVoiceCallAssistant({
         }
 
         // --- 3. Normal LISTENING / USER-SPEAKING state ---
+        if (isAcousticEchoOfAi(processedSpeech) || isAcousticEchoOfAi(rawSpeech)) {
+          // Acoustic echo of recent AI speech: drop it completely!
+          return;
+        }
+
         if (isPureInterruptCommand(processedSpeech) || isPureInterruptCommand(rawSpeech)) {
           if (canInterruptRef.current && onInterruptRef.current) {
             onInterruptRef.current();
@@ -629,6 +890,7 @@ export function useVoiceCallAssistant({
     waitingForAssistantResponseRef.current = true;
     activeAssistantMessageIdRef.current = null;
     processedTextOffsetRef.current = 0;
+    processedChunksSetRef.current.clear();
 
     // Snapshot pre-turn message IDs so only NEW assistant messages from this turn are spoken
     const preIds = new Set<string>();
@@ -651,9 +913,20 @@ export function useVoiceCallAssistant({
           startFreshRecognition();
         }
       },
+      onChunkStarted: (chunk: string) => {
+        addAiSpokenPhrase(chunk);
+      },
       onFinished: () => {
+        // Immediately abort active recognition session to flush out any audio buffered from laptop speakers
+        cleanupRecognition();
+
         isTtsActiveRef.current = false;
         lastTtsEndedTimestampRef.current = Date.now();
+        manualBaselineRef.current = "";
+        lastTranscribedTextRef.current = "";
+        promptRef.current = "";
+        onTranscriptChangeRef.current("");
+
         clearTtsCooldownTimer();
         ttsCooldownTimerRef.current = setTimeout(() => {
           if (!isCallActiveRef.current) return;
@@ -975,7 +1248,9 @@ export function useVoiceCallAssistant({
       targetMessage = promptHistoryMessages.find(
         (m) => m.id === activeAssistantMessageIdRef.current,
       );
-    } else {
+    }
+
+    if (!targetMessage) {
       // Find the latest assistant message that was NOT present before dispatch
       targetMessage = [...promptHistoryMessages]
         .reverse()
@@ -983,7 +1258,10 @@ export function useVoiceCallAssistant({
 
       if (targetMessage) {
         activeAssistantMessageIdRef.current = targetMessage.id;
-        processedTextOffsetRef.current = 0;
+        // Do not reset offset if current offset is already valid within the message
+        if (processedTextOffsetRef.current > targetMessage.text.length) {
+          processedTextOffsetRef.current = 0;
+        }
       }
     }
 
@@ -998,7 +1276,12 @@ export function useVoiceCallAssistant({
     );
 
     for (const chunk of chunks) {
-      streamingPlayerRef.current.enqueue(chunk);
+      const sig = cleanForComparison(chunk);
+      if (sig && !processedChunksSetRef.current.has(sig)) {
+        processedChunksSetRef.current.add(sig);
+        addAiSpokenPhrase(chunk);
+        streamingPlayerRef.current.enqueue(chunk);
+      }
     }
     processedTextOffsetRef.current = newOffset;
 
@@ -1009,7 +1292,7 @@ export function useVoiceCallAssistant({
       activeAssistantMessageIdRef.current = null;
       processedTextOffsetRef.current = 0;
     }
-  }, [isCallActive, promptHistoryMessages]);
+  }, [isCallActive, promptHistoryMessages, addAiSpokenPhrase]);
 
   return {
     isCallActive,

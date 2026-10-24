@@ -509,10 +509,15 @@ export const terminalStore = {
   deleteTerminalChat(id: string) {
     const updated = state.terminalChats.filter((c) => c.id !== id);
     const nextActive = state.activeChatId === id ? (updated[0]?.id ?? null) : state.activeChatId;
+    const nextRunsByChat = { ...state.runsByChat };
+    delete nextRunsByChat[id];
+    const sessionRuns = nextActive ? (nextRunsByChat[nextActive] ?? []) : [];
     state = {
       ...state,
       terminalChats: updated,
       activeChatId: nextActive,
+      runsByChat: nextRunsByChat,
+      runs: sessionRuns,
     };
     if (typeof window !== "undefined") {
       window.localStorage.setItem(STORAGE_KEY_TERMINAL_CHATS, JSON.stringify(updated));

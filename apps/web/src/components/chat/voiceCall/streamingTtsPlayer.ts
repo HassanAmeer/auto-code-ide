@@ -55,10 +55,12 @@ export interface StreamingTtsPlayerOptions {
   maxChunks?: number | undefined;
   onStartSpeaking?: (() => void) | undefined;
   onFinished?: (() => void) | undefined;
+  onChunkStarted?: ((chunk: string) => void) | undefined;
 }
 
 /**
  * Sequential queue player that streams sentence chunks seamlessly into browser SpeechSynthesis.
+ * Includes built-in sentence-level deduplication to prevent repetitive speech output.
  */
 export class StreamingTtsPlayer {
   private queue: string[] = [];
@@ -67,14 +69,25 @@ export class StreamingTtsPlayer {
   private hasStartedSpeaking = false;
   private onStartSpeakingCallback?: (() => void) | undefined;
   private onFinishedCallback?: (() => void) | undefined;
+  private onChunkStartedCallback?: ((chunk: string) => void) | undefined;
   private stopped = false;
   private maxChunks?: number | undefined;
   private enqueuedChunksCount = 0;
+  private enqueuedSignatures = new Set<string>();
 
   constructor(options?: StreamingTtsPlayerOptions) {
     this.maxChunks = options?.maxChunks;
     this.onStartSpeakingCallback = options?.onStartSpeaking;
     this.onFinishedCallback = options?.onFinished;
+    this.onChunkStartedCallback = options?.onChunkStarted;
+  }
+
+  private normalizeChunkSignature(text: string): string {
+    return text
+      .toLowerCase()
+      .replace(/[.,/#!$%^&*;:{}=\-_`~()?"'۔،؟]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
   }
 
   enqueue(chunk: string) {
@@ -84,6 +97,16 @@ export class StreamingTtsPlayer {
     }
     const clean = sanitizeTextForSpeech(chunk);
     if (!clean) return;
+
+    // Deduplication check: prevent identical sentence/chunk from being queued twice
+    const signature = this.normalizeChunkSignature(clean);
+    if (!signature || signature.length < 3) return;
+
+    if (this.enqueuedSignatures.has(signature)) {
+      return;
+    }
+
+    this.enqueuedSignatures.add(signature);
     this.enqueuedChunksCount += 1;
     this.queue.push(clean);
     this.processNext();
@@ -120,6 +143,8 @@ export class StreamingTtsPlayer {
       this.onStartSpeakingCallback?.();
     }
 
+    this.onChunkStartedCallback?.(nextChunk);
+
     speakText(nextChunk, undefined, () => {
       this.isPlaying = false;
       this.processNext();
@@ -129,6 +154,7 @@ export class StreamingTtsPlayer {
   stop() {
     this.stopped = true;
     this.queue = [];
+    this.enqueuedSignatures.clear();
     this.isPlaying = false;
     this.isStreamFinished = false;
     this.hasStartedSpeaking = false;

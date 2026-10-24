@@ -664,7 +664,7 @@ export function translatePromptToBashCommand(
     p.includes("hard drive") ||
     p.includes("nvme")
   ) {
-    return "df -h /";
+    return "df -h";
   }
 
   if (

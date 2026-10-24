@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   Zap,
   Key,
+  Square,
 } from "lucide-react";
 
 import { cn } from "../../../lib/utils";
@@ -22,6 +23,7 @@ import { isNaturalLanguagePrompt, translatePromptToBashCommand } from "./termina
 import type { TerminalCommandRun } from "./terminalTypes";
 import { TerminalCommandsMenu } from "./TerminalCommandsMenu";
 import { toastManager } from "../../ui/toast";
+import { parseAnsiToHtml } from "./ansiParser";
 
 export interface AiTerminalCommandBarProps {
   projectCwd?: string | undefined;
@@ -72,6 +74,14 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
   const handleExecute = useCallback(async () => {
     const trimmed = command.trim();
     if (!trimmed || isRunning) return;
+
+    // Clear screen shortcut
+    if (trimmed === "clear" || trimmed === "cls") {
+      setCommand("");
+      setLatestRun(null);
+      terminalStore.clearRuns();
+      return;
+    }
 
     // Check if user input is natural language intended for AI thinking/tool-calling
     const isNatural = isNaturalLanguagePrompt(trimmed);
@@ -140,6 +150,20 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
     store.alwaysAllowedCommands,
   ]);
 
+  const handleKill = useCallback(async () => {
+    if (!latestRun) return;
+    try {
+      await terminalStore.killRunningCommand(latestRun.id);
+      toastManager.add({
+        type: "info",
+        title: "Process Cancelled",
+        description: "Sent SIGINT (Ctrl+C) to cancel running command.",
+      });
+    } catch (err) {
+      console.error("Failed to kill command:", err);
+    }
+  }, [latestRun]);
+
   const handleAllowOnce = useCallback(
     async (cmd: string) => {
       if (!cmd || isRunning) return;
@@ -156,6 +180,11 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
         });
       } catch (err) {
         console.error("Sudo execution failed:", err);
+        toastManager.add({
+          type: "error",
+          title: "Sudo Execution Failed",
+          description: err instanceof Error ? err.message : "Failed to run with sudo.",
+        });
       } finally {
         setIsRunning(false);
         inputRef.current?.focus();
@@ -181,6 +210,11 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
         });
       } catch (err) {
         console.error("Allow Always execution failed:", err);
+        toastManager.add({
+          type: "error",
+          title: "Execution Failed",
+          description: err instanceof Error ? err.message : "Command failed to run.",
+        });
       } finally {
         setIsRunning(false);
         inputRef.current?.focus();
@@ -213,6 +247,14 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
   );
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    // Ctrl+C / Cmd+C cancels running process
+    if (e.key === "c" && (e.ctrlKey || e.metaKey)) {
+      if (isRunning && latestRun) {
+        e.preventDefault();
+        void handleKill();
+        return;
+      }
+    }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       void handleExecute();
@@ -283,6 +325,19 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
             </div>
 
             <div className="flex items-center gap-1 shrink-0">
+              {/* Cancel / Stop button if process is running */}
+              {latestRun.status === "running" && (
+                <button
+                  type="button"
+                  onClick={() => void handleKill()}
+                  title="Stop running process (Ctrl+C)"
+                  className="flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 font-medium text-4xs transition-all cursor-pointer mr-0.5 active:scale-95"
+                >
+                  <Square className="size-2 fill-current" />
+                  <span>Stop</span>
+                </button>
+              )}
+
               {/* Ask AI to Fix Button if command failed */}
               {(latestRun.status === "error" ||
                 (latestRun.exitCode !== undefined && latestRun.exitCode !== 0) ||
@@ -392,16 +447,18 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
           )}
 
           {!isOutputCollapsed && (
-            <div className="p-2.5 max-h-44 overflow-y-auto font-mono text-3xs leading-relaxed space-y-1 bg-black/50">
+            <div className="p-2.5 max-h-48 overflow-y-auto font-mono text-3xs leading-relaxed space-y-1 bg-black/50 select-text">
               {latestRun.stdout && (
-                <pre className="text-zinc-200 whitespace-pre-wrap break-all select-text">
-                  {latestRun.stdout}
-                </pre>
+                <div
+                  className="text-zinc-200 whitespace-pre-wrap break-all"
+                  dangerouslySetInnerHTML={{ __html: parseAnsiToHtml(latestRun.stdout) }}
+                />
               )}
               {latestRun.stderr && (
-                <pre className="text-rose-400 whitespace-pre-wrap break-all select-text">
-                  {latestRun.stderr}
-                </pre>
+                <div
+                  className="text-rose-400 whitespace-pre-wrap break-all"
+                  dangerouslySetInnerHTML={{ __html: parseAnsiToHtml(latestRun.stderr) }}
+                />
               )}
               {!latestRun.stdout && !latestRun.stderr && latestRun.status === "success" && (
                 <span className="text-zinc-500 italic">(Command completed with no output)</span>
@@ -453,26 +510,33 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
           className="flex-1 min-w-0 bg-transparent text-[12px] text-zinc-100 placeholder:text-zinc-500 focus:outline-none font-mono"
         />
 
-        {/* Send / Run Button */}
+        {/* Send / Run or Stop Button */}
         <div className="flex items-center gap-1 shrink-0">
-          <button
-            type="button"
-            onClick={() => void handleExecute()}
-            disabled={!command.trim() || isRunning}
-            title="Execute Command (Enter)"
-            className={cn(
-              "inline-flex items-center justify-center size-[26px] rounded-[6px] transition-all cursor-pointer",
-              command.trim() && !isRunning
-                ? "bg-emerald-500 hover:bg-emerald-600 text-white shadow-xs active:scale-[0.96]"
-                : "text-zinc-600 hover:text-zinc-400 cursor-not-allowed",
-            )}
-          >
-            {isRunning ? (
-              <Loader2 className="size-3 animate-spin" />
-            ) : (
+          {isRunning ? (
+            <button
+              type="button"
+              onClick={() => void handleKill()}
+              title="Stop running command (Ctrl+C)"
+              className="inline-flex items-center justify-center size-[26px] rounded-[6px] bg-rose-500 hover:bg-rose-600 text-white shadow-xs transition-all cursor-pointer active:scale-[0.96]"
+            >
+              <Square className="size-2.5 fill-current" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void handleExecute()}
+              disabled={!command.trim()}
+              title="Execute Command (Enter)"
+              className={cn(
+                "inline-flex items-center justify-center size-[26px] rounded-[6px] transition-all cursor-pointer",
+                command.trim()
+                  ? "bg-emerald-500 hover:bg-emerald-600 text-white shadow-xs active:scale-[0.96]"
+                  : "text-zinc-600 hover:text-zinc-400 cursor-not-allowed",
+              )}
+            >
               <SendHorizontal className="size-3" />
-            )}
-          </button>
+            </button>
+          )}
 
           {/* Close Bar Button */}
           <button
