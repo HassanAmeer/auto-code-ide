@@ -102,16 +102,16 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
     }
 
     // Auto-elevate with sudo if command is marked as always-allowed or user is in full-access mode for root commands
-    let finalCommandToRun = trimmed;
+    let finalCommandToRun = translated || trimmed;
     if (
-      !trimmed.startsWith("sudo ") &&
-      (store.isCommandAlwaysAllowed(trimmed) ||
+      !finalCommandToRun.startsWith("sudo ") &&
+      (store.isCommandAlwaysAllowed(finalCommandToRun) ||
         (store.permissionMode === "full-access" &&
-          (trimmed.startsWith("apt ") ||
-            trimmed.startsWith("systemctl ") ||
-            trimmed.startsWith("service "))))
+          (finalCommandToRun.startsWith("apt ") ||
+            finalCommandToRun.startsWith("systemctl ") ||
+            finalCommandToRun.startsWith("service "))))
     ) {
-      finalCommandToRun = `sudo ${trimmed}`;
+      finalCommandToRun = `sudo ${finalCommandToRun}`;
     }
 
     setIsRunning(true);

@@ -693,6 +693,7 @@ export const terminalStore = {
         ? "Local VPS (Root)"
         : `Local (${state.selectedProjectTitle || "Project"})`;
 
+    let isSshTarget = false;
     // ONLY execute via SSH if user explicitly selected an SSH target / profile (not "local")
     if (state.activeTarget && state.activeTarget !== "local") {
       const activeProfile = state.sshProfiles.find((p) => p.id === state.activeTarget);
@@ -707,9 +708,11 @@ export const terminalStore = {
       const safeSshCmd = effectiveCommand.replace(/'/g, "'\\''");
 
       if (activeProfile && activeProfile.host) {
+        isSshTarget = true;
         targetLabel = `SSH: ${activeProfile.label || activeProfile.host}`;
         commandToExecute = `ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=10 -p ${activeProfile.port || 22} ${activeProfile.user ? `${activeProfile.user}@` : ""}${activeProfile.host} '${safeSshCmd}'`;
       } else if (activeKeyTarget && activeKeyTarget.host) {
+        isSshTarget = true;
         targetLabel = `SSH: ${activeKeyTarget.name} (${activeKeyTarget.user || "root"}@${activeKeyTarget.host})`;
         const port = activeKeyTarget.port || 22;
         const userPrefix = activeKeyTarget.user ? `${activeKeyTarget.user}@` : "";
@@ -764,7 +767,7 @@ export const terminalStore = {
     });
 
     // Auto-update CWD on successful `cd <path>` if local
-    if (!activeProfile && result.ok) {
+    if (!isSshTarget && result.ok) {
       const cdMatch = actualCommand.match(/(?:^|[;&&|])\s*cd\s+([^;&|]+)/);
       if (cdMatch && cdMatch[1]) {
         let rawTarget = cdMatch[1].replace(/["']/g, "").trim();

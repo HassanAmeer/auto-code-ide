@@ -3,6 +3,7 @@
 // @effect-diagnostics globalDate:off
 
 import * as NodeChildProcess from "node:child_process";
+import * as NodeFs from "node:fs";
 import * as Stream from "effect/Stream";
 import * as Effect from "effect/Effect";
 
@@ -44,8 +45,17 @@ export function runBashCommandOnHost(
     let stderr = "";
     let finished = false;
 
+    let safeCwd = cwd;
+    try {
+      if (!safeCwd || !NodeFs.existsSync(safeCwd) || !NodeFs.statSync(safeCwd).isDirectory()) {
+        safeCwd = process.cwd();
+      }
+    } catch {
+      safeCwd = process.cwd();
+    }
+
     const child = NodeChildProcess.spawn("/bin/bash", ["-c", command], {
-      cwd,
+      cwd: safeCwd,
       env: {
         ...process.env,
         TERM: "xterm-256color",
@@ -148,8 +158,17 @@ export function createTerminalEventStream(
   const startTime = Date.now();
   let finished = false;
 
+  let safeCwd = cwd;
+  try {
+    if (!safeCwd || !NodeFs.existsSync(safeCwd) || !NodeFs.statSync(safeCwd).isDirectory()) {
+      safeCwd = process.cwd();
+    }
+  } catch {
+    safeCwd = process.cwd();
+  }
+
   const child = NodeChildProcess.spawn("/bin/bash", ["-c", command], {
-    cwd,
+    cwd: safeCwd,
     env: {
       ...process.env,
       TERM: "xterm-256color",
