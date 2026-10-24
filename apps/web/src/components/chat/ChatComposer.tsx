@@ -329,7 +329,6 @@ import {
   submitComposerDraft,
 } from "./composerSubmission";
 import { useVoiceCallAssistant, VoiceCallButton } from "./voiceCall";
-import { AiTerminalCommandBar, useTerminalStore } from "./terminal";
 import { ComposerPromptLengthValidation } from "./ComposerPromptLengthValidation";
 import { PierreEntryIcon } from "./PierreEntryIcon";
 import { pendingDraftWork } from "./pendingDraftWork";
@@ -2475,7 +2474,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   });
   const isComposerCollapsedMobile =
     isMobileViewport && !forceExpandedOnMobile && !isComposerFocused && !hasMultilinePrompt;
-  const terminalState = useTerminalStore();
 
   // ------------------------------------------------------------------
   // Refs
@@ -7263,9 +7261,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           />
         ) : null}
       </ComposerBanner.Dock>
-      {terminalState.isQuickBarOpen ? (
-        <AiTerminalCommandBar projectCwd={gitCwd ?? undefined} />
-      ) : null}
       <div className="relative">
         <ComposerSurface.Main
           ref={composerMainSurfaceRef}

@@ -320,6 +320,37 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
             <ShieldCheck className="size-2.5 shrink-0" />
             <span>{store.permissionMode === "full-access" ? "Permitted" : "Ask"}</span>
           </button>
+
+          {/* Divider */}
+          <div className="w-px h-3.5 bg-white/[0.08] shrink-0" />
+
+          {/* 6. Split Studio Terminal Pane Toggle Button */}
+          <button
+            type="button"
+            onClick={() => terminalStore.toggleQuickBar()}
+            title={
+              store.isQuickBarOpen
+                ? "Split Studio: Terminal Pane Open (Click to hide)"
+                : "Split Studio: Terminal Pane Hidden (Click to open right pane)"
+            }
+            className={cn(
+              "flex items-center gap-1.5 px-2 py-0.5 rounded-[5px] text-4xs font-semibold shrink-0 transition-all cursor-pointer border active:scale-[0.98]",
+              store.isQuickBarOpen
+                ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-xs"
+                : "bg-white/[0.05] text-zinc-400 hover:text-white border-white/[0.08]",
+            )}
+          >
+            <Terminal className="size-2.5 shrink-0 text-emerald-400" />
+            <span>Terminal Studio</span>
+            <span
+              className={cn(
+                "size-1.5 rounded-full",
+                store.isQuickBarOpen
+                  ? "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)] animate-pulse"
+                  : "bg-zinc-600",
+              )}
+            />
+          </button>
         </div>
 
         {/* Right Scroll Arrow */}

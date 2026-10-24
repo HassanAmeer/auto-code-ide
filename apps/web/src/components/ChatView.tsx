@@ -483,7 +483,7 @@ import {
   startWaitingWaveSound,
   stopWaitingWaveSound,
 } from "~/lib/sound/soundManager";
-import { AiTerminalHeaderStrip } from "./chat/terminal/AiTerminalHeaderStrip";
+import { AiTerminalHeaderStrip, AiTerminalCommandBar } from "./chat/terminal";
 import { useTerminalStore } from "./chat/terminal/terminalStore";
 import { ProjectFileExplorer } from "./chat/terminal/ProjectFileExplorer";
 import { ProviderSubagentBar } from "./chat/ProviderSubagentBar";
@@ -11996,13 +11996,11 @@ export default function ChatView(props: ChatViewProps) {
           />
         </header>
 
-        {/* Top Header Patti for Projects, SSH Keys & Terminal Chats - ONLY when AI Terminal is active */}
-        {isTerminalQuickBarOpen && (
-          <AiTerminalHeaderStrip
-            activeProject={activeProject ?? null}
-            onNewTerminalThread={handleNewTerminalThread}
-          />
-        )}
+        {/* Top Header Patti for Projects, SSH Keys & Terminal Chats */}
+        <AiTerminalHeaderStrip
+          activeProject={activeProject ?? null}
+          onNewTerminalThread={handleNewTerminalThread}
+        />
 
         {/* Project File Explorer & Editor */}
         <ProjectFileExplorer />
@@ -12622,6 +12620,24 @@ export default function ChatView(props: ChatViewProps) {
             ) : null}
           </ThreadFindCanvas>
           {/* end chat column */}
+
+          {/* RIGHT PANE: Split Studio Dedicated Linux Terminal */}
+          {isTerminalQuickBarOpen && (
+            <>
+              {/* Desktop Split Divider */}
+              <div className="hidden md:flex w-px bg-white/[0.08] hover:bg-emerald-500/50 cursor-col-resize select-none shrink-0 transition-colors" />
+
+              {/* Desktop Dedicated Right Terminal Studio Pane (42% width) */}
+              <div className="hidden md:flex flex-col w-[45%] lg:w-[42%] max-w-[650px] min-w-[340px] shrink-0 h-full z-20 transition-all duration-200">
+                <AiTerminalCommandBar projectCwd={gitCwd ?? undefined} />
+              </div>
+
+              {/* Mobile Slide-Over Terminal Drawer */}
+              <div className="md:hidden fixed inset-x-0 bottom-0 top-12 z-50 bg-[#070709]/98 backdrop-blur-2xl border-t border-white/[0.12] flex flex-col shadow-2xl">
+                <AiTerminalCommandBar projectCwd={gitCwd ?? undefined} />
+              </div>
+            </>
+          )}
         </div>
         {/* end horizontal flex container */}
 
