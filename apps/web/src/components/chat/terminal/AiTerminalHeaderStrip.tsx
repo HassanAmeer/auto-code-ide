@@ -14,12 +14,14 @@ import {
   Clock,
   Sparkles,
   Pencil,
+  ShieldCheck,
 } from "lucide-react";
 import { cn } from "../../../lib/utils";
 import { useTerminalStore, terminalStore } from "./terminalStore";
 import { useProjects } from "../../../state/entities";
 import { SshKeysSheet } from "./SshKeysSheet";
 import { TerminalChatsSheet } from "./TerminalChatsSheet";
+import { toastManager } from "../../ui/toast";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 
 export interface AiTerminalHeaderStripProps {
@@ -287,6 +289,37 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
                 </div>
               );
             })}
+
+          {/* Divider */}
+          <div className="w-px h-3.5 bg-white/[0.08] shrink-0" />
+
+          {/* 5. Permission Control Pill */}
+          <button
+            type="button"
+            onClick={() => {
+              const nextMode = store.permissionMode === "full-access" ? "ask" : "full-access";
+              terminalStore.setPermissionMode(nextMode);
+              toastManager.add({
+                type: nextMode === "full-access" ? "success" : "info",
+                title:
+                  nextMode === "full-access" ? "Full Permission Enabled" : "Ask Permission Mode",
+                description:
+                  nextMode === "full-access"
+                    ? "Commands have full execution permissions (auto-allowed)."
+                    : "Terminal will prompt for approval before running elevated commands.",
+              });
+            }}
+            title={`Permission Mode: ${store.permissionMode === "full-access" ? "Full Access (Permitted)" : "Ask Permission"}. Click to toggle.`}
+            className={cn(
+              "flex items-center gap-1 px-1.5 py-0.5 rounded-[5px] text-4xs font-medium shrink-0 transition-all cursor-pointer border active:scale-[0.98]",
+              store.permissionMode === "full-access"
+                ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/40 shadow-xs font-semibold"
+                : "bg-amber-500/15 text-amber-300 border-amber-500/40 shadow-xs font-semibold",
+            )}
+          >
+            <ShieldCheck className="size-2.5 shrink-0" />
+            <span>{store.permissionMode === "full-access" ? "Permitted" : "Ask"}</span>
+          </button>
         </div>
 
         {/* Right Scroll Arrow */}

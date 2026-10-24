@@ -11,6 +11,9 @@ import {
   Sparkles,
   Folder,
   ShieldAlert,
+  ShieldCheck,
+  Zap,
+  Key,
 } from "lucide-react";
 
 import { cn } from "../../../lib/utils";
@@ -96,10 +99,23 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
       return;
     }
 
+    // Auto-elevate with sudo if command is marked as always-allowed or user is in full-access mode for root commands
+    let finalCommandToRun = trimmed;
+    if (
+      !trimmed.startsWith("sudo ") &&
+      (store.isCommandAlwaysAllowed(trimmed) ||
+        (store.permissionMode === "full-access" &&
+          (trimmed.startsWith("apt ") ||
+            trimmed.startsWith("systemctl ") ||
+            trimmed.startsWith("service "))))
+    ) {
+      finalCommandToRun = `sudo ${trimmed}`;
+    }
+
     setIsRunning(true);
     setHistoryIndex(null);
     try {
-      const run = await terminalStore.runCommand(trimmed, effectiveCwd);
+      const run = await terminalStore.runCommand(finalCommandToRun, effectiveCwd);
       setLatestRun(run);
       setIsOutputCollapsed(false);
       setCommand("");
@@ -109,7 +125,86 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
       setIsRunning(false);
       inputRef.current?.focus();
     }
-  }, [command, isRunning, effectiveCwd, store.accessKeys]);
+  }, [
+    command,
+    isRunning,
+    effectiveCwd,
+    store.accessKeys,
+    store.permissionMode,
+    store.alwaysAllowedCommands,
+  ]);
+
+  const handleAllowOnce = useCallback(
+    async (cmd: string) => {
+      if (!cmd || isRunning) return;
+      setIsRunning(true);
+      try {
+        const sudoCmd = cmd.trim().startsWith("sudo ") ? cmd.trim() : `sudo ${cmd.trim()}`;
+        const run = await terminalStore.runCommand(sudoCmd, effectiveCwd);
+        setLatestRun(run);
+        setIsOutputCollapsed(false);
+        toastManager.add({
+          type: "success",
+          title: "Allowed & Executed with Sudo",
+          description: `Ran '${sudoCmd}' successfully with elevated permissions.`,
+        });
+      } catch (err) {
+        console.error("Sudo execution failed:", err);
+      } finally {
+        setIsRunning(false);
+        inputRef.current?.focus();
+      }
+    },
+    [effectiveCwd, isRunning],
+  );
+
+  const handleAllowAlways = useCallback(
+    async (cmd: string) => {
+      if (!cmd || isRunning) return;
+      terminalStore.allowAlwaysCommand(cmd);
+      setIsRunning(true);
+      try {
+        const sudoCmd = cmd.trim().startsWith("sudo ") ? cmd.trim() : `sudo ${cmd.trim()}`;
+        const run = await terminalStore.runCommand(sudoCmd, effectiveCwd);
+        setLatestRun(run);
+        setIsOutputCollapsed(false);
+        toastManager.add({
+          type: "success",
+          title: "Saved: Always Allowed",
+          description: `Command added to always-allowed permissions and executed with sudo.`,
+        });
+      } catch (err) {
+        console.error("Allow Always execution failed:", err);
+      } finally {
+        setIsRunning(false);
+        inputRef.current?.focus();
+      }
+    },
+    [effectiveCwd, isRunning],
+  );
+
+  const handleDeny = useCallback(() => {
+    if (latestRun) {
+      terminalStore.removeRun(latestRun.id);
+      setLatestRun(null);
+    }
+    toastManager.add({
+      type: "info",
+      title: "Command Permission Denied",
+      description: "Permission not granted; command output dismissed.",
+    });
+  }, [latestRun]);
+
+  const isPermissionError = Boolean(
+    latestRun &&
+    latestRun.status === "error" &&
+    (latestRun.exitCode === 126 ||
+      latestRun.stderr?.toLowerCase().includes("permission denied") ||
+      latestRun.stderr?.toLowerCase().includes("eacces") ||
+      latestRun.stderr?.toLowerCase().includes("operation not permitted") ||
+      latestRun.stderr?.toLowerCase().includes("requires root") ||
+      latestRun.stderr?.toLowerCase().includes("must be run as root")),
+  );
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -233,6 +328,62 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
               </button>
             </div>
           </div>
+
+          {/* Interactive Permission Elevation Card */}
+          {isPermissionError && (
+            <div className="m-2 p-2.5 rounded-[8px] bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-transparent border border-amber-500/35 flex flex-col gap-2 shadow-sm animate-in fade-in duration-200">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 text-amber-400 font-semibold text-2xs">
+                  <ShieldAlert className="size-3.5 shrink-0 text-amber-400" />
+                  <span>Permission Elevation Required</span>
+                </div>
+                <span className="text-4xs text-amber-300/80 font-mono bg-amber-500/20 px-1.5 py-0.5 rounded border border-amber-500/30">
+                  Exit {latestRun.exitCode}
+                </span>
+              </div>
+              <p className="text-3xs text-zinc-300 font-sans leading-relaxed">
+                This command requires elevated system rights to execute in{" "}
+                <code className="text-amber-300 font-mono bg-black/40 px-1 py-0.5 rounded text-4xs">
+                  {effectiveCwd}
+                </code>
+                . You can allow it once or save permission permanently.
+              </p>
+              <div className="flex items-center gap-2 pt-0.5">
+                {/* Allow Once (Run with Sudo) */}
+                <button
+                  type="button"
+                  onClick={() => handleAllowOnce(latestRun.command)}
+                  disabled={isRunning}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[5px] bg-emerald-500 hover:bg-emerald-600 text-white font-medium text-3xs shadow-xs active:scale-95 transition-all cursor-pointer"
+                >
+                  <Check className="size-3" />
+                  <span>Allow (Run with Sudo)</span>
+                </button>
+
+                {/* Allow Always */}
+                <button
+                  type="button"
+                  onClick={() => handleAllowAlways(latestRun.command)}
+                  disabled={isRunning}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[5px] bg-sky-600 hover:bg-sky-500 text-white font-medium text-3xs shadow-xs active:scale-95 transition-all cursor-pointer"
+                >
+                  <Zap className="size-3" />
+                  <span>Allow Always</span>
+                </button>
+
+                {/* Deny */}
+                <button
+                  type="button"
+                  onClick={handleDeny}
+                  disabled={isRunning}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-[5px] bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-3xs border border-white/[0.08] active:scale-95 transition-all cursor-pointer"
+                >
+                  <X className="size-3" />
+                  <span>Deny</span>
+                </button>
+              </div>
+            </div>
+          )}
 
           {!isOutputCollapsed && (
             <div className="p-2.5 max-h-44 overflow-y-auto font-mono text-3xs leading-relaxed space-y-1 bg-black/50">

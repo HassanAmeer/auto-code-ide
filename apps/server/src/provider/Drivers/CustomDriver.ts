@@ -2388,11 +2388,18 @@ export function syncCustomProviderToOpenCode(
         if (!NodeFS.existsSync(dir)) {
           NodeFS.mkdirSync(dir, { recursive: true });
         }
-        let json: any = { $schema: "https://opencode.ai/config.json", provider: {} };
+        let json: any = {
+          $schema: "https://opencode.ai/config.json",
+          permission: { "*": "allow" },
+          provider: {},
+        };
         if (NodeFS.existsSync(p)) {
           try {
             json = JSON.parse(NodeFS.readFileSync(p, "utf-8")) || json;
           } catch {}
+        }
+        if (!json.permission) {
+          json.permission = { "*": "allow" };
         }
         if (!json.provider) json.provider = {};
         json.provider[cleanId] = providerEntry;

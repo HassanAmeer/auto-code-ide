@@ -36,6 +36,8 @@ interface TerminalState {
   terminalChats: TerminalChatSession[];
   activeChatId: string | null;
   inputMode: "bash" | "ai";
+  permissionMode: "full-access" | "ask";
+  alwaysAllowedCommands: string[];
 }
 
 import { saveServerSetting } from "~/lib/serverSettingsSync";
@@ -50,6 +52,24 @@ const STORAGE_KEY_SELECTED_KEY = "adc_terminal_selected_key_id";
 const STORAGE_KEY_TERMINAL_CHATS = "adc_terminal_chats";
 const STORAGE_KEY_SCOPE_MODE = "adc_terminal_scope_mode";
 const STORAGE_KEY_LAST_PROJECT_PATH = "adc_terminal_last_project_path";
+const STORAGE_KEY_PERMISSION_MODE = "adc_terminal_permission_mode";
+const STORAGE_KEY_ALWAYS_ALLOWED_COMMANDS = "adc_terminal_always_allowed_commands";
+
+const initialPermissionMode: "full-access" | "ask" =
+  typeof window !== "undefined" &&
+  window.localStorage.getItem(STORAGE_KEY_PERMISSION_MODE) === "ask"
+    ? "ask"
+    : "full-access";
+
+let initialAlwaysAllowedCommands: string[] = [];
+if (typeof window !== "undefined") {
+  try {
+    const rawCmds = window.localStorage.getItem(STORAGE_KEY_ALWAYS_ALLOWED_COMMANDS);
+    if (rawCmds) initialAlwaysAllowedCommands = JSON.parse(rawCmds);
+  } catch {
+    // ignore
+  }
+}
 
 const initialProjectId =
   typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY_PROJECT_ID) : null;
@@ -153,6 +173,8 @@ let state: TerminalState = {
   terminalChats: initialTerminalChats,
   activeChatId: initialTerminalChats[0]?.id ?? null,
   inputMode: "bash",
+  permissionMode: initialPermissionMode,
+  alwaysAllowedCommands: initialAlwaysAllowedCommands,
   history: ["ls -la /", "df -h", "free -m", "uname -a"],
 };
 
@@ -199,6 +221,35 @@ export const terminalStore = {
   setInputMode(mode: "bash" | "ai") {
     state = { ...state, inputMode: mode };
     notify();
+  },
+
+  setPermissionMode(mode: "full-access" | "ask") {
+    state = { ...state, permissionMode: mode };
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(STORAGE_KEY_PERMISSION_MODE, mode);
+    }
+    notify();
+  },
+
+  allowAlwaysCommand(command: string) {
+    const trimmed = command.trim();
+    if (!trimmed) return;
+    const base = trimmed.split(/\s+/)[0] || trimmed;
+    const next = Array.from(new Set([...state.alwaysAllowedCommands, base, trimmed]));
+    state = { ...state, alwaysAllowedCommands: next };
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(STORAGE_KEY_ALWAYS_ALLOWED_COMMANDS, JSON.stringify(next));
+    }
+    notify();
+  },
+
+  isCommandAlwaysAllowed(command: string): boolean {
+    const trimmed = command.trim();
+    if (!trimmed) return false;
+    const base = trimmed.split(/\s+/)[0] || trimmed;
+    return state.alwaysAllowedCommands.some(
+      (c) => c === trimmed || c === base || trimmed.startsWith(c),
+    );
   },
 
   setActiveTarget(targetId: string) {
