@@ -48,6 +48,9 @@ node_modules/
 
 # pnpm content-addressable store; never belongs in the repo.
 .pnpm-store/
+opencode.json
+apps/server/opencode.json
+
 
 # Runtime skill mirrors: the canonical tree is .agents/skills; the manager
 # copies it into the Claude and OpenCode trees when the skills are listed.
