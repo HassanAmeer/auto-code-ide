@@ -403,12 +403,16 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
     { category: "git", title: "🌱 Git Branches", cmd: "git branch -a" },
     { category: "git", title: "🔍 Git Diff Stat", cmd: "git diff --stat" },
     { category: "git", title: "📦 Node & PNPM Ver", cmd: "node -v && pnpm -v" },
+    { category: "git", title: "🌿 Git Fetch Prune", cmd: "git fetch --all --prune" },
+    { category: "git", title: "📦 Git Stash List", cmd: "git stash list" },
 
     // 🌐 NETWORK & PORTS
     { category: "network", title: "🔌 Active Ports", cmd: "ss -tulpn | grep LISTEN" },
     { category: "network", title: "🌐 Public IP Check", cmd: "curl -s4 ifconfig.me" },
     { category: "network", title: "🏓 Ping Test (DNS)", cmd: "ping -c 3 8.8.8.8" },
     { category: "network", title: "📡 Open TCP Sockets", cmd: "ss -tan | head -n 15" },
+    { category: "network", title: "🌐 Route Table", cmd: "ip route show" },
+    { category: "network", title: "🔍 Resolv DNS", cmd: "cat /etc/resolv.conf" },
 
     // 🧹 CLEANUP & UTILITIES
     {
@@ -428,12 +432,18 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
       cmd: "pnpm store prune 2>/dev/null || true",
     },
     { category: "cleanup", title: "🧹 Clear Screen", cmd: "clear" },
+    { category: "cleanup", title: "📂 Current PWD", cmd: "pwd" },
+    { category: "cleanup", title: "👥 Active Users", cmd: "who && w" },
   ];
 
   const filteredSuggestions =
     suggestionCategory === "all"
       ? smartSuggestions
       : smartSuggestions.filter((item) => item.category === suggestionCategory);
+
+  const halfSuggestions = Math.ceil(filteredSuggestions.length / 2);
+  const row1Suggestions = filteredSuggestions.slice(0, halfSuggestions);
+  const row2Suggestions = filteredSuggestions.slice(halfSuggestions);
 
   // Runs to display chronologically in the terminal screen for active tab
   const activeTabRuns = store.runs.filter((r) => !r.tabId || r.tabId === activeTabId);
@@ -1027,11 +1037,32 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
           })}
         </div>
 
-        {/* Action Command Buttons */}
+        {/* LINE 1 (Ooper Wali Line): Command Buttons */}
         <div className="flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none] py-0.5 px-0.5">
-          {filteredSuggestions.map((item) => (
+          {row1Suggestions.map((item) => (
             <button
-              key={item.cmd}
+              key={"row1_" + item.cmd}
+              type="button"
+              onClick={() => void handleExecute(item.cmd)}
+              disabled={isRunning}
+              title={`Click to execute on VPS:\n$ ${item.cmd}`}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[6px] bg-[#14141d] hover:bg-[#1f1f2d] border border-white/[0.08] hover:border-emerald-500/40 text-left transition-all cursor-pointer shrink-0 active:scale-95 group shadow-xs"
+            >
+              <span className="text-3xs font-medium text-zinc-300 group-hover:text-emerald-400 transition-colors">
+                {item.title}
+              </span>
+              <span className="text-4xs font-mono text-zinc-500 group-hover:text-zinc-400">
+                ${item.cmd.length > 22 ? item.cmd.slice(0, 20) + "..." : item.cmd}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        {/* LINE 2 (Neechy Wali Line): Command Buttons */}
+        <div className="flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none] py-0.5 px-0.5">
+          {row2Suggestions.map((item) => (
+            <button
+              key={"row2_" + item.cmd}
               type="button"
               onClick={() => void handleExecute(item.cmd)}
               disabled={isRunning}
