@@ -30,14 +30,18 @@ import type { TerminalCommandRun } from "./terminalTypes";
 import { toastManager } from "../../ui/toast";
 import { parseAnsiToHtml } from "./ansiParser";
 import { SshKeysSheet } from "./SshKeysSheet";
+import { AiTerminalHeaderStrip } from "./AiTerminalHeaderStrip";
+import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 
 export interface AiTerminalCommandBarProps {
   projectCwd?: string | undefined;
+  activeProject?: EnvironmentProject | null | undefined;
   className?: string | undefined;
 }
 
 export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
   projectCwd,
+  activeProject,
   className = "",
 }: AiTerminalCommandBarProps) {
   const store = useTerminalStore();
@@ -752,6 +756,16 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
       )}
       onClick={() => promptInputRef.current?.focus()}
     >
+      {/* ============================================================== */}
+      {/* 0. AI TERMINAL HEADER STRIP (Projects, SSH Keys & New Chat)    */}
+      {/* ============================================================== */}
+      <AiTerminalHeaderStrip
+        activeProject={activeProject ?? null}
+        onNewTerminalThread={() => {
+          window.dispatchEvent(new CustomEvent("t3:new-terminal-thread"));
+        }}
+      />
+
       {/* ============================================================== */}
       {/* 1. AUTHENTIC TERMINAL WINDOW TOP BAR & TABS                    */}
       {/* ============================================================== */}

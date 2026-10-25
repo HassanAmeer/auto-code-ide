@@ -260,6 +260,7 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
         terminalStore.createTerminalChat({ title: "AI Terminal Session" });
       }
       terminalStore.setQuickBarOpen(true);
+      terminalStore.setMobileActiveTab("terminal");
       window.dispatchEvent(new CustomEvent("t3:new-terminal-thread"));
     }
   }, [closeMobileSidebar, navigate]);
@@ -600,6 +601,7 @@ export const SidebarAiTerminalItem = memo(function SidebarAiTerminalItem() {
         terminalStore.createTerminalChat({ title: "AI Terminal Session" });
       }
       terminalStore.setQuickBarOpen(true);
+      terminalStore.setMobileActiveTab("terminal");
       window.dispatchEvent(new CustomEvent("t3:new-terminal-thread"));
     }
   }, [isMobile, navigate, setOpenMobile]);

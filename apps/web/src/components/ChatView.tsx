@@ -485,7 +485,7 @@ import {
   startWaitingWaveSound,
   stopWaitingWaveSound,
 } from "~/lib/sound/soundManager";
-import { AiTerminalHeaderStrip, AiTerminalCommandBar } from "./chat/terminal";
+import { AiTerminalCommandBar } from "./chat/terminal";
 import { useTerminalStore, terminalStore } from "./chat/terminal/terminalStore";
 import {
   translatePromptToBashCommand,
@@ -12086,14 +12086,6 @@ export default function ChatView(props: ChatViewProps) {
           />
         </header>
 
-        {/* Top Header Patti for Projects, SSH Keys & Terminal Chats (Visible only when in AI Terminal mode) */}
-        {isTerminalQuickBarOpen && (
-          <AiTerminalHeaderStrip
-            activeProject={activeProject ?? null}
-            onNewTerminalThread={handleNewTerminalThread}
-          />
-        )}
-
         {/* Project File Explorer & Editor */}
         <ProjectFileExplorer />
 
@@ -12827,7 +12819,10 @@ export default function ChatView(props: ChatViewProps) {
                   !isResizingTerminal && "transition-[width] duration-75",
                 )}
               >
-                <AiTerminalCommandBar projectCwd={gitCwd ?? undefined} />
+                <AiTerminalCommandBar
+                  projectCwd={gitCwd ?? undefined}
+                  activeProject={activeProject ?? null}
+                />
               </div>
 
               {/* Mobile Fullscreen Terminal View (Concept 2 Full Frame) */}
@@ -12837,7 +12832,10 @@ export default function ChatView(props: ChatViewProps) {
                   terminalStoreState.mobileActiveTab !== "terminal" && "hidden",
                 )}
               >
-                <AiTerminalCommandBar projectCwd={gitCwd ?? undefined} />
+                <AiTerminalCommandBar
+                  projectCwd={gitCwd ?? undefined}
+                  activeProject={activeProject ?? null}
+                />
               </div>
             </>
           )}

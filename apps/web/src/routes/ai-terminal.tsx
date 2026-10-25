@@ -8,6 +8,7 @@ function AiTerminalRouteHandler() {
     terminalStore.setScopeMode("root");
     terminalStore.setActiveCwd("/");
     terminalStore.setQuickBarOpen(true);
+    terminalStore.setMobileActiveTab("terminal");
     void navigate({ to: "/" });
   }, [navigate]);
   return null;
