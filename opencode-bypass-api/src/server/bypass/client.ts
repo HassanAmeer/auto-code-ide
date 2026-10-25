@@ -40,6 +40,7 @@ export interface BypassRequestOptions {
   /** Default: 8192 */
   maxTokens?: number | undefined;
   sessionId?: string | undefined;
+  _isRetry?: boolean | undefined;
 }
 
 export interface BypassResponse {
@@ -193,6 +194,15 @@ export async function bypassChatStream(
     const resetInfo = retryAfter ? ` (Reset after: ${retryAfter}s)` : "";
 
     if (res.status === 429) {
+      if (!options._isRetry) {
+        try {
+          const { rotateAllIpRotation } = await import("./ipRotationState.ts");
+          await rotateAllIpRotation();
+          return await bypassChatStream({ ...options, _isRetry: true }, onChunk, onDone);
+        } catch (retryErr) {
+          console.warn("[opencode-bypass] Auto-retry on 429 encountered error:", retryErr);
+        }
+      }
       throw new Error(
         `[opencode-bypass] HTTP 429 Rate Limit Exceeded (Limit Full)${resetInfo}: Model '${options.model}' ki free limit/quota full ho chuki hai.\n\nUpstream Raw Response:\n${errorDetail}`,
       );

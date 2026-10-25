@@ -26,6 +26,8 @@ export interface RotatedProviderRecord {
   name: string;
   oldIp: string;
   newIp: string;
+  previousIp?: string;
+  currentIp?: string;
   rotatedAt: number; // timestamp in milliseconds
 }
 
@@ -97,7 +99,7 @@ export async function getIpRotationStatus() {
     lastIp: store.lastIp || (warpInfo.isProxied ? "201.18.218.29" : ""),
     lastPort: "8118",
     isProxied: warpInfo.isProxied,
-    proxyPort: "127.0.0.1:8118",
+    proxyPort: "127.0.0.1:8118 (Privoxy) ➔ 127.0.0.1:40000 (WARP)",
     socks5Port: "127.0.0.1:40000",
     rotatedProviders: store.rotatedProviders,
     session: sessionInfo.session,
@@ -119,6 +121,8 @@ export async function rotateAllIpRotation() {
     ...p,
     oldIp: p.newIp || result.oldIp,
     newIp: result.newIp,
+    previousIp: p.newIp || result.oldIp,
+    currentIp: result.newIp,
     rotatedAt: now,
   }));
   saveStore(store);
@@ -150,7 +154,10 @@ export async function attachProvidersToIpRotation(providers: Array<{ id: string;
       store.rotatedProviders[existingIndex] = {
         ...store.rotatedProviders[existingIndex]!,
         name: prov.name || store.rotatedProviders[existingIndex]!.name,
+        oldIp: store.rotatedProviders[existingIndex]!.newIp || directIp,
         newIp: currentWarpIp,
+        previousIp: store.rotatedProviders[existingIndex]!.newIp || directIp,
+        currentIp: currentWarpIp,
         rotatedAt: now,
       };
     } else {
@@ -159,6 +166,8 @@ export async function attachProvidersToIpRotation(providers: Array<{ id: string;
         name: prov.name || prov.id,
         oldIp: directIp,
         newIp: currentWarpIp,
+        previousIp: directIp,
+        currentIp: currentWarpIp,
         rotatedAt: now,
       });
     }

@@ -120,7 +120,7 @@ export async function getWarpProxyIp(): Promise<string> {
     } catch {}
   }
 
-  return "104.28.237.51";
+  return await getDirectIp();
 }
 
 /**

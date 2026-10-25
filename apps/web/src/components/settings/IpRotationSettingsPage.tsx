@@ -760,6 +760,16 @@ export function IpRotationSettingsPage() {
             </Button>
           </div>
         </div>
+
+        {/* Micro Note */}
+        <div className="mt-2.5 pt-2 border-t border-border/20 flex flex-wrap items-center justify-between gap-1 text-[11px] text-muted-foreground/80">
+          <span>
+            ℹ️ Session ID tokens are managed dynamically with IP rotation or in OpenCode Bypass.
+          </span>
+          <span className="font-mono text-[10px] text-muted-foreground/70">
+            Proxy Bridge: 127.0.0.1:8118 (Privoxy) ➔ 127.0.0.1:40000 (WARP SOCKS5)
+          </span>
+        </div>
       </div>
 
       {/* ─────────────────────────────────────────────────────────────────
