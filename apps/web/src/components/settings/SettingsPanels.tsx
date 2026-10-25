@@ -1911,11 +1911,43 @@ export function GeneralSettingsPanel() {
     others: "Other ACP Connector (Claude, Codex, Gemini...)",
   };
 
+  const [testingEngine, setTestingEngine] = useState(false);
+  const handleTestEngine = async () => {
+    setTestingEngine(true);
+    try {
+      const res = await fetch("/api/engine/test", { method: "POST" });
+      const data = (await res.json()) as any;
+      if (data?.ok) {
+        toastManager.add({
+          type: "success",
+          message: data.message || `✓ Engine verified in ${data.durationMs}ms!`,
+        });
+      } else {
+        toastManager.add({
+          type: "error",
+          message: `Engine self-test failed: ${data?.error || "unknown error"}`,
+        });
+      }
+    } catch (err: any) {
+      toastManager.add({
+        type: "error",
+        message: `Engine test error: ${err?.message || String(err)}`,
+      });
+    } finally {
+      setTestingEngine(false);
+    }
+  };
+
   const handleSelectEngine = (type: CoreEngineType) => {
     setSelectedCoreEngine(type);
     if (typeof window !== "undefined") {
       window.localStorage.setItem("t3_selected_core_engine", type);
       window.dispatchEvent(new CustomEvent("t3:core-engine-changed", { detail: { engine: type } }));
+      fetch("/api/engine/switch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ engine: type }),
+      }).catch(() => {});
     }
     toastManager.add({
       type: "success",
@@ -2093,6 +2125,21 @@ export function GeneralSettingsPanel() {
               }`}
             >
               <span className="truncate">Other ACP Connector (Claude, Codex, Gemini...)</span>
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between pt-1 border-t border-border/30">
+            <span className="text-[11px] text-muted-foreground">
+              Mode: Embedded Standalone (Zero External Dependencies)
+            </span>
+            <button
+              type="button"
+              disabled={testingEngine}
+              onClick={handleTestEngine}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium rounded-md bg-secondary hover:bg-secondary/80 text-secondary-foreground transition-all disabled:opacity-50"
+            >
+              <SparklesIcon className="w-3 h-3 text-amber-400" />
+              <span>{testingEngine ? "Testing Engine..." : "Test Engine"}</span>
             </button>
           </div>
         </div>

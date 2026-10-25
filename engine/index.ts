@@ -8,6 +8,7 @@
 
 export * from "./adapters/opencode-adapter";
 export * from "./adapters/others";
+export * from "./runtimes/opencode-full-engine";
 
 export type SupportedEngineType = "opencode-full-engine" | "opencode-adapter" | "others";
 
