@@ -42,6 +42,8 @@ interface TerminalState {
   inputMode: "bash" | "ai";
   permissionMode: "full-access" | "ask";
   alwaysAllowedCommands: string[];
+  mobileActiveTab: "chat" | "terminal";
+  unreadAiToolsCount: number;
 }
 
 import { saveServerSetting } from "~/lib/serverSettingsSync";
@@ -189,6 +191,8 @@ let state: TerminalState = {
   inputMode: "bash",
   permissionMode: initialPermissionMode,
   alwaysAllowedCommands: initialAlwaysAllowedCommands,
+  mobileActiveTab: "chat",
+  unreadAiToolsCount: 0,
   history: ["ls -la /", "df -h", "free -m", "uname -a"],
 };
 
@@ -221,7 +225,12 @@ export const terminalStore = {
   },
 
   setQuickBarOpen(isOpen: boolean) {
-    state = { ...state, isQuickBarOpen: isOpen };
+    state = {
+      ...state,
+      isQuickBarOpen: isOpen,
+      mobileActiveTab: isOpen ? "terminal" : "chat",
+      unreadAiToolsCount: isOpen ? 0 : state.unreadAiToolsCount,
+    };
     if (typeof window !== "undefined") {
       window.localStorage.setItem(STORAGE_KEY_OPEN, String(isOpen));
     }
@@ -230,6 +239,20 @@ export const terminalStore = {
 
   toggleQuickBar() {
     this.setQuickBarOpen(!state.isQuickBarOpen);
+  },
+
+  setMobileActiveTab(tab: "chat" | "terminal") {
+    state = {
+      ...state,
+      mobileActiveTab: tab,
+      unreadAiToolsCount: tab === "terminal" ? 0 : state.unreadAiToolsCount,
+    };
+    notify();
+  },
+
+  clearUnreadAiTools() {
+    state = { ...state, unreadAiToolsCount: 0 };
+    notify();
   },
 
   addTerminalTab(name?: string, type: "bash" | "logs" = "bash"): string {
@@ -388,13 +411,19 @@ export const terminalStore = {
     };
 
     let updatedRuns: TerminalCommandRun[];
+    const isNewRun = existingIndex < 0;
     if (existingIndex >= 0) {
       updatedRuns = state.runs.map((r, i) => (i === existingIndex ? { ...r, ...run } : r));
     } else {
       updatedRuns = [run, ...state.runs];
     }
 
-    state = { ...state, runs: updatedRuns };
+    const nextUnreadCount =
+      isNewRun && state.mobileActiveTab === "chat"
+        ? state.unreadAiToolsCount + 1
+        : state.unreadAiToolsCount;
+
+    state = { ...state, runs: updatedRuns, unreadAiToolsCount: nextUnreadCount };
     notify();
   },
 

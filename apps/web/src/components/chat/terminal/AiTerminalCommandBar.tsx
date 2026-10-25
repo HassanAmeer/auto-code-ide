@@ -777,6 +777,132 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
       </div>
 
       {/* ============================================================== */}
+      {/* 2.5 MOBILE HACKER KEYBOARD ACCESSORY TOOLBAR (Concept 2)       */}
+      {/* ============================================================== */}
+      <div
+        className="md:hidden flex items-center gap-1.5 px-2.5 py-1.5 bg-[#0a0a0f] border-t border-white/[0.08] overflow-x-auto [scrollbar-width:none] shrink-0 select-none"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          type="button"
+          onClick={() => {
+            setCommand("");
+            promptInputRef.current?.focus();
+          }}
+          className="px-2 py-1 rounded-[5px] bg-[#161622] active:bg-white/[0.15] text-zinc-300 font-mono text-3xs font-semibold shrink-0 border border-white/[0.1]"
+        >
+          ESC
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setCommand((prev) => prev + "  ");
+            promptInputRef.current?.focus();
+          }}
+          className="px-2 py-1 rounded-[5px] bg-[#161622] active:bg-white/[0.15] text-zinc-300 font-mono text-3xs font-semibold shrink-0 border border-white/[0.1]"
+        >
+          TAB
+        </button>
+        <button
+          type="button"
+          onClick={() => void handleKill()}
+          disabled={!isRunning}
+          className={cn(
+            "px-2 py-1 rounded-[5px] font-mono text-3xs font-semibold shrink-0 border transition-all",
+            isRunning
+              ? "bg-rose-500/20 active:bg-rose-500/40 text-rose-300 border-rose-500/40 shadow-xs"
+              : "bg-[#161622] text-zinc-500 border-white/[0.06] opacity-60",
+          )}
+        >
+          Ctrl+C
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setCommand((prev) => prev + " | ");
+            promptInputRef.current?.focus();
+          }}
+          className="px-2 py-1 rounded-[5px] bg-[#161622] active:bg-white/[0.15] text-emerald-400 font-mono text-3xs font-bold shrink-0 border border-emerald-500/30"
+        >
+          |
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setCommand((prev) => prev + "~");
+            promptInputRef.current?.focus();
+          }}
+          className="px-2 py-1 rounded-[5px] bg-[#161622] active:bg-white/[0.15] text-cyan-400 font-mono text-3xs font-bold shrink-0 border border-cyan-500/30"
+        >
+          ~
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setCommand((prev) => prev + "/");
+            promptInputRef.current?.focus();
+          }}
+          className="px-2 py-1 rounded-[5px] bg-[#161622] active:bg-white/[0.15] text-zinc-200 font-mono text-3xs font-bold shrink-0 border border-white/[0.1]"
+        >
+          /
+        </button>
+        <button
+          type="button"
+          onClick={() => void handleExecute("cd ..")}
+          className="px-2 py-1 rounded-[5px] bg-[#161622] active:bg-white/[0.15] text-amber-300 font-mono text-3xs font-semibold shrink-0 border border-amber-500/30"
+        >
+          cd ..
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            terminalStore.clearRuns(activeTabId);
+            setLatestRun(null);
+            setLogsOutput(null);
+          }}
+          className="px-2 py-1 rounded-[5px] bg-[#161622] active:bg-white/[0.15] text-zinc-400 font-mono text-3xs font-semibold shrink-0 border border-white/[0.1]"
+        >
+          clear
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            if (store.history.length === 0) return;
+            const nextIndex =
+              historyIndex === null ? store.history.length - 1 : Math.max(0, historyIndex - 1);
+            setHistoryIndex(nextIndex);
+            const histCmd = store.history[nextIndex];
+            if (histCmd) setCommand(histCmd);
+            promptInputRef.current?.focus();
+          }}
+          className="px-2.5 py-1 rounded-[5px] bg-[#161622] active:bg-white/[0.15] text-zinc-300 font-mono text-3xs font-semibold shrink-0 border border-white/[0.1]"
+          title="Previous command"
+        >
+          ▲
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            if (historyIndex === null) return;
+            const nextIndex = historyIndex + 1;
+            if (nextIndex >= store.history.length) {
+              setHistoryIndex(null);
+              setCommand("");
+            } else {
+              setHistoryIndex(nextIndex);
+              const histCmd = store.history[nextIndex];
+              if (histCmd) setCommand(histCmd);
+            }
+            promptInputRef.current?.focus();
+          }}
+          className="px-2.5 py-1 rounded-[5px] bg-[#161622] active:bg-white/[0.15] text-zinc-300 font-mono text-3xs font-semibold shrink-0 border border-white/[0.1]"
+          title="Next command"
+        >
+          ▼
+        </button>
+      </div>
+
+      {/* ============================================================== */}
       {/* 3. BOTTOM SUGGESTIONS ROW (NO INPUT FIELD UNDERNEATH!)          */}
       {/* ============================================================== */}
       <div
