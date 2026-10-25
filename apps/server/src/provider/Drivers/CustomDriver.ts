@@ -21,6 +21,13 @@ import * as NodeChildProcess from "node:child_process";
 import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
+import {
+  executeEngineTool,
+  executeWriteTool,
+  executeEditTool,
+  executePatchTool,
+  executeShellTool,
+} from "../../../../../engine/runtimes/opencode-full-engine/index.ts";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as DateTime from "effect/DateTime";
@@ -717,56 +724,44 @@ export function applyFileContentOrPatch(
     return { saved: false, method: "skipped_protected", path: file.path };
   }
 
-  const dir = NodePath.dirname(fullPath);
-  if (!NodeFS.existsSync(dir)) {
-    NodeFS.mkdirSync(dir, { recursive: true });
-  }
+  const existingContent = NodeFS.existsSync(fullPath)
+    ? NodeFS.readFileSync(fullPath, "utf-8")
+    : null;
 
-  if (!NodeFS.existsSync(fullPath)) {
-    NodeFS.writeFileSync(fullPath, file.content, "utf-8");
-    return { saved: true, method: "created", path: file.path };
-  }
-
-  const existingContent = NodeFS.readFileSync(fullPath, "utf-8");
   const trimmedNew = file.content.trim();
   const ext = file.path.split(".").pop()?.toLowerCase() || "";
 
-  // 1. Check if new content is a complete HTML document
-  const isCompleteHtml =
-    ext === "html" &&
-    (trimmedNew.toLowerCase().startsWith("<!doctype") ||
-      trimmedNew.toLowerCase().startsWith("<html") ||
-      (trimmedNew.toLowerCase().includes("<html") && trimmedNew.toLowerCase().includes("</html>")));
-
-  // Complete HTML documents must ALWAYS be written directly to disk without patching/splicing
-  if (isCompleteHtml) {
-    NodeFS.writeFileSync(fullPath, file.content, "utf-8");
-    return { saved: true, method: "overwritten", path: file.path };
-  }
-
-  // 2. Check if new content has explicit SEARCH/REPLACE diff markers
+  // 1. Check if new content has explicit SEARCH/REPLACE diff markers using OpenCode Full Engine
   const hasSearchReplace = /<{3,7}\s*SEARCH\s*\n[\s\S]*?\n[=]{3,7}\s*\n[\s\S]*?\n[>]{3,7}/.test(
     file.content,
   );
 
-  if (hasSearchReplace) {
-    const patchResult = universalPatchFile(existingContent, file.content, file.path);
-    if (patchResult.success && patchResult.content !== existingContent) {
-      NodeFS.writeFileSync(fullPath, patchResult.content, "utf-8");
+  if (hasSearchReplace && existingContent !== null) {
+    try {
+      const patchResult = executePatchTool(
+        { patchText: file.content, path: file.path },
+        projectCwd,
+      );
+      if (patchResult.totalHunks > 0) {
+        return { saved: true, method: "patched", path: file.path };
+      }
+    } catch {
+      // Fallback to legacy parser below
+    }
+
+    const legacyPatch = universalPatchFile(existingContent, file.content, file.path);
+    if (legacyPatch.success && legacyPatch.content !== existingContent) {
+      executeWriteTool({ path: file.path, content: legacyPatch.content }, projectCwd);
       return { saved: true, method: "patched", path: file.path };
     }
   }
 
-  // 3. Check if content is a partial placeholder snippet (e.g. // ... rest of code unchanged ...)
-  const hasPlaceholder =
-    /\/\/\s*\.\.\.\s*(?:rest|existing|code|remaining|unchanged)/i.test(trimmedNew) ||
-    /#\s*\.\.\.\s*(?:rest|existing|code|remaining|unchanged)/i.test(trimmedNew) ||
-    /\/\*\s*\.\.\.\s*(?:rest|existing|code|remaining|unchanged)/i.test(trimmedNew);
-
-  if (hasPlaceholder) {
+  // 2. Direct write using OpenCode Full Engine executeWriteTool
+  // 3. Placeholder protection check
+  if (hasPlaceholder && existingContent !== null) {
     const patchResult = universalPatchFile(existingContent, file.content, file.path);
     if (patchResult.success && patchResult.content !== existingContent) {
-      NodeFS.writeFileSync(fullPath, patchResult.content, "utf-8");
+      executeWriteTool({ path: file.path, content: patchResult.content }, projectCwd);
       return { saved: true, method: "patched", path: file.path };
     }
     console.warn(
@@ -775,33 +770,32 @@ export function applyFileContentOrPatch(
     return { saved: false, method: "skipped_protected", path: file.path };
   }
 
-  // 4. CRITICAL SAFETY GUARD: Prevent wiping a large existing file with a tiny snippet!
-  // If existing file is HTML and incoming content does NOT have HTML structure:
+  // 4. Safety Guard: Prevent wiping a large HTML file with a non-HTML snippet
   if (
     ext === "html" &&
+    existingContent !== null &&
     existingContent.toLowerCase().includes("<html") &&
     !trimmedNew.toLowerCase().includes("<html") &&
     !trimmedNew.toLowerCase().includes("<!doctype")
   ) {
     console.warn(
-      `[AutoCode Protect] Blocked destructive overwrite: Refusing to replace HTML file ${file.path} (${existingContent.length} chars) with non-HTML snippet (${trimmedNew.length} chars).`,
+      `[AutoCode Protect] Blocked destructive overwrite: Refusing to replace HTML file ${file.path} with non-HTML snippet.`,
     );
     return { saved: false, method: "skipped_protected", path: file.path };
   }
 
-  // If existing file is substantial (> 40 lines) and new content is tiny (< 10 lines) without SEARCH/REPLACE:
-  const existingLines = existingContent.split("\n").length;
-  const newLines = trimmedNew.split("\n").length;
-  if (existingLines > 40 && newLines < 10) {
-    console.warn(
-      `[AutoCode Protect] Blocked destructive wipe: Refusing to wipe ${file.path} (${existingLines} lines) with a ${newLines}-line snippet.`,
-    );
+  // 5. Genuine complete file write via OpenCode Full Engine executeWriteTool
+  try {
+    const writeResult = executeWriteTool({ path: file.path, content: file.content }, projectCwd);
+    return {
+      saved: true,
+      method: writeResult.created ? "created" : "overwritten",
+      path: file.path,
+    };
+  } catch (writeErr) {
+    console.error("[OpenCodeEngine] executeWriteTool failed:", file.path, writeErr);
     return { saved: false, method: "skipped_protected", path: file.path };
   }
-
-  // 5. Genuine complete file write or full rewrite (games, scripts, components)
-  NodeFS.writeFileSync(fullPath, file.content, "utf-8");
-  return { saved: true, method: "overwritten", path: file.path };
 }
 
 export interface ScannedFileDetail {

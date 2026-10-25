@@ -4,6 +4,20 @@ import * as NodePath from "node:path";
 import * as NodeOS from "node:os";
 import * as NodeChildProcess from "node:child_process";
 
+import {
+  executeEngineTool,
+  executeWriteTool,
+  executeEditTool,
+  executePatchTool,
+  executeShellTool,
+  executeReadTool,
+  executeGrepTool,
+  executeGlobTool,
+  ATTACHED_TOOLS,
+  ENGINE_NAME,
+  ENGINE_VERSION,
+} from "../../../engine/runtimes/opencode-full-engine/index.ts";
+
 export interface ExtractedProjectFile {
   readonly path: string;
   readonly content: string;
@@ -455,7 +469,7 @@ function universalPatchFile(
 }
 
 /**
- * Writes or patches the file to the project filesystem.
+ * Writes or patches the file to the project filesystem using OpenCode Full Engine tools.
  */
 export function applyFileContentOrPatch(
   projectCwd: string,
@@ -471,52 +485,50 @@ export function applyFileContentOrPatch(
     return { saved: false, method: "skipped_protected", path: file.path };
   }
 
-  const dir = NodePath.dirname(fullPath);
-  if (!NodeFS.existsSync(dir)) {
-    NodeFS.mkdirSync(dir, { recursive: true });
-  }
+  const existingContent = NodeFS.existsSync(fullPath)
+    ? NodeFS.readFileSync(fullPath, "utf-8")
+    : null;
 
-  if (!NodeFS.existsSync(fullPath)) {
-    NodeFS.writeFileSync(fullPath, file.content, "utf-8");
-    return { saved: true, method: "created", path: file.path };
-  }
-
-  const existingContent = NodeFS.readFileSync(fullPath, "utf-8");
   const trimmedNew = file.content.trim();
   const ext = file.path.split(".").pop()?.toLowerCase() || "";
 
-  // 1. Complete HTML document check
-  const isCompleteHtml =
-    ext === "html" &&
-    (trimmedNew.toLowerCase().startsWith("<!doctype") ||
-      trimmedNew.toLowerCase().startsWith("<html") ||
-      (trimmedNew.toLowerCase().includes("<html") && trimmedNew.toLowerCase().includes("</html>")));
-
-  if (isCompleteHtml) {
-    NodeFS.writeFileSync(fullPath, file.content, "utf-8");
-    return { saved: true, method: "overwritten", path: file.path };
-  }
-
-  // 2. SEARCH/REPLACE diff check
+  // 1. SEARCH/REPLACE diff check - use OpenCode Full Engine executePatchTool
   const hasSearchReplace = /<{3,7}\s*SEARCH\s*\n[\s\S]*?\n[=]{3,7}\s*\n[\s\S]*?\n[>]{3,7}/.test(
     file.content,
   );
 
-  if (hasSearchReplace) {
-    const patchResult = universalPatchFile(existingContent, file.content, file.path);
-    if (patchResult.success && patchResult.content !== existingContent) {
-      NodeFS.writeFileSync(fullPath, patchResult.content, "utf-8");
+  if (hasSearchReplace && existingContent !== null) {
+    try {
+      const patchResult = executePatchTool(
+        { patchText: file.content, path: file.path },
+        projectCwd,
+      );
+      if (patchResult.totalHunks > 0) {
+        return { saved: true, method: "patched", path: file.path };
+      }
+    } catch {
+      // Fallback to legacy parser below
+    }
+
+    const legacyPatch = universalPatchFile(existingContent, file.content, file.path);
+    if (legacyPatch.success && legacyPatch.content !== existingContent) {
+      executeWriteTool({ path: file.path, content: legacyPatch.content }, projectCwd);
       return { saved: true, method: "patched", path: file.path };
     }
   }
 
-  // Fallback: If substantial file, overwrite cleanly
-  if (trimmedNew.length > 50) {
-    NodeFS.writeFileSync(fullPath, file.content, "utf-8");
-    return { saved: true, method: "overwritten", path: file.path };
+  // 2. Direct write using OpenCode Full Engine executeWriteTool
+  try {
+    const writeResult = executeWriteTool({ path: file.path, content: file.content }, projectCwd);
+    return {
+      saved: true,
+      method: writeResult.created ? "created" : "overwritten",
+      path: file.path,
+    };
+  } catch (writeErr) {
+    console.error("[OpenCodeEngine] executeWriteTool error for file:", file.path, writeErr);
+    return { saved: false, method: "skipped_protected", path: file.path };
   }
-
-  return { saved: false, method: "skipped_protected", path: file.path };
 }
 
 /**
@@ -538,9 +550,10 @@ export function getActiveEngineSystemPrompt(projectCwd: string): string {
     }
   }
 
-  return `You are an elite, production-grade AI Software Engineer operating directly inside the user's workspace.
+  return `You are an elite, production-grade AI Software Engineer powered by OpenCode Full Engine (${ENGINE_VERSION}).
 Current Project Directory: ${projectCwd}
-Active Execution Engine: ${engine.mode === "codex" ? "OpenAI Codex CLI Engine" : "Custom AI Engine"}
+Active Execution Engine: OpenCode Full Engine (14 Embedded Standalone Tools)
+Available Embedded Tools: ${ATTACHED_TOOLS.join(", ")}
 
 ================================================================================
 WORKSPACE FILE SYSTEM CONTEXT (ALREADY SCANNED - DO NOT ASK TO READ DIRECTORY):
@@ -574,7 +587,7 @@ CRITICAL MANDATORY RULES FOR CODE GENERATION (100% RELIABILITY):
    • Never reference external images or sounds that do not exist locally on disk.
 
 5. AUTOMATIC DISK PERSISTENCE:
-   • The host IDE automatically saves files to ${projectCwd} and stages them to Git when you output code blocks with filepaths.
+   • The host OpenCode Full Engine automatically intercepts code blocks, executes them via executeEngineTool (write/edit/patch), saves files to ${projectCwd}, and stages them to Git.
 ================================================================================`;
 }
 
