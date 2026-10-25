@@ -61,7 +61,9 @@ function savedOptionLabel(id: string): string {
 export function buildUnavailableModelOptionDescriptors(
   selections: ProviderOptions | null | undefined,
 ): ReadonlyArray<ProviderOptionDescriptor> {
-  return (selections ?? []).map((selection) =>
+  const hasVariant = selections?.some((s) => s.id === "variant");
+  const hasAgent = selections?.some((s) => s.id === "agent");
+  const base = (selections ?? []).map((selection) =>
     typeof selection.value === "boolean"
       ? {
           id: selection.id,
@@ -77,6 +79,34 @@ export function buildUnavailableModelOptionDescriptors(
           currentValue: selection.value,
         },
   );
+  const defaults: ProviderOptionDescriptor[] = [];
+  if (!hasVariant) {
+    defaults.push({
+      id: "variant",
+      label: "Reasoning",
+      type: "select",
+      options: [
+        { id: "low", label: "Low" },
+        { id: "medium", label: "Medium" },
+        { id: "high", label: "High", isDefault: true },
+        { id: "xhigh", label: "Extra High" },
+      ],
+      currentValue: "high",
+    });
+  }
+  if (!hasAgent) {
+    defaults.push({
+      id: "agent",
+      label: "Agent",
+      type: "select",
+      options: [
+        { id: "build", label: "Build", isDefault: true },
+        { id: "plan", label: "Plan" },
+      ],
+      currentValue: "build",
+    });
+  }
+  return [...defaults, ...base];
 }
 
 type TraitsPersistence =
@@ -527,7 +557,7 @@ export function buildTraitsTriggerDisplay(input: {
         continue;
       }
     }
-    const label =
+    let label =
       input.ultrathinkPromptControlled && descriptor.id === input.primarySelectDescriptorId
         ? "Ultrathink"
         : descriptor.type === "boolean"
@@ -537,6 +567,21 @@ export function buildTraitsTriggerDisplay(input: {
               input.modelSelection,
               input.reportedModelSelection,
             );
+
+    // Fallback: If reasoning / variant / effort label is missing or "Unknown", default to "High"
+    if (
+      (descriptor.id === "variant" ||
+        descriptor.id === "reasoningEffort" ||
+        descriptor.id === "effort" ||
+        descriptor.id === "reasoning") &&
+      (!label || label === "Unknown")
+    ) {
+      label =
+        descriptor.type === "select"
+          ? (descriptor.options?.find((opt) => opt.id === "high")?.label ?? "High")
+          : "High";
+    }
+
     if (typeof label === "string" && label.length > 0) {
       // Custom models retain descriptor order, so the primary select can be context.
       if (
@@ -563,7 +608,8 @@ export function buildTraitsTriggerDisplay(input: {
       labels.push(speedLabel);
     }
   }
-  return { label: labels.join(" · ") };
+  const joinedLabel = labels.join(" · ").replaceAll("Unknown", "High");
+  return { label: joinedLabel.length > 0 ? joinedLabel : "High · Build" };
 }
 
 export const TraitsPicker = memo(function TraitsPicker({
@@ -615,7 +661,7 @@ export const TraitsPicker = memo(function TraitsPicker({
     return null;
   }
 
-  const { label: triggerLabel } = buildTraitsTriggerDisplay({
+  const { label: rawTriggerLabel } = buildTraitsTriggerDisplay({
     provider,
     descriptors,
     primarySelectDescriptorId: primarySelectDescriptor?.id ?? null,
@@ -623,6 +669,9 @@ export const TraitsPicker = memo(function TraitsPicker({
     modelSelection: instanceId && model ? { instanceId, model, options: modelOptions ?? [] } : null,
     reportedModelSelection,
   });
+  const triggerLabel = rawTriggerLabel
+    ? rawTriggerLabel.replaceAll("Unknown", "High")
+    : "High · Build";
   const isCodexStyle = provider === "codex";
 
   return (

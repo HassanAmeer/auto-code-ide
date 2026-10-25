@@ -153,19 +153,19 @@ function titleCaseSlug(value: string): string {
 }
 
 function inferDefaultVariant(
-  providerID: string,
+  _providerID: string,
   variants: ReadonlyArray<string>,
 ): string | undefined {
   if (variants.length === 1) {
     return variants[0];
   }
-  if (providerID === "anthropic" || providerID.startsWith("google")) {
-    return variants.includes("high") ? "high" : undefined;
+  if (variants.includes("high")) {
+    return "high";
   }
-  if (providerID === "openai" || providerID === "opencode") {
-    return variants.includes("medium") ? "medium" : variants.includes("high") ? "high" : undefined;
+  if (variants.includes("medium")) {
+    return "medium";
   }
-  return undefined;
+  return variants[0] ?? "high";
 }
 
 function inferDefaultAgent(agents: ReadonlyArray<Agent>): string | undefined {
@@ -180,11 +180,11 @@ const DEFAULT_OPENCODE_MODEL_CAPABILITIES: ModelCapabilities = createModelCapabi
       type: "select",
       options: [
         { id: "low", label: "Low" },
-        { id: "medium", label: "Medium", isDefault: true },
-        { id: "high", label: "High" },
+        { id: "medium", label: "Medium" },
+        { id: "high", label: "High", isDefault: true },
         { id: "xhigh", label: "Extra High" },
       ],
-      currentValue: "medium",
+      currentValue: "high",
     },
     {
       id: "agent",

@@ -87,6 +87,23 @@ export function withImplicitFastModeDefault(
   return [...(modelOptions ?? []), { id: "fastMode", value: false }];
 }
 
+function withImplicitVariantDefault(
+  caps: ModelCapabilities,
+  modelOptions: ReadonlyArray<ProviderOptionSelection> | null | undefined,
+): ReadonlyArray<ProviderOptionSelection> | undefined {
+  const hasVariant = caps.optionDescriptors?.some(
+    (descriptor) => descriptor.type === "select" && descriptor.id === "variant",
+  );
+  if (!hasVariant) {
+    return modelOptions ?? undefined;
+  }
+  const hasExplicitVariant = modelOptions?.some((option) => option.id === "variant");
+  if (hasExplicitVariant) {
+    return modelOptions ?? undefined;
+  }
+  return [...(modelOptions ?? []), { id: "variant", value: "high" }];
+}
+
 function resolveComposerOptionSelections(
   models: ReadonlyArray<ServerProviderModel>,
   model: string,
@@ -98,7 +115,9 @@ function resolveComposerOptionSelections(
   selections: ReadonlyArray<ProviderOptionSelection> | undefined;
 } {
   const caps = getProviderModelCapabilities(models, model, provider, planModeEnabled);
-  return { caps, selections: withImplicitFastModeDefault(caps, modelOptions) };
+  const withFast = withImplicitFastModeDefault(caps, modelOptions);
+  const withVariant = withImplicitVariantDefault(caps, withFast);
+  return { caps, selections: withVariant };
 }
 
 export function getComposerProviderState(input: ComposerProviderStateInput): ComposerProviderState {
@@ -117,11 +136,16 @@ export function getComposerProviderState(input: ComposerProviderStateInput): Com
       const preservedOptions = modelOptions?.filter(
         (option) => planModeEnabled || option.id !== "agent" || option.value !== "plan",
       );
+      const withVariant = preservedOptions?.some((o) => o.id === "variant")
+        ? preservedOptions
+        : [...(preservedOptions ?? []), { id: "variant", value: "high" }];
+      const withAgent = withVariant.some((o) => o.id === "agent")
+        ? withVariant
+        : [...withVariant, { id: "agent", value: "build" }];
       return {
         provider,
         promptEffort: null,
-        modelOptionsForDispatch:
-          preservedOptions && preservedOptions.length > 0 ? preservedOptions : undefined,
+        modelOptionsForDispatch: withAgent,
       };
     }
   }
