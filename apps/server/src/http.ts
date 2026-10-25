@@ -2698,6 +2698,95 @@ export const layerOpenCodeBypassSessionCheckRoute = HttpRouter.add(
   }),
 );
 
+export const layerIpRotationStatusRoute = HttpRouter.add(
+  "GET",
+  "/api/ip-rotation/status",
+  Effect.gen(function* () {
+    const { getIpRotationStatus } = yield* Effect.promise(
+      () => import("@t3tools/provider-opencodebypasssetup/server"),
+    );
+    const status = yield* Effect.promise(() => getIpRotationStatus());
+    return HttpServerResponse.jsonUnsafe(status);
+  }),
+);
+
+export const layerIpRotationStartWarpRoute = HttpRouter.add(
+  "POST",
+  "/api/ip-rotation/start-warp",
+  Effect.gen(function* () {
+    const { startWarpBackground } = yield* Effect.promise(
+      () => import("@t3tools/provider-opencodebypasssetup/server"),
+    );
+    const result = yield* Effect.promise(() => startWarpBackground());
+    return HttpServerResponse.jsonUnsafe({
+      ok: result.ok,
+      message: result.message,
+    });
+  }),
+);
+
+export const layerIpRotationRotateRoute = HttpRouter.add(
+  "POST",
+  "/api/ip-rotation/rotate",
+  Effect.gen(function* () {
+    const { rotateAllIpRotation } = yield* Effect.promise(
+      () => import("@t3tools/provider-opencodebypasssetup/server"),
+    );
+    const result = yield* Effect.promise(() => rotateAllIpRotation());
+    return HttpServerResponse.jsonUnsafe(result);
+  }),
+);
+
+export const layerIpRotationAttachRoute = HttpRouter.add(
+  "POST",
+  "/api/ip-rotation/attach",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      providers?: Array<{ id: string; name: string }>;
+      providerIds?: string[];
+      names?: Record<string, string>;
+    };
+    const { attachProvidersToIpRotation } = yield* Effect.promise(
+      () => import("@t3tools/provider-opencodebypasssetup/server"),
+    );
+    const providersToAttach: Array<{ id: string; name: string }> = [];
+    if (Array.isArray(bodyJson?.providers)) {
+      for (const p of bodyJson.providers) {
+        if (p && p.id) {
+          providersToAttach.push({ id: String(p.id), name: String(p.name || p.id) });
+        }
+      }
+    } else if (Array.isArray(bodyJson?.providerIds)) {
+      for (const id of bodyJson.providerIds) {
+        if (id) {
+          const name = bodyJson.names?.[id] || String(id);
+          providersToAttach.push({ id: String(id), name });
+        }
+      }
+    }
+    const result = yield* Effect.promise(() => attachProvidersToIpRotation(providersToAttach));
+    return HttpServerResponse.jsonUnsafe(result);
+  }),
+);
+
+export const layerIpRotationDetachRoute = HttpRouter.add(
+  "POST",
+  "/api/ip-rotation/detach",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      providerId?: string;
+    };
+    const providerId = String(bodyJson?.providerId || "").trim();
+    const { detachProviderFromIpRotation } = yield* Effect.promise(
+      () => import("@t3tools/provider-opencodebypasssetup/server"),
+    );
+    const result = yield* Effect.promise(() => detachProviderFromIpRotation(providerId));
+    return HttpServerResponse.jsonUnsafe(result);
+  }),
+);
+
 export const layerDbInspectRoute = HttpRouter.add(
   "POST",
   "/api/db/inspect",

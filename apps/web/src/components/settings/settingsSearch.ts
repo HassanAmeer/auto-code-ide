@@ -23,6 +23,7 @@ export type SettingsPath =
   | "/settings/skills"
   | "/settings/providers"
   | "/settings/custom-providers"
+  | "/settings/ip-rotation"
   | "/settings/mcp"
   | "/settings/integrations"
   | "/settings/scheduled-tasks"
@@ -104,6 +105,7 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/skills": "Skills",
   "/settings/providers": "Providers",
   "/settings/custom-providers": "Custom Providers",
+  "/settings/ip-rotation": "IP Rotation",
   "/settings/mcp": "MCP Servers",
   "/settings/integrations": "Integrations",
   "/settings/scheduled-tasks": "Scheduled Tasks",

@@ -39,3 +39,11 @@ export {
   startWarpBackground,
   isWarpProxyAvailable,
 } from "./proxy.ts";
+
+export {
+  getIpRotationStatus,
+  rotateAllIpRotation,
+  attachProvidersToIpRotation,
+  detachProviderFromIpRotation,
+  type RotatedProviderRecord,
+} from "./ipRotationState.ts";

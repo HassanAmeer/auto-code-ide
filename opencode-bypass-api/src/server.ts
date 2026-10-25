@@ -16,4 +16,9 @@ export {
   clearAndMintSession,
   checkActiveSession,
   isCanonicalSession,
+  getIpRotationStatus,
+  rotateAllIpRotation,
+  attachProvidersToIpRotation,
+  detachProviderFromIpRotation,
+  type RotatedProviderRecord,
 } from "./server/bypass/index.ts";

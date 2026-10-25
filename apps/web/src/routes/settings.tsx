@@ -92,7 +92,8 @@ function SettingsScopeBoundary({ pathname, children }: { pathname: string; child
     SETTINGS_DEVICE_ONLY_PATHS.has(pathname) ||
     pathname === "/settings/projects" ||
     pathname === "/settings/providers" ||
-    pathname === "/settings/custom-providers"
+    pathname === "/settings/custom-providers" ||
+    pathname === "/settings/ip-rotation"
   ) {
     return children;
   }
