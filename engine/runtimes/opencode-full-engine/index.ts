@@ -15,7 +15,7 @@ import * as NodeOS from "node:os";
 import * as NodeChildProcess from "node:child_process";
 
 export const ENGINE_NAME = "OpenCode Full Engine";
-export const ENGINE_VERSION = "2.0.0-embedded";
+export const ENGINE_VERSION = "2.1.4-embedded";
 export const IS_STANDALONE = true;
 
 export interface EngineCapabilities {

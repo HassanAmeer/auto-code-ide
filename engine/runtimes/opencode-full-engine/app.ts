@@ -15,9 +15,9 @@ export const Metadata = Context.Reference<Info>("@opencode/App", {
 
 export function make(input: Partial<Info> = {}): Info {
   return {
-    name: input.name ?? "opencode",
-    version: input.version ?? "unknown",
-    channel: input.channel ?? "unknown",
+    name: input.name ?? "cli",
+    version: input.version ?? "2.1.4",
+    channel: input.channel ?? "latest",
   };
 }
 
