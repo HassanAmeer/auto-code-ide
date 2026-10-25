@@ -2,17 +2,14 @@
  * AutoCode Unified Engine Registry
  * Exposes:
  * 1. OpenCode Full Engine (Original OpenCode standalone runtime)
- * 2. OpenCode Adapter (External CLI bridge for optional remote/local CLI)
- * 3. External ACP Adapter (Claude / Cursor CLI bridge)
+ * 2. OpenCode Adapter (External OpenCode CLI bridge)
+ * 3. Others Adapter (Claude Code, Cursor ACP, and Third-party CLI bridge)
  */
 
 export * from "./adapters/opencode-adapter";
-export * from "./adapters/external-acp-adapter";
+export * from "./adapters/others";
 
-export type SupportedEngineType =
-  | "opencode-full-engine"
-  | "opencode-adapter"
-  | "external-acp-adapter";
+export type SupportedEngineType = "opencode-full-engine" | "opencode-adapter" | "others";
 
 export interface EngineDescriptor {
   readonly id: SupportedEngineType;
@@ -38,10 +35,11 @@ export const AVAILABLE_ENGINES: Record<SupportedEngineType, EngineDescriptor> = 
     isStandalone: false,
     memoryFootprint: "Varies (depends on external CLI)",
   },
-  "external-acp-adapter": {
-    id: "external-acp-adapter",
-    name: "External ACP Adapter",
-    description: "Agent Client Protocol bridge for third-party Claude Code / Cursor CLIs.",
+  others: {
+    id: "others",
+    name: "Others (Claude Code / Cursor)",
+    description:
+      "Adapter for third-party coding agents such as Claude Code, Cursor, and external ACP agents.",
     isStandalone: false,
     memoryFootprint: "Varies",
   },

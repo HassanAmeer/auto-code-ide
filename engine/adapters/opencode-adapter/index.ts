@@ -5,6 +5,10 @@
  * Note: Requires OpenCode CLI installed on the system (e.g. /usr/local/bin/opencode).
  */
 
+export * from "./server";
+export * from "./universalRunner";
+export * from "./client";
+
 export interface OpenCodeAdapterConfig {
   readonly opencodeUrl?: string;
   readonly defaultPort?: number;
