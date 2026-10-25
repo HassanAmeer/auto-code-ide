@@ -1920,18 +1920,22 @@ export function GeneralSettingsPanel() {
       if (data?.ok) {
         toastManager.add({
           type: "success",
-          message: data.message || `✓ Engine verified in ${data.durationMs}ms!`,
+          title: "OpenCode Full Engine Verified",
+          description:
+            data.message || `All core subsystems active and verified in ${data.durationMs}ms.`,
         });
       } else {
         toastManager.add({
           type: "error",
-          message: `Engine self-test failed: ${data?.error || "unknown error"}`,
+          title: "Engine Self-Test Failed",
+          description: data?.error || "Unknown error occurred during test",
         });
       }
     } catch (err: any) {
       toastManager.add({
         type: "error",
-        message: `Engine test error: ${err?.message || String(err)}`,
+        title: "Engine Test Error",
+        description: err?.message || String(err),
       });
     } finally {
       setTestingEngine(false);
@@ -1951,7 +1955,8 @@ export function GeneralSettingsPanel() {
     }
     toastManager.add({
       type: "success",
-      message: `Shifted core engine to: ${engineDisplayNames[type]}`,
+      title: "Core Engine Switched",
+      description: `Shifted core engine to: ${engineDisplayNames[type]}`,
     });
   };
 
