@@ -266,6 +266,7 @@ export function PreviewChromeRow({
                   aria-label={pickActive ? "Cancel annotation" : "Annotate preview"}
                   aria-pressed={pickActive ? "true" : "false"}
                   type="button"
+                  className="hidden md:inline-flex"
                 />
               }
             >
@@ -290,7 +291,7 @@ export function PreviewChromeRow({
                   onClick={(event) => onCapture(event.shiftKey)}
                   aria-label={recording ? "Stop recording" : "Capture screenshot"}
                   type="button"
-                  className="relative"
+                  className="relative hidden md:inline-flex"
                   disabled={captureDisabled}
                 />
               }
@@ -319,6 +320,7 @@ export function PreviewChromeRow({
                   aria-pressed={pictureInPicture ? "true" : "false"}
                   type="button"
                   disabled={pictureInPictureDisabled}
+                  className="hidden md:inline-flex"
                 />
               }
             >
@@ -340,7 +342,7 @@ export function PreviewChromeRow({
                   aria-label={logsOpen ? "Close browser logs" : "Open browser logs"}
                   aria-pressed={logsOpen ? "true" : "false"}
                   type="button"
-                  className="relative"
+                  className="relative hidden md:inline-flex"
                 />
               }
             >
@@ -372,6 +374,7 @@ export function PreviewChromeRow({
                   }
                   aria-pressed={deviceToolbarVisible ? "true" : "false"}
                   type="button"
+                  className="hidden md:inline-flex"
                 />
               }
             >
@@ -383,7 +386,7 @@ export function PreviewChromeRow({
           </Tooltip>
         ) : null}
         {onZoomIn && onZoomOut ? (
-          <div className="flex items-center gap-0.5 rounded-md border border-border/50 bg-muted/40 px-1 py-0.5">
+          <div className="hidden md:flex items-center gap-0.5 rounded-md border border-border/50 bg-muted/40 px-1 py-0.5">
             <Tooltip>
               <TooltipTrigger
                 render={

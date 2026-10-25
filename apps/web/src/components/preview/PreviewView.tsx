@@ -1194,6 +1194,22 @@ export function PreviewView({
               deviceToolbarVisible={viewport._tag !== "fill"}
               onToggleDeviceToolbar={handleToggleDeviceToolbar}
               nativePictureInPicture={desktopOverlay?.pictureInPicture ?? false}
+              onPickElement={tabId ? handlePickElement : undefined}
+              pickActive={pickActive}
+              pickDisabled={!tabId || isUnreachable}
+              onCapture={previewBridge && tabId && !isServerTab ? handleCapture : undefined}
+              captureDisabled={!desktopOverlay || isUnreachable}
+              recording={recordingRuntimeTabId !== null}
+              onPictureInPicture={
+                tabId && (isServerTab || previewBridge) ? handlePictureInPicture : undefined
+              }
+              pictureInPicture={miniPlayerTabId === tabId}
+              pictureInPictureDisabled={
+                isUnreachable || (!isServerTab && !desktopOverlay?.hasWebContents)
+              }
+              onToggleLogs={activeLogsTabId ? toggleLogsOpen : undefined}
+              logsOpen={isLogsOpen}
+              logsErrorCount={logsErrorCount}
             />
           ) : null
         }

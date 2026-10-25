@@ -1,7 +1,17 @@
 "use client";
 
 import type { DesktopPreviewColorScheme } from "@t3tools/contracts";
-import { Minus, MoreVertical, Plus as PlusIcon, RotateCcw } from "lucide-react";
+import {
+  Camera,
+  Minus,
+  MoreVertical,
+  MousePointerClick,
+  PictureInPicture2,
+  Plus as PlusIcon,
+  RotateCcw,
+  Smartphone,
+  Terminal,
+} from "lucide-react";
 
 import { Button } from "~/components/ui/button";
 import {
@@ -19,6 +29,7 @@ import {
   MenuTrigger,
 } from "~/components/ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
+import { cn } from "~/lib/utils";
 
 const COLOR_SCHEME_OPTIONS: ReadonlyArray<{
   value: DesktopPreviewColorScheme;
@@ -66,6 +77,20 @@ interface Props {
   profileName: string | undefined;
   /** Reopens the tab in the other browser it can run in. */
   move?: { readonly label: string; readonly onMove: () => void };
+
+  /** Actions moved from toolbar to menu on mobile */
+  onPickElement?: (() => void) | undefined;
+  pickActive?: boolean | undefined;
+  pickDisabled?: boolean | undefined;
+  onCapture?: ((record: boolean) => void) | undefined;
+  captureDisabled?: boolean | undefined;
+  recording?: boolean | undefined;
+  onPictureInPicture?: (() => void) | undefined;
+  pictureInPicture?: boolean | undefined;
+  pictureInPictureDisabled?: boolean | undefined;
+  onToggleLogs?: (() => void) | undefined;
+  logsOpen?: boolean | undefined;
+  logsErrorCount?: number | undefined;
 }
 
 const MenuTriggerButton = () => (
@@ -94,6 +119,18 @@ export function PreviewMoreMenu({
   nativePictureInPicture,
   profileName,
   move,
+  onPickElement,
+  pickActive,
+  pickDisabled,
+  onCapture,
+  captureDisabled,
+  recording,
+  onPictureInPicture,
+  pictureInPicture,
+  pictureInPictureDisabled,
+  onToggleLogs,
+  logsOpen,
+  logsErrorCount,
 }: Props) {
   const zoomLabel = `${Math.round(zoomFactor * 100)}%`;
   const disabled = !enabled;
@@ -101,6 +138,58 @@ export function PreviewMoreMenu({
     <Menu>
       <MenuTriggerButton />
       <MenuPopup align="end" sideOffset={6}>
+        {/* Mobile quick actions (visible only on mobile where toolbar icons are hidden) */}
+        {onPickElement ? (
+          <MenuItem
+            onClick={onPickElement}
+            disabled={disabled || pickDisabled}
+            className="flex items-center gap-2 md:hidden"
+          >
+            <MousePointerClick className={cn("size-4", pickActive && "text-primary")} />
+            <span>{pickActive ? "Cancel element annotation" : "Annotate & inspect element"}</span>
+          </MenuItem>
+        ) : null}
+        {onCapture ? (
+          <MenuItem
+            onClick={() => onCapture(false)}
+            disabled={disabled || captureDisabled}
+            className="flex items-center gap-2 md:hidden"
+          >
+            <Camera className={cn("size-4", recording && "text-destructive")} />
+            <span>{recording ? "Stop recording" : "Capture screenshot"}</span>
+          </MenuItem>
+        ) : null}
+        {onPictureInPicture ? (
+          <MenuItem
+            onClick={onPictureInPicture}
+            disabled={disabled || pictureInPictureDisabled}
+            className="flex items-center gap-2 md:hidden"
+          >
+            <PictureInPicture2 className={cn("size-4", pictureInPicture && "text-primary")} />
+            <span>{pictureInPicture ? "Close floating preview" : "Float preview over chat"}</span>
+          </MenuItem>
+        ) : null}
+        {onToggleLogs ? (
+          <MenuItem
+            onClick={onToggleLogs}
+            disabled={disabled}
+            className="flex items-center justify-between gap-2 md:hidden"
+          >
+            <span className="flex items-center gap-2">
+              <Terminal className={cn("size-4", logsOpen && "text-primary")} />
+              <span>{logsOpen ? "Close browser logs" : "Browser logs & network"}</span>
+            </span>
+            {logsErrorCount && logsErrorCount > 0 ? (
+              <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground">
+                {logsErrorCount > 99 ? "99+" : logsErrorCount}
+              </span>
+            ) : null}
+          </MenuItem>
+        ) : null}
+        {onPickElement || onCapture || onPictureInPicture || onToggleLogs ? (
+          <MenuSeparator className="md:hidden" />
+        ) : null}
+
         <MenuItem onClick={actions.hardReload} disabled={disabled}>
           Hard reload
         </MenuItem>
@@ -117,8 +206,13 @@ export function PreviewMoreMenu({
           </MenuItem>
         ) : null}
         {move ? <MenuItem onClick={move.onMove}>{move.label}</MenuItem> : null}
-        <MenuItem onClick={onToggleDeviceToolbar} disabled={disabled}>
-          {deviceToolbarVisible ? "Hide device toolbar" : "Show device toolbar"}
+        <MenuItem
+          onClick={onToggleDeviceToolbar}
+          disabled={disabled}
+          className="flex items-center gap-2"
+        >
+          <Smartphone className={cn("size-4", deviceToolbarVisible && "text-primary")} />
+          <span>{deviceToolbarVisible ? "Hide device toolbar" : "Show device toolbar"}</span>
         </MenuItem>
         <MenuSub>
           <MenuSubTrigger disabled={disabled}>Appearance</MenuSubTrigger>
