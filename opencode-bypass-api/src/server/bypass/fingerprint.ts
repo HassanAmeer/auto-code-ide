@@ -21,7 +21,7 @@ import { mintSession, canonicalizeSession } from "./session.ts";
  * ⚠️  Is string me kuch bhi add/change mat karo — gate exact match karta hai.
  *     Major version 2+ hona zaroori hai; purana `opencode/1.x` 403 deta hai.
  */
-export const CLIENT_UA = "opencode/latest/2.0.26/cli";
+export const CLIENT_UA = "opencode/latest/2.1.4/cli";
 
 // @effect-diagnostics nodeBuiltinImport:off globalConsole:off globalConsoleInEffect:off globalDate:off globalDateInEffect:off globalRandomInEffect:off globalErrorInEffectFailure:off preferSchemaOverJson:off globalFetchInEffect:off anyUnknownInErrorContext:off globalFetch:off
 /**

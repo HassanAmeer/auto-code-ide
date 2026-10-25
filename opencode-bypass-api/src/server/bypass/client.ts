@@ -68,7 +68,7 @@ export function resolveChatEndpoint(baseUrl?: string): string {
   if (base.includes("/v1/")) {
     return `${base}/chat/completions`;
   }
-  return `${base}/inference/v1/chat/completions`;
+  return `${base}/inference/openai/v1/chat/completions`;
 }
 
 /**
