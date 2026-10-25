@@ -52,20 +52,20 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
   const [copied, setCopied] = useState(false);
   const [suggestionCategory, setSuggestionCategory] = useState<string>("all");
 
-  // Terminal Output Font Size (Persisted in localStorage with 12px default)
+  // Terminal Output Font Size (Persisted in localStorage with 12px default, min 4px)
   const [terminalFontSize, setTerminalFontSize] = useState<number>(() => {
     if (typeof window !== "undefined") {
       const saved = window.localStorage.getItem("adc_terminal_font_size");
       if (saved) {
         const parsed = parseInt(saved, 10);
-        if (!isNaN(parsed) && parsed >= 9 && parsed <= 32) return parsed;
+        if (!isNaN(parsed) && parsed >= 4 && parsed <= 72) return parsed;
       }
     }
     return 12;
   });
 
   const handleSetFontSize = useCallback((newSize: number) => {
-    const clamped = Math.max(9, Math.min(32, newSize));
+    const clamped = Math.max(4, Math.min(72, newSize));
     setTerminalFontSize(clamped);
     if (typeof window !== "undefined") {
       window.localStorage.setItem("adc_terminal_font_size", String(clamped));
@@ -91,7 +91,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isFontSizeOpen]);
 
-  const FONT_PRESETS = [9, 10, 11, 12, 13, 14, 15, 16, 18, 20, 24, 28, 32];
+  const FONT_PRESETS = [4, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 20, 24, 28, 32];
 
   const promptInputRef = useRef<HTMLInputElement>(null);
   const terminalScreenRef = useRef<HTMLDivElement>(null);
@@ -756,8 +756,22 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
       {/* 1. AUTHENTIC TERMINAL WINDOW TOP BAR & TABS                    */}
       {/* ============================================================== */}
       <div className="flex items-center justify-between px-2.5 h-8 bg-[#0d0d12] border-b border-white/[0.08] select-none text-xs shrink-0">
-        {/* Dynamic Multi-Terminal Tabs (Terminal 1, Terminal 2, etc.) */}
+        {/* Dynamic Multi-Terminal Tabs (Plus Button at FULL LEFT) */}
         <div className="flex items-center gap-1.5 min-w-0 overflow-x-auto [scrollbar-width:none]">
+          {/* Plus Tab: Add New Terminal Instance (FULL LEFT) */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              terminalStore.addTerminalTab();
+              promptInputRef.current?.focus();
+            }}
+            title="Create New Terminal Tab (+)"
+            className="flex items-center justify-center p-1 rounded-[4px] text-zinc-400 hover:text-emerald-400 bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] text-3xs transition-all cursor-pointer shrink-0 shadow-xs active:scale-95"
+          >
+            <Plus className="size-3" />
+          </button>
+
           {store.terminalTabs.map((tab) => {
             const isActive = tab.id === activeTabId;
             return (
@@ -793,20 +807,6 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
               </div>
             );
           })}
-
-          {/* Plus Tab: Add New Terminal Instance */}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              terminalStore.addTerminalTab();
-              promptInputRef.current?.focus();
-            }}
-            title="Create New Terminal Tab (+)"
-            className="flex items-center justify-center p-1 rounded-[5px] text-zinc-400 hover:text-emerald-400 bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] text-3xs transition-all cursor-pointer shrink-0"
-          >
-            <Plus className="size-3" />
-          </button>
         </div>
 
         {/* Right Action Controls: Copy + Font Size + Clear */}
@@ -842,103 +842,72 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
             {copied ? <Check className="size-3 text-emerald-400" /> : <Copy className="size-3" />}
           </button>
 
-          {/* Custom Pixel Font Size Dropdown (No native glitchy select) */}
+          {/* Custom Pixel Font Size Dropdown Pill (Clean: just "{size}px" and dropdown icon) */}
           <div className="relative shrink-0" ref={fontSizeDropdownRef}>
-            <div
-              className="flex items-center gap-1 px-1.5 py-0.5 rounded-[5px] bg-[#14141d] hover:bg-[#1c1c28] border border-white/[0.08] hover:border-cyan-500/40 transition-all select-none shadow-xs"
-              onClick={(e) => e.stopPropagation()}
+            <button
+              type="button"
+              onClick={() => setIsFontSizeOpen((prev) => !prev)}
+              title="Change terminal font size (min 4px)"
+              className="flex items-center gap-1 px-2 py-0.5 rounded-[4px] bg-[#14141d] hover:bg-[#1c1c28] border border-white/[0.08] hover:border-cyan-500/40 text-zinc-200 hover:text-white transition-all cursor-pointer select-none shadow-xs text-3xs font-mono font-semibold"
             >
-              {/* Decrement Button */}
-              <button
-                type="button"
-                onClick={() => handleSetFontSize(terminalFontSize - 1)}
-                disabled={terminalFontSize <= 9}
-                title="Decrease font size (-1px)"
-                className="p-0.5 text-zinc-400 hover:text-white disabled:opacity-30 transition-colors cursor-pointer"
-              >
-                <Minus className="size-2.5" />
-              </button>
-
-              {/* Direct Custom Input + Dropdown Toggle Trigger */}
-              <div
-                className="flex items-center gap-0.5 cursor-pointer hover:opacity-90"
-                onClick={() => setIsFontSizeOpen((prev) => !prev)}
-                title="Click to select font size preset or type custom px"
-              >
-                <Type className="size-2.5 text-cyan-400 shrink-0" />
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  value={customSizeInput}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    (e.target as HTMLInputElement).select();
-                  }}
-                  onChange={(e) => {
-                    const val = e.target.value.replace(/\D/g, "");
-                    setCustomSizeInput(val);
-                    const num = parseInt(val, 10);
-                    if (!isNaN(num) && num >= 9 && num <= 32) {
-                      handleSetFontSize(num);
-                    }
-                  }}
-                  onBlur={() => {
-                    const num = parseInt(customSizeInput, 10);
-                    if (isNaN(num) || num < 9) {
-                      handleSetFontSize(9);
-                      setCustomSizeInput("9");
-                    } else if (num > 32) {
-                      handleSetFontSize(32);
-                      setCustomSizeInput("32");
-                    } else {
-                      handleSetFontSize(num);
-                    }
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      (e.target as HTMLInputElement).blur();
-                      setIsFontSizeOpen(false);
-                    }
-                  }}
-                  className="w-5 text-center bg-transparent text-4xs font-mono font-bold text-zinc-100 focus:text-cyan-300 focus:outline-none p-0 cursor-text"
-                  title="Type custom font size"
-                />
-                <span className="text-4xs font-mono text-zinc-400 font-medium">px</span>
-                <ChevronDown
-                  className={cn(
-                    "size-2.5 text-zinc-400 transition-transform duration-150 shrink-0",
-                    isFontSizeOpen && "rotate-180 text-cyan-400",
-                  )}
-                />
-              </div>
-
-              {/* Increment Button */}
-              <button
-                type="button"
-                onClick={() => handleSetFontSize(terminalFontSize + 1)}
-                disabled={terminalFontSize >= 32}
-                title="Increase font size (+1px)"
-                className="p-0.5 text-zinc-400 hover:text-white disabled:opacity-30 transition-colors cursor-pointer"
-              >
-                <Plus className="size-2.5" />
-              </button>
-            </div>
+              <span>{terminalFontSize}px</span>
+              <ChevronDown
+                className={cn(
+                  "size-2.5 text-zinc-400 transition-transform duration-150 shrink-0",
+                  isFontSizeOpen && "rotate-180 text-cyan-400",
+                )}
+              />
+            </button>
 
             {/* Custom Floating Dropdown Menu */}
             {isFontSizeOpen && (
               <div
-                className="absolute right-0 top-full mt-1.5 w-40 rounded-[8px] bg-[#0e0e16] border border-white/[0.14] shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 duration-150 backdrop-blur-md space-y-1.5"
+                className="absolute right-0 top-full mt-1.5 w-44 rounded-[8px] bg-[#0e0e16] border border-white/[0.14] shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 duration-150 backdrop-blur-md space-y-2"
                 onClick={(e) => e.stopPropagation()}
               >
-                <div className="flex items-center justify-between pb-1 border-b border-white/[0.08] text-4xs font-mono">
-                  <span className="text-zinc-400 font-medium">Font Size</span>
-                  <span className="text-cyan-400 font-bold bg-cyan-500/10 border border-cyan-500/20 px-1 py-0.2 rounded">
-                    {terminalFontSize}px
-                  </span>
+                {/* Custom Input Header */}
+                <div className="flex items-center justify-between pb-1.5 border-b border-white/[0.08] text-4xs font-mono gap-1.5">
+                  <span className="text-zinc-400 font-medium">Custom Size:</span>
+                  <div className="flex items-center gap-1 bg-black/60 border border-white/[0.12] focus-within:border-cyan-400/60 rounded px-1.5 py-0.5">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      value={customSizeInput}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, "");
+                        setCustomSizeInput(val);
+                        const num = parseInt(val, 10);
+                        if (!isNaN(num) && num >= 4 && num <= 72) {
+                          handleSetFontSize(num);
+                        }
+                      }}
+                      onBlur={() => {
+                        const num = parseInt(customSizeInput, 10);
+                        if (isNaN(num) || num < 4) {
+                          handleSetFontSize(4);
+                          setCustomSizeInput("4");
+                        } else if (num > 72) {
+                          handleSetFontSize(72);
+                          setCustomSizeInput("72");
+                        } else {
+                          handleSetFontSize(num);
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          (e.target as HTMLInputElement).blur();
+                          setIsFontSizeOpen(false);
+                        }
+                      }}
+                      className="w-6 text-center bg-transparent text-3xs font-mono font-bold text-cyan-300 focus:outline-none p-0 cursor-text"
+                      title="Type custom font size (min 4px)"
+                    />
+                    <span className="text-zinc-500 text-4xs">px</span>
+                  </div>
                 </div>
 
-                {/* Preset Chips Grid */}
+                {/* Preset Chips Grid (Starts from 4px) */}
                 <div className="grid grid-cols-4 gap-1">
                   {FONT_PRESETS.map((size) => {
                     const isSelected = terminalFontSize === size;
@@ -963,17 +932,17 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
                   })}
                 </div>
 
-                {/* Range Slider for fast fine-tuning */}
+                {/* Range Slider for fast fine-tuning (4px to 48px) */}
                 <div className="pt-1.5 border-t border-white/[0.06] space-y-1">
                   <div className="flex items-center justify-between text-[9px] font-mono text-zinc-500">
-                    <span>9px</span>
+                    <span>4px</span>
                     <span className="text-zinc-400">Drag Slider</span>
-                    <span>32px</span>
+                    <span>48px</span>
                   </div>
                   <input
                     type="range"
-                    min={9}
-                    max={32}
+                    min={4}
+                    max={48}
                     value={terminalFontSize}
                     onChange={(e) => handleSetFontSize(Number(e.target.value))}
                     className="w-full accent-cyan-400 h-1 bg-white/[0.1] rounded cursor-pointer"

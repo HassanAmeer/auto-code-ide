@@ -266,7 +266,7 @@ export const terminalStore = {
     };
     state = {
       ...state,
-      terminalTabs: [...state.terminalTabs, newTab],
+      terminalTabs: [newTab, ...state.terminalTabs],
       activeTabId: newTab.id,
     };
     notify();
