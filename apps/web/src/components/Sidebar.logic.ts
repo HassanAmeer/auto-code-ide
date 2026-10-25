@@ -640,7 +640,9 @@ export interface ThreadStatusPill {
   label:
     | "Working"
     | "Connecting"
+    | "Done"
     | "Completed"
+    | "Error"
     | "Pending Approval"
     | "Awaiting Input"
     | "Waiting"
@@ -651,12 +653,14 @@ export interface ThreadStatusPill {
 }
 
 const THREAD_STATUS_PRIORITY: Record<ThreadStatusPill["label"], number> = {
+  Error: 6,
   "Pending Approval": 5,
   "Awaiting Input": 4,
   Working: 3,
   Connecting: 3,
   Waiting: 2.5,
   "Plan Ready": 2,
+  Done: 1,
   Completed: 1,
 };
 
@@ -785,6 +789,13 @@ export function resolveThreadLastVisitedAt(
 
 export function hasUnseenCompletion(thread: ThreadStatusInput): boolean {
   if (!thread.latestRun?.completedAt) return false;
+  if (
+    thread.latestRun.status === "failed" ||
+    thread.latestRun.status === "interrupted" ||
+    thread.latestRun.status === "cancelled"
+  ) {
+    return false;
+  }
   const completedAt = Date.parse(thread.latestRun.completedAt);
   if (Number.isNaN(completedAt)) return false;
   if (!thread.lastVisitedAt) return false;
@@ -1179,6 +1190,23 @@ export function resolveThreadStatusPill(input: {
 }): ThreadStatusPill | null {
   const { thread } = input;
 
+  const isFailed =
+    (thread.latestRun?.status === "failed" ||
+      thread.runtime?.status === "failed" ||
+      Boolean(thread.runtime?.lastError)) &&
+    thread.runtime?.status !== "running" &&
+    thread.runtime?.status !== "starting" &&
+    thread.runtime?.status !== "preparing";
+
+  if (isFailed) {
+    return {
+      label: "Error",
+      colorClass: "text-red-500 dark:text-red-400",
+      dotClass: "bg-red-500 dark:bg-red-400",
+      pulse: false,
+    };
+  }
+
   if (thread.hasPendingApprovals) {
     return {
       label: "Pending Approval",
@@ -1244,7 +1272,7 @@ export function resolveThreadStatusPill(input: {
 
   if (hasUnseenCompletion(thread)) {
     return {
-      label: "Completed",
+      label: "Done",
       colorClass: "text-emerald-600 dark:text-emerald-300/90",
       dotClass: "bg-emerald-500 dark:bg-emerald-300/90",
       pulse: false,

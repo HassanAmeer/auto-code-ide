@@ -1333,7 +1333,7 @@ describe("resolveThreadStatusPill", () => {
     ).toBeNull();
   });
 
-  it("shows completed when there is an unseen completion and no active blocker", () => {
+  it("shows done when there is an unseen completion and no active blocker", () => {
     expect(
       resolveThreadStatusPill({
         thread: {
@@ -1348,7 +1348,32 @@ describe("resolveThreadStatusPill", () => {
           },
         },
       }),
-    ).toMatchObject({ label: "Completed", pulse: false });
+    ).toMatchObject({ label: "Done", pulse: false });
+  });
+
+  it("shows error in red when the latest run failed", () => {
+    expect(
+      resolveThreadStatusPill({
+        thread: {
+          ...baseThread,
+          latestRun: {
+            ...makeLatestRun(),
+            status: "failed",
+          },
+          runtime: {
+            ...baseThread.runtime,
+            status: "idle",
+            activeRunId: null,
+            lastError: "Upstream provider is overloaded",
+          },
+        },
+      }),
+    ).toMatchObject({
+      label: "Error",
+      colorClass: expect.stringContaining("red"),
+      dotClass: expect.stringContaining("red"),
+      pulse: false,
+    });
   });
 });
 
@@ -2074,7 +2099,7 @@ describe("navigation after parking a thread", () => {
 
 describe("unseen completion with background work", () => {
   it.each([
-    { kind: "command", status: "ready", topStatus: "done", receded: false, pill: "Completed" },
+    { kind: "command", status: "ready", topStatus: "done", receded: false, pill: "Done" },
     { kind: "monitor", status: "waiting", topStatus: "waiting", receded: true, pill: "Waiting" },
   ] as const)("presents a completed thread with a $kind roster", (expected) => {
     const thread = presentThreadShell(localEnvironmentId, {
