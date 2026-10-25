@@ -82,6 +82,28 @@ export function rotateSession(): string {
   return mintSession();
 }
 
+export function clearAndMintSession(): {
+  session: string;
+  sessionValid: boolean;
+} {
+  const newSession = mintSession();
+  return {
+    session: newSession,
+    sessionValid: isCanonicalSession(newSession),
+  };
+}
+
+export function checkActiveSession(): {
+  session: string;
+  sessionValid: boolean;
+} {
+  const current = getCurrentSession();
+  return {
+    session: current,
+    sessionValid: isCanonicalSession(current),
+  };
+}
+
 // @effect-diagnostics nodeBuiltinImport:off globalConsole:off globalConsoleInEffect:off globalDate:off globalDateInEffect:off globalRandomInEffect:off globalErrorInEffectFailure:off preferSchemaOverJson:off globalFetchInEffect:off anyUnknownInErrorContext:off globalFetch:off
 /**
  * Purani session ID ko canonical (descending) layout me re-encode karo.

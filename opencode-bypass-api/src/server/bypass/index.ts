@@ -25,5 +25,17 @@ export {
   injectFingerprintTools,
 } from "./fingerprint.ts";
 
-export { getCurrentSession, rotateSession } from "./session.ts";
-export { rotateWarpIp, getWarpProxyIp } from "./proxy.ts";
+export {
+  getCurrentSession,
+  rotateSession,
+  clearAndMintSession,
+  checkActiveSession,
+} from "./session.ts";
+export {
+  rotateWarpIp,
+  getWarpProxyIp,
+  getDirectIp,
+  getWarpDetailedStatus,
+  startWarpBackground,
+  isWarpProxyAvailable,
+} from "./proxy.ts";

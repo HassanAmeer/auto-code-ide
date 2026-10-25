@@ -2612,15 +2612,18 @@ export const layerOpenCodeBypassStatusRoute = HttpRouter.add(
   "GET",
   "/api/opencode-bypass/status",
   Effect.gen(function* () {
-    const { getWarpProxyIp, getCurrentSession } = yield* Effect.promise(
+    const { getWarpDetailedStatus, checkActiveSession } = yield* Effect.promise(
       () => import("@t3tools/provider-opencodebypasssetup/server"),
     );
-    const ip = yield* Effect.promise(() => getWarpProxyIp());
-    const session = getCurrentSession();
+    const warpInfo = yield* Effect.promise(() => getWarpDetailedStatus());
+    const sessionInfo = checkActiveSession();
     return HttpServerResponse.jsonUnsafe({
       ok: true,
-      ip,
-      session,
+      warpStatus: warpInfo.warpStatus,
+      ip: warpInfo.ip,
+      isProxied: warpInfo.isProxied,
+      session: sessionInfo.session,
+      sessionValid: sessionInfo.sessionValid,
     });
   }),
 );
@@ -2629,7 +2632,7 @@ export const layerOpenCodeBypassRotateRoute = HttpRouter.add(
   "POST",
   "/api/opencode-bypass/rotate",
   Effect.gen(function* () {
-    const { rotateWarpIp, rotateSession } = yield* Effect.promise(
+    const { rotateWarpIp, rotateSession, isCanonicalSession } = yield* Effect.promise(
       () => import("@t3tools/provider-opencodebypasssetup/server"),
     );
     const result = yield* Effect.promise(() => rotateWarpIp());
@@ -2638,8 +2641,59 @@ export const layerOpenCodeBypassRotateRoute = HttpRouter.add(
       ok: true,
       success: result.success,
       ip: result.newIp,
+      warpStatus: "running",
+      isProxied: true,
       session: newSession,
+      sessionValid: isCanonicalSession(newSession),
+      message: result.message || "Cloud IP & session successfully rotated",
+    });
+  }),
+);
+
+export const layerOpenCodeBypassStartWarpRoute = HttpRouter.add(
+  "POST",
+  "/api/opencode-bypass/start-warp",
+  Effect.gen(function* () {
+    const { startWarpBackground } = yield* Effect.promise(
+      () => import("@t3tools/provider-opencodebypasssetup/server"),
+    );
+    const result = yield* Effect.promise(() => startWarpBackground());
+    return HttpServerResponse.jsonUnsafe({
+      ok: result.ok,
       message: result.message,
+    });
+  }),
+);
+
+export const layerOpenCodeBypassSessionClearRoute = HttpRouter.add(
+  "POST",
+  "/api/opencode-bypass/session/clear",
+  Effect.gen(function* () {
+    const { clearAndMintSession } = yield* Effect.promise(
+      () => import("@t3tools/provider-opencodebypasssetup/server"),
+    );
+    const sessionInfo = clearAndMintSession();
+    return HttpServerResponse.jsonUnsafe({
+      ok: true,
+      session: sessionInfo.session,
+      sessionValid: sessionInfo.sessionValid,
+      message: "Fresh canonical session minted",
+    });
+  }),
+);
+
+export const layerOpenCodeBypassSessionCheckRoute = HttpRouter.add(
+  "POST",
+  "/api/opencode-bypass/session/check",
+  Effect.gen(function* () {
+    const { checkActiveSession } = yield* Effect.promise(
+      () => import("@t3tools/provider-opencodebypasssetup/server"),
+    );
+    const sessionInfo = checkActiveSession();
+    return HttpServerResponse.jsonUnsafe({
+      ok: true,
+      session: sessionInfo.session,
+      sessionValid: sessionInfo.sessionValid,
     });
   }),
 );

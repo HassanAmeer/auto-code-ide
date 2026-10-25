@@ -6,7 +6,14 @@
 export { OpenCodeBypassSetupDriver, type OpenCodeBypassSetupDriverEnv } from "./server/driver.ts";
 export {
   getWarpProxyIp,
+  getDirectIp,
+  getWarpDetailedStatus,
+  startWarpBackground,
+  isWarpProxyAvailable,
   rotateWarpIp,
   getCurrentSession,
   rotateSession,
+  clearAndMintSession,
+  checkActiveSession,
+  isCanonicalSession,
 } from "./server/bypass/index.ts";

@@ -22,9 +22,9 @@ let _lastChecked = 0;
 /**
  * Check if the local WARP HTTP bridge is responding
  */
-export async function isWarpProxyAvailable(): Promise<boolean> {
+export async function isWarpProxyAvailable(forceCheck = false): Promise<boolean> {
   const now = Date.now();
-  if (_proxyAvailable !== null && now - _lastChecked < 60_000) {
+  if (!forceCheck && _proxyAvailable !== null && now - _lastChecked < 60_000) {
     return _proxyAvailable;
   }
 
@@ -60,6 +60,22 @@ export async function getBypassDispatcher(): Promise<ProxyAgent | undefined> {
 }
 
 /**
+ * Direct unproxied outgoing IP of the VPS host
+ */
+export async function getDirectIp(): Promise<string> {
+  try {
+    const out = NodeChildProcess.execSync(
+      `curl -s --max-time 3 https://api.ipify.org 2>/dev/null`,
+      { encoding: "utf-8", timeout: 4000 },
+    ).trim();
+    if (out && !out.includes("<") && out.length < 50) {
+      return out;
+    }
+  } catch {}
+  return "Direct IP";
+}
+
+/**
  * Get the currently active outgoing Cloudflare WARP proxy IP
  */
 export async function getWarpProxyIp(): Promise<string> {
@@ -73,6 +89,90 @@ export async function getWarpProxyIp(): Promise<string> {
     }
   } catch {}
   return "104.28.237.48 (Cloudflare WARP)";
+}
+
+/**
+ * Returns full status of Cloudflare WARP and whether outgoing traffic is proxied
+ */
+export async function getWarpDetailedStatus(): Promise<{
+  ok: boolean;
+  warpStatus: "running" | "stopped";
+  ip: string;
+  isProxied: boolean;
+}> {
+  // Always probe fresh
+  _proxyAvailable = null;
+  const isAvailable = await isWarpProxyAvailable(true);
+
+  if (isAvailable) {
+    try {
+      const out = NodeChildProcess.execSync(
+        `curl -x ${DEFAULT_WARP_HTTP_PROXY} -s --max-time 3 https://api.ipify.org 2>/dev/null`,
+        { encoding: "utf-8", timeout: 4000 },
+      ).trim();
+      if (out && !out.includes("<") && out.length < 50) {
+        return {
+          ok: true,
+          warpStatus: "running",
+          ip: out,
+          isProxied: true,
+        };
+      }
+    } catch {}
+
+    return {
+      ok: true,
+      warpStatus: "running",
+      ip: "104.28.237.48",
+      isProxied: true,
+    };
+  }
+
+  const directIp = await getDirectIp();
+  return {
+    ok: true,
+    warpStatus: "stopped",
+    ip: directIp,
+    isProxied: false,
+  };
+}
+
+/**
+ * Starts Cloudflare WARP & Privoxy in the background detached so the server does not block
+ */
+export async function startWarpBackground(): Promise<{
+  ok: boolean;
+  message: string;
+}> {
+  const candidateScriptPaths = [
+    NodePath.join(process.cwd(), "opencode-bypass-api", "bypass-vps-ip", "start.sh"),
+    "/root/autojobs/opencode-bypass-api/bypass-vps-ip/start.sh",
+  ];
+  const scriptPath = candidateScriptPaths.find((p) => NodeFS.existsSync(p));
+
+  const startCommand = scriptPath
+    ? `/bin/bash "${scriptPath}"`
+    : `warp-cli --accept-tos mode proxy && warp-cli --accept-tos proxy port 40000 && warp-cli --accept-tos connect && systemctl start privoxy`;
+
+  try {
+    const child = NodeChildProcess.spawn("/bin/bash", ["-c", `${startCommand} >/dev/null 2>&1 &`], {
+      detached: true,
+      stdio: "ignore",
+    });
+    child.unref();
+
+    _proxyAvailable = null;
+
+    return {
+      ok: true,
+      message: "Cloudflare WARP starting in background",
+    };
+  } catch (err: any) {
+    return {
+      ok: false,
+      message: err?.message || "Failed to start WARP service",
+    };
+  }
 }
 
 /**
