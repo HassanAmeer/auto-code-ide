@@ -12097,13 +12097,13 @@ export default function ChatView(props: ChatViewProps) {
 
         {/* Mobile Concept 2: Segmented Tabs Switcher (Chat vs Fullscreen Terminal) */}
         {isTerminalQuickBarOpen && (
-          <div className="md:hidden flex items-center justify-between px-3 py-1.5 bg-[#0a0a0f] border-b border-white/[0.08] shrink-0 z-30 select-none">
-            <div className="flex items-center p-0.5 rounded-lg bg-black/60 border border-white/[0.08] w-full max-w-sm shadow-inner">
+          <div className="md:hidden flex items-center justify-between px-2.5 py-1 bg-[#0a0a0f] border-b border-white/[0.08] shrink-0 z-30 select-none">
+            <div className="flex items-center p-0.5 rounded-md bg-black/60 border border-white/[0.08] w-full max-w-xs shadow-inner">
               <button
                 type="button"
                 onClick={() => terminalStore.setMobileActiveTab("chat")}
                 className={cn(
-                  "flex-1 flex items-center justify-center gap-1.5 py-1 px-3 rounded-md text-xs font-semibold transition-all cursor-pointer",
+                  "flex-1 flex items-center justify-center gap-1.5 py-1 px-2.5 rounded text-xs font-semibold transition-all cursor-pointer",
                   terminalStoreState.mobileActiveTab === "chat"
                     ? "bg-zinc-800 text-white shadow-sm border border-white/[0.12]"
                     : "text-zinc-400 hover:text-zinc-200",
@@ -12117,20 +12117,14 @@ export default function ChatView(props: ChatViewProps) {
                 type="button"
                 onClick={() => terminalStore.setMobileActiveTab("terminal")}
                 className={cn(
-                  "flex-1 flex items-center justify-center gap-1.5 py-1 px-3 rounded-md text-xs font-semibold transition-all relative cursor-pointer",
+                  "flex-1 flex items-center justify-center gap-1.5 py-1 px-2.5 rounded text-xs font-semibold transition-all relative cursor-pointer",
                   terminalStoreState.mobileActiveTab === "terminal"
                     ? "bg-emerald-500/20 text-emerald-300 shadow-sm border border-emerald-500/40"
                     : "text-zinc-400 hover:text-zinc-200",
                 )}
               >
                 <TerminalStudioIcon className="size-3.5 text-emerald-400" />
-                <span>
-                  Terminal (root@
-                  {terminalStoreState.scopeMode === "root"
-                    ? "vps"
-                    : terminalStoreState.selectedProjectTitle || "project"}
-                  )
-                </span>
+                <span>Terminal</span>
                 {terminalStoreState.unreadAiToolsCount > 0 &&
                   terminalStoreState.mobileActiveTab !== "terminal" && (
                     <span className="flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-emerald-500 text-black text-4xs font-bold font-mono shadow-[0_0_8px_rgba(52,211,153,0.9)] animate-pulse">
@@ -12145,7 +12139,7 @@ export default function ChatView(props: ChatViewProps) {
               type="button"
               onClick={() => terminalStore.setQuickBarOpen(false)}
               title="Close Terminal Studio"
-              className="ml-2 p-1.5 rounded-md text-zinc-400 hover:text-white hover:bg-white/[0.08] transition-colors cursor-pointer shrink-0"
+              className="ml-1.5 p-1 rounded-md text-zinc-400 hover:text-white hover:bg-white/[0.08] transition-colors cursor-pointer shrink-0"
             >
               <CloseIcon className="size-4" />
             </button>

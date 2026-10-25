@@ -755,7 +755,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
       {/* ============================================================== */}
       {/* 1. AUTHENTIC TERMINAL WINDOW TOP BAR & TABS                    */}
       {/* ============================================================== */}
-      <div className="flex items-center justify-between px-3 h-10 bg-[#0d0d12] border-b border-white/[0.08] select-none text-xs shrink-0">
+      <div className="flex items-center justify-between px-2.5 h-8 bg-[#0d0d12] border-b border-white/[0.08] select-none text-xs shrink-0">
         {/* Dynamic Multi-Terminal Tabs (Terminal 1, Terminal 2, etc.) */}
         <div className="flex items-center gap-1.5 min-w-0 overflow-x-auto [scrollbar-width:none]">
           {store.terminalTabs.map((tab) => {
@@ -769,7 +769,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
                   promptInputRef.current?.focus();
                 }}
                 className={cn(
-                  "group flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] text-3xs font-semibold border transition-all cursor-pointer active:scale-95 shrink-0 select-none",
+                  "group flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] text-3xs font-semibold border transition-all cursor-pointer active:scale-95 shrink-0 select-none",
                   isActive
                     ? "bg-[#141816] text-emerald-400 border-emerald-500/40 shadow-xs"
                     : "text-zinc-400 hover:text-zinc-200 border-white/[0.04] hover:bg-white/[0.04]",
@@ -1006,11 +1006,11 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
       <div
         ref={terminalScreenRef}
         style={{ fontSize: `${terminalFontSize}px` }}
-        className="flex-1 p-3 overflow-y-auto leading-relaxed space-y-2 bg-[#050508] text-zinc-200 select-text [scrollbar-width:thin] scroll-smooth font-mono cursor-text"
+        className="flex-1 p-2.5 overflow-y-auto leading-relaxed space-y-1.5 bg-[#050508] text-zinc-200 select-text [scrollbar-width:thin] scroll-smooth font-mono cursor-text"
         onClick={() => promptInputRef.current?.focus()}
       >
         {/* Terminal Header Banner */}
-        <div className="text-zinc-500 pb-1.5 border-b border-white/[0.06] select-none flex items-center justify-between text-4xs">
+        <div className="text-zinc-500 pb-1 border-b border-white/[0.06] select-none flex items-center justify-between text-4xs">
           <span>AutoCode Linux VPS Terminal v2.5 (Host: root@{scopeName})</span>
           <span className="text-zinc-600">cwd: {effectiveCwd}</span>
         </div>
@@ -1218,7 +1218,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
       {/* 2.5 OPERATOR & KEYBOARD TOOLBAR (All Bash Operators & Keys)    */}
       {/* ============================================================== */}
       <div
-        className="flex items-center gap-1 px-2 py-1 bg-[#0a0a0f] border-t border-white/[0.08] overflow-x-auto [scrollbar-width:none] shrink-0 select-none"
+        className="flex items-center gap-1 px-2 py-0.5 bg-[#0a0a0f] border-t border-white/[0.08] overflow-x-auto [scrollbar-width:none] shrink-0 select-none"
         onClick={(e) => e.stopPropagation()}
       >
         {/* ESC */}
@@ -1229,7 +1229,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
             promptInputRef.current?.focus();
           }}
           title="Clear current input line (ESC)"
-          className="px-2 py-1 rounded-[5px] bg-[#161622] hover:bg-[#222232] active:bg-white/[0.15] text-zinc-300 font-mono text-3xs font-semibold shrink-0 border border-white/[0.1] transition-colors cursor-pointer"
+          className="px-2 py-0.5 rounded-[4px] bg-[#161622] hover:bg-[#222232] active:bg-white/[0.15] text-zinc-300 font-mono text-3xs font-semibold shrink-0 border border-white/[0.1] transition-colors cursor-pointer"
         >
           ESC
         </button>
@@ -1239,7 +1239,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
           type="button"
           onClick={() => handleInsertToken("  ")}
           title="Tab indent (2 spaces)"
-          className="px-2 py-1 rounded-[5px] bg-[#161622] hover:bg-[#222232] active:bg-white/[0.15] text-zinc-300 font-mono text-3xs font-semibold shrink-0 border border-white/[0.1] transition-colors cursor-pointer"
+          className="px-2 py-0.5 rounded-[4px] bg-[#161622] hover:bg-[#222232] active:bg-white/[0.15] text-zinc-300 font-mono text-3xs font-semibold shrink-0 border border-white/[0.1] transition-colors cursor-pointer"
         >
           TAB
         </button>
@@ -1257,7 +1257,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
           }}
           title={isRunning ? "Interrupt running process (Ctrl+C)" : "Clear input (Ctrl+C)"}
           className={cn(
-            "px-2 py-1 rounded-[5px] font-mono text-3xs font-semibold shrink-0 border transition-all cursor-pointer",
+            "px-2 py-0.5 rounded-[4px] font-mono text-3xs font-semibold shrink-0 border transition-all cursor-pointer",
             isRunning
               ? "bg-rose-500/20 active:bg-rose-500/40 text-rose-300 border-rose-500/40 shadow-xs"
               : "bg-[#161622] hover:bg-[#222232] text-zinc-400 border-white/[0.08]",
@@ -1266,14 +1266,14 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
           Ctrl+C
         </button>
 
-        <div className="w-[1px] h-4 bg-white/[0.08] shrink-0 mx-0.5" />
+        <div className="w-[1px] h-3.5 bg-white/[0.08] shrink-0 mx-0.5" />
 
         {/* Main Operators */}
         <button
           type="button"
           onClick={() => handleInsertToken(" | ")}
           title="Pipe stdout to next command"
-          className="px-2 py-1 rounded-[5px] bg-[#14141f] hover:bg-emerald-500/20 active:bg-emerald-500/30 text-emerald-400 font-mono text-3xs font-bold shrink-0 border border-emerald-500/30 transition-colors cursor-pointer"
+          className="px-2 py-0.5 rounded-[4px] bg-[#14141f] hover:bg-emerald-500/20 active:bg-emerald-500/30 text-emerald-400 font-mono text-3xs font-bold shrink-0 border border-emerald-500/30 transition-colors cursor-pointer"
         >
           |
         </button>
@@ -1282,7 +1282,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
           type="button"
           onClick={() => handleInsertToken(" && ")}
           title="Logical AND (run if previous succeeded)"
-          className="px-2 py-1 rounded-[5px] bg-[#14141f] hover:bg-emerald-500/20 active:bg-emerald-500/30 text-emerald-400 font-mono text-3xs font-bold shrink-0 border border-emerald-500/30 transition-colors cursor-pointer"
+          className="px-2 py-0.5 rounded-[4px] bg-[#14141f] hover:bg-emerald-500/20 active:bg-emerald-500/30 text-emerald-400 font-mono text-3xs font-bold shrink-0 border border-emerald-500/30 transition-colors cursor-pointer"
         >
           &&
         </button>
@@ -1291,7 +1291,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
           type="button"
           onClick={() => handleInsertToken(" || ")}
           title="Logical OR (run if previous failed)"
-          className="px-2 py-1 rounded-[5px] bg-[#14141f] hover:bg-emerald-500/20 active:bg-emerald-500/30 text-emerald-400 font-mono text-3xs font-bold shrink-0 border border-emerald-500/30 transition-colors cursor-pointer"
+          className="px-2 py-0.5 rounded-[4px] bg-[#14141f] hover:bg-emerald-500/20 active:bg-emerald-500/30 text-emerald-400 font-mono text-3xs font-bold shrink-0 border border-emerald-500/30 transition-colors cursor-pointer"
         >
           ||
         </button>
@@ -1300,7 +1300,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
           type="button"
           onClick={() => handleInsertToken("; ")}
           title="Command separator"
-          className="px-2 py-1 rounded-[5px] bg-[#14141f] hover:bg-emerald-500/20 active:bg-emerald-500/30 text-emerald-400 font-mono text-3xs font-bold shrink-0 border border-emerald-500/30 transition-colors cursor-pointer"
+          className="px-2 py-0.5 rounded-[4px] bg-[#14141f] hover:bg-emerald-500/20 active:bg-emerald-500/30 text-emerald-400 font-mono text-3xs font-bold shrink-0 border border-emerald-500/30 transition-colors cursor-pointer"
         >
           ;
         </button>
@@ -1309,7 +1309,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
           type="button"
           onClick={() => handleInsertToken(" > ")}
           title="Redirect stdout (overwrite)"
-          className="px-2 py-1 rounded-[5px] bg-[#14141f] hover:bg-emerald-500/20 active:bg-emerald-500/30 text-emerald-400 font-mono text-3xs font-bold shrink-0 border border-emerald-500/30 transition-colors cursor-pointer"
+          className="px-2 py-0.5 rounded-[4px] bg-[#14141f] hover:bg-emerald-500/20 active:bg-emerald-500/30 text-emerald-400 font-mono text-3xs font-bold shrink-0 border border-emerald-500/30 transition-colors cursor-pointer"
         >
           &gt;
         </button>
@@ -1318,7 +1318,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
           type="button"
           onClick={() => handleInsertToken(" >> ")}
           title="Redirect stdout (append)"
-          className="px-2 py-1 rounded-[5px] bg-[#14141f] hover:bg-emerald-500/20 active:bg-emerald-500/30 text-emerald-400 font-mono text-3xs font-bold shrink-0 border border-emerald-500/30 transition-colors cursor-pointer"
+          className="px-2 py-0.5 rounded-[4px] bg-[#14141f] hover:bg-emerald-500/20 active:bg-emerald-500/30 text-emerald-400 font-mono text-3xs font-bold shrink-0 border border-emerald-500/30 transition-colors cursor-pointer"
         >
           &gt;&gt;
         </button>
@@ -1327,7 +1327,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
           type="button"
           onClick={() => handleInsertToken(" < ")}
           title="Redirect stdin"
-          className="px-2 py-1 rounded-[5px] bg-[#14141f] hover:bg-emerald-500/20 active:bg-emerald-500/30 text-emerald-400 font-mono text-3xs font-bold shrink-0 border border-emerald-500/30 transition-colors cursor-pointer"
+          className="px-2 py-0.5 rounded-[4px] bg-[#14141f] hover:bg-emerald-500/20 active:bg-emerald-500/30 text-emerald-400 font-mono text-3xs font-bold shrink-0 border border-emerald-500/30 transition-colors cursor-pointer"
         >
           &lt;
         </button>
@@ -1336,7 +1336,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
           type="button"
           onClick={() => handleInsertToken(" 2>&1")}
           title="Redirect stderr to stdout"
-          className="px-2 py-1 rounded-[5px] bg-[#14141f] hover:bg-emerald-500/20 active:bg-emerald-500/30 text-emerald-400 font-mono text-3xs font-bold shrink-0 border border-emerald-500/30 transition-colors cursor-pointer"
+          className="px-2 py-0.5 rounded-[4px] bg-[#14141f] hover:bg-emerald-500/20 active:bg-emerald-500/30 text-emerald-400 font-mono text-3xs font-bold shrink-0 border border-emerald-500/30 transition-colors cursor-pointer"
         >
           2&gt;&amp;1
         </button>
@@ -1345,19 +1345,19 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
           type="button"
           onClick={() => handleInsertToken(" &")}
           title="Run in background (&)"
-          className="px-2 py-1 rounded-[5px] bg-[#14141f] hover:bg-emerald-500/20 active:bg-emerald-500/30 text-emerald-400 font-mono text-3xs font-bold shrink-0 border border-emerald-500/30 transition-colors cursor-pointer"
+          className="px-2 py-0.5 rounded-[4px] bg-[#14141f] hover:bg-emerald-500/20 active:bg-emerald-500/30 text-emerald-400 font-mono text-3xs font-bold shrink-0 border border-emerald-500/30 transition-colors cursor-pointer"
         >
           &amp;
         </button>
 
-        <div className="w-[1px] h-4 bg-white/[0.08] shrink-0 mx-0.5" />
+        <div className="w-[1px] h-3.5 bg-white/[0.08] shrink-0 mx-0.5" />
 
         {/* Path, Symbols & Modifiers */}
         <button
           type="button"
           onClick={() => handleInsertToken("~")}
           title="Home directory (~)"
-          className="px-2 py-1 rounded-[5px] bg-[#14141f] hover:bg-cyan-500/20 active:bg-cyan-500/30 text-cyan-400 font-mono text-3xs font-bold shrink-0 border border-cyan-500/30 transition-colors cursor-pointer"
+          className="px-2 py-0.5 rounded-[4px] bg-[#14141f] hover:bg-cyan-500/20 active:bg-cyan-500/30 text-cyan-400 font-mono text-3xs font-bold shrink-0 border border-cyan-500/30 transition-colors cursor-pointer"
         >
           ~
         </button>
@@ -1366,7 +1366,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
           type="button"
           onClick={() => handleInsertToken("/")}
           title="Root / Path separator (/)"
-          className="px-2 py-1 rounded-[5px] bg-[#14141f] hover:bg-cyan-500/20 active:bg-cyan-500/30 text-cyan-400 font-mono text-3xs font-bold shrink-0 border border-cyan-500/30 transition-colors cursor-pointer"
+          className="px-2 py-0.5 rounded-[4px] bg-[#14141f] hover:bg-cyan-500/20 active:bg-cyan-500/30 text-cyan-400 font-mono text-3xs font-bold shrink-0 border border-cyan-500/30 transition-colors cursor-pointer"
         >
           /
         </button>
@@ -1375,7 +1375,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
           type="button"
           onClick={() => handleInsertToken("\\")}
           title="Escape / Line continuation (\)"
-          className="px-2 py-1 rounded-[5px] bg-[#14141f] hover:bg-cyan-500/20 active:bg-cyan-500/30 text-cyan-400 font-mono text-3xs font-bold shrink-0 border border-cyan-500/30 transition-colors cursor-pointer"
+          className="px-2 py-0.5 rounded-[4px] bg-[#14141f] hover:bg-cyan-500/20 active:bg-cyan-500/30 text-cyan-400 font-mono text-3xs font-bold shrink-0 border border-cyan-500/30 transition-colors cursor-pointer"
         >
           \
         </button>
@@ -1384,7 +1384,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
           type="button"
           onClick={() => handleInsertToken("+")}
           title="Plus (+)"
-          className="px-2 py-1 rounded-[5px] bg-[#14141f] hover:bg-cyan-500/20 active:bg-cyan-500/30 text-cyan-400 font-mono text-3xs font-bold shrink-0 border border-cyan-500/30 transition-colors cursor-pointer"
+          className="px-2 py-0.5 rounded-[4px] bg-[#14141f] hover:bg-cyan-500/20 active:bg-cyan-500/30 text-cyan-400 font-mono text-3xs font-bold shrink-0 border border-cyan-500/30 transition-colors cursor-pointer"
         >
           +
         </button>
@@ -1393,7 +1393,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
           type="button"
           onClick={() => handleInsertToken("-")}
           title="Single dash (-)"
-          className="px-2 py-1 rounded-[5px] bg-[#14141f] hover:bg-cyan-500/20 active:bg-cyan-500/30 text-cyan-400 font-mono text-3xs font-bold shrink-0 border border-cyan-500/30 transition-colors cursor-pointer"
+          className="px-2 py-0.5 rounded-[4px] bg-[#14141f] hover:bg-cyan-500/20 active:bg-cyan-500/30 text-cyan-400 font-mono text-3xs font-bold shrink-0 border border-cyan-500/30 transition-colors cursor-pointer"
         >
           -
         </button>
@@ -1402,7 +1402,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
           type="button"
           onClick={() => handleInsertToken(" --")}
           title="Double dash flag (--)"
-          className="px-2 py-1 rounded-[5px] bg-[#14141f] hover:bg-cyan-500/20 active:bg-cyan-500/30 text-cyan-400 font-mono text-3xs font-bold shrink-0 border border-cyan-500/30 transition-colors cursor-pointer"
+          className="px-2 py-0.5 rounded-[4px] bg-[#14141f] hover:bg-cyan-500/20 active:bg-cyan-500/30 text-cyan-400 font-mono text-3xs font-bold shrink-0 border border-cyan-500/30 transition-colors cursor-pointer"
         >
           --
         </button>
@@ -1411,7 +1411,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
           type="button"
           onClick={() => handleInsertToken("*")}
           title="Wildcard (*)"
-          className="px-2 py-1 rounded-[5px] bg-[#14141f] hover:bg-cyan-500/20 active:bg-cyan-500/30 text-cyan-400 font-mono text-3xs font-bold shrink-0 border border-cyan-500/30 transition-colors cursor-pointer"
+          className="px-2 py-0.5 rounded-[4px] bg-[#14141f] hover:bg-cyan-500/20 active:bg-cyan-500/30 text-cyan-400 font-mono text-3xs font-bold shrink-0 border border-cyan-500/30 transition-colors cursor-pointer"
         >
           *
         </button>
@@ -1420,7 +1420,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
           type="button"
           onClick={() => handleInsertToken("$")}
           title="Shell variable ($)"
-          className="px-2 py-1 rounded-[5px] bg-[#14141f] hover:bg-cyan-500/20 active:bg-cyan-500/30 text-cyan-400 font-mono text-3xs font-bold shrink-0 border border-cyan-500/30 transition-colors cursor-pointer"
+          className="px-2 py-0.5 rounded-[4px] bg-[#14141f] hover:bg-cyan-500/20 active:bg-cyan-500/30 text-cyan-400 font-mono text-3xs font-bold shrink-0 border border-cyan-500/30 transition-colors cursor-pointer"
         >
           $
         </button>
@@ -1429,7 +1429,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
           type="button"
           onClick={() => handleInsertToken('"')}
           title='Double quote (")'
-          className="px-2 py-1 rounded-[5px] bg-[#14141f] hover:bg-amber-500/20 active:bg-amber-500/30 text-amber-300 font-mono text-3xs font-bold shrink-0 border border-amber-500/30 transition-colors cursor-pointer"
+          className="px-2 py-0.5 rounded-[4px] bg-[#14141f] hover:bg-amber-500/20 active:bg-amber-500/30 text-amber-300 font-mono text-3xs font-bold shrink-0 border border-amber-500/30 transition-colors cursor-pointer"
         >
           &quot;
         </button>
@@ -1438,19 +1438,19 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
           type="button"
           onClick={() => handleInsertToken("'")}
           title="Single quote (')"
-          className="px-2 py-1 rounded-[5px] bg-[#14141f] hover:bg-amber-500/20 active:bg-amber-500/30 text-amber-300 font-mono text-3xs font-bold shrink-0 border border-amber-500/30 transition-colors cursor-pointer"
+          className="px-2 py-0.5 rounded-[4px] bg-[#14141f] hover:bg-amber-500/20 active:bg-amber-500/30 text-amber-300 font-mono text-3xs font-bold shrink-0 border border-amber-500/30 transition-colors cursor-pointer"
         >
           &#39;
         </button>
 
-        <div className="w-[1px] h-4 bg-white/[0.08] shrink-0 mx-0.5" />
+        <div className="w-[1px] h-3.5 bg-white/[0.08] shrink-0 mx-0.5" />
 
         {/* Quick Commands & Navigation */}
         <button
           type="button"
           onClick={() => handleInsertToken("sudo ")}
           title="Insert sudo prefix"
-          className="px-2 py-1 rounded-[5px] bg-[#181524] hover:bg-purple-500/20 active:bg-purple-500/30 text-purple-300 font-mono text-3xs font-semibold shrink-0 border border-purple-500/30 transition-colors cursor-pointer"
+          className="px-2 py-0.5 rounded-[4px] bg-[#181524] hover:bg-purple-500/20 active:bg-purple-500/30 text-purple-300 font-mono text-3xs font-semibold shrink-0 border border-purple-500/30 transition-colors cursor-pointer"
         >
           sudo
         </button>
@@ -1459,7 +1459,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
           type="button"
           onClick={() => handleInsertToken("grep ")}
           title="Insert grep pattern filter"
-          className="px-2 py-1 rounded-[5px] bg-[#181524] hover:bg-purple-500/20 active:bg-purple-500/30 text-purple-300 font-mono text-3xs font-semibold shrink-0 border border-purple-500/30 transition-colors cursor-pointer"
+          className="px-2 py-0.5 rounded-[4px] bg-[#181524] hover:bg-purple-500/20 active:bg-purple-500/30 text-purple-300 font-mono text-3xs font-semibold shrink-0 border border-purple-500/30 transition-colors cursor-pointer"
         >
           grep
         </button>
@@ -1468,7 +1468,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
           type="button"
           onClick={() => void handleExecute("cd ..")}
           title="Change to parent directory (cd ..)"
-          className="px-2 py-1 rounded-[5px] bg-[#161622] hover:bg-[#222232] active:bg-white/[0.15] text-amber-300 font-mono text-3xs font-semibold shrink-0 border border-amber-500/30 transition-colors cursor-pointer"
+          className="px-2 py-0.5 rounded-[4px] bg-[#161622] hover:bg-[#222232] active:bg-white/[0.15] text-amber-300 font-mono text-3xs font-semibold shrink-0 border border-amber-500/30 transition-colors cursor-pointer"
         >
           cd ..
         </button>
@@ -1481,12 +1481,12 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
             setLogsOutput(null);
           }}
           title="Clear screen runs"
-          className="px-2 py-1 rounded-[5px] bg-[#161622] hover:bg-[#222232] active:bg-white/[0.15] text-zinc-400 font-mono text-3xs font-semibold shrink-0 border border-white/[0.1] transition-colors cursor-pointer"
+          className="px-2 py-0.5 rounded-[4px] bg-[#161622] hover:bg-[#222232] active:bg-white/[0.15] text-zinc-400 font-mono text-3xs font-semibold shrink-0 border border-white/[0.1] transition-colors cursor-pointer"
         >
           clear
         </button>
 
-        <div className="w-[1px] h-4 bg-white/[0.08] shrink-0 mx-0.5" />
+        <div className="w-[1px] h-3.5 bg-white/[0.08] shrink-0 mx-0.5" />
 
         {/* History Navigation */}
         <button
@@ -1500,7 +1500,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
             if (histCmd) setCommand(histCmd);
             promptInputRef.current?.focus();
           }}
-          className="px-2.5 py-1 rounded-[5px] bg-[#161622] hover:bg-[#222232] active:bg-white/[0.15] text-zinc-300 font-mono text-3xs font-semibold shrink-0 border border-white/[0.1] transition-colors cursor-pointer"
+          className="px-2 py-0.5 rounded-[4px] bg-[#161622] hover:bg-[#222232] active:bg-white/[0.15] text-zinc-300 font-mono text-3xs font-semibold shrink-0 border border-white/[0.1] transition-colors cursor-pointer"
           title="Previous command (Up Arrow)"
         >
           ▲
@@ -1520,7 +1520,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
             }
             promptInputRef.current?.focus();
           }}
-          className="px-2.5 py-1 rounded-[5px] bg-[#161622] hover:bg-[#222232] active:bg-white/[0.15] text-zinc-300 font-mono text-3xs font-semibold shrink-0 border border-white/[0.1] transition-colors cursor-pointer"
+          className="px-2 py-0.5 rounded-[4px] bg-[#161622] hover:bg-[#222232] active:bg-white/[0.15] text-zinc-300 font-mono text-3xs font-semibold shrink-0 border border-white/[0.1] transition-colors cursor-pointer"
           title="Next command (Down Arrow)"
         >
           ▼
@@ -1531,7 +1531,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
       {/* 3. BOTTOM SUGGESTIONS ROW (Single Line + Pagination Arrows)    */}
       {/* ============================================================== */}
       <div
-        className="px-2.5 py-1.5 bg-[#0c0c11] border-t border-white/[0.08] shrink-0 select-none space-y-1.5"
+        className="px-2 py-1 bg-[#0c0c11] border-t border-white/[0.08] shrink-0 select-none space-y-1"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Category Filter Badges */}
@@ -1548,7 +1548,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
                 type="button"
                 onClick={() => setSuggestionCategory(cat.id)}
                 className={cn(
-                  "flex items-center gap-1 px-2 py-0.5 rounded-[5px] text-4xs font-mono font-medium shrink-0 transition-all cursor-pointer border active:scale-95",
+                  "flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] text-4xs font-mono font-medium shrink-0 transition-all cursor-pointer border active:scale-95",
                   isSelected
                     ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-xs font-semibold"
                     : "bg-white/[0.03] text-zinc-400 hover:text-zinc-200 border-white/[0.06] hover:bg-white/[0.06]",
@@ -1571,7 +1571,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
         </div>
 
         {/* Single Line of Command Buttons with Left & Right Scroll Pagination Arrows */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1">
           {/* Full Left Scroll Arrow Button */}
           <button
             type="button"
@@ -1579,9 +1579,9 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
               suggestionsScrollRef.current?.scrollTo({ left: 0, behavior: "smooth" });
             }}
             title="Scroll to beginning (Full Left)"
-            className="p-1.5 rounded-[6px] bg-[#14141d] hover:bg-[#20202e] border border-white/[0.08] hover:border-emerald-500/40 text-zinc-400 hover:text-emerald-400 transition-all cursor-pointer shrink-0 active:scale-95 shadow-xs"
+            className="p-1 rounded-[5px] bg-[#14141d] hover:bg-[#20202e] border border-white/[0.08] hover:border-emerald-500/40 text-zinc-400 hover:text-emerald-400 transition-all cursor-pointer shrink-0 active:scale-95 shadow-xs"
           >
-            <ChevronLeft className="size-3.5" />
+            <ChevronLeft className="size-3" />
           </button>
 
           {/* Scrollable single row of command action buttons */}
@@ -1596,7 +1596,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
                 onClick={() => void handleExecute(item.cmd)}
                 disabled={isRunning}
                 title={`Click to execute on VPS:\n$ ${item.cmd}`}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[6px] bg-[#14141d] hover:bg-[#1f1f2d] border border-white/[0.08] hover:border-emerald-500/40 text-left transition-all cursor-pointer shrink-0 active:scale-95 group shadow-xs whitespace-nowrap"
+                className="flex items-center gap-1.5 px-2 py-1 rounded-[5px] bg-[#14141d] hover:bg-[#1f1f2d] border border-white/[0.08] hover:border-emerald-500/40 text-left transition-all cursor-pointer shrink-0 active:scale-95 group shadow-xs whitespace-nowrap"
               >
                 <span className="text-3xs font-medium text-zinc-300 group-hover:text-emerald-400 transition-colors">
                   {item.title}
@@ -1620,9 +1620,9 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
               }
             }}
             title="Scroll to end (Full Right)"
-            className="p-1.5 rounded-[6px] bg-[#14141d] hover:bg-[#20202e] border border-white/[0.08] hover:border-emerald-500/40 text-zinc-400 hover:text-emerald-400 transition-all cursor-pointer shrink-0 active:scale-95 shadow-xs"
+            className="p-1 rounded-[5px] bg-[#14141d] hover:bg-[#20202e] border border-white/[0.08] hover:border-emerald-500/40 text-zinc-400 hover:text-emerald-400 transition-all cursor-pointer shrink-0 active:scale-95 shadow-xs"
           >
-            <ChevronRight className="size-3.5" />
+            <ChevronRight className="size-3" />
           </button>
         </div>
       </div>
