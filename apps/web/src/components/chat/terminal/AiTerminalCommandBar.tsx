@@ -16,6 +16,7 @@ import {
   Type,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   RotateCcw,
   FolderGit2,
   Server,
@@ -70,6 +71,27 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
       window.localStorage.setItem("adc_terminal_font_size", String(clamped));
     }
   }, []);
+
+  const [isFontSizeOpen, setIsFontSizeOpen] = useState(false);
+  const fontSizeDropdownRef = useRef<HTMLDivElement>(null);
+  const [customSizeInput, setCustomSizeInput] = useState<string>(() => String(terminalFontSize));
+
+  useEffect(() => {
+    setCustomSizeInput(String(terminalFontSize));
+  }, [terminalFontSize]);
+
+  useEffect(() => {
+    if (!isFontSizeOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (fontSizeDropdownRef.current && !fontSizeDropdownRef.current.contains(e.target as Node)) {
+        setIsFontSizeOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isFontSizeOpen]);
+
+  const FONT_PRESETS = [9, 10, 11, 12, 13, 14, 15, 16, 18, 20, 24, 28, 32];
 
   const promptInputRef = useRef<HTMLInputElement>(null);
   const terminalScreenRef = useRef<HTMLDivElement>(null);
@@ -820,65 +842,145 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
             {copied ? <Check className="size-3 text-emerald-400" /> : <Copy className="size-3" />}
           </button>
 
-          {/* Terminal Output Font Size: A- / Custom Number / Dropdown / A+ */}
-          <div
-            className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-[4px] bg-white/[0.04] hover:bg-white/[0.07] border border-white/[0.06] transition-colors select-none"
-            onClick={(e) => e.stopPropagation()}
-            title="Adjust Output Font Size"
-          >
-            <button
-              type="button"
-              onClick={() => handleSetFontSize(terminalFontSize - 1)}
-              disabled={terminalFontSize <= 9}
-              title="Decrease Font Size (-1px)"
-              className="p-0.5 text-zinc-400 hover:text-white disabled:opacity-30 transition-colors cursor-pointer"
+          {/* Custom Pixel Font Size Dropdown (No native glitchy select) */}
+          <div className="relative shrink-0" ref={fontSizeDropdownRef}>
+            <div
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded-[5px] bg-[#14141d] hover:bg-[#1c1c28] border border-white/[0.08] hover:border-cyan-500/40 transition-all select-none shadow-xs"
+              onClick={(e) => e.stopPropagation()}
             >
-              <Minus className="size-2.5" />
-            </button>
+              {/* Decrement Button */}
+              <button
+                type="button"
+                onClick={() => handleSetFontSize(terminalFontSize - 1)}
+                disabled={terminalFontSize <= 9}
+                title="Decrease font size (-1px)"
+                className="p-0.5 text-zinc-400 hover:text-white disabled:opacity-30 transition-colors cursor-pointer"
+              >
+                <Minus className="size-2.5" />
+              </button>
 
-            <Type className="size-2.5 text-cyan-400 shrink-0 ml-0.5" />
+              {/* Direct Custom Input + Dropdown Toggle Trigger */}
+              <div
+                className="flex items-center gap-0.5 cursor-pointer hover:opacity-90"
+                onClick={() => setIsFontSizeOpen((prev) => !prev)}
+                title="Click to select font size preset or type custom px"
+              >
+                <Type className="size-2.5 text-cyan-400 shrink-0" />
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={customSizeInput}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    (e.target as HTMLInputElement).select();
+                  }}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, "");
+                    setCustomSizeInput(val);
+                    const num = parseInt(val, 10);
+                    if (!isNaN(num) && num >= 9 && num <= 32) {
+                      handleSetFontSize(num);
+                    }
+                  }}
+                  onBlur={() => {
+                    const num = parseInt(customSizeInput, 10);
+                    if (isNaN(num) || num < 9) {
+                      handleSetFontSize(9);
+                      setCustomSizeInput("9");
+                    } else if (num > 32) {
+                      handleSetFontSize(32);
+                      setCustomSizeInput("32");
+                    } else {
+                      handleSetFontSize(num);
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      (e.target as HTMLInputElement).blur();
+                      setIsFontSizeOpen(false);
+                    }
+                  }}
+                  className="w-5 text-center bg-transparent text-4xs font-mono font-bold text-zinc-100 focus:text-cyan-300 focus:outline-none p-0 cursor-text"
+                  title="Type custom font size"
+                />
+                <span className="text-4xs font-mono text-zinc-400 font-medium">px</span>
+                <ChevronDown
+                  className={cn(
+                    "size-2.5 text-zinc-400 transition-transform duration-150 shrink-0",
+                    isFontSizeOpen && "rotate-180 text-cyan-400",
+                  )}
+                />
+              </div>
 
-            <input
-              type="number"
-              min={9}
-              max={32}
-              value={terminalFontSize}
-              onChange={(e) => {
-                const val = parseInt(e.target.value, 10);
-                if (!isNaN(val)) handleSetFontSize(val);
-              }}
-              title="Type custom font size in px"
-              className="w-5 text-center bg-transparent text-4xs font-mono font-semibold text-zinc-200 focus:text-cyan-300 focus:outline-none p-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-            />
-            <span className="text-4xs font-mono text-zinc-500">px</span>
+              {/* Increment Button */}
+              <button
+                type="button"
+                onClick={() => handleSetFontSize(terminalFontSize + 1)}
+                disabled={terminalFontSize >= 32}
+                title="Increase font size (+1px)"
+                className="p-0.5 text-zinc-400 hover:text-white disabled:opacity-30 transition-colors cursor-pointer"
+              >
+                <Plus className="size-2.5" />
+              </button>
+            </div>
 
-            <select
-              value={terminalFontSize}
-              onChange={(e) => handleSetFontSize(Number(e.target.value))}
-              title="Font presets"
-              className="bg-transparent text-4xs font-mono text-zinc-400 hover:text-zinc-200 focus:text-white focus:outline-none cursor-pointer p-0 [&>option]:bg-[#121218] [&>option]:text-zinc-200"
-            >
-              <option value={10}>10</option>
-              <option value={11}>11</option>
-              <option value={12}>12</option>
-              <option value={13}>13</option>
-              <option value={14}>14</option>
-              <option value={15}>15</option>
-              <option value={16}>16</option>
-              <option value={18}>18</option>
-              <option value={20}>20</option>
-              <option value={24}>24</option>
-            </select>
+            {/* Custom Floating Dropdown Menu */}
+            {isFontSizeOpen && (
+              <div
+                className="absolute right-0 top-full mt-1.5 w-40 rounded-[8px] bg-[#0e0e16] border border-white/[0.14] shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 duration-150 backdrop-blur-md space-y-1.5"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between pb-1 border-b border-white/[0.08] text-4xs font-mono">
+                  <span className="text-zinc-400 font-medium">Font Size</span>
+                  <span className="text-cyan-400 font-bold bg-cyan-500/10 border border-cyan-500/20 px-1 py-0.2 rounded">
+                    {terminalFontSize}px
+                  </span>
+                </div>
 
-            <button
-              type="button"
-              onClick={() => handleSetFontSize(terminalFontSize + 1)}
-              disabled={terminalFontSize >= 32}
-              title="Increase Font Size (+1px)"
-              className="p-0.5 text-zinc-400 hover:text-white disabled:opacity-30 transition-colors cursor-pointer"
-            >
-              <Plus className="size-2.5" />
-            </button>
+                {/* Preset Chips Grid */}
+                <div className="grid grid-cols-4 gap-1">
+                  {FONT_PRESETS.map((size) => {
+                    const isSelected = terminalFontSize === size;
+                    return (
+                      <button
+                        key={size}
+                        type="button"
+                        onClick={() => {
+                          handleSetFontSize(size);
+                          setIsFontSizeOpen(false);
+                        }}
+                        className={cn(
+                          "py-1 rounded-[4px] text-3xs font-mono font-medium transition-all cursor-pointer text-center",
+                          isSelected
+                            ? "bg-cyan-500/25 text-cyan-300 border border-cyan-500/50 font-bold shadow-xs"
+                            : "text-zinc-300 hover:text-white hover:bg-white/[0.08] bg-white/[0.03] border border-transparent",
+                        )}
+                      >
+                        {size}px
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Range Slider for fast fine-tuning */}
+                <div className="pt-1.5 border-t border-white/[0.06] space-y-1">
+                  <div className="flex items-center justify-between text-[9px] font-mono text-zinc-500">
+                    <span>9px</span>
+                    <span className="text-zinc-400">Drag Slider</span>
+                    <span>32px</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={9}
+                    max={32}
+                    value={terminalFontSize}
+                    onChange={(e) => handleSetFontSize(Number(e.target.value))}
+                    className="w-full accent-cyan-400 h-1 bg-white/[0.1] rounded cursor-pointer"
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Clear Console */}
