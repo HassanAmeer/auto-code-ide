@@ -12086,11 +12086,13 @@ export default function ChatView(props: ChatViewProps) {
           />
         </header>
 
-        {/* Top Header Patti for Projects, SSH Keys & Terminal Chats */}
-        <AiTerminalHeaderStrip
-          activeProject={activeProject ?? null}
-          onNewTerminalThread={handleNewTerminalThread}
-        />
+        {/* Top Header Patti for Projects, SSH Keys & Terminal Chats (Visible only when in AI Terminal mode) */}
+        {isTerminalQuickBarOpen && (
+          <AiTerminalHeaderStrip
+            activeProject={activeProject ?? null}
+            onNewTerminalThread={handleNewTerminalThread}
+          />
+        )}
 
         {/* Project File Explorer & Editor */}
         <ProjectFileExplorer />
