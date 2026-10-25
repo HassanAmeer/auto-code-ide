@@ -391,22 +391,35 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
     { id: "all", label: "All" },
     { id: "system", label: "System 📊" },
     { id: "services", label: "Services ⚙️" },
+    { id: "logs", label: "Logs 📜" },
     { id: "git", label: "Git 🌿" },
     { id: "network", label: "Network 🌐" },
+    { id: "docker", label: "Docker 🐳" },
+    { id: "processes", label: "Processes ⚡" },
+    { id: "database", label: "Database 🗄️" },
+    { id: "security", label: "Security 🛡️" },
     { id: "cleanup", label: "Cleanup 🧹" },
   ];
 
   const smartSuggestions: Array<{
-    category: "system" | "services" | "git" | "network" | "cleanup";
+    category:
+      | "system"
+      | "services"
+      | "logs"
+      | "git"
+      | "network"
+      | "docker"
+      | "processes"
+      | "database"
+      | "security"
+      | "cleanup";
     title: string;
     cmd: string;
   }> = [
     // 📊 SYSTEM & RESOURCES
-    { category: "system", title: "📁 List Directory", cmd: "ls -la" },
+    { category: "system", title: "📁 List Directory", cmd: "ls -lah" },
     { category: "system", title: "💾 Check Free RAM", cmd: "free -h" },
     { category: "system", title: "💿 Disk Usage", cmd: "df -h /" },
-    { category: "system", title: "🔥 Top CPU Tasks", cmd: "ps aux --sort=-%cpu | head -n 8" },
-    { category: "system", title: "🧠 Top Memory Tasks", cmd: "ps aux --sort=-%mem | head -n 8" },
     { category: "system", title: "⏱ VPS Uptime & Load", cmd: "uptime" },
     {
       category: "system",
@@ -414,6 +427,17 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
       cmd: "uname -srm && cat /etc/os-release | grep PRETTY",
     },
     { category: "system", title: "📊 Inode Usage", cmd: "df -ih /" },
+    {
+      category: "system",
+      title: "🔥 CPU Cores & Model",
+      cmd: "lscpu | grep -E 'Model name|CPU\\(s\\):|Thread'",
+    },
+    { category: "system", title: "🔋 Swap Usage", cmd: "swapon --show 2>/dev/null || free -h" },
+    {
+      category: "system",
+      title: "📂 Disk I/O Stats",
+      cmd: "iostat 1 2 2>/dev/null || vmstat 1 2",
+    },
 
     // ⚙️ SERVICES & SERVERS
     {
@@ -432,40 +456,238 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
       cmd: "journalctl -u autojobs.service -n 35 --no-pager",
     },
     { category: "services", title: "🌐 Nginx Status", cmd: "systemctl status nginx --no-pager" },
+    { category: "services", title: "🧪 Test Nginx Config", cmd: "nginx -t" },
     { category: "services", title: "🔄 Reload Nginx", cmd: "systemctl reload nginx" },
+    { category: "services", title: "🔍 Failed Services", cmd: "systemctl --failed" },
     {
       category: "services",
-      title: "🐳 Docker Containers",
-      cmd: "docker ps -a 2>/dev/null || echo 'Docker not running'",
+      title: "📋 Running Services",
+      cmd: "systemctl list-units --type=service --state=running | head -n 15",
     },
-    { category: "services", title: "🛡️ Firewall (UFW)", cmd: "ufw status verbose" },
-    { category: "services", title: "🔍 Failed Services", cmd: "systemctl --failed" },
+    {
+      category: "services",
+      title: "⏰ Crontab Jobs",
+      cmd: "crontab -l 2>/dev/null || echo 'No crontab for current user'",
+    },
+    {
+      category: "services",
+      title: "🔄 Reload Systemd",
+      cmd: "systemctl daemon-reload",
+    },
+
+    // 📜 SYSTEM & SERVICE LOGS
+    {
+      category: "logs",
+      title: "📜 Tail AutoJobs (50)",
+      cmd: "journalctl -u autojobs.service -n 50 --no-pager",
+    },
+    {
+      category: "logs",
+      title: "🔴 AutoJobs Errors",
+      cmd: "journalctl -u autojobs.service -p err -n 25 --no-pager",
+    },
+    {
+      category: "logs",
+      title: "🌐 Nginx Error Log",
+      cmd: "tail -n 35 /var/log/nginx/error.log 2>/dev/null || echo 'No nginx error log'",
+    },
+    {
+      category: "logs",
+      title: "🌐 Nginx Access Log",
+      cmd: "tail -n 25 /var/log/nginx/access.log 2>/dev/null || echo 'No nginx access log'",
+    },
+    {
+      category: "logs",
+      title: "🚨 Boot Errors",
+      cmd: "journalctl -b -p err -n 30 --no-pager",
+    },
+    {
+      category: "logs",
+      title: "🖥️ Kernel Messages (dmesg)",
+      cmd: "dmesg -T | tail -n 25",
+    },
+    {
+      category: "logs",
+      title: "🔒 Auth / SSH Log",
+      cmd: "tail -n 25 /var/log/auth.log 2>/dev/null || journalctl -u ssh -n 25 --no-pager",
+    },
+    {
+      category: "logs",
+      title: "📜 Syslog Tail",
+      cmd: "tail -n 30 /var/log/syslog 2>/dev/null || journalctl -n 30 --no-pager",
+    },
 
     // 🌿 GIT & REPOSITORY
     { category: "git", title: "⚡ Git Status", cmd: "git status" },
     { category: "git", title: "🔄 Pull Latest Code", cmd: "git pull origin main" },
-    { category: "git", title: "📜 Recent Git Logs", cmd: "git log --oneline -n 8" },
+    { category: "git", title: "📜 Recent Git Logs", cmd: "git log --oneline --graph -n 8" },
     { category: "git", title: "🌱 Git Branches", cmd: "git branch -a" },
     { category: "git", title: "🔍 Git Diff Stat", cmd: "git diff --stat" },
-    { category: "git", title: "📦 Node & PNPM Ver", cmd: "node -v && pnpm -v" },
     { category: "git", title: "🌿 Git Fetch Prune", cmd: "git fetch --all --prune" },
     { category: "git", title: "📦 Git Stash List", cmd: "git stash list" },
+    { category: "git", title: "🔗 Git Remote URLs", cmd: "git remote -v" },
+    { category: "git", title: "📦 Node & PNPM Ver", cmd: "node -v && pnpm -v && git --version" },
+    { category: "git", title: "🏷️ Recent Tags", cmd: "git tag -l -n1 | tail -n 5" },
 
     // 🌐 NETWORK & PORTS
     { category: "network", title: "🔌 Active Ports", cmd: "ss -tulpn | grep LISTEN" },
     { category: "network", title: "🌐 Public IP Check", cmd: "curl -s4 ifconfig.me" },
     { category: "network", title: "🏓 Ping Test (DNS)", cmd: "ping -c 3 8.8.8.8" },
-    { category: "network", title: "📡 Open TCP Sockets", cmd: "ss -tan | head -n 15" },
+    {
+      category: "network",
+      title: "📡 Established TCP",
+      cmd: "ss -tan state established | head -n 15",
+    },
     { category: "network", title: "🌐 Route Table", cmd: "ip route show" },
     { category: "network", title: "🔍 Resolv DNS", cmd: "cat /etc/resolv.conf" },
+    { category: "network", title: "🛡️ Firewall (UFW)", cmd: "ufw status verbose" },
+    { category: "network", title: "⚡ Interface IPs", cmd: "ip -brief address" },
+    {
+      category: "network",
+      title: "🔎 Port 3000 Check",
+      cmd: "lsof -i :3000 2>/dev/null || ss -tulpn | grep 3000",
+    },
+    {
+      category: "network",
+      title: "🔎 Port 80/443 Check",
+      cmd: "ss -tulpn | grep -E ':80|:443'",
+    },
+
+    // 🐳 DOCKER CONTAINERS
+    {
+      category: "docker",
+      title: "🐳 Running Containers",
+      cmd: "docker ps 2>/dev/null || echo 'Docker not running'",
+    },
+    {
+      category: "docker",
+      title: "📋 All Containers",
+      cmd: "docker ps -a 2>/dev/null || echo 'Docker not running'",
+    },
+    {
+      category: "docker",
+      title: "📊 Container Stats",
+      cmd: "docker stats --no-stream 2>/dev/null || echo 'Docker not running'",
+    },
+    {
+      category: "docker",
+      title: "🖼️ Docker Images",
+      cmd: "docker images 2>/dev/null || echo 'Docker not running'",
+    },
+    {
+      category: "docker",
+      title: "📜 Latest Docker Logs",
+      cmd: "docker logs --tail 50 $(docker ps -q | head -n 1) 2>/dev/null || echo 'No container running'",
+    },
+    {
+      category: "docker",
+      title: "🐙 Compose Containers",
+      cmd: "docker compose ps 2>/dev/null || docker-compose ps 2>/dev/null || echo 'Compose not found'",
+    },
+    {
+      category: "docker",
+      title: "🧹 Docker Disk Usage",
+      cmd: "docker system df 2>/dev/null || echo 'Docker not running'",
+    },
+    {
+      category: "docker",
+      title: "🔄 Docker Daemon Status",
+      cmd: "systemctl status docker --no-pager 2>/dev/null || echo 'Docker service not found'",
+    },
+
+    // ⚡ PROCESSES & RUNTIME
+    { category: "processes", title: "🔥 Top CPU Tasks", cmd: "ps aux --sort=-%cpu | head -n 10" },
+    {
+      category: "processes",
+      title: "🧠 Top Memory Tasks",
+      cmd: "ps aux --sort=-%mem | head -n 10",
+    },
+    {
+      category: "processes",
+      title: "🌳 Process Tree",
+      cmd: "pstree -ap 2>/dev/null || ps -ejH | head -n 25",
+    },
+    {
+      category: "processes",
+      title: "💀 Zombie Processes",
+      cmd: "ps aux | awk '{if ($8 ~ /Z/) print $0}' || echo 'No zombie processes'",
+    },
+    {
+      category: "processes",
+      title: "⚡ Node.js Processes",
+      cmd: "pgrep -a node || echo 'No node process found'",
+    },
+    {
+      category: "processes",
+      title: "🐍 Python Processes",
+      cmd: "pgrep -a python || echo 'No python process found'",
+    },
+    { category: "processes", title: "📂 Open Files Limit", cmd: "cat /proc/sys/fs/file-nr" },
+    {
+      category: "processes",
+      title: "🛑 Kill Port 3000",
+      cmd: "fuser -k 3000/tcp 2>/dev/null || echo 'Port 3000 free'",
+    },
+
+    // 🗄️ DATABASE & CACHE
+    {
+      category: "database",
+      title: "🐘 PostgreSQL Status",
+      cmd: "systemctl status postgresql --no-pager 2>/dev/null || echo 'PostgreSQL not installed'",
+    },
+    {
+      category: "database",
+      title: "⚡ Redis Ping Test",
+      cmd: "redis-cli ping 2>/dev/null || systemctl status redis --no-pager 2>/dev/null || echo 'Redis not running'",
+    },
+    {
+      category: "database",
+      title: "🐬 MySQL / MariaDB Status",
+      cmd: "systemctl status mysql --no-pager 2>/dev/null || systemctl status mariadb --no-pager 2>/dev/null || echo 'MySQL not installed'",
+    },
+    {
+      category: "database",
+      title: "📦 Prisma Migration Status",
+      cmd: "pnpm prisma migrate status 2>/dev/null || npx prisma migrate status 2>/dev/null || echo 'Prisma not found'",
+    },
+    {
+      category: "database",
+      title: "📁 Find SQLite DBs",
+      cmd: "find . -maxdepth 3 -name '*.sqlite' -o -name '*.db' 2>/dev/null | head -n 6",
+    },
+
+    // 🛡️ SECURITY & ACCESS
+    { category: "security", title: "🛡️ UFW Rules List", cmd: "ufw status numbered" },
+    { category: "security", title: "👥 Active Users", cmd: "who && w" },
+    {
+      category: "security",
+      title: "🚫 Failed SSH Logins",
+      cmd: "grep 'Failed password' /var/log/auth.log 2>/dev/null | tail -n 10 || journalctl -u ssh -g 'Failed' -n 10 --no-pager",
+    },
+    { category: "security", title: "🔄 Recent Reboots", cmd: "last reboot | head -n 5" },
+    {
+      category: "security",
+      title: "👤 Sudoers Group",
+      cmd: "getent group sudo || getent group wheel",
+    },
+    {
+      category: "security",
+      title: "🔑 Listening Sockets",
+      cmd: "netstat -tuln 2>/dev/null || ss -tuln",
+    },
+    {
+      category: "security",
+      title: "🔒 Check /tmp Permissions",
+      cmd: "ls -ld /tmp /var/tmp",
+    },
 
     // 🧹 CLEANUP & UTILITIES
     {
       category: "cleanup",
-      title: "📁 Find Large Files",
+      title: "📁 Find Large Files (>100M)",
       cmd: "find / -xdev -type f -size +100M 2>/dev/null | head -n 10",
     },
-    { category: "cleanup", title: "🧹 Vacuum Journals", cmd: "journalctl --vacuum-time=3d" },
+    { category: "cleanup", title: "🧹 Vacuum Journals (3d)", cmd: "journalctl --vacuum-time=3d" },
     {
       category: "cleanup",
       title: "🧹 Clean Apt Cache",
@@ -476,9 +698,13 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
       title: "🧹 Prune PNPM Store",
       cmd: "pnpm store prune 2>/dev/null || true",
     },
+    {
+      category: "cleanup",
+      title: "🗑️ Empty Old /tmp Files",
+      cmd: "find /tmp -type f -atime +7 -delete 2>/dev/null || echo '/tmp cleaned'",
+    },
     { category: "cleanup", title: "🧹 Clear Screen", cmd: "clear" },
     { category: "cleanup", title: "📂 Current PWD", cmd: "pwd" },
-    { category: "cleanup", title: "👥 Active Users", cmd: "who && w" },
   ];
 
   const filteredSuggestions =
