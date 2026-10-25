@@ -1231,27 +1231,29 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
   );
 }
 
-export function IntegrationsSettingsPanel() {
-  const previewDefaults = (
+export function BrowserPreviewSettings({ disabled = false }: { readonly disabled?: boolean }) {
+  return (
     <>
-      <BrowserProfilesSetting disabled={false} />
-      <BrowserViewportSetting disabled={false} />
-      <BrowserZoomSetting disabled={false} />
-      <BrowserAppearanceSetting disabled={false} />
-      <BrowserRecordingFrameRateSetting disabled={false} />
-      <BrowserRecordingInputSettings disabled={false} />
-      <BrowserLinkTargetSetting disabled={false} />
-      <BrowserAutoShowFloatingPreviewSetting disabled={false} />
+      <BrowserProfilesSetting disabled={disabled} />
+      <BrowserViewportSetting disabled={disabled} />
+      <BrowserZoomSetting disabled={disabled} />
+      <BrowserAppearanceSetting disabled={disabled} />
+      <BrowserRecordingFrameRateSetting disabled={disabled} />
+      <BrowserRecordingInputSettings disabled={disabled} />
+      <BrowserLinkTargetSetting disabled={disabled} />
+      <BrowserAutoShowFloatingPreviewSetting disabled={disabled} />
     </>
   );
+}
 
+export function IntegrationsSettingsPanel() {
   return (
     <SettingsPageContainer>
       {/* Server-authoritative agent access is scoped by the header selection;
           the preview defaults below are device-local and ignore it. */}
       <ProjectDefaultsSettings category="integrations" />
       <SettingsSection id="browser" title="Browser">
-        {previewDefaults}
+        <BrowserPreviewSettings disabled={false} />
       </SettingsSection>
       <SettingsSection id="agent-reach" title="Web Research & Agent-Reach">
         <ResearchAgentSettings />
