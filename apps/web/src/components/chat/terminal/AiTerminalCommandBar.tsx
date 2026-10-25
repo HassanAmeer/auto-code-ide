@@ -45,6 +45,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
   const [logsOutput, setLogsOutput] = useState<string | null>(null);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [suggestionCategory, setSuggestionCategory] = useState<string>("all");
 
   const promptInputRef = useRef<HTMLInputElement>(null);
   const terminalScreenRef = useRef<HTMLDivElement>(null);
@@ -340,18 +341,99 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // 2-Line Smart Action Suggestions (Title on top, muted exact bash command below)
-  const smartSuggestions = [
-    { title: "📁 List Directory", cmd: "ls -la" },
-    { title: "💾 Check Free RAM", cmd: "free -h" },
-    { title: "⚡ Git Status", cmd: "git status" },
-    { title: "⏱ VPS Uptime", cmd: "uptime" },
-    { title: "⚙️ AutoJobs Service", cmd: "systemctl status autojobs.service --no-pager" },
-    { title: "💿 Disk Usage", cmd: "df -h /" },
-    { title: "🔄 Pull Latest Code", cmd: "git pull origin main" },
-    { title: "🔍 Active Ports", cmd: "ss -tulpn" },
-    { title: "🧹 Clear Screen", cmd: "clear" },
+  // Categorized Smart Action Suggestions (Title on top, muted exact bash command below)
+  const suggestionCategories = [
+    { id: "all", label: "All" },
+    { id: "system", label: "System 📊" },
+    { id: "services", label: "Services ⚙️" },
+    { id: "git", label: "Git 🌿" },
+    { id: "network", label: "Network 🌐" },
+    { id: "cleanup", label: "Cleanup 🧹" },
   ];
+
+  const smartSuggestions: Array<{
+    category: "system" | "services" | "git" | "network" | "cleanup";
+    title: string;
+    cmd: string;
+  }> = [
+    // 📊 SYSTEM & RESOURCES
+    { category: "system", title: "📁 List Directory", cmd: "ls -la" },
+    { category: "system", title: "💾 Check Free RAM", cmd: "free -h" },
+    { category: "system", title: "💿 Disk Usage", cmd: "df -h /" },
+    { category: "system", title: "🔥 Top CPU Tasks", cmd: "ps aux --sort=-%cpu | head -n 8" },
+    { category: "system", title: "🧠 Top Memory Tasks", cmd: "ps aux --sort=-%mem | head -n 8" },
+    { category: "system", title: "⏱ VPS Uptime & Load", cmd: "uptime" },
+    {
+      category: "system",
+      title: "🖥️ OS & Kernel Info",
+      cmd: "uname -srm && cat /etc/os-release | grep PRETTY",
+    },
+    { category: "system", title: "📊 Inode Usage", cmd: "df -ih /" },
+
+    // ⚙️ SERVICES & SERVERS
+    {
+      category: "services",
+      title: "⚙️ AutoJobs Service",
+      cmd: "systemctl status autojobs.service --no-pager",
+    },
+    {
+      category: "services",
+      title: "🔄 Restart AutoJobs",
+      cmd: "systemctl restart autojobs.service",
+    },
+    {
+      category: "services",
+      title: "📜 AutoJobs Logs",
+      cmd: "journalctl -u autojobs.service -n 35 --no-pager",
+    },
+    { category: "services", title: "🌐 Nginx Status", cmd: "systemctl status nginx --no-pager" },
+    { category: "services", title: "🔄 Reload Nginx", cmd: "systemctl reload nginx" },
+    {
+      category: "services",
+      title: "🐳 Docker Containers",
+      cmd: "docker ps -a 2>/dev/null || echo 'Docker not running'",
+    },
+    { category: "services", title: "🛡️ Firewall (UFW)", cmd: "ufw status verbose" },
+    { category: "services", title: "🔍 Failed Services", cmd: "systemctl --failed" },
+
+    // 🌿 GIT & REPOSITORY
+    { category: "git", title: "⚡ Git Status", cmd: "git status" },
+    { category: "git", title: "🔄 Pull Latest Code", cmd: "git pull origin main" },
+    { category: "git", title: "📜 Recent Git Logs", cmd: "git log --oneline -n 8" },
+    { category: "git", title: "🌱 Git Branches", cmd: "git branch -a" },
+    { category: "git", title: "🔍 Git Diff Stat", cmd: "git diff --stat" },
+    { category: "git", title: "📦 Node & PNPM Ver", cmd: "node -v && pnpm -v" },
+
+    // 🌐 NETWORK & PORTS
+    { category: "network", title: "🔌 Active Ports", cmd: "ss -tulpn | grep LISTEN" },
+    { category: "network", title: "🌐 Public IP Check", cmd: "curl -s4 ifconfig.me" },
+    { category: "network", title: "🏓 Ping Test (DNS)", cmd: "ping -c 3 8.8.8.8" },
+    { category: "network", title: "📡 Open TCP Sockets", cmd: "ss -tan | head -n 15" },
+
+    // 🧹 CLEANUP & UTILITIES
+    {
+      category: "cleanup",
+      title: "📁 Find Large Files",
+      cmd: "find / -xdev -type f -size +100M 2>/dev/null | head -n 10",
+    },
+    { category: "cleanup", title: "🧹 Vacuum Journals", cmd: "journalctl --vacuum-time=3d" },
+    {
+      category: "cleanup",
+      title: "🧹 Clean Apt Cache",
+      cmd: "apt-get clean && apt-get autoremove -y",
+    },
+    {
+      category: "cleanup",
+      title: "🧹 Prune PNPM Store",
+      cmd: "pnpm store prune 2>/dev/null || true",
+    },
+    { category: "cleanup", title: "🧹 Clear Screen", cmd: "clear" },
+  ];
+
+  const filteredSuggestions =
+    suggestionCategory === "all"
+      ? smartSuggestions
+      : smartSuggestions.filter((item) => item.category === suggestionCategory);
 
   // Runs to display chronologically in the terminal screen for active tab
   const activeTabRuns = store.runs.filter((r) => !r.tabId || r.tabId === activeTabId);
@@ -903,26 +985,64 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
       </div>
 
       {/* ============================================================== */}
-      {/* 3. BOTTOM SUGGESTIONS ROW (NO INPUT FIELD UNDERNEATH!)          */}
+      {/* 3. BOTTOM SUGGESTIONS ROW (Categorized Smart Action Buttons)   */}
       {/* ============================================================== */}
       <div
-        className="px-2.5 py-2 bg-[#0c0c11] border-t border-white/[0.08] shrink-0 select-none"
+        className="px-2.5 py-1.5 bg-[#0c0c11] border-t border-white/[0.08] shrink-0 select-none space-y-1.5"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none] py-0.5">
-          {smartSuggestions.map((item) => (
+        {/* Category Filter Badges */}
+        <div className="flex items-center gap-1 overflow-x-auto [scrollbar-width:none] px-0.5">
+          {suggestionCategories.map((cat) => {
+            const count =
+              cat.id === "all"
+                ? smartSuggestions.length
+                : smartSuggestions.filter((s) => s.category === cat.id).length;
+            const isSelected = suggestionCategory === cat.id;
+            return (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => setSuggestionCategory(cat.id)}
+                className={cn(
+                  "flex items-center gap-1 px-2 py-0.5 rounded-[5px] text-4xs font-mono font-medium shrink-0 transition-all cursor-pointer border active:scale-95",
+                  isSelected
+                    ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-xs font-semibold"
+                    : "bg-white/[0.03] text-zinc-400 hover:text-zinc-200 border-white/[0.06] hover:bg-white/[0.06]",
+                )}
+              >
+                <span>{cat.label}</span>
+                <span
+                  className={cn(
+                    "px-1 py-0.1 rounded text-[9px]",
+                    isSelected
+                      ? "bg-emerald-400/20 text-emerald-300 font-bold"
+                      : "bg-black/40 text-zinc-500",
+                  )}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Action Command Buttons */}
+        <div className="flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none] py-0.5 px-0.5">
+          {filteredSuggestions.map((item) => (
             <button
               key={item.cmd}
               type="button"
               onClick={() => void handleExecute(item.cmd)}
               disabled={isRunning}
+              title={`Click to execute on VPS:\n$ ${item.cmd}`}
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[6px] bg-[#14141d] hover:bg-[#1f1f2d] border border-white/[0.08] hover:border-emerald-500/40 text-left transition-all cursor-pointer shrink-0 active:scale-95 group shadow-xs"
             >
               <span className="text-3xs font-medium text-zinc-300 group-hover:text-emerald-400 transition-colors">
                 {item.title}
               </span>
               <span className="text-4xs font-mono text-zinc-500 group-hover:text-zinc-400">
-                ${item.cmd.length > 20 ? item.cmd.slice(0, 18) + "..." : item.cmd}
+                ${item.cmd.length > 22 ? item.cmd.slice(0, 20) + "..." : item.cmd}
               </span>
             </button>
           ))}
