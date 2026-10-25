@@ -4,9 +4,10 @@ import {
   ShieldCheckIcon,
   CheckIcon,
   PlayIcon,
+  PauseIcon,
+  SquareIcon,
   ServerIcon,
   ArrowRightIcon,
-  SparklesIcon,
   CpuIcon,
   GlobeIcon,
   Loader2Icon,
@@ -14,6 +15,7 @@ import {
   XIcon,
   LayersIcon,
   BotIcon,
+  AlertCircleIcon,
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { toastManager } from "../ui/toast";
@@ -30,8 +32,11 @@ export interface RotatedProviderItem {
 
 interface IpRotationStatusResponse {
   ok: boolean;
-  warpStatus: "running" | "stopped";
+  warpStatus: "running" | "paused" | "stopped";
   ip: string;
+  port?: string;
+  lastIp?: string;
+  lastPort?: string;
   isProxied: boolean;
   proxyPort: string;
   socks5Port: string;
@@ -115,8 +120,11 @@ function formatTimeAgo(timestamp: number, now: number): string {
 }
 
 export function IpRotationSettingsPage() {
-  const [warpStatus, setWarpStatus] = useState<"running" | "stopped">("stopped");
+  const [warpStatus, setWarpStatus] = useState<"running" | "paused" | "stopped">("stopped");
   const [currentIp, setCurrentIp] = useState<string>("Checking...");
+  const [lastIp, setLastIp] = useState<string>("");
+  const [port, setPort] = useState<string>("8118");
+  const [lastPort, setLastPort] = useState<string>("8118");
   const [isProxied, setIsProxied] = useState<boolean>(false);
   const [proxyPort, setProxyPort] = useState<string>("127.0.0.1:8118");
   const [socks5Port, setSocks5Port] = useState<string>("127.0.0.1:40000");
@@ -126,9 +134,11 @@ export function IpRotationSettingsPage() {
   // Selection for Section 2
   const [selectedProviderIds, setSelectedProviderIds] = useState<Set<string>>(new Set());
 
-  // Loading states
+  // Individual loading states with circular spinners
   const [isCheckingWarp, setIsCheckingWarp] = useState(false);
   const [isStartingWarp, setIsStartingWarp] = useState(false);
+  const [isPausingWarp, setIsPausingWarp] = useState(false);
+  const [isStoppingWarp, setIsStoppingWarp] = useState(false);
   const [isRotatingIp, setIsRotatingIp] = useState(false);
   const [isAttaching, setIsAttaching] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
@@ -149,6 +159,9 @@ export function IpRotationSettingsPage() {
         const data = (await res.json()) as IpRotationStatusResponse;
         setWarpStatus(data.warpStatus || "stopped");
         setCurrentIp(data.ip || "Unknown IP");
+        if (data.lastIp) setLastIp(data.lastIp);
+        if (data.port) setPort(data.port);
+        if (data.lastPort) setLastPort(data.lastPort);
         setIsProxied(Boolean(data.isProxied));
         if (data.proxyPort) setProxyPort(data.proxyPort);
         if (data.socks5Port) setSocks5Port(data.socks5Port);
@@ -157,9 +170,14 @@ export function IpRotationSettingsPage() {
         }
         if (showToast) {
           toastManager.add({
-            type: "info",
-            title: data.warpStatus === "running" ? "WARP is Active" : "WARP is Stopped",
-            description: `IP: ${data.ip} (${data.isProxied ? "Cloudflare WARP Proxied" : "Direct VPS IP"})`,
+            type:
+              data.warpStatus === "running"
+                ? "success"
+                : data.warpStatus === "paused"
+                  ? "warning"
+                  : "info",
+            title: `WARP is ${data.warpStatus.toUpperCase()}`,
+            description: `Active IP: ${data.ip}:${data.port || "8118"} (${data.isProxied ? "Cloudflare WARP Proxied" : "Direct / Paused"})`,
           });
         }
       }
@@ -224,7 +242,7 @@ export function IpRotationSettingsPage() {
     }
   };
 
-  // Section 1: Start WARP in background
+  // Section 1: Start / Resume WARP
   const handleStartWarp = async () => {
     setIsStartingWarp(true);
     try {
@@ -232,10 +250,10 @@ export function IpRotationSettingsPage() {
       const data = await res.json().catch(() => ({}));
       toastManager.add({
         type: data.ok ? "success" : "warning",
-        title: data.ok ? "WARP Started" : "Start Triggered",
+        title: "WARP Service Started",
         description: data.message || "Cloudflare WARP starting in background...",
       });
-      setTimeout(() => void fetchStatus(false), 2500);
+      setTimeout(() => void fetchStatus(false), 2000);
     } catch (err: any) {
       toastManager.add({
         type: "error",
@@ -247,6 +265,72 @@ export function IpRotationSettingsPage() {
     }
   };
 
+  // Section 1: Pause WARP
+  const handlePauseWarp = async () => {
+    setIsPausingWarp(true);
+    try {
+      const res = await fetch("/api/ip-rotation/pause", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (data.ok) {
+        setWarpStatus("paused");
+        setIsProxied(false);
+        toastManager.add({
+          type: "warning",
+          title: "WARP Paused",
+          description: "WARP proxy tunnel paused. Outbound requests fall back to Direct IP.",
+        });
+      } else {
+        toastManager.add({
+          type: "error",
+          title: "Pause Failed",
+          description: data.message || "Failed to pause WARP.",
+        });
+      }
+    } catch (err: any) {
+      toastManager.add({
+        type: "error",
+        title: "Pause Error",
+        description: err?.message || "Network error while pausing.",
+      });
+    } finally {
+      setIsPausingWarp(false);
+      void fetchStatus(false);
+    }
+  };
+
+  // Section 1: Stop WARP completely
+  const handleStopWarp = async () => {
+    setIsStoppingWarp(true);
+    try {
+      const res = await fetch("/api/ip-rotation/stop", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (data.ok) {
+        setWarpStatus("stopped");
+        setIsProxied(false);
+        toastManager.add({
+          type: "info",
+          title: "WARP Stopped",
+          description: "WARP proxy daemon and Privoxy bridge stopped completely.",
+        });
+      } else {
+        toastManager.add({
+          type: "error",
+          title: "Stop Failed",
+          description: data.message || "Failed to stop WARP.",
+        });
+      }
+    } catch (err: any) {
+      toastManager.add({
+        type: "error",
+        title: "Stop Error",
+        description: err?.message || "Network error while stopping.",
+      });
+    } finally {
+      setIsStoppingWarp(false);
+      void fetchStatus(false);
+    }
+  };
+
   // Section 1: Rotate IP now
   const handleRotateIp = async () => {
     setIsRotatingIp(true);
@@ -254,7 +338,10 @@ export function IpRotationSettingsPage() {
       const res = await fetch("/api/ip-rotation/rotate", { method: "POST" });
       const data = await res.json().catch(() => ({}));
       if (data.ok && data.newIp) {
+        setLastIp(data.oldIp || currentIp);
+        setLastPort(data.port || "8118");
         setCurrentIp(data.newIp);
+        setPort(data.port || "8118");
         setWarpStatus("running");
         setIsProxied(true);
         if (Array.isArray(data.rotatedProviders)) {
@@ -263,7 +350,7 @@ export function IpRotationSettingsPage() {
         toastManager.add({
           type: "success",
           title: "IP Rotated Successfully",
-          description: `Previous: ${data.oldIp || "Unknown"} ➔ New: ${data.newIp}`,
+          description: `Shifted from ${data.oldIp}:${data.port || "8118"} ➔ ${data.newIp}:${data.port || "8118"}`,
         });
       } else {
         toastManager.add({
@@ -362,6 +449,8 @@ export function IpRotationSettingsPage() {
   };
 
   const isRunning = warpStatus === "running";
+  const isPaused = warpStatus === "paused";
+  const isStopped = warpStatus === "stopped";
 
   return (
     <SettingsPageContainer width="wide" className="space-y-4 pb-12 font-sans antialiased">
@@ -373,7 +462,11 @@ export function IpRotationSettingsPage() {
         <div className="flex flex-col gap-1 border-b border-border/30 pb-2.5 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-0.5">
             <div className="flex items-center gap-1.5">
-              <NetworkIcon className="size-4 text-emerald-500" />
+              <NetworkIcon
+                className={`size-4 ${
+                  isRunning ? "text-emerald-500" : isPaused ? "text-amber-500" : "text-rose-500"
+                }`}
+              />
               <h2 className="text-sm font-semibold tracking-tight text-foreground">
                 Cloudflare WARP Tunnel & Proxy Engine
               </h2>
@@ -387,48 +480,82 @@ export function IpRotationSettingsPage() {
           <div className="flex items-center gap-1.5 self-start pt-1 sm:self-auto sm:pt-0">
             {/* Status Pill */}
             <span
-              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium transition-all ${
+              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold transition-all ${
                 isRunning
                   ? "border border-emerald-500/25 bg-emerald-500/10 text-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.25)]"
-                  : "border border-rose-500/25 bg-rose-500/10 text-rose-500"
+                  : isPaused
+                    ? "border border-amber-500/25 bg-amber-500/10 text-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.25)]"
+                    : "border border-rose-500/25 bg-rose-500/10 text-rose-500"
               }`}
             >
               <span
-                className={`size-1.5 rounded-full ${
-                  isRunning ? "animate-pulse bg-emerald-500" : "bg-rose-500"
+                className={`size-2 rounded-full ${
+                  isRunning
+                    ? "animate-pulse bg-emerald-500"
+                    : isPaused
+                      ? "bg-amber-500"
+                      : "bg-rose-500"
                 }`}
               />
-              {isRunning ? "Running" : "Stopped"}
+              {isRunning ? "Running" : isPaused ? "Paused" : "Stopped"}
             </span>
           </div>
         </div>
 
         {/* Status Details & Actions Row */}
-        <div className="mt-2.5 flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
-          {/* IP & Bridge details */}
+        <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          {/* IP & Port Badges (Last IP in Gray, New IP in Green or Orange when Paused) */}
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1 rounded-lg border border-border/40 bg-muted/40 px-2 py-1 text-xs">
-              <ServerIcon className="size-3 text-muted-foreground/70" />
-              <span className="text-[11px] text-muted-foreground">Outgoing IP:</span>
-              <span className="font-mono text-[11px] font-medium text-foreground">{currentIp}</span>
+            {/* Last IP (Gray badge) */}
+            {lastIp && (
+              <div className="flex items-center gap-1 rounded-lg border border-border/40 bg-muted/40 px-2 py-1 text-xs">
+                <span className="text-[10px] uppercase font-semibold text-muted-foreground/70">
+                  Last IP:
+                </span>
+                <span className="font-mono text-[11px] text-muted-foreground">
+                  {lastIp}:{lastPort || "8118"}
+                </span>
+              </div>
+            )}
+
+            {/* Current Active IP Badge */}
+            <div
+              className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs transition-all ${
+                isRunning
+                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-500"
+                  : isPaused
+                    ? "border-amber-500/30 bg-amber-500/10 text-amber-500"
+                    : "border-border/40 bg-muted/30 text-muted-foreground"
+              }`}
+            >
+              <ServerIcon className="size-3.5 shrink-0 opacity-80" />
+              <span className="text-[10px] uppercase font-bold tracking-wider opacity-75">
+                {isRunning ? "Active IP:" : isPaused ? "Paused IP:" : "Direct IP:"}
+              </span>
+              <span className="font-mono text-[11px] font-bold">
+                {currentIp}:{port || "8118"}
+              </span>
               <span
-                className={`ml-1 rounded px-1 text-[9px] font-semibold uppercase ${
-                  isProxied
-                    ? "bg-emerald-500/15 text-emerald-500"
-                    : "bg-amber-500/15 text-amber-500"
+                className={`ml-1 rounded px-1.5 py-0.2 text-[9px] font-bold uppercase ${
+                  isRunning
+                    ? "bg-emerald-500/20 text-emerald-500"
+                    : isPaused
+                      ? "bg-amber-500/20 text-amber-500"
+                      : "bg-rose-500/20 text-rose-500"
                 }`}
               >
-                {isProxied ? "WARP" : "Direct"}
+                {isRunning ? "WARP" : isPaused ? "Paused" : "Direct"}
               </span>
             </div>
 
-            <span className="font-mono text-[10px] text-muted-foreground/80">
-              Bridge: {proxyPort} (Privoxy) ➔ {socks5Port} (WARP)
+            <span className="font-mono text-[10px] text-muted-foreground/70">
+              Bridge: {proxyPort} ➔ {socks5Port}
             </span>
           </div>
 
-          {/* Action buttons */}
+          {/* Action buttons with circular spinners */}
           <div className="flex flex-wrap items-center gap-1.5">
+            {/* Check Status */}
             <Button
               variant="outline"
               size="xs"
@@ -441,10 +568,11 @@ export function IpRotationSettingsPage() {
               ) : (
                 <RotateCwIcon className="mr-1 size-3 text-muted-foreground" />
               )}
-              Check WARP
+              Check Status
             </Button>
 
-            {!isRunning && (
+            {/* Start / Resume */}
+            {(isStopped || isPaused) && (
               <Button
                 variant="default"
                 size="xs"
@@ -457,15 +585,52 @@ export function IpRotationSettingsPage() {
                 ) : (
                   <PlayIcon className="mr-1 size-3 fill-current" />
                 )}
-                Start in Background
+                {isPaused ? "Resume WARP" : "Start in Background"}
               </Button>
             )}
 
+            {/* Pause (Active when running) */}
+            {isRunning && (
+              <Button
+                variant="outline"
+                size="xs"
+                onClick={() => void handlePauseWarp()}
+                disabled={isPausingWarp}
+                className="h-7 rounded-lg border-amber-500/30 text-amber-500 px-2.5 text-[11px] font-medium hover:bg-amber-500/10 active:scale-95"
+              >
+                {isPausingWarp ? (
+                  <Loader2Icon className="mr-1 size-3 animate-spin text-amber-500" />
+                ) : (
+                  <PauseIcon className="mr-1 size-3" />
+                )}
+                Pause
+              </Button>
+            )}
+
+            {/* Stop (Active when running or paused) */}
+            {!isStopped && (
+              <Button
+                variant="outline"
+                size="xs"
+                onClick={() => void handleStopWarp()}
+                disabled={isStoppingWarp}
+                className="h-7 rounded-lg border-rose-500/30 text-rose-500 px-2 text-[11px] font-medium hover:bg-rose-500/10 active:scale-95"
+              >
+                {isStoppingWarp ? (
+                  <Loader2Icon className="mr-1 size-3 animate-spin text-rose-500" />
+                ) : (
+                  <SquareIcon className="mr-1 size-3 fill-current" />
+                )}
+                Stop
+              </Button>
+            )}
+
+            {/* Rotate IP Now */}
             <Button
               variant="secondary"
               size="xs"
               onClick={() => void handleRotateIp()}
-              disabled={isRotatingIp || !isRunning}
+              disabled={isRotatingIp}
               className="h-7 rounded-lg border border-border/40 px-2.5 text-[11px] font-medium transition-all hover:bg-muted/80 active:scale-95"
             >
               {isRotatingIp ? (
@@ -609,11 +774,23 @@ export function IpRotationSettingsPage() {
         <div className="flex flex-col gap-1 border-b border-border/30 pb-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-0.5">
             <div className="flex items-center gap-1.5">
-              <ShieldCheckIcon className="size-4 text-emerald-500" />
+              <ShieldCheckIcon
+                className={`size-4 ${
+                  isRunning ? "text-emerald-500" : isPaused ? "text-amber-500" : "text-rose-500"
+                }`}
+              />
               <h3 className="text-sm font-semibold tracking-tight text-foreground">
                 Active Rotated Providers
               </h3>
-              <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.2 text-[10px] font-semibold text-emerald-500">
+              <span
+                className={`rounded-full px-1.5 py-0.2 text-[10px] font-semibold ${
+                  isRunning
+                    ? "bg-emerald-500/10 text-emerald-500"
+                    : isPaused
+                      ? "bg-amber-500/10 text-amber-500"
+                      : "bg-rose-500/10 text-rose-500"
+                }`}
+              >
                 {rotatedProviders.length} Active
               </span>
             </div>
@@ -644,11 +821,21 @@ export function IpRotationSettingsPage() {
                 return (
                   <div
                     key={item.id}
-                    className="flex flex-col gap-2 rounded-xl border border-border/40 bg-background/60 p-2.5 transition-all sm:flex-row sm:items-center sm:justify-between"
+                    className={`flex flex-col gap-2 rounded-xl border p-2.5 transition-all sm:flex-row sm:items-center sm:justify-between ${
+                      isPaused
+                        ? "border-amber-500/25 bg-amber-500/5"
+                        : "border-border/40 bg-background/60"
+                    }`}
                   >
                     {/* Provider info & Tag */}
                     <div className="flex min-w-0 items-center gap-2">
-                      <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-500">
+                      <div
+                        className={`flex size-7 shrink-0 items-center justify-center rounded-lg ${
+                          isPaused
+                            ? "bg-amber-500/15 text-amber-500"
+                            : "bg-emerald-500/10 text-emerald-500"
+                        }`}
+                      >
                         <ShieldCheckIcon className="size-4" />
                       </div>
                       <div className="min-w-0">
@@ -656,8 +843,14 @@ export function IpRotationSettingsPage() {
                           <span className="truncate text-xs font-semibold text-foreground">
                             {item.name}
                           </span>
-                          <span className="rounded bg-emerald-500/10 px-1.5 py-0.2 text-[9px] font-medium text-emerald-500">
-                            WARP Routed
+                          <span
+                            className={`rounded px-1.5 py-0.2 text-[9px] font-bold uppercase ${
+                              isPaused
+                                ? "bg-amber-500/20 text-amber-500 border border-amber-500/30"
+                                : "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+                            }`}
+                          >
+                            {isPaused ? "Paused" : "WARP Routed"}
                           </span>
                         </div>
 
@@ -670,12 +863,20 @@ export function IpRotationSettingsPage() {
 
                     {/* IP Shift Indicator & Remove Action */}
                     <div className="flex flex-wrap items-center gap-2 self-end sm:self-auto">
-                      {/* IP Shift Pill */}
+                      {/* IP Shift Pill: Old IP in Muted Gray, New IP in Green (or Orange if paused) */}
                       <div className="flex items-center gap-1 rounded-lg border border-border/50 bg-muted/40 px-2 py-0.5 font-mono text-[11px]">
-                        <span className="text-muted-foreground">{item.oldIp || "Direct"}</span>
-                        <ArrowRightIcon className="size-3 text-emerald-500" />
-                        <span className="font-semibold text-emerald-500">
-                          {item.newIp || currentIp}
+                        <span className="text-muted-foreground">
+                          {item.oldIp ? `${item.oldIp}:8118` : "Direct"}
+                        </span>
+                        <ArrowRightIcon
+                          className={`size-3 ${isPaused ? "text-amber-500" : "text-emerald-500"}`}
+                        />
+                        <span
+                          className={`font-bold ${
+                            isPaused ? "text-amber-500" : "text-emerald-500"
+                          }`}
+                        >
+                          {item.newIp || currentIp}:8118
                         </span>
                       </div>
 

@@ -3,7 +3,8 @@
  * IP Rotation State & Provider Management Store
  *
  * Yeh module Cloudflare WARP proxy ke sath attached providers ki state,
- * IP shift history (Old IP -> New IP), aur relative timestamps ko persist karta hai.
+ * IP shift history (Old IP -> New IP), relative timestamps, aur pause/stop
+ * state ko persist karta hai.
  */
 
 import * as NodeFS from "node:fs";
@@ -14,6 +15,8 @@ import {
   getDirectIp,
   getWarpProxyIp,
   startWarpBackground,
+  pauseWarp,
+  stopWarp,
   isWarpProxyAvailable,
 } from "./proxy.ts";
 
@@ -27,6 +30,8 @@ export interface RotatedProviderRecord {
 
 interface IpRotationStore {
   rotatedProviders: RotatedProviderRecord[];
+  lastIp?: string;
+  currentIp?: string;
 }
 
 function getStoreFilePath(): string {
@@ -57,7 +62,11 @@ function loadStore(): IpRotationStore {
       const raw = NodeFS.readFileSync(file, "utf-8");
       const data = JSON.parse(raw);
       if (Array.isArray(data?.rotatedProviders)) {
-        _inMemoryStore = { rotatedProviders: data.rotatedProviders };
+        _inMemoryStore = {
+          rotatedProviders: data.rotatedProviders,
+          lastIp: data.lastIp,
+          currentIp: data.currentIp,
+        };
         return _inMemoryStore;
       }
     }
@@ -77,10 +86,17 @@ function saveStore(store: IpRotationStore): void {
 export async function getIpRotationStatus() {
   const warpInfo = await getWarpDetailedStatus();
   const store = loadStore();
+
+  const directIp = warpInfo.isProxied ? store.lastIp || "201.18.218.29" : warpInfo.ip;
+  const activeWarpIp = warpInfo.isProxied ? warpInfo.ip : store.currentIp || warpInfo.ip;
+
   return {
     ok: true,
-    warpStatus: warpInfo.warpStatus,
+    warpStatus: warpInfo.warpStatus, // "running" | "paused" | "stopped"
     ip: warpInfo.ip,
+    port: "8118",
+    lastIp: store.lastIp || (warpInfo.isProxied ? "201.18.218.29" : ""),
+    lastPort: "8118",
     isProxied: warpInfo.isProxied,
     proxyPort: "127.0.0.1:8118",
     socks5Port: "127.0.0.1:40000",
@@ -90,16 +106,17 @@ export async function getIpRotationStatus() {
 
 export async function rotateAllIpRotation() {
   const store = loadStore();
-  const currentIp = await getWarpProxyIp();
   const result = await rotateWarpIp();
-  const newIp = result.newIp;
   const now = Date.now();
+
+  store.lastIp = result.oldIp;
+  store.currentIp = result.newIp;
 
   // Update all currently rotated providers with previous IP and new IP
   store.rotatedProviders = store.rotatedProviders.map((p) => ({
     ...p,
-    oldIp: p.newIp || currentIp,
-    newIp,
+    oldIp: p.newIp || result.oldIp,
+    newIp: result.newIp,
     rotatedAt: now,
   }));
   saveStore(store);
@@ -107,8 +124,9 @@ export async function rotateAllIpRotation() {
   return {
     ok: true,
     success: result.success,
-    oldIp: currentIp,
-    newIp,
+    oldIp: result.oldIp,
+    newIp: result.newIp,
+    port: "8118",
     rotatedAt: now,
     message: result.message || "Cloudflare WARP IP rotated successfully",
     rotatedProviders: store.rotatedProviders,
@@ -159,4 +177,4 @@ export async function detachProviderFromIpRotation(providerId: string) {
   };
 }
 
-export { startWarpBackground, isWarpProxyAvailable };
+export { startWarpBackground, pauseWarp, stopWarp, isWarpProxyAvailable };

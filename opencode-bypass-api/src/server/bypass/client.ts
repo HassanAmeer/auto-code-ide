@@ -148,10 +148,10 @@ export async function bypassChatStream(
     }, ms);
   };
 
-  // Initial connection timeout: If upstream server doesn't respond with headers within 45 seconds, abort.
+  // Initial connection timeout: If upstream server doesn't respond with headers within 25 seconds, abort.
   resetTimeout(
-    45_000,
-    `[opencode-bypass] HTTP 408 Request Timeout: Model '${options.model}' ke upstream server ne 45 seconds mein response shuru nahi kiya. Upstream server busy ya model queue mein ho sakta hai. Settings se IP rotate karein ya koi doosra model chunein.`,
+    25_000,
+    `[opencode-bypass] HTTP 408 Request Timeout: Model '${options.model}' ke upstream server ne 25 seconds mein response shuru nahi kiya. Upstream server busy ya model queue mein atka hua hai. Settings me ja kar IP Rotate karein ya koi doosra model chunein.`,
   );
 
   const fetchOptions: any = {
@@ -189,23 +189,26 @@ export async function bypassChatStream(
       errorDetail = parsed?.message || parsed?.error?.message || parsed?.error || rawText.trim();
     } catch {}
 
+    const retryAfter = res.headers?.get?.("retry-after") || res.headers?.get?.("x-ratelimit-reset");
+    const resetInfo = retryAfter ? ` (Reset after: ${retryAfter}s)` : "";
+
     if (res.status === 429) {
       throw new Error(
-        `[opencode-bypass] HTTP 429 Rate Limit Exceeded (Limit Full): Model '${options.model}' ki free limit/quota full ho chuki hai. Upstream response: ${errorDetail}`,
+        `[opencode-bypass] HTTP 429 Rate Limit Exceeded (Limit Full)${resetInfo}: Model '${options.model}' ki free limit/quota full ho chuki hai.\n\nUpstream Raw Response:\n${errorDetail}`,
       );
     }
     if (res.status === 502 || res.status === 503 || res.status === 504) {
       throw new Error(
-        `[opencode-bypass] HTTP ${res.status} Service Unavailable: Upstream server busy ya overloaded hai. Upstream response: ${errorDetail}`,
+        `[opencode-bypass] HTTP ${res.status} Service Unavailable: Upstream server busy ya overloaded hai.\n\nUpstream Response:\n${errorDetail}`,
       );
     }
     throw new Error(`[opencode-bypass] HTTP ${res.status}: ${errorDetail}`);
   }
 
-  // Once headers are received ok, set streaming idle heartbeat timeout (35 seconds between chunks)
+  // Once headers are received ok, set streaming idle heartbeat timeout (25 seconds between chunks)
   resetTimeout(
-    35_000,
-    `[opencode-bypass] HTTP 408 Request Timeout: Model '${options.model}' ka stream stall ho gaya (35s se koi token receive nahi hua). Upstream server busy ya limit hit ho sakti hai.`,
+    25_000,
+    `[opencode-bypass] HTTP 408 Request Timeout: Model '${options.model}' ka stream stall ho gaya (25s se koi token receive nahi hua). Upstream server busy ya limit hit ho sakti hai.`,
   );
 
   const decoder = new TextDecoder();

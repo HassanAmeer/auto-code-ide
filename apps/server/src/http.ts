@@ -2725,6 +2725,30 @@ export const layerIpRotationStartWarpRoute = HttpRouter.add(
   }),
 );
 
+export const layerIpRotationPauseRoute = HttpRouter.add(
+  "POST",
+  "/api/ip-rotation/pause",
+  Effect.gen(function* () {
+    const { pauseWarp } = yield* Effect.promise(
+      () => import("@t3tools/provider-opencodebypasssetup/server"),
+    );
+    const result = yield* Effect.promise(() => pauseWarp());
+    return HttpServerResponse.jsonUnsafe(result);
+  }),
+);
+
+export const layerIpRotationStopRoute = HttpRouter.add(
+  "POST",
+  "/api/ip-rotation/stop",
+  Effect.gen(function* () {
+    const { stopWarp } = yield* Effect.promise(
+      () => import("@t3tools/provider-opencodebypasssetup/server"),
+    );
+    const result = yield* Effect.promise(() => stopWarp());
+    return HttpServerResponse.jsonUnsafe(result);
+  }),
+);
+
 export const layerIpRotationRotateRoute = HttpRouter.add(
   "POST",
   "/api/ip-rotation/rotate",

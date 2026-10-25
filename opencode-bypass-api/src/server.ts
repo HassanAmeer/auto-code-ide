@@ -9,6 +9,8 @@ export {
   getDirectIp,
   getWarpDetailedStatus,
   startWarpBackground,
+  pauseWarp,
+  stopWarp,
   isWarpProxyAvailable,
   rotateWarpIp,
   getCurrentSession,

@@ -720,103 +720,81 @@ export const OpenCodeBypassSetupDriver: ProviderDriver<
                     // If stream encountered an error, mark turn as failed and emit error card
                     if (aiLogError !== null) {
                       // 1. Immediately complete reasoning item so it never hangs in "Thinking..."
-                      if (hasEmittedReasoning) {
-                        yield* Queue.offer(eventsQueue, {
-                          type: "turn_item.updated",
-                          driver: DRIVER_KIND,
-                          turnItem: {
-                            id: reasoningTurnItemId,
-                            threadId: turnInput.threadId,
-                            runId: turnInput.runId,
-                            nodeId: turnInput.rootNodeId,
-                            providerThreadId: turnInput.providerThread.id,
-                            providerTurnId,
-                            nativeItemRef: null,
-                            parentItemId: null,
-                            ordinal: reasoningOrdinal,
-                            status: "completed",
-                            title: "Thinking",
-                            startedAt: turnStartedAt,
-                            completedAt: finishedTime,
-                            updatedAt: finishedTime,
-                            type: "reasoning",
-                            text: accumulatedReasoning,
-                            streaming: false,
-                          },
-                        });
-                      }
+                      yield* Queue.offer(eventsQueue, {
+                        type: "turn_item.updated",
+                        driver: DRIVER_KIND,
+                        turnItem: {
+                          id: reasoningTurnItemId,
+                          threadId: turnInput.threadId,
+                          runId: turnInput.runId,
+                          nodeId: turnInput.rootNodeId,
+                          providerThreadId: turnInput.providerThread.id,
+                          providerTurnId,
+                          nativeItemRef: null,
+                          parentItemId: null,
+                          ordinal: reasoningOrdinal,
+                          status: "completed",
+                          title: "Thinking",
+                          startedAt: turnStartedAt,
+                          completedAt: finishedTime,
+                          updatedAt: finishedTime,
+                          type: "reasoning",
+                          text:
+                            accumulatedReasoning ||
+                            "Turn stopped due to upstream provider response.",
+                          streaming: false,
+                        },
+                      });
 
-                      // 2. Finalize assistant message
-                      if (accumulatedText.trim().length > 0) {
-                        yield* Queue.offer(eventsQueue, {
-                          type: "message.updated",
-                          driver: DRIVER_KIND,
-                          message: {
-                            id: assistantMessageId,
-                            threadId: turnInput.threadId,
-                            runId: turnInput.runId,
-                            nodeId: turnInput.rootNodeId,
-                            role: "assistant",
-                            text: accumulatedText,
-                            attachments: [],
-                            streaming: false,
-                            createdBy: "agent",
-                            creationSource: "provider",
-                            createdAt: turnStartedAt,
-                            updatedAt: finishedTime,
-                          },
-                        });
-                        yield* Queue.offer(eventsQueue, {
-                          type: "turn_item.updated",
-                          driver: DRIVER_KIND,
-                          turnItem: {
-                            id: assistantTurnItemId,
-                            threadId: turnInput.threadId,
-                            runId: turnInput.runId,
-                            nodeId: turnInput.rootNodeId,
-                            providerThreadId: turnInput.providerThread.id,
-                            providerTurnId,
-                            nativeItemRef: null,
-                            parentItemId: null,
-                            ordinal: itemOrdinal,
-                            status: "completed",
-                            title: null,
-                            startedAt: turnStartedAt,
-                            completedAt: finishedTime,
-                            updatedAt: finishedTime,
-                            type: "assistant_message",
-                            messageId: assistantMessageId,
-                            text: accumulatedText,
-                            streaming: false,
-                          },
-                        });
-                      } else {
-                        // Mark assistant message item as failed with no streaming
-                        yield* Queue.offer(eventsQueue, {
-                          type: "turn_item.updated",
-                          driver: DRIVER_KIND,
-                          turnItem: {
-                            id: assistantTurnItemId,
-                            threadId: turnInput.threadId,
-                            runId: turnInput.runId,
-                            nodeId: turnInput.rootNodeId,
-                            providerThreadId: turnInput.providerThread.id,
-                            providerTurnId,
-                            nativeItemRef: null,
-                            parentItemId: null,
-                            ordinal: itemOrdinal,
-                            status: "failed",
-                            title: null,
-                            startedAt: turnStartedAt,
-                            completedAt: finishedTime,
-                            updatedAt: finishedTime,
-                            type: "assistant_message",
-                            messageId: assistantMessageId,
-                            text: "",
-                            streaming: false,
-                          },
-                        });
-                      }
+                      // 2. Finalize assistant message with clear formatted error notice
+                      const errorNotice = `⚠️ **Provider Error (HTTP ${errorCode})**\n> **Model:** \`${selectedModel}\`\n> **Issue:** ${isUsageLimit ? "Usage Limit Reached (Limit Full)" : isTimeout ? "Request Timeout" : "Provider Error"}\n\n${aiLogError}`;
+                      const finalText =
+                        accumulatedText.trim().length > 0
+                          ? `${accumulatedText}\n\n${errorNotice}`
+                          : errorNotice;
+
+                      yield* Queue.offer(eventsQueue, {
+                        type: "message.updated",
+                        driver: DRIVER_KIND,
+                        message: {
+                          id: assistantMessageId,
+                          threadId: turnInput.threadId,
+                          runId: turnInput.runId,
+                          nodeId: turnInput.rootNodeId,
+                          role: "assistant",
+                          text: finalText,
+                          attachments: [],
+                          streaming: false,
+                          createdBy: "agent",
+                          creationSource: "provider",
+                          createdAt: turnStartedAt,
+                          updatedAt: finishedTime,
+                        },
+                      });
+                      yield* Queue.offer(eventsQueue, {
+                        type: "turn_item.updated",
+                        driver: DRIVER_KIND,
+                        turnItem: {
+                          id: assistantTurnItemId,
+                          threadId: turnInput.threadId,
+                          runId: turnInput.runId,
+                          nodeId: turnInput.rootNodeId,
+                          providerThreadId: turnInput.providerThread.id,
+                          providerTurnId,
+                          nativeItemRef: null,
+                          parentItemId: null,
+                          ordinal: itemOrdinal,
+                          status: "completed",
+                          title: null,
+                          startedAt: turnStartedAt,
+                          completedAt: finishedTime,
+                          updatedAt: finishedTime,
+                          type: "assistant_message",
+                          messageId: assistantMessageId,
+                          text: finalText,
+                          streaming: false,
+                        },
+                      });
 
                       // 3. Mark provider turn as failed
                       yield* Queue.offer(eventsQueue, {
@@ -856,6 +834,7 @@ export const OpenCodeBypassSetupDriver: ProviderDriver<
                         failureItemOrdinal: NonNegativeInt.make(turnOrdinal * 100 + 2),
                         threadDisposition: "reusable",
                       });
+                      Queue.flushUnsafe(eventsQueue);
                       return;
                     }
 

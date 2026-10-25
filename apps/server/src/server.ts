@@ -696,6 +696,8 @@ const layerMakeRoutes = Layer.mergeAll(
     ServerHttp.layerOpenCodeBypassSessionCheckRoute,
     ServerHttp.layerIpRotationStatusRoute,
     ServerHttp.layerIpRotationStartWarpRoute,
+    ServerHttp.layerIpRotationPauseRoute,
+    ServerHttp.layerIpRotationStopRoute,
     ServerHttp.layerIpRotationRotateRoute,
     ServerHttp.layerIpRotationAttachRoute,
     ServerHttp.layerIpRotationDetachRoute,

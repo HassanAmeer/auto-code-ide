@@ -37,6 +37,8 @@ export {
   getDirectIp,
   getWarpDetailedStatus,
   startWarpBackground,
+  pauseWarp,
+  stopWarp,
   isWarpProxyAvailable,
 } from "./proxy.ts";
 
