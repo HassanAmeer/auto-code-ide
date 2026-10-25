@@ -4,15 +4,18 @@ import { Spinner } from "~/components/ui/spinner";
 
 import {
   AlertTriangleIcon,
+  ArrowRightIcon,
   ArrowUpCircleIcon,
   CopyIcon,
   DownloadIcon,
   ExternalLinkIcon,
+  NetworkIcon,
   PlusIcon,
   RefreshCwIcon,
   Trash2Icon,
   XIcon,
 } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { Lock as LockGlyph, LockOpen } from "lucide";
 import * as Arr from "effect/Array";
 import * as Result from "effect/Result";
@@ -37,7 +40,6 @@ import {
   toCustomModelSetting,
 } from "@t3tools/shared/model";
 import { cn } from "../../lib/utils";
-import { OpenCodeBypassWarpControl } from "./OpenCodeBypassWarpControl";
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { normalizeProviderAccentColor } from "../../providerInstances";
 import { Badge } from "../ui/badge";
@@ -1040,8 +1042,26 @@ export function ProviderInstanceCard({
     <>
       {instance.driver === "opencodebypasssetup" ? (
         <>
-          <div className="mb-4">
-            <OpenCodeBypassWarpControl readOnly={readOnly} />
+          <div className="mb-4 flex items-center justify-between rounded-xl border border-sky-500/25 bg-sky-500/5 p-3 text-xs">
+            <div className="flex items-center gap-2">
+              <NetworkIcon className="size-4 shrink-0 text-sky-500" />
+              <div>
+                <span className="font-semibold text-foreground">
+                  IP Rotation & Session Tokens Moved
+                </span>
+                <p className="text-[11px] text-muted-foreground">
+                  Cloudflare WARP proxy status, session tokens, and IP rotation are now managed in
+                  the dedicated IP Rotation page.
+                </p>
+              </div>
+            </div>
+            <Link
+              to="/settings/ip-rotation"
+              className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-sky-500/30 bg-sky-500/10 px-2.5 py-1 text-xs font-medium text-sky-500 transition-all hover:bg-sky-500/20 active:scale-95"
+            >
+              Open IP Rotation
+              <ArrowRightIcon className="size-3" />
+            </Link>
           </div>
           <div className="mb-4 rounded-lg border border-primary/20 bg-primary/5 p-3.5 text-xs text-muted-foreground">
             <div className="font-semibold text-foreground flex items-center gap-1.5 mb-1">

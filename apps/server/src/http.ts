@@ -2811,6 +2811,39 @@ export const layerIpRotationDetachRoute = HttpRouter.add(
   }),
 );
 
+export const layerIpRotationSessionCheckRoute = HttpRouter.add(
+  "POST",
+  "/api/ip-rotation/session/check",
+  Effect.gen(function* () {
+    const { checkActiveSession } = yield* Effect.promise(
+      () => import("@t3tools/provider-opencodebypasssetup/server"),
+    );
+    const sessionInfo = checkActiveSession();
+    return HttpServerResponse.jsonUnsafe({
+      ok: true,
+      session: sessionInfo.session,
+      sessionValid: sessionInfo.sessionValid,
+    });
+  }),
+);
+
+export const layerIpRotationSessionClearRoute = HttpRouter.add(
+  "POST",
+  "/api/ip-rotation/session/clear",
+  Effect.gen(function* () {
+    const { clearAndMintSession } = yield* Effect.promise(
+      () => import("@t3tools/provider-opencodebypasssetup/server"),
+    );
+    const sessionInfo = clearAndMintSession();
+    return HttpServerResponse.jsonUnsafe({
+      ok: true,
+      session: sessionInfo.session,
+      sessionValid: sessionInfo.sessionValid,
+      message: "Fresh canonical session minted",
+    });
+  }),
+);
+
 export const layerDbInspectRoute = HttpRouter.add(
   "POST",
   "/api/db/inspect",

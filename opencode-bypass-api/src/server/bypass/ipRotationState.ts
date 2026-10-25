@@ -19,6 +19,7 @@ import {
   stopWarp,
   isWarpProxyAvailable,
 } from "./proxy.ts";
+import { checkActiveSession, clearAndMintSession } from "./session.ts";
 
 export interface RotatedProviderRecord {
   id: string;
@@ -86,9 +87,7 @@ function saveStore(store: IpRotationStore): void {
 export async function getIpRotationStatus() {
   const warpInfo = await getWarpDetailedStatus();
   const store = loadStore();
-
-  const directIp = warpInfo.isProxied ? store.lastIp || "201.18.218.29" : warpInfo.ip;
-  const activeWarpIp = warpInfo.isProxied ? warpInfo.ip : store.currentIp || warpInfo.ip;
+  const sessionInfo = checkActiveSession();
 
   return {
     ok: true,
@@ -101,6 +100,8 @@ export async function getIpRotationStatus() {
     proxyPort: "127.0.0.1:8118",
     socks5Port: "127.0.0.1:40000",
     rotatedProviders: store.rotatedProviders,
+    session: sessionInfo.session,
+    sessionValid: sessionInfo.sessionValid,
   };
 }
 
@@ -108,6 +109,7 @@ export async function rotateAllIpRotation() {
   const store = loadStore();
   const result = await rotateWarpIp();
   const now = Date.now();
+  const sessionInfo = clearAndMintSession();
 
   store.lastIp = result.oldIp;
   store.currentIp = result.newIp;
@@ -130,6 +132,8 @@ export async function rotateAllIpRotation() {
     rotatedAt: now,
     message: result.message || "Cloudflare WARP IP rotated successfully",
     rotatedProviders: store.rotatedProviders,
+    session: sessionInfo.session,
+    sessionValid: sessionInfo.sessionValid,
   };
 }
 

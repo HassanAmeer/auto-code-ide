@@ -16,6 +16,11 @@ import {
   LayersIcon,
   BotIcon,
   AlertCircleIcon,
+  KeyIcon,
+  CopyIcon,
+  CheckCircle2Icon,
+  RefreshCwIcon,
+  SearchIcon,
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { toastManager } from "../ui/toast";
@@ -41,6 +46,8 @@ interface IpRotationStatusResponse {
   proxyPort: string;
   socks5Port: string;
   rotatedProviders: RotatedProviderItem[];
+  session?: string;
+  sessionValid?: boolean;
 }
 
 interface AvailableProviderItem {
@@ -131,6 +138,13 @@ export function IpRotationSettingsPage() {
   const [rotatedProviders, setRotatedProviders] = useState<RotatedProviderItem[]>([]);
   const [customProviders, setCustomProviders] = useState<CustomProvider[]>([]);
 
+  // Session management state (OpenCode Bypass)
+  const [session, setSession] = useState<string>("Checking...");
+  const [sessionValid, setSessionValid] = useState<boolean>(true);
+  const [checkingSession, setCheckingSession] = useState<boolean>(false);
+  const [clearingSession, setClearingSession] = useState<boolean>(false);
+  const [copiedSession, setCopiedSession] = useState<boolean>(false);
+
   // Selection for Section 2
   const [selectedProviderIds, setSelectedProviderIds] = useState<Set<string>>(new Set());
 
@@ -165,6 +179,8 @@ export function IpRotationSettingsPage() {
         setIsProxied(Boolean(data.isProxied));
         if (data.proxyPort) setProxyPort(data.proxyPort);
         if (data.socks5Port) setSocks5Port(data.socks5Port);
+        if (data.session) setSession(data.session);
+        if (data.sessionValid !== undefined) setSessionValid(Boolean(data.sessionValid));
         if (Array.isArray(data.rotatedProviders)) {
           setRotatedProviders(data.rotatedProviders);
         }
@@ -344,13 +360,15 @@ export function IpRotationSettingsPage() {
         setPort(data.port || "8118");
         setWarpStatus("running");
         setIsProxied(true);
+        if (data.session) setSession(data.session);
+        if (data.sessionValid !== undefined) setSessionValid(Boolean(data.sessionValid));
         if (Array.isArray(data.rotatedProviders)) {
           setRotatedProviders(data.rotatedProviders);
         }
         toastManager.add({
           type: "success",
           title: "IP Rotated Successfully",
-          description: `Shifted from ${data.oldIp}:${data.port || "8118"} ➔ ${data.newIp}:${data.port || "8118"}`,
+          description: `Shifted from ${data.oldIp}:${data.port || "8118"} ➔ ${data.newIp}:${data.port || "8118"}${data.session ? " | Fresh session minted" : ""}`,
         });
       } else {
         toastManager.add({
@@ -369,6 +387,87 @@ export function IpRotationSettingsPage() {
       setIsRotatingIp(false);
       void fetchStatus(false);
     }
+  };
+
+  // Check active session token (OpenCode Bypass)
+  const handleCheckSession = async (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setCheckingSession(true);
+    try {
+      const res = await fetch("/api/ip-rotation/session/check", { method: "POST" });
+      if (res.ok) {
+        const data = await res.json();
+        setSessionValid(Boolean(data.sessionValid));
+        if (data.session) setSession(data.session);
+        toastManager.add({
+          type: data.sessionValid ? "success" : "warning",
+          title: data.sessionValid ? "Session ID Valid" : "Session Format Non-Canonical",
+          description: data.sessionValid
+            ? `Canonical token active (${data.session.slice(0, 16)}...). Ready for IP rotation.`
+            : "Token layout non-canonical. Click 'Change / Clear' to renew.",
+        });
+      } else {
+        toastManager.add({
+          type: "error",
+          title: "Session Check Failed",
+          description: "Could not verify session state.",
+        });
+      }
+    } catch (err: any) {
+      toastManager.add({
+        type: "error",
+        title: "Session Error",
+        description: err?.message || "Network error while checking session.",
+      });
+    } finally {
+      setCheckingSession(false);
+    }
+  };
+
+  // Clear & Mint fresh canonical session token (OpenCode Bypass)
+  const handleClearAndMintSession = async (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setClearingSession(true);
+    try {
+      const res = await fetch("/api/ip-rotation/session/clear", { method: "POST" });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.session) setSession(data.session);
+        setSessionValid(true);
+        toastManager.add({
+          type: "success",
+          title: "Fresh Session Generated",
+          description: `New Session ID minted: ${data.session?.slice(0, 18)}...`,
+        });
+      } else {
+        toastManager.add({
+          type: "error",
+          title: "Session Reset Failed",
+          description: "Server could not mint fresh session.",
+        });
+      }
+    } catch (err: any) {
+      toastManager.add({
+        type: "error",
+        title: "Reset Error",
+        description: err?.message || "Could not clear and mint session.",
+      });
+    } finally {
+      setClearingSession(false);
+    }
+  };
+
+  const handleCopySession = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!session || session === "Checking..." || session === "Unknown") return;
+    void navigator.clipboard?.writeText(session);
+    setCopiedSession(true);
+    toastManager.add({
+      type: "info",
+      title: "Session Copied",
+      description: "Session token copied to clipboard.",
+    });
+    setTimeout(() => setCopiedSession(false), 2000);
   };
 
   // Section 2: Rotate Selected Providers
@@ -551,6 +650,25 @@ export function IpRotationSettingsPage() {
             <span className="font-mono text-[10px] text-muted-foreground/70">
               Bridge: {proxyPort} ➔ {socks5Port}
             </span>
+
+            {/* Session Token Quick Pill */}
+            {session && session !== "Loading..." && session !== "Checking..." && (
+              <div className="flex items-center gap-1 rounded-lg border border-border/40 bg-muted/40 px-2 py-1 text-xs">
+                <KeyIcon className="size-3 text-amber-500/80" />
+                <span className="text-[10px] uppercase font-semibold text-muted-foreground/70">
+                  Session:
+                </span>
+                <span className="font-mono text-[11px] text-muted-foreground">
+                  {session.slice(0, 14)}...
+                </span>
+                <span
+                  className={`size-1.5 rounded-full ${
+                    sessionValid ? "bg-emerald-500" : "bg-amber-500"
+                  }`}
+                  title={sessionValid ? "Canonical Session" : "Non-canonical"}
+                />
+              </div>
+            )}
           </div>
 
           {/* Action buttons with circular spinners */}
@@ -709,9 +827,132 @@ export function IpRotationSettingsPage() {
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {unrotatedProviders.map((provider) => {
                 const isSelected = selectedProviderIds.has(provider.id);
+                const isOpenCode = provider.id === "builtin_opencode_bypass";
+
+                if (isOpenCode) {
+                  return (
+                    <div
+                      key={provider.id}
+                      onClick={() => toggleSelectProvider(provider.id)}
+                      className={`group relative flex flex-col gap-2 rounded-xl border p-2.5 transition-all select-none sm:col-span-2 ${
+                        isSelected
+                          ? "border-sky-500/50 bg-sky-500/8 shadow-sm"
+                          : "border-border/50 bg-background/60 hover:border-border/80 hover:bg-muted/30"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex min-w-0 items-center gap-2">
+                          {/* iOS Circular Checkbox */}
+                          <div
+                            className={`flex size-4.5 shrink-0 items-center justify-center rounded-full border transition-all ${
+                              isSelected
+                                ? "border-sky-500 bg-sky-500 text-white shadow-xs"
+                                : "border-border/70 bg-card group-hover:border-foreground/40"
+                            }`}
+                          >
+                            {isSelected && <CheckIcon className="size-3 stroke-[3]" />}
+                          </div>
+
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <BotIcon className="size-3.5 shrink-0 text-sky-400" />
+                              <span className="truncate text-xs font-semibold text-foreground">
+                                {provider.name}
+                              </span>
+                              <span className="rounded bg-sky-500/10 px-1.5 py-0.2 text-[9px] font-bold text-sky-500 uppercase">
+                                Free Gate
+                              </span>
+                            </div>
+                            <p className="truncate font-mono text-[10px] text-muted-foreground/80">
+                              Internal Engine SOCKS5 Bridge • 127.0.0.1:8118
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="ml-2 flex shrink-0 items-center">
+                          <span className="rounded-md border border-border/30 bg-muted/30 px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground">
+                            Direct VPS IP
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* OpenCode Session Management Toolbar */}
+                      <div
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/40 bg-card/70 p-1.5 backdrop-blur-xs"
+                      >
+                        {/* Session Token Badge */}
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <KeyIcon className="size-3 shrink-0 text-amber-500/80" />
+                          <span className="text-[10px] font-semibold uppercase text-muted-foreground">
+                            Session:
+                          </span>
+                          <span className="font-mono text-[11px] text-foreground truncate max-w-[130px] sm:max-w-[220px]">
+                            {session ? `${session.slice(0, 16)}...` : "None"}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={handleCopySession}
+                            title="Copy full session token"
+                            className="rounded p-1 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                          >
+                            {copiedSession ? (
+                              <CheckCircle2Icon className="size-3 text-emerald-500" />
+                            ) : (
+                              <CopyIcon className="size-3" />
+                            )}
+                          </button>
+                          <span
+                            className={`rounded px-1.5 py-0.2 text-[9px] font-bold uppercase ${
+                              sessionValid
+                                ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+                                : "bg-amber-500/10 text-amber-500 border border-amber-500/20"
+                            }`}
+                          >
+                            {sessionValid ? "Valid" : "Invalid"}
+                          </span>
+                        </div>
+
+                        {/* Action Buttons: Check Session & Change Session */}
+                        <div className="flex items-center gap-1.5">
+                          <Button
+                            variant="outline"
+                            size="xs"
+                            onClick={handleCheckSession}
+                            disabled={checkingSession}
+                            className="h-6 rounded-md border-border/50 px-2 text-[10px] hover:bg-muted active:scale-95"
+                          >
+                            {checkingSession ? (
+                              <Loader2Icon className="mr-1 size-2.5 animate-spin text-muted-foreground" />
+                            ) : (
+                              <SearchIcon className="mr-1 size-2.5 text-muted-foreground" />
+                            )}
+                            Check Session
+                          </Button>
+
+                          <Button
+                            variant="secondary"
+                            size="xs"
+                            onClick={handleClearAndMintSession}
+                            disabled={clearingSession}
+                            className="h-6 rounded-md border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 px-2 text-[10px] font-medium hover:bg-amber-500/20 active:scale-95"
+                          >
+                            {clearingSession ? (
+                              <Loader2Icon className="mr-1 size-2.5 animate-spin text-amber-500" />
+                            ) : (
+                              <RefreshCwIcon className="mr-1 size-2.5 text-amber-500" />
+                            )}
+                            Change Session
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
                 return (
                   <div
                     key={provider.id}
@@ -828,73 +1069,145 @@ export function IpRotationSettingsPage() {
                     }`}
                   >
                     {/* Provider info & Tag */}
-                    <div className="flex min-w-0 items-center gap-2">
-                      <div
-                        className={`flex size-7 shrink-0 items-center justify-center rounded-lg ${
-                          isPaused
-                            ? "bg-amber-500/15 text-amber-500"
-                            : "bg-emerald-500/10 text-emerald-500"
-                        }`}
-                      >
-                        <ShieldCheckIcon className="size-4" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="truncate text-xs font-semibold text-foreground">
-                            {item.name}
-                          </span>
-                          <span
-                            className={`rounded px-1.5 py-0.2 text-[9px] font-bold uppercase ${
+                    <div className="flex w-full flex-col gap-2">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <div
+                            className={`flex size-7 shrink-0 items-center justify-center rounded-lg ${
                               isPaused
-                                ? "bg-amber-500/20 text-amber-500 border border-amber-500/30"
-                                : "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+                                ? "bg-amber-500/15 text-amber-500"
+                                : "bg-emerald-500/10 text-emerald-500"
                             }`}
                           >
-                            {isPaused ? "Paused" : "WARP Routed"}
-                          </span>
+                            <ShieldCheckIcon className="size-4" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="truncate text-xs font-semibold text-foreground">
+                                {item.name}
+                              </span>
+                              <span
+                                className={`rounded px-1.5 py-0.2 text-[9px] font-bold uppercase ${
+                                  isPaused
+                                    ? "bg-amber-500/20 text-amber-500 border border-amber-500/30"
+                                    : "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+                                }`}
+                              >
+                                {isPaused ? "Paused" : "WARP Routed"}
+                              </span>
+                            </div>
+
+                            {/* Relative Timestamp */}
+                            <p className="text-[10px] text-muted-foreground">
+                              Shifted {formatTimeAgo(item.rotatedAt, now)}
+                            </p>
+                          </div>
                         </div>
 
-                        {/* Relative Timestamp */}
-                        <p className="text-[10px] text-muted-foreground">
-                          Shifted {formatTimeAgo(item.rotatedAt, now)}
-                        </p>
-                      </div>
-                    </div>
+                        {/* IP Shift Indicator & Remove Action */}
+                        <div className="flex flex-wrap items-center gap-2 self-end sm:self-auto">
+                          {/* IP Shift Pill: Old IP in Muted Gray, New IP in Green (or Orange if paused) */}
+                          <div className="flex items-center gap-1 rounded-lg border border-border/50 bg-muted/40 px-2 py-0.5 font-mono text-[11px]">
+                            <span className="text-muted-foreground">
+                              {item.oldIp ? `${item.oldIp}:8118` : "Direct"}
+                            </span>
+                            <ArrowRightIcon
+                              className={`size-3 ${isPaused ? "text-amber-500" : "text-emerald-500"}`}
+                            />
+                            <span
+                              className={`font-bold ${
+                                isPaused ? "text-amber-500" : "text-emerald-500"
+                              }`}
+                            >
+                              {item.newIp || currentIp}:8118
+                            </span>
+                          </div>
 
-                    {/* IP Shift Indicator & Remove Action */}
-                    <div className="flex flex-wrap items-center gap-2 self-end sm:self-auto">
-                      {/* IP Shift Pill: Old IP in Muted Gray, New IP in Green (or Orange if paused) */}
-                      <div className="flex items-center gap-1 rounded-lg border border-border/50 bg-muted/40 px-2 py-0.5 font-mono text-[11px]">
-                        <span className="text-muted-foreground">
-                          {item.oldIp ? `${item.oldIp}:8118` : "Direct"}
-                        </span>
-                        <ArrowRightIcon
-                          className={`size-3 ${isPaused ? "text-amber-500" : "text-emerald-500"}`}
-                        />
-                        <span
-                          className={`font-bold ${
-                            isPaused ? "text-amber-500" : "text-emerald-500"
-                          }`}
-                        >
-                          {item.newIp || currentIp}:8118
-                        </span>
+                          {/* Remove Button */}
+                          <Button
+                            variant="outline"
+                            size="xs"
+                            onClick={() => void handleRemoveRotated(item)}
+                            disabled={isRemoving}
+                            className="h-6.5 rounded-lg border-rose-500/30 text-[11px] font-medium text-rose-500 transition-all hover:bg-rose-500/10 active:scale-95"
+                          >
+                            {isRemoving ? (
+                              <Loader2Icon className="mr-1 size-3 animate-spin text-rose-500" />
+                            ) : (
+                              <XIcon className="mr-1 size-3" />
+                            )}
+                            Remove
+                          </Button>
+                        </div>
                       </div>
 
-                      {/* Remove Button */}
-                      <Button
-                        variant="outline"
-                        size="xs"
-                        onClick={() => void handleRemoveRotated(item)}
-                        disabled={isRemoving}
-                        className="h-6.5 rounded-lg border-rose-500/30 text-[11px] font-medium text-rose-500 transition-all hover:bg-rose-500/10 active:scale-95"
-                      >
-                        {isRemoving ? (
-                          <Loader2Icon className="mr-1 size-3 animate-spin text-rose-500" />
-                        ) : (
-                          <XIcon className="mr-1 size-3" />
-                        )}
-                        Remove
-                      </Button>
+                      {/* OpenCode Session Management Toolbar (when OpenCode is rotated) */}
+                      {item.id === "builtin_opencode_bypass" && (
+                        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/40 bg-card/70 p-1.5 backdrop-blur-xs w-full">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <KeyIcon className="size-3 shrink-0 text-amber-500/80" />
+                            <span className="text-[10px] font-semibold uppercase text-muted-foreground">
+                              Session:
+                            </span>
+                            <span className="font-mono text-[11px] text-foreground truncate max-w-[130px] sm:max-w-[220px]">
+                              {session ? `${session.slice(0, 16)}...` : "None"}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={handleCopySession}
+                              title="Copy full session token"
+                              className="rounded p-1 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                              {copiedSession ? (
+                                <CheckCircle2Icon className="size-3 text-emerald-500" />
+                              ) : (
+                                <CopyIcon className="size-3" />
+                              )}
+                            </button>
+                            <span
+                              className={`rounded px-1.5 py-0.2 text-[9px] font-bold uppercase ${
+                                sessionValid
+                                  ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+                                  : "bg-amber-500/10 text-amber-500 border border-amber-500/20"
+                              }`}
+                            >
+                              {sessionValid ? "Valid" : "Invalid"}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-1.5">
+                            <Button
+                              variant="outline"
+                              size="xs"
+                              onClick={handleCheckSession}
+                              disabled={checkingSession}
+                              className="h-6 rounded-md border-border/50 px-2 text-[10px] hover:bg-muted active:scale-95"
+                            >
+                              {checkingSession ? (
+                                <Loader2Icon className="mr-1 size-2.5 animate-spin text-muted-foreground" />
+                              ) : (
+                                <SearchIcon className="mr-1 size-2.5 text-muted-foreground" />
+                              )}
+                              Check Session
+                            </Button>
+
+                            <Button
+                              variant="secondary"
+                              size="xs"
+                              onClick={handleClearAndMintSession}
+                              disabled={clearingSession}
+                              className="h-6 rounded-md border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 px-2 text-[10px] font-medium hover:bg-amber-500/20 active:scale-95"
+                            >
+                              {clearingSession ? (
+                                <Loader2Icon className="mr-1 size-2.5 animate-spin text-amber-500" />
+                              ) : (
+                                <RefreshCwIcon className="mr-1 size-2.5 text-amber-500" />
+                              )}
+                              Change Session
+                            </Button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );

@@ -701,6 +701,8 @@ const layerMakeRoutes = Layer.mergeAll(
     ServerHttp.layerIpRotationRotateRoute,
     ServerHttp.layerIpRotationAttachRoute,
     ServerHttp.layerIpRotationDetachRoute,
+    ServerHttp.layerIpRotationSessionCheckRoute,
+    ServerHttp.layerIpRotationSessionClearRoute,
     ServerHttp.layerDbInspectRoute,
     ServerHttp.layerMcpSyncRoute,
     ServerHttp.layerWebFetchRoute,
