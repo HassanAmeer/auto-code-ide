@@ -12778,26 +12778,6 @@ export default function ChatView(props: ChatViewProps) {
                 />
               ) : null}
             </ThreadFindCanvas>
-
-            {/* Floating Pill on Mobile Chat when AI runs commands in Terminal */}
-            {isTerminalQuickBarOpen && terminalStoreState.mobileActiveTab === "chat" && (
-              <div className="md:hidden fixed bottom-24 right-4 z-40 animate-in fade-in slide-in-from-bottom-2">
-                <button
-                  type="button"
-                  onClick={() => terminalStore.setMobileActiveTab("terminal")}
-                  className="flex items-center gap-2 px-3.5 py-2 rounded-full bg-emerald-500/25 hover:bg-emerald-500/35 text-emerald-300 border border-emerald-500/40 backdrop-blur-xl shadow-xl text-xs font-medium cursor-pointer active:scale-95 transition-all"
-                >
-                  <span className="size-2 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.9)] animate-pulse" />
-                  <span>
-                    Terminal{" "}
-                    {terminalStoreState.unreadAiToolsCount > 0
-                      ? `(${terminalStoreState.unreadAiToolsCount} new)`
-                      : "Active"}
-                  </span>
-                  <span className="text-emerald-400 text-xs">➔</span>
-                </button>
-              </div>
-            )}
           </div>
           {/* end chat column wrapper */}
 
