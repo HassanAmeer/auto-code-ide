@@ -679,22 +679,185 @@ export const OpenCodeBypassSetupDriver: ProviderDriver<
                         const errorMsg = err instanceof Error ? err.message : String(err);
                         aiLogError = errorMsg;
                         console.error(`[OpenCodeBypass] ❌ bypassChatStream error:`, errorMsg);
-                        accumulatedText += `\n[Error: ${errorMsg}]`;
                       }
                     });
 
+                    const isUsageLimit =
+                      aiLogError !== null &&
+                      /429|rate limit|quota|limit full|too many requests/i.test(aiLogError);
+                    const isTimeout =
+                      aiLogError !== null && /timeout|408|timed out|stalled/i.test(aiLogError);
+                    const errorCode = isUsageLimit ? "429" : isTimeout ? "408" : "500";
+                    const errorStatusCode = isUsageLimit ? 429 : isTimeout ? 408 : 500;
+
                     updateAiModelLog(aiLogId, {
-                      status: aiLogError === null ? 200 : 500,
-                      statusText: aiLogError === null ? "completed" : "error",
+                      status: aiLogError === null ? 200 : errorStatusCode,
+                      statusText:
+                        aiLogError === null
+                          ? "completed"
+                          : isUsageLimit
+                            ? "Rate Limit Exceeded (Limit Full)"
+                            : isTimeout
+                              ? "Request Timeout"
+                              : "error",
                       durationMs: Date.now() - aiLogStartedAt,
                       state: aiLogError === null ? "completed" : "error",
-                      responseBody: accumulatedText,
+                      responseBody: accumulatedText || aiLogError || "",
                       ...(aiLogError === null
                         ? {}
-                        : { error: aiLogError, errorType: "stream_error" }),
+                        : {
+                            error: aiLogError,
+                            errorType: isUsageLimit
+                              ? "rate_limit"
+                              : isTimeout
+                                ? "timeout"
+                                : "stream_error",
+                          }),
                     });
 
                     const finishedTime = yield* DateTime.now;
+
+                    // If stream encountered an error, mark turn as failed and emit error card
+                    if (aiLogError !== null) {
+                      // 1. Immediately complete reasoning item so it never hangs in "Thinking..."
+                      if (hasEmittedReasoning) {
+                        yield* Queue.offer(eventsQueue, {
+                          type: "turn_item.updated",
+                          driver: DRIVER_KIND,
+                          turnItem: {
+                            id: reasoningTurnItemId,
+                            threadId: turnInput.threadId,
+                            runId: turnInput.runId,
+                            nodeId: turnInput.rootNodeId,
+                            providerThreadId: turnInput.providerThread.id,
+                            providerTurnId,
+                            nativeItemRef: null,
+                            parentItemId: null,
+                            ordinal: reasoningOrdinal,
+                            status: "completed",
+                            title: "Thinking",
+                            startedAt: turnStartedAt,
+                            completedAt: finishedTime,
+                            updatedAt: finishedTime,
+                            type: "reasoning",
+                            text: accumulatedReasoning,
+                            streaming: false,
+                          },
+                        });
+                      }
+
+                      // 2. Finalize assistant message
+                      if (accumulatedText.trim().length > 0) {
+                        yield* Queue.offer(eventsQueue, {
+                          type: "message.updated",
+                          driver: DRIVER_KIND,
+                          message: {
+                            id: assistantMessageId,
+                            threadId: turnInput.threadId,
+                            runId: turnInput.runId,
+                            nodeId: turnInput.rootNodeId,
+                            role: "assistant",
+                            text: accumulatedText,
+                            attachments: [],
+                            streaming: false,
+                            createdBy: "agent",
+                            creationSource: "provider",
+                            createdAt: turnStartedAt,
+                            updatedAt: finishedTime,
+                          },
+                        });
+                        yield* Queue.offer(eventsQueue, {
+                          type: "turn_item.updated",
+                          driver: DRIVER_KIND,
+                          turnItem: {
+                            id: assistantTurnItemId,
+                            threadId: turnInput.threadId,
+                            runId: turnInput.runId,
+                            nodeId: turnInput.rootNodeId,
+                            providerThreadId: turnInput.providerThread.id,
+                            providerTurnId,
+                            nativeItemRef: null,
+                            parentItemId: null,
+                            ordinal: itemOrdinal,
+                            status: "completed",
+                            title: null,
+                            startedAt: turnStartedAt,
+                            completedAt: finishedTime,
+                            updatedAt: finishedTime,
+                            type: "assistant_message",
+                            messageId: assistantMessageId,
+                            text: accumulatedText,
+                            streaming: false,
+                          },
+                        });
+                      } else {
+                        // Mark assistant message item as failed with no streaming
+                        yield* Queue.offer(eventsQueue, {
+                          type: "turn_item.updated",
+                          driver: DRIVER_KIND,
+                          turnItem: {
+                            id: assistantTurnItemId,
+                            threadId: turnInput.threadId,
+                            runId: turnInput.runId,
+                            nodeId: turnInput.rootNodeId,
+                            providerThreadId: turnInput.providerThread.id,
+                            providerTurnId,
+                            nativeItemRef: null,
+                            parentItemId: null,
+                            ordinal: itemOrdinal,
+                            status: "failed",
+                            title: null,
+                            startedAt: turnStartedAt,
+                            completedAt: finishedTime,
+                            updatedAt: finishedTime,
+                            type: "assistant_message",
+                            messageId: assistantMessageId,
+                            text: "",
+                            streaming: false,
+                          },
+                        });
+                      }
+
+                      // 3. Mark provider turn as failed
+                      yield* Queue.offer(eventsQueue, {
+                        type: "provider_turn.updated",
+                        driver: DRIVER_KIND,
+                        providerTurn: {
+                          id: providerTurnId,
+                          providerThreadId: turnInput.providerThread.id,
+                          nodeId: turnInput.rootNodeId,
+                          runAttemptId: turnInput.attemptId,
+                          nativeTurnRef: null,
+                          ordinal: turnOrdinal,
+                          status: "failed",
+                          startedAt: turnStartedAt,
+                          completedAt: finishedTime,
+                        },
+                      });
+
+                      // 4. Emit terminal failure event so server creates first-class error card
+                      yield* Queue.offer(eventsQueue, {
+                        type: "turn.terminal",
+                        driver: DRIVER_KIND,
+                        providerThreadId: turnInput.providerThread.id,
+                        providerTurnId,
+                        runOrdinal: PositiveInt.make(turnInput.runOrdinal),
+                        status: "failed",
+                        failure: {
+                          class: isUsageLimit
+                            ? "usage_limit"
+                            : isTimeout
+                              ? "transport_error"
+                              : "provider_error",
+                          message: aiLogError,
+                          code: errorCode,
+                          retryable: isUsageLimit || isTimeout,
+                        },
+                        failureItemOrdinal: NonNegativeInt.make(turnOrdinal * 100 + 2),
+                        threadDisposition: "reusable",
+                      });
+                      return;
+                    }
 
                     // Execute Active Engine Pipeline (Custom Engine or Codex CLI)
                     // Automatically extracts generated files, writes them to disk in projectCwd,

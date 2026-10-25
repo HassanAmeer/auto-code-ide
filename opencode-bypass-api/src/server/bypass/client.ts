@@ -1,4 +1,4 @@
-// @effect-diagnostics nodeBuiltinImport:off globalConsole:off globalConsoleInEffect:off globalDate:off globalDateInEffect:off globalRandomInEffect:off globalErrorInEffectFailure:off preferSchemaOverJson:off globalFetchInEffect:off anyUnknownInErrorContext:off globalFetch:off
+// @effect-diagnostics nodeBuiltinImport:off globalConsole:off globalConsoleInEffect:off globalDate:off globalDateInEffect:off globalRandomInEffect:off globalErrorInEffectFailure:off preferSchemaOverJson:off globalFetchInEffect:off anyUnknownInErrorContext:off globalFetch:off globalTimers:off
 /**
  * OpenCode Free Lane — Main Bypass Client
  *
@@ -137,109 +137,190 @@ export async function bypassChatStream(
   // If WARP/Privoxy is running, attach dispatcher to bypass datacenter IP 429
   const dispatcher = await getBypassDispatcher();
 
+  const controller = new AbortController();
+  let timer: NodeJS.Timeout | null = null;
+  let hasReceivedAnyChunk = false;
+
+  const resetTimeout = (ms: number, reason: string) => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      controller.abort(new Error(reason));
+    }, ms);
+  };
+
+  // Initial connection timeout: If upstream server doesn't respond with headers within 45 seconds, abort.
+  resetTimeout(
+    45_000,
+    `[opencode-bypass] HTTP 408 Request Timeout: Model '${options.model}' ke upstream server ne 45 seconds mein response shuru nahi kiya. Upstream server busy ya model queue mein ho sakta hai. Settings se IP rotate karein ya koi doosra model chunein.`,
+  );
+
   const fetchOptions: any = {
     method: "POST",
     headers,
     body: JSON.stringify(body),
+    signal: controller.signal,
   };
 
   let res: any;
-  if (dispatcher) {
-    // When using undici ProxyAgent, we must use undiciFetch so the dispatcher is respected
-    fetchOptions.dispatcher = dispatcher;
-    res = await undiciFetch(endpoint, fetchOptions);
-  } else {
-    res = await globalThis.fetch(endpoint, fetchOptions);
+  try {
+    if (dispatcher) {
+      // When using undici ProxyAgent, we must use undiciFetch so the dispatcher is respected
+      fetchOptions.dispatcher = dispatcher;
+      res = await undiciFetch(endpoint, fetchOptions);
+    } else {
+      res = await globalThis.fetch(endpoint, fetchOptions);
+    }
+  } catch (fetchErr: any) {
+    if (timer) clearTimeout(timer);
+    if (controller.signal.aborted) {
+      const abortReason =
+        (controller.signal.reason as any)?.message || String(controller.signal.reason);
+      throw new Error(abortReason);
+    }
+    throw fetchErr;
   }
 
   if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`[opencode-bypass] HTTP ${res.status}: ${text.slice(0, 300)}`);
+    if (timer) clearTimeout(timer);
+    const rawText = await res.text().catch(() => "");
+    let errorDetail = rawText.trim();
+    try {
+      const parsed = JSON.parse(rawText);
+      errorDetail = parsed?.message || parsed?.error?.message || parsed?.error || rawText.trim();
+    } catch {}
+
+    if (res.status === 429) {
+      throw new Error(
+        `[opencode-bypass] HTTP 429 Rate Limit Exceeded (Limit Full): Model '${options.model}' ki free limit/quota full ho chuki hai. Upstream response: ${errorDetail}`,
+      );
+    }
+    if (res.status === 502 || res.status === 503 || res.status === 504) {
+      throw new Error(
+        `[opencode-bypass] HTTP ${res.status} Service Unavailable: Upstream server busy ya overloaded hai. Upstream response: ${errorDetail}`,
+      );
+    }
+    throw new Error(`[opencode-bypass] HTTP ${res.status}: ${errorDetail}`);
   }
+
+  // Once headers are received ok, set streaming idle heartbeat timeout (35 seconds between chunks)
+  resetTimeout(
+    35_000,
+    `[opencode-bypass] HTTP 408 Request Timeout: Model '${options.model}' ka stream stall ho gaya (35s se koi token receive nahi hua). Upstream server busy ya limit hit ho sakti hai.`,
+  );
 
   const decoder = new TextDecoder();
   let buffer = "";
 
-  // Handle both WHATWG ReadableStream and Node/undici ReadableStream
-  if (res.body && typeof (res.body as any).getReader === "function") {
-    const reader = (res.body as any).getReader();
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
+  try {
+    // Handle both WHATWG ReadableStream and Node/undici ReadableStream
+    if (res.body && typeof (res.body as any).getReader === "function") {
+      const reader = (res.body as any).getReader();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed || !trimmed.startsWith("data:")) continue;
-        const data = trimmed.slice(5).trim();
-        if (data === "[DONE]") {
-          onDone?.(sessionId);
-          return;
-        }
-        try {
-          const chunk = JSON.parse(data) as {
-            choices?: Array<{
-              delta?: {
-                content?: string;
-                reasoning_content?: string;
-                reasoning?: string;
-                thought?: string;
-              };
-              text?: string;
-            }>;
-          };
-          const delta = chunk.choices?.[0]?.delta;
-          const text = delta?.content ?? chunk.choices?.[0]?.text ?? "";
-          const reasoning = delta?.reasoning_content ?? delta?.reasoning ?? delta?.thought;
-          if (text || reasoning) {
-            onChunk(text, reasoning);
+        // Reset idle timer on every incoming chunk
+        hasReceivedAnyChunk = true;
+        resetTimeout(
+          35_000,
+          `[opencode-bypass] HTTP 408 Request Timeout: Model '${options.model}' ka stream stall ho gaya (35s se koi token receive nahi hua). Upstream server busy ya limit hit ho sakti hai.`,
+        );
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || !trimmed.startsWith("data:")) continue;
+          const data = trimmed.slice(5).trim();
+          if (data === "[DONE]") {
+            if (timer) clearTimeout(timer);
+            onDone?.(sessionId);
+            return;
           }
-        } catch {
-          // malformed chunk — skip
+          try {
+            const chunk = JSON.parse(data) as any;
+            if (chunk?.error) {
+              const errObj = chunk.error;
+              const errMsg = errObj?.message || JSON.stringify(errObj);
+              const errCode = errObj?.code || errObj?.type || "429";
+              throw new Error(
+                `[opencode-bypass] HTTP ${errCode} (Limit Full / Stream Error): ${errMsg}`,
+              );
+            }
+            const delta = chunk.choices?.[0]?.delta;
+            const text = delta?.content ?? chunk.choices?.[0]?.text ?? "";
+            const reasoning = delta?.reasoning_content ?? delta?.reasoning ?? delta?.thought;
+            if (text || reasoning) {
+              onChunk(text, reasoning);
+            }
+          } catch (jsonErr: any) {
+            if (jsonErr?.message?.startsWith("[opencode-bypass]")) {
+              throw jsonErr;
+            }
+            // malformed chunk — skip
+          }
         }
       }
-    }
-  } else if (res.body && typeof (res.body as any)[Symbol.asyncIterator] === "function") {
-    for await (const chunk of res.body as any) {
-      buffer += typeof chunk === "string" ? chunk : decoder.decode(chunk, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
+    } else if (res.body && typeof (res.body as any)[Symbol.asyncIterator] === "function") {
+      for await (const chunk of res.body as any) {
+        hasReceivedAnyChunk = true;
+        resetTimeout(
+          35_000,
+          `[opencode-bypass] HTTP 408 Request Timeout: Model '${options.model}' ka stream stall ho gaya (35s se koi token receive nahi hua). Upstream server busy ya limit hit ho sakti hai.`,
+        );
 
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed || !trimmed.startsWith("data:")) continue;
-        const data = trimmed.slice(5).trim();
-        if (data === "[DONE]") {
-          onDone?.(sessionId);
-          return;
-        }
-        try {
-          const parsed = JSON.parse(data) as {
-            choices?: Array<{
-              delta?: {
-                content?: string;
-                reasoning_content?: string;
-                reasoning?: string;
-                thought?: string;
-              };
-              text?: string;
-            }>;
-          };
-          const delta = parsed.choices?.[0]?.delta;
-          const text = delta?.content ?? parsed.choices?.[0]?.text ?? "";
-          const reasoning = delta?.reasoning_content ?? delta?.reasoning ?? delta?.thought;
-          if (text || reasoning) {
-            onChunk(text, reasoning);
+        buffer += typeof chunk === "string" ? chunk : decoder.decode(chunk, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || !trimmed.startsWith("data:")) continue;
+          const data = trimmed.slice(5).trim();
+          if (data === "[DONE]") {
+            if (timer) clearTimeout(timer);
+            onDone?.(sessionId);
+            return;
           }
-        } catch {
-          // malformed chunk — skip
+          try {
+            const parsed = JSON.parse(data) as any;
+            if (parsed?.error) {
+              const errObj = parsed.error;
+              const errMsg = errObj?.message || JSON.stringify(errObj);
+              const errCode = errObj?.code || errObj?.type || "429";
+              throw new Error(
+                `[opencode-bypass] HTTP ${errCode} (Limit Full / Stream Error): ${errMsg}`,
+              );
+            }
+            const delta = parsed.choices?.[0]?.delta;
+            const text = delta?.content ?? parsed.choices?.[0]?.text ?? "";
+            const reasoning = delta?.reasoning_content ?? delta?.reasoning ?? delta?.thought;
+            if (text || reasoning) {
+              onChunk(text, reasoning);
+            }
+          } catch (jsonErr: any) {
+            if (jsonErr?.message?.startsWith("[opencode-bypass]")) {
+              throw jsonErr;
+            }
+            // malformed chunk — skip
+          }
         }
       }
+    } else {
+      throw new Error("[opencode-bypass] No response body");
     }
-  } else {
-    throw new Error("[opencode-bypass] No response body");
+  } catch (streamErr: any) {
+    if (timer) clearTimeout(timer);
+    if (controller.signal.aborted) {
+      const abortReason =
+        (controller.signal.reason as any)?.message || String(controller.signal.reason);
+      throw new Error(abortReason);
+    }
+    throw streamErr;
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 
   onDone?.(sessionId);

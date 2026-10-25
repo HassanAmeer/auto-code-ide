@@ -194,20 +194,23 @@ export function parseErrorDetails(
     recommendation =
       "The selected model ID was not found on the upstream server. Verify the model slug in settings.";
   } else if (statusCode === "408" || /timeout|timed out|stalled/i.test(text)) {
-    errorCategory = "Request Timeout";
+    errorCategory = "Model Request Timeout";
     shortReason = "Timeout";
     recommendation =
-      "Upstream server took too long to begin streaming. Retry or choose a faster model.";
+      "Upstream server ne time par response shuru nahi kiya (server busy ya queue mein atka hua hai). OpenCode Bypass settings se IP rotate karein ya koi doosra model try karein.";
   } else if (/cooling down/i.test(text)) {
     errorCategory = "Rate Limit (Cooldown)";
     shortReason = "Cooling down";
     recommendation =
       "All credentials for this model are cooling down. Please wait a few seconds and retry.";
-  } else if (statusCode === "429" || /429|rate limit|too many requests/i.test(text)) {
-    errorCategory = "Rate Limit Exceeded";
-    shortReason = "Rate limited";
+  } else if (
+    statusCode === "429" ||
+    /429|rate limit|too many requests|limit full|quota/i.test(text)
+  ) {
+    errorCategory = "Rate Limit Exceeded (Limit Full)";
+    shortReason = "Limit full";
     recommendation =
-      "Rate limit reached on this model. Please wait a few seconds or switch to another free model.";
+      "Model ki free quota ya rate limit full ho chuki hai. Settings mein ja kar OpenCode Bypass 'Rotate IP / Session' karein ya koi doosra free model chunein.";
   } else if (
     statusCode === "503" ||
     /503|overloaded|circuit breaker|unavailable|resource pressure/i.test(text)
