@@ -163,8 +163,7 @@ if (typeof window !== "undefined") {
 }
 
 const initialTerminalTabs: TerminalTab[] = [
-  { id: "term_tab_1", name: "1: bash", type: "bash", createdAt: Date.now() },
-  { id: "term_tab_logs", name: "2: server logs", type: "logs", createdAt: Date.now() },
+  { id: "term_tab_1", name: "Terminal 1", type: "bash", createdAt: Date.now() },
 ];
 
 let state: TerminalState = {
@@ -256,13 +255,13 @@ export const terminalStore = {
   },
 
   addTerminalTab(name?: string, type: "bash" | "logs" = "bash"): string {
-    const bashCount = state.terminalTabs.filter((t) => t.type === "bash").length;
-    const tabName = name || (type === "logs" ? "server logs" : `${bashCount + 1}: bash`);
+    const nextNum = state.terminalTabs.length + 1;
+    const tabName = name || `Terminal ${nextNum}`;
     const newTab: TerminalTab = {
       id: "term_tab_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
       name: tabName,
       type,
-      cwd: state.activeCwd,
+      cwd: state.activeCwd || "/",
       createdAt: Date.now(),
     };
     state = {

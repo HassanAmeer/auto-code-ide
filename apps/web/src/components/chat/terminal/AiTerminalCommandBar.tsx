@@ -14,6 +14,8 @@ import {
   Plus,
   Minus,
   Type,
+  ChevronLeft,
+  ChevronRight,
   RotateCcw,
   FolderGit2,
   Server,
@@ -71,6 +73,27 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
 
   const promptInputRef = useRef<HTMLInputElement>(null);
   const terminalScreenRef = useRef<HTMLDivElement>(null);
+  const suggestionsScrollRef = useRef<HTMLDivElement>(null);
+
+  const handleInsertToken = useCallback(
+    (token: string) => {
+      if (promptInputRef.current) {
+        const input = promptInputRef.current;
+        const start = input.selectionStart ?? command.length;
+        const end = input.selectionEnd ?? command.length;
+        const next = command.slice(0, start) + token + command.slice(end);
+        setCommand(next);
+        input.focus();
+        setTimeout(() => {
+          const nextPos = start + token.length;
+          input.setSelectionRange(nextPos, nextPos);
+        }, 0);
+      } else {
+        setCommand((prev) => prev + token);
+      }
+    },
+    [command],
+  );
 
   // Active Tab from store or fallback
   const activeTabId = store.activeTabId || store.terminalTabs[0]?.id || "term_tab_1";
@@ -463,10 +486,6 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
       ? smartSuggestions
       : smartSuggestions.filter((item) => item.category === suggestionCategory);
 
-  const halfSuggestions = Math.ceil(filteredSuggestions.length / 2);
-  const row1Suggestions = filteredSuggestions.slice(0, halfSuggestions);
-  const row2Suggestions = filteredSuggestions.slice(halfSuggestions);
-
   // Runs to display chronologically in the terminal screen for active tab
   const activeTabRuns = store.runs.filter((r) => !r.tabId || r.tabId === activeTabId);
   const baseRuns = activeTabRuns.slice(0, 30).reverse();
@@ -489,7 +508,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
       {/* 1. AUTHENTIC TERMINAL WINDOW TOP BAR & TABS                    */}
       {/* ============================================================== */}
       <div className="flex items-center justify-between px-3 h-10 bg-[#0d0d12] border-b border-white/[0.08] select-none text-xs shrink-0">
-        {/* Dynamic Multi-Terminal Tabs */}
+        {/* Dynamic Multi-Terminal Tabs (Terminal 1, Terminal 2, etc.) */}
         <div className="flex items-center gap-1.5 min-w-0 overflow-x-auto [scrollbar-width:none]">
           {store.terminalTabs.map((tab) => {
             const isActive = tab.id === activeTabId;
@@ -499,31 +518,17 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
                 onClick={(e) => {
                   e.stopPropagation();
                   terminalStore.setActiveTabId(tab.id);
-                  if (tab.type === "logs") {
-                    void handleLoadLogs();
-                  }
                   promptInputRef.current?.focus();
                 }}
                 className={cn(
-                  "group flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] text-3xs font-semibold border transition-all cursor-pointer active:scale-95 shrink-0",
+                  "group flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] text-3xs font-semibold border transition-all cursor-pointer active:scale-95 shrink-0 select-none",
                   isActive
-                    ? tab.type === "logs"
-                      ? "bg-[#181824] text-sky-400 border-sky-500/40 shadow-xs"
-                      : "bg-[#141816] text-emerald-400 border-emerald-500/40 shadow-xs"
+                    ? "bg-[#141816] text-emerald-400 border-emerald-500/40 shadow-xs"
                     : "text-zinc-400 hover:text-zinc-200 border-white/[0.04] hover:bg-white/[0.04]",
                 )}
               >
-                <span
-                  className={cn(
-                    "size-1.5 rounded-full shrink-0",
-                    isActive
-                      ? tab.type === "logs"
-                        ? "bg-sky-400 shadow-[0_0_6px_rgba(56,189,248,0.8)]"
-                        : "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]"
-                      : "bg-zinc-600",
-                  )}
-                />
-                <span className="truncate max-w-[110px]">{tab.name}</span>
+                <Terminal className="size-2.5 shrink-0 text-emerald-400" />
+                <span className="truncate max-w-[120px]">{tab.name}</span>
                 {store.terminalTabs.length > 1 && (
                   <button
                     type="button"
@@ -531,8 +536,8 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
                       e.stopPropagation();
                       terminalStore.closeTerminalTab(tab.id);
                     }}
-                    title="Close Terminal Tab"
-                    className="opacity-0 group-hover:opacity-100 p-0.5 hover:text-rose-400 transition-opacity ml-0.5"
+                    title="Delete Terminal Tab"
+                    className="opacity-70 group-hover:opacity-100 hover:text-rose-400 p-0.5 rounded transition-colors ml-0.5"
                   >
                     <X className="size-2.5" />
                   </button>
@@ -548,62 +553,16 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
               e.stopPropagation();
               terminalStore.addTerminalTab();
               promptInputRef.current?.focus();
-              toastManager.add({
-                type: "info",
-                title: "New Terminal Opened",
-                description: `Created dedicated session: Terminal ${store.terminalTabs.length + 1}`,
-              });
             }}
-            title="Open New Terminal Session (+)"
-            className="flex items-center gap-1 px-2 py-1 rounded-[5px] text-zinc-400 hover:text-white bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] text-3xs transition-all cursor-pointer shrink-0"
+            title="Create New Terminal Tab (+)"
+            className="flex items-center justify-center p-1 rounded-[5px] text-zinc-400 hover:text-emerald-400 bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] text-3xs transition-all cursor-pointer shrink-0"
           >
             <Plus className="size-3" />
-            <span className="hidden sm:inline">New</span>
           </button>
         </div>
 
-        {/* Right Action Controls: Scope Pill + Clear + Copy + Close */}
+        {/* Right Action Controls: Copy + Font Size + Clear */}
         <div className="flex items-center gap-1.5 text-zinc-400 shrink-0 ml-2">
-          {/* Scope indicator badge (Default: Root /) */}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              const nextMode = isRootScope ? "project" : "root";
-              terminalStore.setScopeMode(nextMode);
-              toastManager.add({
-                type: "info",
-                title:
-                  nextMode === "root"
-                    ? "Switched to Root (/)"
-                    : `Switched to Project (${projectTitle})`,
-                description:
-                  nextMode === "root"
-                    ? "Commands will execute from Linux VPS root (/)."
-                    : `Commands will execute in ${projectPath}`,
-              });
-            }}
-            title={`Current Scope: ${isRootScope ? "Root (/)" : `Project (${projectTitle})`}. Click to toggle.`}
-            className={cn(
-              "flex items-center gap-1 px-2 py-0.5 rounded-[5px] text-4xs font-semibold transition-all cursor-pointer border active:scale-95 shrink-0",
-              isRootScope
-                ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
-                : "bg-sky-500/15 text-sky-400 border-sky-500/30",
-            )}
-          >
-            {isRootScope ? (
-              <>
-                <Server className="size-2.5 shrink-0 text-emerald-400" />
-                <span>root@vps (/)</span>
-              </>
-            ) : (
-              <>
-                <FolderGit2 className="size-2.5 shrink-0 text-sky-400" />
-                <span>{projectTitle}</span>
-              </>
-            )}
-          </button>
-
           {/* Ask AI to Fix Button (on error) */}
           {(latestRun?.status === "error" ||
             (latestRun?.exitCode !== undefined && latestRun?.exitCode !== 0) ||
@@ -633,20 +592,6 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
             className="p-1 rounded-[4px] text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] transition-colors cursor-pointer"
           >
             {copied ? <Check className="size-3 text-emerald-400" /> : <Copy className="size-3" />}
-          </button>
-
-          {/* SSH Keys trigger */}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              terminalStore.setSshSheetOpen(true);
-            }}
-            title="Manage SSH Keys & Remote Servers"
-            className="flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-white/[0.04] hover:bg-white/[0.08] text-zinc-300 hover:text-white border border-white/[0.06] text-4xs transition-colors cursor-pointer"
-          >
-            <Key className="size-2.5 text-amber-400" />
-            <span>SSH</span>
           </button>
 
           {/* Terminal Output Font Size: A- / Custom Number / Dropdown / A+ */}
@@ -723,19 +668,6 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
             className="px-1.5 py-0.5 rounded-[4px] text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] text-4xs transition-colors cursor-pointer"
           >
             Clear
-          </button>
-
-          {/* Close Panel Button */}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              terminalStore.setQuickBarOpen(false);
-            }}
-            title="Close Terminal Studio"
-            className="p-1 rounded-[4px] text-zinc-400 hover:text-white hover:bg-white/[0.08] transition-colors cursor-pointer ml-0.5"
-          >
-            <X className="size-3.5" />
           </button>
         </div>
       </div>
@@ -955,82 +887,264 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
       </div>
 
       {/* ============================================================== */}
-      {/* 2.5 MOBILE HACKER KEYBOARD ACCESSORY TOOLBAR (Concept 2)       */}
+      {/* 2.5 OPERATOR & KEYBOARD TOOLBAR (All Bash Operators & Keys)    */}
       {/* ============================================================== */}
       <div
-        className="md:hidden flex items-center gap-1.5 px-2.5 py-1.5 bg-[#0a0a0f] border-t border-white/[0.08] overflow-x-auto [scrollbar-width:none] shrink-0 select-none"
+        className="flex items-center gap-1 px-2 py-1 bg-[#0a0a0f] border-t border-white/[0.08] overflow-x-auto [scrollbar-width:none] shrink-0 select-none"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* ESC */}
         <button
           type="button"
           onClick={() => {
             setCommand("");
             promptInputRef.current?.focus();
           }}
-          className="px-2 py-1 rounded-[5px] bg-[#161622] active:bg-white/[0.15] text-zinc-300 font-mono text-3xs font-semibold shrink-0 border border-white/[0.1]"
+          title="Clear current input line (ESC)"
+          className="px-2 py-1 rounded-[5px] bg-[#161622] hover:bg-[#222232] active:bg-white/[0.15] text-zinc-300 font-mono text-3xs font-semibold shrink-0 border border-white/[0.1] transition-colors cursor-pointer"
         >
           ESC
         </button>
+
+        {/* TAB */}
         <button
           type="button"
-          onClick={() => {
-            setCommand((prev) => prev + "  ");
-            promptInputRef.current?.focus();
-          }}
-          className="px-2 py-1 rounded-[5px] bg-[#161622] active:bg-white/[0.15] text-zinc-300 font-mono text-3xs font-semibold shrink-0 border border-white/[0.1]"
+          onClick={() => handleInsertToken("  ")}
+          title="Tab indent (2 spaces)"
+          className="px-2 py-1 rounded-[5px] bg-[#161622] hover:bg-[#222232] active:bg-white/[0.15] text-zinc-300 font-mono text-3xs font-semibold shrink-0 border border-white/[0.1] transition-colors cursor-pointer"
         >
           TAB
         </button>
+
+        {/* Ctrl+C */}
         <button
           type="button"
-          onClick={() => void handleKill()}
-          disabled={!isRunning}
+          onClick={() => {
+            if (isRunning) {
+              void handleKill();
+            } else {
+              setCommand("");
+              promptInputRef.current?.focus();
+            }
+          }}
+          title={isRunning ? "Interrupt running process (Ctrl+C)" : "Clear input (Ctrl+C)"}
           className={cn(
-            "px-2 py-1 rounded-[5px] font-mono text-3xs font-semibold shrink-0 border transition-all",
+            "px-2 py-1 rounded-[5px] font-mono text-3xs font-semibold shrink-0 border transition-all cursor-pointer",
             isRunning
               ? "bg-rose-500/20 active:bg-rose-500/40 text-rose-300 border-rose-500/40 shadow-xs"
-              : "bg-[#161622] text-zinc-500 border-white/[0.06] opacity-60",
+              : "bg-[#161622] hover:bg-[#222232] text-zinc-400 border-white/[0.08]",
           )}
         >
           Ctrl+C
         </button>
+
+        <div className="w-[1px] h-4 bg-white/[0.08] shrink-0 mx-0.5" />
+
+        {/* Main Operators */}
         <button
           type="button"
-          onClick={() => {
-            setCommand((prev) => prev + " | ");
-            promptInputRef.current?.focus();
-          }}
-          className="px-2 py-1 rounded-[5px] bg-[#161622] active:bg-white/[0.15] text-emerald-400 font-mono text-3xs font-bold shrink-0 border border-emerald-500/30"
+          onClick={() => handleInsertToken(" | ")}
+          title="Pipe stdout to next command"
+          className="px-2 py-1 rounded-[5px] bg-[#14141f] hover:bg-emerald-500/20 active:bg-emerald-500/30 text-emerald-400 font-mono text-3xs font-bold shrink-0 border border-emerald-500/30 transition-colors cursor-pointer"
         >
           |
         </button>
+
         <button
           type="button"
-          onClick={() => {
-            setCommand((prev) => prev + "~");
-            promptInputRef.current?.focus();
-          }}
-          className="px-2 py-1 rounded-[5px] bg-[#161622] active:bg-white/[0.15] text-cyan-400 font-mono text-3xs font-bold shrink-0 border border-cyan-500/30"
+          onClick={() => handleInsertToken(" && ")}
+          title="Logical AND (run if previous succeeded)"
+          className="px-2 py-1 rounded-[5px] bg-[#14141f] hover:bg-emerald-500/20 active:bg-emerald-500/30 text-emerald-400 font-mono text-3xs font-bold shrink-0 border border-emerald-500/30 transition-colors cursor-pointer"
+        >
+          &&
+        </button>
+
+        <button
+          type="button"
+          onClick={() => handleInsertToken(" || ")}
+          title="Logical OR (run if previous failed)"
+          className="px-2 py-1 rounded-[5px] bg-[#14141f] hover:bg-emerald-500/20 active:bg-emerald-500/30 text-emerald-400 font-mono text-3xs font-bold shrink-0 border border-emerald-500/30 transition-colors cursor-pointer"
+        >
+          ||
+        </button>
+
+        <button
+          type="button"
+          onClick={() => handleInsertToken("; ")}
+          title="Command separator"
+          className="px-2 py-1 rounded-[5px] bg-[#14141f] hover:bg-emerald-500/20 active:bg-emerald-500/30 text-emerald-400 font-mono text-3xs font-bold shrink-0 border border-emerald-500/30 transition-colors cursor-pointer"
+        >
+          ;
+        </button>
+
+        <button
+          type="button"
+          onClick={() => handleInsertToken(" > ")}
+          title="Redirect stdout (overwrite)"
+          className="px-2 py-1 rounded-[5px] bg-[#14141f] hover:bg-emerald-500/20 active:bg-emerald-500/30 text-emerald-400 font-mono text-3xs font-bold shrink-0 border border-emerald-500/30 transition-colors cursor-pointer"
+        >
+          &gt;
+        </button>
+
+        <button
+          type="button"
+          onClick={() => handleInsertToken(" >> ")}
+          title="Redirect stdout (append)"
+          className="px-2 py-1 rounded-[5px] bg-[#14141f] hover:bg-emerald-500/20 active:bg-emerald-500/30 text-emerald-400 font-mono text-3xs font-bold shrink-0 border border-emerald-500/30 transition-colors cursor-pointer"
+        >
+          &gt;&gt;
+        </button>
+
+        <button
+          type="button"
+          onClick={() => handleInsertToken(" < ")}
+          title="Redirect stdin"
+          className="px-2 py-1 rounded-[5px] bg-[#14141f] hover:bg-emerald-500/20 active:bg-emerald-500/30 text-emerald-400 font-mono text-3xs font-bold shrink-0 border border-emerald-500/30 transition-colors cursor-pointer"
+        >
+          &lt;
+        </button>
+
+        <button
+          type="button"
+          onClick={() => handleInsertToken(" 2>&1")}
+          title="Redirect stderr to stdout"
+          className="px-2 py-1 rounded-[5px] bg-[#14141f] hover:bg-emerald-500/20 active:bg-emerald-500/30 text-emerald-400 font-mono text-3xs font-bold shrink-0 border border-emerald-500/30 transition-colors cursor-pointer"
+        >
+          2&gt;&amp;1
+        </button>
+
+        <button
+          type="button"
+          onClick={() => handleInsertToken(" &")}
+          title="Run in background (&)"
+          className="px-2 py-1 rounded-[5px] bg-[#14141f] hover:bg-emerald-500/20 active:bg-emerald-500/30 text-emerald-400 font-mono text-3xs font-bold shrink-0 border border-emerald-500/30 transition-colors cursor-pointer"
+        >
+          &amp;
+        </button>
+
+        <div className="w-[1px] h-4 bg-white/[0.08] shrink-0 mx-0.5" />
+
+        {/* Path, Symbols & Modifiers */}
+        <button
+          type="button"
+          onClick={() => handleInsertToken("~")}
+          title="Home directory (~)"
+          className="px-2 py-1 rounded-[5px] bg-[#14141f] hover:bg-cyan-500/20 active:bg-cyan-500/30 text-cyan-400 font-mono text-3xs font-bold shrink-0 border border-cyan-500/30 transition-colors cursor-pointer"
         >
           ~
         </button>
+
         <button
           type="button"
-          onClick={() => {
-            setCommand((prev) => prev + "/");
-            promptInputRef.current?.focus();
-          }}
-          className="px-2 py-1 rounded-[5px] bg-[#161622] active:bg-white/[0.15] text-zinc-200 font-mono text-3xs font-bold shrink-0 border border-white/[0.1]"
+          onClick={() => handleInsertToken("/")}
+          title="Root / Path separator (/)"
+          className="px-2 py-1 rounded-[5px] bg-[#14141f] hover:bg-cyan-500/20 active:bg-cyan-500/30 text-cyan-400 font-mono text-3xs font-bold shrink-0 border border-cyan-500/30 transition-colors cursor-pointer"
         >
           /
         </button>
+
+        <button
+          type="button"
+          onClick={() => handleInsertToken("\\")}
+          title="Escape / Line continuation (\)"
+          className="px-2 py-1 rounded-[5px] bg-[#14141f] hover:bg-cyan-500/20 active:bg-cyan-500/30 text-cyan-400 font-mono text-3xs font-bold shrink-0 border border-cyan-500/30 transition-colors cursor-pointer"
+        >
+          \
+        </button>
+
+        <button
+          type="button"
+          onClick={() => handleInsertToken("+")}
+          title="Plus (+)"
+          className="px-2 py-1 rounded-[5px] bg-[#14141f] hover:bg-cyan-500/20 active:bg-cyan-500/30 text-cyan-400 font-mono text-3xs font-bold shrink-0 border border-cyan-500/30 transition-colors cursor-pointer"
+        >
+          +
+        </button>
+
+        <button
+          type="button"
+          onClick={() => handleInsertToken("-")}
+          title="Single dash (-)"
+          className="px-2 py-1 rounded-[5px] bg-[#14141f] hover:bg-cyan-500/20 active:bg-cyan-500/30 text-cyan-400 font-mono text-3xs font-bold shrink-0 border border-cyan-500/30 transition-colors cursor-pointer"
+        >
+          -
+        </button>
+
+        <button
+          type="button"
+          onClick={() => handleInsertToken(" --")}
+          title="Double dash flag (--)"
+          className="px-2 py-1 rounded-[5px] bg-[#14141f] hover:bg-cyan-500/20 active:bg-cyan-500/30 text-cyan-400 font-mono text-3xs font-bold shrink-0 border border-cyan-500/30 transition-colors cursor-pointer"
+        >
+          --
+        </button>
+
+        <button
+          type="button"
+          onClick={() => handleInsertToken("*")}
+          title="Wildcard (*)"
+          className="px-2 py-1 rounded-[5px] bg-[#14141f] hover:bg-cyan-500/20 active:bg-cyan-500/30 text-cyan-400 font-mono text-3xs font-bold shrink-0 border border-cyan-500/30 transition-colors cursor-pointer"
+        >
+          *
+        </button>
+
+        <button
+          type="button"
+          onClick={() => handleInsertToken("$")}
+          title="Shell variable ($)"
+          className="px-2 py-1 rounded-[5px] bg-[#14141f] hover:bg-cyan-500/20 active:bg-cyan-500/30 text-cyan-400 font-mono text-3xs font-bold shrink-0 border border-cyan-500/30 transition-colors cursor-pointer"
+        >
+          $
+        </button>
+
+        <button
+          type="button"
+          onClick={() => handleInsertToken('"')}
+          title='Double quote (")'
+          className="px-2 py-1 rounded-[5px] bg-[#14141f] hover:bg-amber-500/20 active:bg-amber-500/30 text-amber-300 font-mono text-3xs font-bold shrink-0 border border-amber-500/30 transition-colors cursor-pointer"
+        >
+          &quot;
+        </button>
+
+        <button
+          type="button"
+          onClick={() => handleInsertToken("'")}
+          title="Single quote (')"
+          className="px-2 py-1 rounded-[5px] bg-[#14141f] hover:bg-amber-500/20 active:bg-amber-500/30 text-amber-300 font-mono text-3xs font-bold shrink-0 border border-amber-500/30 transition-colors cursor-pointer"
+        >
+          &#39;
+        </button>
+
+        <div className="w-[1px] h-4 bg-white/[0.08] shrink-0 mx-0.5" />
+
+        {/* Quick Commands & Navigation */}
+        <button
+          type="button"
+          onClick={() => handleInsertToken("sudo ")}
+          title="Insert sudo prefix"
+          className="px-2 py-1 rounded-[5px] bg-[#181524] hover:bg-purple-500/20 active:bg-purple-500/30 text-purple-300 font-mono text-3xs font-semibold shrink-0 border border-purple-500/30 transition-colors cursor-pointer"
+        >
+          sudo
+        </button>
+
+        <button
+          type="button"
+          onClick={() => handleInsertToken("grep ")}
+          title="Insert grep pattern filter"
+          className="px-2 py-1 rounded-[5px] bg-[#181524] hover:bg-purple-500/20 active:bg-purple-500/30 text-purple-300 font-mono text-3xs font-semibold shrink-0 border border-purple-500/30 transition-colors cursor-pointer"
+        >
+          grep
+        </button>
+
         <button
           type="button"
           onClick={() => void handleExecute("cd ..")}
-          className="px-2 py-1 rounded-[5px] bg-[#161622] active:bg-white/[0.15] text-amber-300 font-mono text-3xs font-semibold shrink-0 border border-amber-500/30"
+          title="Change to parent directory (cd ..)"
+          className="px-2 py-1 rounded-[5px] bg-[#161622] hover:bg-[#222232] active:bg-white/[0.15] text-amber-300 font-mono text-3xs font-semibold shrink-0 border border-amber-500/30 transition-colors cursor-pointer"
         >
           cd ..
         </button>
+
         <button
           type="button"
           onClick={() => {
@@ -1038,10 +1152,15 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
             setLatestRun(null);
             setLogsOutput(null);
           }}
-          className="px-2 py-1 rounded-[5px] bg-[#161622] active:bg-white/[0.15] text-zinc-400 font-mono text-3xs font-semibold shrink-0 border border-white/[0.1]"
+          title="Clear screen runs"
+          className="px-2 py-1 rounded-[5px] bg-[#161622] hover:bg-[#222232] active:bg-white/[0.15] text-zinc-400 font-mono text-3xs font-semibold shrink-0 border border-white/[0.1] transition-colors cursor-pointer"
         >
           clear
         </button>
+
+        <div className="w-[1px] h-4 bg-white/[0.08] shrink-0 mx-0.5" />
+
+        {/* History Navigation */}
         <button
           type="button"
           onClick={() => {
@@ -1053,8 +1172,8 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
             if (histCmd) setCommand(histCmd);
             promptInputRef.current?.focus();
           }}
-          className="px-2.5 py-1 rounded-[5px] bg-[#161622] active:bg-white/[0.15] text-zinc-300 font-mono text-3xs font-semibold shrink-0 border border-white/[0.1]"
-          title="Previous command"
+          className="px-2.5 py-1 rounded-[5px] bg-[#161622] hover:bg-[#222232] active:bg-white/[0.15] text-zinc-300 font-mono text-3xs font-semibold shrink-0 border border-white/[0.1] transition-colors cursor-pointer"
+          title="Previous command (Up Arrow)"
         >
           ▲
         </button>
@@ -1073,15 +1192,15 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
             }
             promptInputRef.current?.focus();
           }}
-          className="px-2.5 py-1 rounded-[5px] bg-[#161622] active:bg-white/[0.15] text-zinc-300 font-mono text-3xs font-semibold shrink-0 border border-white/[0.1]"
-          title="Next command"
+          className="px-2.5 py-1 rounded-[5px] bg-[#161622] hover:bg-[#222232] active:bg-white/[0.15] text-zinc-300 font-mono text-3xs font-semibold shrink-0 border border-white/[0.1] transition-colors cursor-pointer"
+          title="Next command (Down Arrow)"
         >
           ▼
         </button>
       </div>
 
       {/* ============================================================== */}
-      {/* 3. BOTTOM SUGGESTIONS ROW (Categorized Smart Action Buttons)   */}
+      {/* 3. BOTTOM SUGGESTIONS ROW (Single Line + Pagination Arrows)    */}
       {/* ============================================================== */}
       <div
         className="px-2.5 py-1.5 bg-[#0c0c11] border-t border-white/[0.08] shrink-0 select-none space-y-1.5"
@@ -1123,46 +1242,60 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
           })}
         </div>
 
-        {/* LINE 1 (Ooper Wali Line): Command Buttons */}
-        <div className="flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none] py-0.5 px-0.5">
-          {row1Suggestions.map((item) => (
-            <button
-              key={"row1_" + item.cmd}
-              type="button"
-              onClick={() => void handleExecute(item.cmd)}
-              disabled={isRunning}
-              title={`Click to execute on VPS:\n$ ${item.cmd}`}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[6px] bg-[#14141d] hover:bg-[#1f1f2d] border border-white/[0.08] hover:border-emerald-500/40 text-left transition-all cursor-pointer shrink-0 active:scale-95 group shadow-xs"
-            >
-              <span className="text-3xs font-medium text-zinc-300 group-hover:text-emerald-400 transition-colors">
-                {item.title}
-              </span>
-              <span className="text-4xs font-mono text-zinc-500 group-hover:text-zinc-400">
-                ${item.cmd.length > 22 ? item.cmd.slice(0, 20) + "..." : item.cmd}
-              </span>
-            </button>
-          ))}
-        </div>
+        {/* Single Line of Command Buttons with Left & Right Scroll Pagination Arrows */}
+        <div className="flex items-center gap-1.5">
+          {/* Full Left Scroll Arrow Button */}
+          <button
+            type="button"
+            onClick={() => {
+              suggestionsScrollRef.current?.scrollTo({ left: 0, behavior: "smooth" });
+            }}
+            title="Scroll to beginning (Full Left)"
+            className="p-1.5 rounded-[6px] bg-[#14141d] hover:bg-[#20202e] border border-white/[0.08] hover:border-emerald-500/40 text-zinc-400 hover:text-emerald-400 transition-all cursor-pointer shrink-0 active:scale-95 shadow-xs"
+          >
+            <ChevronLeft className="size-3.5" />
+          </button>
 
-        {/* LINE 2 (Neechy Wali Line): Command Buttons */}
-        <div className="flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none] py-0.5 px-0.5">
-          {row2Suggestions.map((item) => (
-            <button
-              key={"row2_" + item.cmd}
-              type="button"
-              onClick={() => void handleExecute(item.cmd)}
-              disabled={isRunning}
-              title={`Click to execute on VPS:\n$ ${item.cmd}`}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[6px] bg-[#14141d] hover:bg-[#1f1f2d] border border-white/[0.08] hover:border-emerald-500/40 text-left transition-all cursor-pointer shrink-0 active:scale-95 group shadow-xs"
-            >
-              <span className="text-3xs font-medium text-zinc-300 group-hover:text-emerald-400 transition-colors">
-                {item.title}
-              </span>
-              <span className="text-4xs font-mono text-zinc-500 group-hover:text-zinc-400">
-                ${item.cmd.length > 22 ? item.cmd.slice(0, 20) + "..." : item.cmd}
-              </span>
-            </button>
-          ))}
+          {/* Scrollable single row of command action buttons */}
+          <div
+            ref={suggestionsScrollRef}
+            className="flex-1 flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none] py-0.5 px-0.5 scroll-smooth"
+          >
+            {filteredSuggestions.map((item) => (
+              <button
+                key={item.category + "_" + item.cmd}
+                type="button"
+                onClick={() => void handleExecute(item.cmd)}
+                disabled={isRunning}
+                title={`Click to execute on VPS:\n$ ${item.cmd}`}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[6px] bg-[#14141d] hover:bg-[#1f1f2d] border border-white/[0.08] hover:border-emerald-500/40 text-left transition-all cursor-pointer shrink-0 active:scale-95 group shadow-xs whitespace-nowrap"
+              >
+                <span className="text-3xs font-medium text-zinc-300 group-hover:text-emerald-400 transition-colors">
+                  {item.title}
+                </span>
+                <span className="text-4xs font-mono text-zinc-500 group-hover:text-zinc-400">
+                  ${item.cmd.length > 24 ? item.cmd.slice(0, 22) + "..." : item.cmd}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          {/* Full Right Scroll Arrow Button */}
+          <button
+            type="button"
+            onClick={() => {
+              if (suggestionsScrollRef.current) {
+                suggestionsScrollRef.current.scrollTo({
+                  left: suggestionsScrollRef.current.scrollWidth,
+                  behavior: "smooth",
+                });
+              }
+            }}
+            title="Scroll to end (Full Right)"
+            className="p-1.5 rounded-[6px] bg-[#14141d] hover:bg-[#20202e] border border-white/[0.08] hover:border-emerald-500/40 text-zinc-400 hover:text-emerald-400 transition-all cursor-pointer shrink-0 active:scale-95 shadow-xs"
+          >
+            <ChevronRight className="size-3.5" />
+          </button>
         </div>
       </div>
 
