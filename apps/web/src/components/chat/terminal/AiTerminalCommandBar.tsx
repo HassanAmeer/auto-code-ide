@@ -12,6 +12,8 @@ import {
   Zap,
   Square,
   Plus,
+  Minus,
+  Type,
   RotateCcw,
   FolderGit2,
   Server,
@@ -46,6 +48,26 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
   const [copied, setCopied] = useState(false);
   const [suggestionCategory, setSuggestionCategory] = useState<string>("all");
+
+  // Terminal Output Font Size (Persisted in localStorage with 12px default)
+  const [terminalFontSize, setTerminalFontSize] = useState<number>(() => {
+    if (typeof window !== "undefined") {
+      const saved = window.localStorage.getItem("adc_terminal_font_size");
+      if (saved) {
+        const parsed = parseInt(saved, 10);
+        if (!isNaN(parsed) && parsed >= 9 && parsed <= 32) return parsed;
+      }
+    }
+    return 12;
+  });
+
+  const handleSetFontSize = useCallback((newSize: number) => {
+    const clamped = Math.max(9, Math.min(32, newSize));
+    setTerminalFontSize(clamped);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("adc_terminal_font_size", String(clamped));
+    }
+  }, []);
 
   const promptInputRef = useRef<HTMLInputElement>(null);
   const terminalScreenRef = useRef<HTMLDivElement>(null);
@@ -627,6 +649,67 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
             <span>SSH</span>
           </button>
 
+          {/* Terminal Output Font Size: A- / Custom Number / Dropdown / A+ */}
+          <div
+            className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-[4px] bg-white/[0.04] hover:bg-white/[0.07] border border-white/[0.06] transition-colors select-none"
+            onClick={(e) => e.stopPropagation()}
+            title="Adjust Output Font Size"
+          >
+            <button
+              type="button"
+              onClick={() => handleSetFontSize(terminalFontSize - 1)}
+              disabled={terminalFontSize <= 9}
+              title="Decrease Font Size (-1px)"
+              className="p-0.5 text-zinc-400 hover:text-white disabled:opacity-30 transition-colors cursor-pointer"
+            >
+              <Minus className="size-2.5" />
+            </button>
+
+            <Type className="size-2.5 text-cyan-400 shrink-0 ml-0.5" />
+
+            <input
+              type="number"
+              min={9}
+              max={32}
+              value={terminalFontSize}
+              onChange={(e) => {
+                const val = parseInt(e.target.value, 10);
+                if (!isNaN(val)) handleSetFontSize(val);
+              }}
+              title="Type custom font size in px"
+              className="w-5 text-center bg-transparent text-4xs font-mono font-semibold text-zinc-200 focus:text-cyan-300 focus:outline-none p-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+            />
+            <span className="text-4xs font-mono text-zinc-500">px</span>
+
+            <select
+              value={terminalFontSize}
+              onChange={(e) => handleSetFontSize(Number(e.target.value))}
+              title="Font presets"
+              className="bg-transparent text-4xs font-mono text-zinc-400 hover:text-zinc-200 focus:text-white focus:outline-none cursor-pointer p-0 [&>option]:bg-[#121218] [&>option]:text-zinc-200"
+            >
+              <option value={10}>10</option>
+              <option value={11}>11</option>
+              <option value={12}>12</option>
+              <option value={13}>13</option>
+              <option value={14}>14</option>
+              <option value={15}>15</option>
+              <option value={16}>16</option>
+              <option value={18}>18</option>
+              <option value={20}>20</option>
+              <option value={24}>24</option>
+            </select>
+
+            <button
+              type="button"
+              onClick={() => handleSetFontSize(terminalFontSize + 1)}
+              disabled={terminalFontSize >= 32}
+              title="Increase Font Size (+1px)"
+              className="p-0.5 text-zinc-400 hover:text-white disabled:opacity-30 transition-colors cursor-pointer"
+            >
+              <Plus className="size-2.5" />
+            </button>
+          </div>
+
           {/* Clear Console */}
           <button
             type="button"
@@ -662,7 +745,8 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
       {/* ============================================================== */}
       <div
         ref={terminalScreenRef}
-        className="flex-1 p-3 overflow-y-auto text-3xs leading-relaxed space-y-2 bg-[#050508] text-zinc-200 select-text [scrollbar-width:thin] scroll-smooth font-mono cursor-text"
+        style={{ fontSize: `${terminalFontSize}px` }}
+        className="flex-1 p-3 overflow-y-auto leading-relaxed space-y-2 bg-[#050508] text-zinc-200 select-text [scrollbar-width:thin] scroll-smooth font-mono cursor-text"
         onClick={() => promptInputRef.current?.focus()}
       >
         {/* Terminal Header Banner */}
@@ -808,7 +892,8 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
                 autoFocus
                 spellCheck={false}
                 autoComplete="off"
-                className="flex-1 min-w-0 bg-transparent text-3xs font-mono text-zinc-100 placeholder:text-zinc-700 focus:outline-none"
+                style={{ fontSize: `${terminalFontSize}px` }}
+                className="flex-1 min-w-0 bg-transparent font-mono text-zinc-100 placeholder:text-zinc-700 focus:outline-none"
                 placeholder={isRunning ? "Executing..." : ""}
               />
               {isRunning && (
@@ -856,7 +941,8 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
               </div>
             ) : logsOutput ? (
               <div
-                className="text-zinc-300 whitespace-pre-wrap break-all text-3xs font-mono"
+                style={{ fontSize: `${terminalFontSize}px` }}
+                className="text-zinc-300 whitespace-pre-wrap break-all font-mono"
                 dangerouslySetInnerHTML={{ __html: parseAnsiToHtml(logsOutput) }}
               />
             ) : (
