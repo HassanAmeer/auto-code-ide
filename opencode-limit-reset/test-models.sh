@@ -10,8 +10,9 @@ MODELS=(
   "deepseek-v4.1-flash-free"
   "beam-free"
   "glm-5.3-flash-free"
-  "kimi-k2.5-free"
   "flint-40b-free"
+  "mimo-v2.6-flash-free"
+  "nemotron-3.5-lightning-free"
 )
 
 echo "======================================================"
@@ -46,18 +47,29 @@ for MODEL in "${MODELS[@]}"; do
     -H "Content-Type: application/json" \
     -d '{"text":"Explain recursion in 10 words or less."}')
     
-  echo " ✓ Prompt Submitted. Waiting for stream..."
-  sleep 3
+  echo " ✓ Prompt Submitted. Streaming response..."
   
-  # 3. Read Output
-  MSG_RESP=$(curl -s -X GET "${SERVER_URL}/api/session/${SESSION_ID}/message" \
-    -H "$AUTH_HEADER")
+  # 3. Poll for Output (up to 12 seconds)
+  ASSISTANT_TEXT=""
+  REASONING_TEXT=""
+  ERR_MSG=""
+  
+  for ATTEMPT in {1..12}; do
+    sleep 1
+    MSG_RESP=$(curl -s -X GET "${SERVER_URL}/api/session/${SESSION_ID}/message" \
+      -H "$AUTH_HEADER")
+      
+    ASSISTANT_TEXT=$(echo "$MSG_RESP" | jq -r '.[].[] | select(.type=="assistant") | .content[] | select(.type=="text") | .text' 2>/dev/null | head -n 1)
+    REASONING_TEXT=$(echo "$MSG_RESP" | jq -r '.[].[] | select(.type=="assistant") | .content[] | select(.type=="reasoning") | .text' 2>/dev/null | head -n 1)
+    ERR_MSG=$(echo "$MSG_RESP" | jq -r '.[].[] | select(.outcome=="failed") | .error.message' 2>/dev/null | head -n 1)
     
+    if [ -n "$ASSISTANT_TEXT" ] || [ -n "$ERR_MSG" ]; then
+      break
+    fi
+  done
+  
   END_TIME=$(date +%s%N)
   DURATION=$(( (END_TIME - START_TIME) / 1000000 ))
-  
-  ASSISTANT_TEXT=$(echo "$MSG_RESP" | jq -r '.[].[] | select(.type=="assistant") | .content[] | select(.type=="text") | .text' 2>/dev/null | head -n 1)
-  REASONING_TEXT=$(echo "$MSG_RESP" | jq -r '.[].[] | select(.type=="assistant") | .content[] | select(.type=="reasoning") | .text' 2>/dev/null | head -n 1)
   
   if [ -n "$ASSISTANT_TEXT" ]; then
     echo " ✅ SUCCESS [${DURATION}ms]:"
@@ -65,13 +77,10 @@ for MODEL in "${MODELS[@]}"; do
       echo "    Thinking: $REASONING_TEXT"
     fi
     echo "    Output:   $ASSISTANT_TEXT"
+  elif [ -n "$ERR_MSG" ]; then
+    echo " ❌ ERROR: $ERR_MSG"
   else
-    ERR_MSG=$(echo "$MSG_RESP" | jq -r '.[].[] | select(.outcome=="failed") | .error.message' 2>/dev/null)
-    if [ -n "$ERR_MSG" ]; then
-      echo " ❌ ERROR: $ERR_MSG"
-    else
-      echo " ⚠️ Status: Generating or not completed yet."
-    fi
+    echo " ⚠️ Status: Generating or timed out after 12s."
   fi
 done
 
