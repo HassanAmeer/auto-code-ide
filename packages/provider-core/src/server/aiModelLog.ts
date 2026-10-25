@@ -1,4 +1,4 @@
-// @effect-diagnostics globalDate:off globalDateInEffect:off globalRandom:off globalRandomInEffect:off
+// @effect-diagnostics globalDate:off globalDateInEffect:off globalRandom:off globalRandomInEffect:off globalConsole:off globalConsoleInEffect:off
 /**
  * Shared in-memory AI model request log.
  *

@@ -920,6 +920,7 @@ const SETTINGS_CATEGORY_SCOPES: Readonly<Record<SettingsPath, SettingsSearchScop
   "/settings/notifications": null,
   "/settings/sound": null,
   "/settings/scheduled-tasks": null,
+  "/settings/ip-rotation": null,
   "/settings/archived": "project-defaults",
 };
 

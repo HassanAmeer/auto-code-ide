@@ -758,6 +758,9 @@ export function applyFileContentOrPatch(
 
   // 2. Direct write using OpenCode Full Engine executeWriteTool
   // 3. Placeholder protection check
+  const hasPlaceholder = /(?:\/\/|#|\/\*)\s*\.\.\.\s*(?:rest|existing|code|unchanged|here)/i.test(
+    file.content,
+  );
   if (hasPlaceholder && existingContent !== null) {
     const patchResult = universalPatchFile(existingContent, file.content, file.path);
     if (patchResult.success && patchResult.content !== existingContent) {

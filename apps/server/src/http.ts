@@ -1,4 +1,4 @@
-// @effect-diagnostics globalDateInEffect:off globalRandomInEffect:off nodeBuiltinImport:off globalTimers:off preferSchemaOverJson:off globalDate:off globalFetchInEffect:off
+// @effect-diagnostics globalDateInEffect:off globalRandomInEffect:off nodeBuiltinImport:off globalTimers:off globalTimersInEffect:off preferSchemaOverJson:off globalDate:off globalFetchInEffect:off
 import * as NodeOS from "node:os";
 import * as NodeFS from "node:fs";
 import * as NodeChildProcess from "node:child_process";
