@@ -202,18 +202,16 @@ const layer = Layer.effect(
         const provider = state.get().providers.get(providerID);
         if (!provider) return yield* new InitializeError({ kind: "unknown" });
         if (!provider.init) return yield* new InitializeError({ kind: "unsupported" });
-        yield* provider
-          .init(scope)
-          .pipe(
-            Effect.catchCause((cause) =>
-              Cause.hasInterrupts(cause)
-                ? Effect.failCause(cause).pipe(Effect.orDie)
-                : Effect.logWarning("vcs initialization failed", {
-                    provider: providerID,
-                    cause,
-                  }).pipe(Effect.andThen(Effect.fail(new InitializeError({ kind: "failed" })))),
-            ),
-          );
+        yield* provider.init(scope).pipe(
+          Effect.catchCause((cause) =>
+            Cause.hasInterrupts(cause)
+              ? Effect.failCause(cause).pipe(Effect.orDie)
+              : Effect.logWarning("vcs initialization failed", {
+                  provider: providerID,
+                  cause,
+                }).pipe(Effect.andThen(Effect.fail(new InitializeError({ kind: "failed" })))),
+          ),
+        );
       }),
       info: Effect.fn("Vcs.info")(function* () {
         return current.info;

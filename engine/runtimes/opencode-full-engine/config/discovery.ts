@@ -91,14 +91,12 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
       return yield* Effect.forEach(
         [".claude", ".agents", ".opencode", ...names.toReversed()],
         (name) =>
-          fs
-            .resolve(path.join(parent, name))
-            .pipe(
-              Effect.map((resolved) => ({
-                item: AbsolutePath.make(path.join(directory, name)),
-                resolved,
-              })),
-            ),
+          fs.resolve(path.join(parent, name)).pipe(
+            Effect.map((resolved) => ({
+              item: AbsolutePath.make(path.join(directory, name)),
+              resolved,
+            })),
+          ),
       );
     }),
   ).pipe(

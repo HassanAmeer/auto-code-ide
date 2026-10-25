@@ -444,19 +444,17 @@ export const make = Effect.fn("PluginHost.make")(function* (
             ),
           ),
       reply: (input) =>
-        permission
-          .get(input.requestID)
-          .pipe(
-            Effect.flatMap((request) =>
-              request?.sessionID === input.sessionID
-                ? permission.reply({
-                    requestID: input.requestID,
-                    reply: input.decision,
-                    message: input.message,
-                  })
-                : Effect.fail(new Error(`Permission request not found: ${input.requestID}`)),
-            ),
+        permission.get(input.requestID).pipe(
+          Effect.flatMap((request) =>
+            request?.sessionID === input.sessionID
+              ? permission.reply({
+                  requestID: input.requestID,
+                  reply: input.decision,
+                  message: input.message,
+                })
+              : Effect.fail(new Error(`Permission request not found: ${input.requestID}`)),
           ),
+        ),
       // Plain rejections stay defects, as for built-in tools, so they end the step.
       assert: (input) =>
         permission.assert(input).pipe(

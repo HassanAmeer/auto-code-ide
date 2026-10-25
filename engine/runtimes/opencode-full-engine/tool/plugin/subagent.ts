@@ -112,32 +112,28 @@ export const Plugin = {
           output: Output,
           execute: (input, context) =>
             Effect.gen(function* () {
-              const parent = yield* sessions
-                .get(context.sessionID)
-                .pipe(
-                  Effect.mapError(
-                    (error) =>
-                      new ToolFailure({
-                        message: `Parent session not found: ${context.sessionID}`,
-                        error,
-                      }),
-                  ),
-                );
+              const parent = yield* sessions.get(context.sessionID).pipe(
+                Effect.mapError(
+                  (error) =>
+                    new ToolFailure({
+                      message: `Parent session not found: ${context.sessionID}`,
+                      error,
+                    }),
+                ),
+              );
               let current = parent;
               let depth = 0;
               while (current.parentID) {
                 depth++;
-                current = yield* sessions
-                  .get(current.parentID)
-                  .pipe(
-                    Effect.mapError(
-                      (error) =>
-                        new ToolFailure({
-                          message: `Parent session not found: ${current.parentID}`,
-                          error,
-                        }),
-                    ),
-                  );
+                current = yield* sessions.get(current.parentID).pipe(
+                  Effect.mapError(
+                    (error) =>
+                      new ToolFailure({
+                        message: `Parent session not found: ${current.parentID}`,
+                        error,
+                      }),
+                  ),
+                );
               }
               const limit =
                 Config.latest(yield* config.entries(), "experimental")?.subagent_depth ?? 1;
@@ -174,17 +170,15 @@ export const Plugin = {
               const existing =
                 input.sessionID === undefined
                   ? undefined
-                  : yield* sessions
-                      .get(input.sessionID)
-                      .pipe(
-                        Effect.mapError(
-                          (error) =>
-                            new ToolFailure({
-                              message: `Subagent session not found: ${input.sessionID}`,
-                              error,
-                            }),
-                        ),
-                      );
+                  : yield* sessions.get(input.sessionID).pipe(
+                      Effect.mapError(
+                        (error) =>
+                          new ToolFailure({
+                            message: `Subagent session not found: ${input.sessionID}`,
+                            error,
+                          }),
+                      ),
+                    );
               if (existing !== undefined && existing.parentID !== context.sessionID)
                 return yield* new ToolFailure({
                   message: `Session ${existing.id} is not a child of the current session`,

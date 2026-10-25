@@ -70,16 +70,14 @@ export const Plugin = define({
       const at =
         event.messages.at(-1)?.role === "user" ? event.messages.length - 1 : event.messages.length;
       event.messages.splice(at, 0, Message.user(text));
-      return ctx.session
-        .synthetic({ sessionID: event.sessionID, text, resume: false })
-        .pipe(
-          Effect.catchCause((cause) =>
-            Effect.logWarning("failed to persist Plan mode reminder", {
-              sessionID: event.sessionID,
-              cause,
-            }),
-          ),
-        );
+      return ctx.session.synthetic({ sessionID: event.sessionID, text, resume: false }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.logWarning("failed to persist Plan mode reminder", {
+            sessionID: event.sessionID,
+            cause,
+          }),
+        ),
+      );
     });
 
     yield* ctx.event.subscribe().pipe(
