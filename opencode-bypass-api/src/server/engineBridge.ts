@@ -649,7 +649,7 @@ export function executeActiveEnginePipeline(
       NodeChildProcess.execSync("git add -A", { cwd: projectCwd, stdio: "ignore" });
       const commitMsg = `AI generation: ${savedFiles.slice(0, 3).join(", ")}${savedFiles.length > 3 ? "..." : ""}`;
       NodeChildProcess.execSync(
-        `git -c user.name="AutoCode AI" -c user.email="autocode@t3.tools" commit -m "${commitMsg.replace(/"/g, '\\"')}" --allow-empty`,
+        `git -c user.name="AutoCode AI" -c user.email="hasanameer386@gmail.com" commit -m "${commitMsg.replace(/"/g, '\\"')}" --allow-empty`,
         { cwd: projectCwd, stdio: "ignore" },
       );
     } catch {
