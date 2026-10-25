@@ -1897,7 +1897,10 @@ export function GeneralSettingsPanel() {
 
   const [selectedCoreEngine, setSelectedCoreEngine] = useState<CoreEngineType>(() => {
     if (typeof window !== "undefined") {
-      const saved = window.localStorage.getItem("t3_selected_core_engine");
+      const saved =
+        window.localStorage.getItem("autocode_selected_core_engine") ||
+        window.localStorage.getItem("utocode_selected_core_engine") ||
+        window.localStorage.getItem("t3_selected_core_engine");
       if (saved === "opencode-full-engine" || saved === "opencode-adapter" || saved === "others") {
         return saved;
       }
@@ -1945,7 +1948,12 @@ export function GeneralSettingsPanel() {
   const handleSelectEngine = (type: CoreEngineType) => {
     setSelectedCoreEngine(type);
     if (typeof window !== "undefined") {
-      window.localStorage.setItem("t3_selected_core_engine", type);
+      window.localStorage.setItem("autocode_selected_core_engine", type);
+      window.localStorage.setItem("utocode_selected_core_engine", type);
+      window.localStorage.removeItem("t3_selected_core_engine");
+      window.dispatchEvent(
+        new CustomEvent("autocode:core-engine-changed", { detail: { engine: type } }),
+      );
       window.dispatchEvent(new CustomEvent("t3:core-engine-changed", { detail: { engine: type } }));
       fetch("/api/engine/switch", {
         method: "POST",
