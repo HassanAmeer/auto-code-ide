@@ -974,7 +974,7 @@ export const layerEngineStatusRoute = HttpRouter.add(
   "/api/engine/status",
   Effect.gen(function* () {
     const config = yield* ServerConfig.ServerConfig;
-    const settings = getAppSettings(config.dbPath);
+    const settings = getAllAppSettings(config.dbPath);
     const activeEngine = settings?.active_core_engine || "opencode-full-engine";
     const externalCliPath = "/usr/local/bin/opencode";
     const externalCliFound = NodeFS.existsSync(externalCliPath);
