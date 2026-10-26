@@ -31,15 +31,35 @@ import { speakText, stopSpeaking } from "~/lib/speech/tts";
 import { transliterateUrduToRoman } from "~/lib/speech/romanUrduTransliterate";
 import { executeSuperAgentInstruction, isUrduLanguage } from "./superAgentEngine";
 
-const AVAILABLE_MODELS = [
-  { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", provider: "Google", recommended: true },
+interface ModelOption {
+  id: string;
+  name: string;
+  provider: "Google" | "OpenAI" | "Anthropic" | "DeepSeek" | "Other";
+  recommended?: boolean;
+  fast?: boolean;
+}
+
+const AVAILABLE_MODELS: ModelOption[] = [
+  {
+    id: "gemini-2.5-flash",
+    name: "Gemini 2.5 Flash",
+    provider: "Google",
+    recommended: true,
+    fast: true,
+  },
   { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro", provider: "Google" },
-  { id: "deepseek-v3", name: "DeepSeek V3", provider: "DeepSeek" },
-  { id: "deepseek-r1", name: "DeepSeek R1", provider: "DeepSeek" },
-  { id: "glm-4.5-flash", name: "GLM 4.5 Flash", provider: "Zhipu AI" },
+  { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", provider: "Google", fast: true },
+  { id: "gpt-4o", name: "GPT-4o", provider: "OpenAI", recommended: true },
+  { id: "gpt-4o-mini", name: "GPT-4o Mini", provider: "OpenAI", fast: true },
+  { id: "gpt-4.5-preview", name: "GPT-4.5 Preview", provider: "OpenAI" },
+  { id: "o1", name: "o1", provider: "OpenAI" },
+  { id: "claude-3-7-sonnet", name: "Claude 3.7 Sonnet", provider: "Anthropic", recommended: true },
   { id: "claude-3-5-sonnet", name: "Claude 3.5 Sonnet", provider: "Anthropic" },
-  { id: "gpt-4o", name: "GPT-4o", provider: "OpenAI" },
-  { id: "gpt-4o-mini", name: "GPT-4o Mini", provider: "OpenAI" },
+  { id: "claude-3-5-haiku", name: "Claude 3.5 Haiku", provider: "Anthropic", fast: true },
+  { id: "deepseek-v3", name: "DeepSeek V3", provider: "DeepSeek", recommended: true, fast: true },
+  { id: "deepseek-r1", name: "DeepSeek R1", provider: "DeepSeek" },
+  { id: "glm-4.5-flash", name: "GLM 4.5 Flash", provider: "Other", fast: true },
+  { id: "grok-2", name: "Grok 2", provider: "Other" },
 ];
 
 export function SuperCallAssistantView() {
@@ -62,6 +82,8 @@ export function SuperCallAssistantView() {
   const [agentStatus, setAgentStatus] = useState<string | null>(null);
   const [isSessionsDrawerOpen, setIsSessionsDrawerOpen] = useState(false);
   const [isModelMenuOpen, setIsModelMenuOpen] = useState(false);
+  const [modelSearchQuery, setModelSearchQuery] = useState("");
+  const [providerFilter, setProviderFilter] = useState<string>("all");
   const [customModelInput, setCustomModelInput] = useState("");
   const [selectedModel, setSelectedModel] = useState(() => {
     return localStorage.getItem("super_call_assistant_model") || "Gemini 2.5 Flash";
@@ -174,6 +196,7 @@ export function SuperCallAssistantView() {
     },
     prompt: inputText,
     phase: isProcessing ? "running" : "ready",
+    isUserEditing,
   });
 
   // User clicked on the input text: pause auto-send immediately
@@ -211,16 +234,18 @@ export function SuperCallAssistantView() {
     }
   }, [handleSuperAgentDispatch, inputText]);
 
-  // Determine text color for live transcript:
-  // - Gray when actively speaking
-  // - Crisp white when paused & preparing to auto-send
-  // - White when user is editing
-  const transcriptTextColorClass = useMemo(() => {
-    if (isUserEditing) return "text-white font-normal";
-    if (callStatus === "user-speaking") return "text-zinc-400";
-    if (inputText.trim().length > 0) return "text-white font-medium";
-    return "text-zinc-500";
-  }, [callStatus, inputText, isUserEditing]);
+  const filteredModels = useMemo(() => {
+    return AVAILABLE_MODELS.filter((m) => {
+      const matchesProvider =
+        providerFilter === "all" || m.provider.toLowerCase() === providerFilter.toLowerCase();
+      const matchesSearch =
+        !modelSearchQuery.trim() ||
+        m.name.toLowerCase().includes(modelSearchQuery.toLowerCase()) ||
+        m.provider.toLowerCase().includes(modelSearchQuery.toLowerCase()) ||
+        m.id.toLowerCase().includes(modelSearchQuery.toLowerCase());
+      return matchesProvider && matchesSearch;
+    });
+  }, [modelSearchQuery, providerFilter]);
 
   return (
     <div className="flex h-full w-full bg-background text-foreground overflow-hidden relative">
@@ -311,7 +336,7 @@ export function SuperCallAssistantView() {
         </aside>
       )}
 
-      {/* Model Selection Modal */}
+      {/* Model Selection Modal / Sheet */}
       {isModelMenuOpen && (
         <div
           role="dialog"
@@ -321,12 +346,13 @@ export function SuperCallAssistantView() {
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-sm rounded-2xl border border-zinc-800 bg-zinc-950/95 backdrop-blur-2xl p-5 shadow-2xl animate-in zoom-in-95 duration-150"
+            className="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-950/95 backdrop-blur-2xl p-5 shadow-2xl animate-in zoom-in-95 duration-150 flex flex-col max-h-[85vh]"
           >
-            <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-zinc-800 shrink-0">
               <div className="flex items-center gap-2">
                 <Cpu className="size-4 text-amber-400" />
-                <h3 className="text-sm font-semibold text-white">Select AI Model</h3>
+                <h3 className="text-sm font-semibold text-white">Select AI Model & Provider</h3>
               </div>
               <button
                 type="button"
@@ -337,8 +363,41 @@ export function SuperCallAssistantView() {
               </button>
             </div>
 
-            <div className="py-3 space-y-1.5 max-h-72 overflow-y-auto">
-              {AVAILABLE_MODELS.map((m) => {
+            {/* Provider Filter Tabs */}
+            <div className="flex items-center gap-1.5 py-2.5 overflow-x-auto shrink-0 scrollbar-none">
+              {(["all", "Google", "OpenAI", "Anthropic", "DeepSeek", "Other"] as const).map(
+                (prov) => (
+                  <button
+                    key={prov}
+                    type="button"
+                    onClick={() => setProviderFilter(prov)}
+                    className={cn(
+                      "px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer whitespace-nowrap",
+                      providerFilter === prov
+                        ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                        : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 border border-transparent",
+                    )}
+                  >
+                    {prov === "all" ? "All Providers" : prov}
+                  </button>
+                ),
+              )}
+            </div>
+
+            {/* Search Input */}
+            <div className="pb-2 shrink-0">
+              <input
+                type="text"
+                value={modelSearchQuery}
+                onChange={(e) => setModelSearchQuery(e.target.value)}
+                placeholder="Search models or providers..."
+                className="w-full px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-white placeholder:text-zinc-500 focus:outline-hidden focus:border-amber-400"
+              />
+            </div>
+
+            {/* Models List */}
+            <div className="flex-1 py-1 space-y-1 overflow-y-auto min-h-48 max-h-72">
+              {filteredModels.map((m) => {
                 const isSelected = selectedModel.toLowerCase().includes(m.name.toLowerCase());
                 return (
                   <button
@@ -354,9 +413,14 @@ export function SuperCallAssistantView() {
                   >
                     <div>
                       <div className="flex items-center gap-1.5">
-                        <span>{m.name}</span>
+                        <span className="font-medium">{m.name}</span>
                         {m.recommended && (
                           <span className="px-1.5 py-0.5 rounded-md text-[9px] bg-amber-500/20 text-amber-400 font-medium">
+                            Recommended
+                          </span>
+                        )}
+                        {m.fast && (
+                          <span className="px-1.5 py-0.5 rounded-md text-[9px] bg-emerald-500/20 text-emerald-400 font-medium">
                             Fast
                           </span>
                         )}
@@ -367,12 +431,17 @@ export function SuperCallAssistantView() {
                   </button>
                 );
               })}
+              {filteredModels.length === 0 && (
+                <div className="text-center py-6 text-xs text-zinc-500">
+                  No models found matching "{modelSearchQuery}"
+                </div>
+              )}
             </div>
 
             {/* Custom Model Input */}
             <form
               onSubmit={handleCustomModelSubmit}
-              className="pt-3 border-t border-zinc-800 flex gap-2"
+              className="pt-3 border-t border-zinc-800 flex gap-2 shrink-0"
             >
               <input
                 type="text"
@@ -551,17 +620,12 @@ export function SuperCallAssistantView() {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Seamless Borderless Input / Live Speech Transcription Line (NO box border, NO outline) */}
-        <div className="w-full max-w-2xl mx-auto px-4 pb-1 pt-2 shrink-0">
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleSendNow();
-            }}
-            className="flex items-center justify-between gap-3"
-          >
-            {/* The Borderless Text Input */}
-            <div className="flex-1 relative flex items-center">
+        {/* Unified Bottom Area: Live Transcribed Text directly above Divider Line with Centered Model Badge */}
+        <div className="w-full max-w-xl mx-auto px-4 pb-5 pt-1 shrink-0">
+          {/* 1. Live Transcribed Text (Gray color, NO box, NO border, NO outline, looks like floating plain text) */}
+          <div className="flex items-center justify-between gap-2 py-1 min-h-[34px]">
+            {/* Pure text input - borderless, outline-none, transparent */}
+            <div className="flex-1 min-w-0">
               <input
                 ref={inputRef}
                 type="text"
@@ -573,40 +637,40 @@ export function SuperCallAssistantView() {
                   setIsUserEditing(true);
                   setInputText(e.target.value);
                 }}
-                placeholder={
-                  isCallActive
-                    ? "Boleyn ya likhein (Auto-sends in 1.5s)..."
-                    : "Type a message or start call..."
-                }
-                className={cn(
-                  "w-full bg-transparent border-0 outline-hidden focus:outline-hidden focus:ring-0 shadow-none text-sm transition-colors tracking-wide",
-                  transcriptTextColorClass,
-                )}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendNow();
+                  }
+                }}
+                placeholder=""
+                className="w-full bg-transparent border-0 outline-hidden focus:outline-hidden focus:ring-0 p-0 text-sm text-zinc-400 placeholder:text-transparent tracking-wide font-normal leading-relaxed"
+                aria-label="Live Transcribed Text"
               />
             </div>
 
-            {/* Action Buttons: Undo, Sparkles (Urdu -> Roman Urdu), and Send */}
-            <div className="flex items-center gap-1.5 shrink-0">
-              {/* Back / Undo Arrow (Appears after transliterating) */}
+            {/* Gray Action Buttons: Undo, Sparkles (Urdu -> Roman Urdu), and Send */}
+            <div className="flex items-center gap-1 shrink-0">
+              {/* Back / Undo Arrow: Appears ONLY after clicking Spark to restore original Urdu words */}
               {previousTextForUndo !== null && (
                 <button
                   type="button"
                   onClick={handleUndoTransliteration}
                   className="p-1 rounded text-zinc-400 hover:text-white transition-colors cursor-pointer"
-                  title="Undo / Wapas original Urdu script par layen"
+                  title="Wapas original Urdu par layen (Undo)"
                 >
                   <RotateCcw className="size-4" />
                 </button>
               )}
 
-              {/* Sparkles Button: Converts Urdu Script to Roman Urdu */}
+              {/* Spark Icon Button: Urdu -> Roman Urdu with Loader */}
               {inputText.trim().length > 0 && (
                 <button
                   type="button"
                   onClick={handleTransliterateToRoman}
                   disabled={isTransliterating}
-                  className="p-1 rounded text-zinc-400 hover:text-amber-400 transition-colors cursor-pointer"
-                  title="Roman Urdu mein convert karein (Easy to edit)"
+                  className="p-1 rounded text-zinc-400 hover:text-amber-400 disabled:opacity-50 transition-colors cursor-pointer"
+                  title="Urdu ko Roman Urdu mein convert karein"
                 >
                   {isTransliterating ? (
                     <Loader2 className="size-4 animate-spin text-amber-400" />
@@ -616,30 +680,29 @@ export function SuperCallAssistantView() {
                 </button>
               )}
 
-              {/* Gray Borderless Send Button */}
+              {/* Send Button in gray color */}
               <button
-                type="submit"
+                type="button"
+                onClick={handleSendNow}
                 disabled={!inputText.trim() || isProcessing}
-                className="p-1 rounded text-zinc-400 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                className="p-1 rounded text-zinc-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
                 title="Send Message"
               >
                 <Send className="size-4" />
               </button>
             </div>
-          </form>
-        </div>
+          </div>
 
-        {/* Bottom Horizontal Line with Centered Model Selection Badge */}
-        <div className="relative w-full max-w-2xl mx-auto flex items-center justify-center pb-5 pt-1.5 px-4 shrink-0">
-          {/* Shorter, sleek horizontal grey divider line */}
-          <div className="absolute inset-x-4 top-1/2 -translate-y-1/2 h-[1px] bg-zinc-700/60" />
+          {/* 2. Sleek Horizontal Divider with Centered Model Badge (Half above, half below line) */}
+          <div className="relative flex items-center justify-center my-1">
+            {/* The horizontal line */}
+            <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[1px] bg-zinc-700/60" />
 
-          {/* Centered Model Dropdown Badge (Half above line, half below line) */}
-          <div className="relative z-10 px-3 bg-background">
+            {/* Centered Model Dropdown Badge (Half above line, half below line) */}
             <button
               type="button"
               onClick={() => setIsModelMenuOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-0.5 rounded-full border border-zinc-700/80 bg-zinc-900/90 hover:bg-zinc-800 text-zinc-300 hover:text-white text-xs font-medium transition-all shadow-xs cursor-pointer select-none"
+              className="relative z-10 flex items-center gap-1.5 px-3 py-0.5 rounded-full border border-zinc-700/80 bg-background text-zinc-300 hover:text-white hover:border-zinc-500 text-xs font-medium transition-all shadow-xs cursor-pointer select-none"
               title="Click to select AI Model & Provider"
             >
               <Sparkles className="size-3 text-amber-400" />

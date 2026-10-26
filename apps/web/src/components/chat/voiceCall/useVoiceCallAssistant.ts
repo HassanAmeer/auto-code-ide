@@ -301,6 +301,7 @@ export interface UseVoiceCallAssistantOptions {
   onInterrupt?: () => void;
   canInterrupt?: boolean;
   threadId?: string | null;
+  isUserEditing?: boolean;
 }
 
 export interface UseVoiceCallAssistantReturn {
@@ -328,7 +329,10 @@ export function useVoiceCallAssistant({
   onInterrupt,
   canInterrupt = false,
   threadId,
+  isUserEditing = false,
 }: UseVoiceCallAssistantOptions) {
+  const isUserEditingRef = useRef(Boolean(isUserEditing));
+  isUserEditingRef.current = Boolean(isUserEditing);
   const [isCallActive, setIsCallActive] = useState(false);
   const [callStatus, setCallStatus] = useState<VoiceCallStatus>("idle");
   const [callLanguage, setCallLanguageState] = useState<"urdu" | "english">(() => {
@@ -938,13 +942,17 @@ export function useVoiceCallAssistant({
   const dispatchAutoSend = useCallback(() => {
     clearRestartTimer();
 
-    // Never auto-send if call is inactive, or if TTS is actively speaking or thinking
+    // Never auto-send if call is inactive, user is editing, or if TTS is actively speaking or thinking
     if (
       !isCallActiveRef.current ||
+      isUserEditingRef.current ||
       isTtsActiveRef.current ||
       callStatusRef.current === "speaking" ||
       callStatusRef.current === "thinking"
     ) {
+      if (isUserEditingRef.current) {
+        hasPendingSpeechRef.current = false;
+      }
       return;
     }
 
@@ -1043,11 +1051,15 @@ export function useVoiceCallAssistant({
     const interval = setInterval(() => {
       if (
         !isCallActiveRef.current ||
+        isUserEditingRef.current ||
         isTtsActiveRef.current ||
         callStatusRef.current === "thinking" ||
         callStatusRef.current === "speaking" ||
         !hasPendingSpeechRef.current
       ) {
+        if (isUserEditingRef.current) {
+          hasPendingSpeechRef.current = false;
+        }
         return;
       }
 
