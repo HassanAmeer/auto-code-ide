@@ -49,6 +49,7 @@ import {
 import { getAppModelOptionsForInstance } from "~/modelSelection";
 import { ProviderModelPicker } from "../ProviderModelPicker";
 import type { ModelEsque } from "../providerIconUtils";
+import { CircularVoiceWaves } from "./VoiceCallButton";
 import { buildSuperAgentSystemPrompt } from "./superAgentPrompt";
 import { useVoiceCallAssistant } from "./useVoiceCallAssistant";
 import { speakText, stopSpeaking } from "~/lib/speech/tts";
@@ -533,19 +534,7 @@ export function SuperCallAssistantView() {
       {/* Main Conversation Stream */}
       <div className="flex-1 flex flex-col h-full min-w-0 relative">
         {/* Top Header */}
-        <header className="h-14 border-b border-border/50 px-4 sm:px-6 flex items-center justify-between shrink-0 bg-background/80 backdrop-blur-md">
-          {/* Left: Projects with Health Radar Dot */}
-          <div className="flex items-center gap-2 min-w-0">
-            <FolderGit2 className="size-4 text-primary shrink-0" />
-            <span className="text-sm font-semibold truncate text-foreground">
-              Projects ({projects.length})
-            </span>
-            <span
-              className="size-2 rounded-full bg-emerald-500 animate-pulse shrink-0"
-              title="Health Radar: All projects operational"
-            />
-          </div>
-
+        <header className="h-14 border-b border-border/50 px-4 sm:px-6 flex items-center justify-end shrink-0 bg-background/80 backdrop-blur-md">
           {/* Right: Notes & Tasks */}
           <div className="flex items-center gap-2 shrink-0">
             <button
@@ -577,7 +566,7 @@ export function SuperCallAssistantView() {
         </header>
 
         {/* Message Bubble History */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 max-w-3xl w-full mx-auto">
+        <div className="flex-1 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden p-4 sm:p-6 space-y-4 max-w-3xl w-full mx-auto">
           {(!activeSession || activeSession.messages.length === 0) && (
             <div className="h-full flex flex-col items-center justify-center text-center p-6 text-muted-foreground">
               <div className="size-16 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mb-4 shadow-inner">
@@ -706,46 +695,6 @@ export function SuperCallAssistantView() {
 
         {/* Unified Bottom Area: Live Transcribed Text directly above Divider Line with Centered Model Badge */}
         <div className="w-full max-w-xl mx-auto px-4 pb-5 pt-1 shrink-0 space-y-2">
-          {/* Quick Command Pills for Super Admin Hub */}
-          <div className="flex items-center justify-center gap-1.5 flex-wrap">
-            <button
-              type="button"
-              onClick={() =>
-                void handleSuperAgentDispatch("Audit all projects and check error radar")
-              }
-              className="px-2.5 py-1 rounded-full border border-border/60 bg-muted/40 hover:bg-muted hover:border-border text-[11px] text-muted-foreground hover:text-foreground transition-all cursor-pointer flex items-center gap-1 shadow-xs"
-            >
-              🔍 Audit Projects
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                void handleSuperAgentDispatch("Kya kisi project mein koi error hai? Fix check karo")
-              }
-              className="px-2.5 py-1 rounded-full border border-border/60 bg-muted/40 hover:bg-muted hover:border-border text-[11px] text-muted-foreground hover:text-foreground transition-all cursor-pointer flex items-center gap-1 shadow-xs"
-            >
-              ⚡ Fix Errors
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                void handleSuperAgentDispatch(
-                  "Raat ke 2:00 baje dependency update aur test execution schedule karo",
-                )
-              }
-              className="px-2.5 py-1 rounded-full border border-border/60 bg-muted/40 hover:bg-muted hover:border-border text-[11px] text-muted-foreground hover:text-foreground transition-all cursor-pointer flex items-center gap-1 shadow-xs"
-            >
-              ⏰ Schedule 2 AM Job
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleSuperAgentDispatch("Daily standup summary briefing do")}
-              className="px-2.5 py-1 rounded-full border border-border/60 bg-muted/40 hover:bg-muted hover:border-border text-[11px] text-muted-foreground hover:text-foreground transition-all cursor-pointer flex items-center gap-1 shadow-xs"
-            >
-              🎙️ Daily Standup
-            </button>
-          </div>
-
           {/* 1. Live Transcribed Text (Gray color, NO box, NO border, NO outline, looks like floating plain text) */}
           <div className="flex items-center justify-between gap-2 py-1 min-h-[34px]">
             {/* Pure text input - borderless, outline-none, transparent */}
@@ -817,8 +766,8 @@ export function SuperCallAssistantView() {
             </div>
           </div>
 
-          {/* 2. Sleek Horizontal Divider with Left-Aligned Model Badge & Centered Call Controls (Screenshot 2 design) */}
-          <div className="relative flex items-center justify-between my-2 min-h-[32px]">
+          {/* 2. Sleek Horizontal Divider with Left-Aligned Model Badge & Centered Wave Call Button */}
+          <div className="relative flex items-center justify-between my-2 min-h-[48px]">
             {/* The horizontal line spanning across */}
             <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[1px] bg-zinc-800" />
 
@@ -837,62 +786,80 @@ export function SuperCallAssistantView() {
               />
             </div>
 
-            {/* Middle / Center: Compact Call Control(s) (Screenshot 2 design, NO flags, NO waves) */}
-            <div className="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 z-10 flex items-center gap-2 bg-background px-2">
-              {!isCallActive ? (
-                // Idle state: Just Call Button (Compact circle with phone icon, NO flags, NO waves)
+            {/* Middle / Center: Call Button with Circular Wave Animation and Colors Effect (NO flags) */}
+            <div className="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 z-10 flex items-center gap-2">
+              {isCallActive && (
                 <button
                   type="button"
-                  onClick={toggleCall}
-                  className="size-7.5 rounded-full border border-zinc-700/80 bg-zinc-900/90 hover:bg-zinc-800 text-zinc-300 hover:text-white flex items-center justify-center transition-all cursor-pointer shadow-xs active:scale-95"
-                  title="Start Call"
+                  onClick={toggleMicMute}
+                  className={cn(
+                    "size-7 rounded-full border flex items-center justify-center transition-all cursor-pointer shadow-xs active:scale-95 bg-background z-20",
+                    isMicMuted
+                      ? "bg-amber-500/20 border-amber-500/50 text-amber-400"
+                      : "bg-zinc-900/90 border-zinc-700/80 text-zinc-300 hover:text-white hover:bg-zinc-800",
+                  )}
+                  title={isMicMuted ? "Unmute Microphone" : "Mute Microphone"}
                 >
-                  <PhoneCall className="size-3.5" />
+                  {isMicMuted ? <MicOff className="size-3" /> : <Mic className="size-3" />}
                 </button>
-              ) : (
-                // Active Call state: Matches Screenshot 2 exactly (Mic Mute, Red End Call, Waveform)
-                <div className="flex items-center gap-1.5 animate-in fade-in zoom-in-95 duration-200">
-                  {/* Mic Mute Button */}
-                  <button
-                    type="button"
-                    onClick={toggleMicMute}
-                    className={cn(
-                      "size-7 rounded-full border flex items-center justify-center transition-all cursor-pointer shadow-xs active:scale-95",
-                      isMicMuted
-                        ? "bg-amber-500/20 border-amber-500/50 text-amber-400"
-                        : "bg-zinc-800/90 border-zinc-700/80 text-zinc-300 hover:text-white hover:bg-zinc-700",
-                    )}
-                    title={isMicMuted ? "Unmute Microphone" : "Mute Microphone"}
-                  >
-                    {isMicMuted ? <MicOff className="size-3" /> : <Mic className="size-3" />}
-                  </button>
-
-                  {/* Red End Call Button (Center) */}
-                  <button
-                    type="button"
-                    onClick={endCall}
-                    className="size-8 rounded-full bg-rose-600 hover:bg-rose-500 text-white flex items-center justify-center shadow-md transition-all cursor-pointer active:scale-95"
-                    title="End Call"
-                  >
-                    <PhoneOff className="size-3.5" />
-                  </button>
-
-                  {/* Audio Wave / Visualizer Button */}
-                  <div
-                    className="size-7 rounded-full border border-zinc-700/80 bg-zinc-800/90 text-zinc-300 flex items-center justify-center shadow-xs"
-                    title={callStatus === "speaking" ? "Assistant is speaking" : "Listening..."}
-                  >
-                    <AudioLines
-                      className={cn(
-                        "size-3.5 transition-colors",
-                        callStatus === "speaking"
-                          ? "text-emerald-400 animate-pulse"
-                          : "text-zinc-400",
-                      )}
-                    />
-                  </div>
-                </div>
               )}
+
+              <div
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (isCallActive) {
+                    if (callStatus === "speaking" || callStatus === "thinking") {
+                      interruptSpeaking();
+                    }
+                    endCall();
+                  } else {
+                    toggleCall();
+                  }
+                }}
+                className={cn(
+                  "relative z-10 flex items-center justify-center size-13 sm:size-14 rounded-full transition-all duration-300 cursor-pointer select-none",
+                  "bg-zinc-950/95 border border-zinc-800/90 backdrop-blur-xl shadow-xl",
+                  isCallActive && "shadow-[0_0_24px_rgba(225,29,72,0.4)] border-rose-500/40",
+                )}
+              >
+                {/* Circular Voice Waves (Dual concentric animated waves with reactive color effects) */}
+                <CircularVoiceWaves callStatus={callStatus} analyserNode={analyserNode} />
+
+                {/* Centered Phone Icon */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (isCallActive) {
+                      if (callStatus === "speaking" || callStatus === "thinking") {
+                        interruptSpeaking();
+                      }
+                      endCall();
+                    } else {
+                      toggleCall();
+                    }
+                  }}
+                  className={cn(
+                    "relative z-20 flex size-7 items-center justify-center rounded-full transition-all duration-200 cursor-pointer active:scale-90 bg-transparent border-0 shadow-none outline-none focus:outline-none",
+                    isCallActive
+                      ? "text-rose-400 hover:text-rose-300"
+                      : "text-zinc-300 hover:text-white",
+                  )}
+                  title={
+                    isCallActive
+                      ? "End Voice Call (کال بند کریں)"
+                      : "Start Voice Call (کال شروع کریں)"
+                  }
+                >
+                  {isCallActive ? (
+                    <PhoneOff className="size-4" strokeWidth={2.4} />
+                  ) : (
+                    <PhoneCall className="size-4" strokeWidth={2.2} />
+                  )}
+                </button>
+              </div>
             </div>
 
             {/* Right: empty spacer to balance the layout */}
