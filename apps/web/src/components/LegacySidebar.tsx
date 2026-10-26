@@ -38,6 +38,7 @@ import {
 } from "./ThreadStatusIndicators";
 import { EnvironmentMachineIcon } from "./EnvironmentMachineIcon";
 import { ProjectFavicon } from "./ProjectFavicon";
+import { SidebarBotSection } from "./sidebar/SidebarBotSection";
 import { useAtomValue } from "@effect/atom-react";
 import { autoAnimate } from "@formkit/auto-animate";
 import React, { useCallback, useEffect, memo, useMemo, useRef, useState } from "react";
@@ -3677,6 +3678,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
         </SidebarGroup>
       ) : null}
       <SidebarGroup className="p-0">
+        <SidebarBotSection />
         <div className="flex items-center justify-between px-3 py-1.5 border-b border-sidebar-border/30 dark:border-zinc-700/30">
           <span className="text-xs font-semibold tracking-wide uppercase text-sidebar-muted-foreground/80">
             Projects
