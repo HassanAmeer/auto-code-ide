@@ -49,10 +49,10 @@ export const VoiceCallFloatingWidget = memo(function VoiceCallFloatingWidget({
               onToggleCall();
             }}
             className={cn(
-              "relative z-20 flex items-center justify-center w-11 h-7.5 rounded-[5px] transition-all duration-200 cursor-pointer shadow-md -mb-1.5 animate-in fade-in zoom-in-95",
+              "relative z-20 flex items-center justify-center p-0 bg-transparent border-0 shadow-none outline-none focus:outline-none transition-all duration-200 cursor-pointer -mb-1 animate-in fade-in zoom-in-95",
               callLanguage === "urdu"
-                ? "border-2 border-emerald-400 bg-emerald-950/90 shadow-[0_0_12px_rgba(16,185,129,0.55)] scale-105"
-                : "border border-zinc-600/80 bg-zinc-900/95 hover:border-zinc-400 opacity-80 hover:opacity-100",
+                ? "scale-110 opacity-100 drop-shadow-[0_2px_8px_rgba(0,0,0,0.6)]"
+                : "opacity-75 hover:opacity-100 hover:scale-105",
             )}
             title="اردو (Urdu) - Click to call in Urdu"
           >
@@ -93,10 +93,8 @@ export const VoiceCallFloatingWidget = memo(function VoiceCallFloatingWidget({
               onToggleCall();
             }}
             className={cn(
-              "relative z-20 flex size-7 items-center justify-center rounded-full transition-all duration-200 cursor-pointer active:scale-90",
-              isCallActive
-                ? "text-red-400/90 hover:text-red-400 bg-red-950/30 hover:bg-red-500/20 border border-red-500/30 shadow-[0_0_8px_rgba(239,68,68,0.3)]"
-                : "text-zinc-300 hover:text-white bg-zinc-800/60 hover:bg-zinc-700/70 border border-zinc-600/40 shadow-sm",
+              "relative z-20 flex size-7 items-center justify-center rounded-full transition-all duration-200 cursor-pointer active:scale-90 bg-transparent border-0 shadow-none outline-none focus:outline-none",
+              isCallActive ? "text-red-400 hover:text-red-300" : "text-zinc-300 hover:text-white",
             )}
             title={
               isCallActive ? "End Voice Call (کال بند کریں)" : "Start Voice Call (کال شروع کریں)"
@@ -121,10 +119,10 @@ export const VoiceCallFloatingWidget = memo(function VoiceCallFloatingWidget({
               onToggleCall();
             }}
             className={cn(
-              "relative z-20 flex items-center justify-center w-11 h-7.5 rounded-[8px] transition-all duration-200 cursor-pointer shadow-md -mt-1.5 animate-in fade-in zoom-in-95",
+              "relative z-20 flex items-center justify-center p-0 bg-transparent border-0 shadow-none outline-none focus:outline-none transition-all duration-200 cursor-pointer -mt-1 animate-in fade-in zoom-in-95",
               callLanguage === "english"
-                ? "border-2 border-blue-400 bg-blue-950/90 shadow-[0_0_12px_rgba(59,130,246,0.55)] scale-105"
-                : "border border-zinc-600/80 bg-zinc-900/95 hover:border-zinc-400 opacity-80 hover:opacity-100",
+                ? "scale-110 opacity-100 drop-shadow-[0_2px_8px_rgba(0,0,0,0.6)]"
+                : "opacity-75 hover:opacity-100 hover:scale-105",
             )}
             title="English - Click to call in English"
           >
