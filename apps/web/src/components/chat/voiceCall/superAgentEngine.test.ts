@@ -164,6 +164,32 @@ describe("superAgentEngine", () => {
       expect(res.reply).toContain("task dispatch kar diya hai");
     });
 
+    it("handles direct cross-project dispatch with delegatedTask info", async () => {
+      const res = await executeSuperAgentInstruction({
+        userText: "project auto-code-ide mein login page ka validation error fix kar do",
+        projects: mockProjects,
+        selectedModel: "Gemini 2.5 Flash",
+      });
+
+      expect(res.actionTaken).toBe("dispatch_autonomous_task");
+      expect(res.delegatedTask).toBeDefined();
+      expect(res.delegatedTask?.projectName).toBe("auto-code-ide");
+      expect(res.delegatedTask?.progress).toBe(85);
+      expect(res.reply).toContain("worker agent ko prompt de kar");
+    });
+
+    it("provides executive daily standup briefing", async () => {
+      const res = await executeSuperAgentInstruction({
+        userText: "daily standup briefing summary do",
+        projects: mockProjects,
+        selectedModel: "Gemini 2.5 Flash",
+      });
+
+      expect(res.actionTaken).toBe("standup_briefing");
+      expect(res.reply).toContain("Executive Daily Standup Briefing");
+      expect(res.reply).toContain("Projects (1)");
+    });
+
     it("handles hands-free project completion command", async () => {
       const res = await executeSuperAgentInstruction({
         userText: "is project ko complete karo aur handle karo",

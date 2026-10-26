@@ -1,11 +1,24 @@
 import { useState, useEffect, useCallback } from "react";
 import { saveServerSetting } from "./serverSettingsSync";
 
+export interface DelegatedTaskMeta {
+  projectName: string;
+  taskTitle: string;
+  status: "running" | "completed" | "error";
+  progress: number;
+  threadId?: string;
+}
+
 export interface CallAssistantMessage {
   id: string;
   role: "user" | "assistant";
   text: string;
   timestamp: number;
+  meta?: {
+    delegatedTask?: DelegatedTaskMeta;
+    actionType?: string;
+    details?: unknown;
+  };
 }
 
 export interface CallAssistantSession {
@@ -102,13 +115,14 @@ export function addMessageToSession(
   sessionId: string,
   role: "user" | "assistant",
   text: string,
+  meta?: CallAssistantMessage["meta"],
 ): void {
   const current = loadCallSessions();
   const now = Date.now();
   const idx = current.findIndex((s) => s.id === sessionId);
   if (idx === -1) {
     const created = createNewCallSession();
-    addMessageToSession(created.id, role, text);
+    addMessageToSession(created.id, role, text, meta);
     return;
   }
 
@@ -118,6 +132,7 @@ export function addMessageToSession(
     role,
     text: text.trim(),
     timestamp: now,
+    meta,
   };
 
   const updatedSession: CallAssistantSession = {
@@ -208,16 +223,16 @@ export function useCallSessions() {
   }, [setActiveSessionId]);
 
   const handleAddMessage = useCallback(
-    (role: "user" | "assistant", text: string) => {
+    (role: "user" | "assistant", text: string, meta?: CallAssistantMessage["meta"]) => {
       if (!activeSession) {
         const fresh = createNewCallSession();
-        addMessageToSession(fresh.id, role, text);
+        addMessageToSession(fresh.id, role, text, meta);
         setActiveSessionId(fresh.id);
       } else {
-        addMessageToSession(activeSession.id, role, text);
+        addMessageToSession(activeSession.id, role, text, meta);
       }
     },
-    [activeSession],
+    [activeSession, setActiveSessionId],
   );
 
   return {

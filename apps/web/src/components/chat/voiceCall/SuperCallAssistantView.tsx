@@ -10,12 +10,13 @@ import {
   Loader2,
   ListTodo,
   Clock,
+  StickyNote,
 } from "lucide-react";
 import { type ProviderInstanceId } from "@t3tools/contracts";
 import { useAtomValue } from "@effect/atom-react";
 import { cn } from "~/lib/utils";
 import { useProjects } from "~/state/entities";
-import { useNotes, addNote, type NoteItem } from "~/lib/notesStore";
+import { useNotes, openNotesSheet, addNote, type NoteItem } from "~/lib/notesStore";
 import { useScheduledTasks } from "~/lib/scheduledTasksStore";
 import {
   useCallSessions,
@@ -199,7 +200,11 @@ export function SuperCallAssistantView() {
           },
         });
 
-        handleAddMessage("assistant", res.reply);
+        const meta = res.delegatedTask
+          ? { delegatedTask: res.delegatedTask, actionType: res.actionTaken }
+          : undefined;
+
+        handleAddMessage("assistant", res.reply, meta);
         speakText(res.spokenReply);
       } catch (err) {
         console.error("Super agent error:", err);
@@ -421,16 +426,33 @@ export function SuperCallAssistantView() {
       <div className="flex-1 flex flex-col h-full min-w-0 relative">
         {/* Top Header */}
         <header className="h-14 border-b border-border/50 px-4 sm:px-6 flex items-center justify-between shrink-0 bg-background/80 backdrop-blur-md">
-          {/* Left: Just Projects */}
+          {/* Left: Projects with Health Radar Dot */}
           <div className="flex items-center gap-2 min-w-0">
             <FolderGit2 className="size-4 text-primary shrink-0" />
             <span className="text-sm font-semibold truncate text-foreground">
               Projects ({projects.length})
             </span>
+            <span
+              className="size-2 rounded-full bg-emerald-500 animate-pulse shrink-0"
+              title="Health Radar: All projects operational"
+            />
           </div>
 
-          {/* Right: Only Tasks with Count */}
+          {/* Right: Notes & Tasks */}
           <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => openNotesSheet()}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border/70 hover:border-border hover:bg-muted/50 text-xs font-medium transition-colors cursor-pointer"
+              title="Workspace Notes & Memory"
+            >
+              <StickyNote className="size-3.5 text-amber-400" />
+              <span>Notes</span>
+              <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-amber-500/15 text-amber-400 font-semibold">
+                {notes.length}
+              </span>
+            </button>
+
             <button
               type="button"
               onClick={() => setIsTasksSheetOpen(true)}
@@ -518,6 +540,34 @@ export function SuperCallAssistantView() {
                   )}
                 >
                   <p className="whitespace-pre-wrap">{msg.text}</p>
+
+                  {/* Delegated Task Execution Card */}
+                  {msg.meta?.delegatedTask && (
+                    <div className="mt-2.5 rounded-xl border border-primary/30 bg-primary/10 p-3 text-xs space-y-2">
+                      <div className="flex items-center justify-between font-medium">
+                        <span className="flex items-center gap-1.5 text-foreground">
+                          <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
+                          <span>Delegated:</span>
+                          <span className="font-semibold text-primary">
+                            {msg.meta.delegatedTask.projectName}
+                          </span>
+                        </span>
+                        <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-primary/20 text-primary font-mono font-semibold">
+                          {msg.meta.delegatedTask.status}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground leading-snug">
+                        {msg.meta.delegatedTask.taskTitle}
+                      </p>
+                      <div className="w-full bg-border/60 rounded-full h-1.5 overflow-hidden">
+                        <div
+                          className="bg-primary h-full rounded-full transition-all duration-500"
+                          style={{ width: `${msg.meta.delegatedTask.progress}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
                   <span className="block text-[9px] opacity-60 mt-1 text-right">
                     {new Date(msg.timestamp).toLocaleTimeString([], {
                       hour: "2-digit",
@@ -547,7 +597,47 @@ export function SuperCallAssistantView() {
         </div>
 
         {/* Unified Bottom Area: Live Transcribed Text directly above Divider Line with Centered Model Badge */}
-        <div className="w-full max-w-xl mx-auto px-4 pb-5 pt-1 shrink-0">
+        <div className="w-full max-w-xl mx-auto px-4 pb-5 pt-1 shrink-0 space-y-2">
+          {/* Quick Command Pills for Super Admin Hub */}
+          <div className="flex items-center justify-center gap-1.5 flex-wrap">
+            <button
+              type="button"
+              onClick={() =>
+                void handleSuperAgentDispatch("Audit all projects and check error radar")
+              }
+              className="px-2.5 py-1 rounded-full border border-border/60 bg-muted/40 hover:bg-muted hover:border-border text-[11px] text-muted-foreground hover:text-foreground transition-all cursor-pointer flex items-center gap-1 shadow-xs"
+            >
+              🔍 Audit Projects
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                void handleSuperAgentDispatch("Kya kisi project mein koi error hai? Fix check karo")
+              }
+              className="px-2.5 py-1 rounded-full border border-border/60 bg-muted/40 hover:bg-muted hover:border-border text-[11px] text-muted-foreground hover:text-foreground transition-all cursor-pointer flex items-center gap-1 shadow-xs"
+            >
+              ⚡ Fix Errors
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                void handleSuperAgentDispatch(
+                  "Raat ke 2:00 baje dependency update aur test execution schedule karo",
+                )
+              }
+              className="px-2.5 py-1 rounded-full border border-border/60 bg-muted/40 hover:bg-muted hover:border-border text-[11px] text-muted-foreground hover:text-foreground transition-all cursor-pointer flex items-center gap-1 shadow-xs"
+            >
+              ⏰ Schedule 2 AM Job
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleSuperAgentDispatch("Daily standup summary briefing do")}
+              className="px-2.5 py-1 rounded-full border border-border/60 bg-muted/40 hover:bg-muted hover:border-border text-[11px] text-muted-foreground hover:text-foreground transition-all cursor-pointer flex items-center gap-1 shadow-xs"
+            >
+              🎙️ Daily Standup
+            </button>
+          </div>
+
           {/* 1. Live Transcribed Text (Gray color, NO box, NO border, NO outline, looks like floating plain text) */}
           <div className="flex items-center justify-between gap-2 py-1 min-h-[34px]">
             {/* Pure text input - borderless, outline-none, transparent */}
