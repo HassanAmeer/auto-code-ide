@@ -1,9 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import {
-  PhoneCall,
-  PhoneOff,
-  Mic,
-  MicOff,
   Plus,
   Trash2,
   FolderGit2,
@@ -11,17 +7,18 @@ import {
   Send,
   Sparkles,
   Bot,
-  Square,
   History,
   X,
-  Volume2,
   ChevronDown,
   Check,
   Cpu,
+  RotateCcw,
+  Loader2,
 } from "lucide-react";
 import { cn } from "~/lib/utils";
 import { useProjects } from "~/state/entities";
 import { useNotes, addNote, type NoteItem } from "~/lib/notesStore";
+import { useScheduledTasks } from "~/lib/scheduledTasksStore";
 import {
   useCallSessions,
   type CallAssistantMessage,
@@ -31,6 +28,8 @@ import { buildSuperAgentSystemPrompt } from "./superAgentPrompt";
 import { VoiceCallFloatingWidget } from "./VoiceCallFloatingWidget";
 import { useVoiceCallAssistant } from "./useVoiceCallAssistant";
 import { speakText, stopSpeaking } from "~/lib/speech/tts";
+import { transliterateUrduToRoman } from "~/lib/speech/romanUrduTransliterate";
+import { executeSuperAgentInstruction, isUrduLanguage } from "./superAgentEngine";
 
 const AVAILABLE_MODELS = [
   { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", provider: "Google", recommended: true },
@@ -57,19 +56,27 @@ export function SuperCallAssistantView() {
     handleAddMessage,
   } = useCallSessions();
 
+  const { tasks: scheduledTasks } = useScheduledTasks();
   const [inputText, setInputText] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [agentStatus, setAgentStatus] = useState<string | null>(null);
   const [isSessionsDrawerOpen, setIsSessionsDrawerOpen] = useState(false);
   const [isModelMenuOpen, setIsModelMenuOpen] = useState(false);
+  const [customModelInput, setCustomModelInput] = useState("");
   const [selectedModel, setSelectedModel] = useState(() => {
     return localStorage.getItem("super_call_assistant_model") || "Gemini 2.5 Flash";
   });
 
-  // State to track if user is editing the transcribed speech manually
-  const [isEditingTranscript, setIsEditingTranscript] = useState(false);
-  const [isSilenceCountdown, setIsSilenceCountdown] = useState(false);
-  const countdownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Track if user clicked/focused the input field to pause auto-sending
+  const [isUserEditing, setIsUserEditing] = useState(false);
+  const isUserEditingRef = useRef(false);
+
+  // Transliteration & Undo state
+  const [isTransliterating, setIsTransliterating] = useState(false);
+  const [previousTextForUndo, setPreviousTextForUndo] = useState<string | null>(null);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // Auto scroll to latest message
   useEffect(() => {
@@ -82,161 +89,65 @@ export function SuperCallAssistantView() {
     setIsModelMenuOpen(false);
   }, []);
 
+  const handleCustomModelSubmit = useCallback(
+    (e: React.FormEvent) => {
+      e.preventDefault();
+      if (customModelInput.trim()) {
+        handleModelChange(customModelInput.trim());
+        setCustomModelInput("");
+      }
+    },
+    [customModelInput, handleModelChange],
+  );
+
   const handleSuperAgentDispatch = useCallback(
     async (rawUserText: string) => {
       const userText = rawUserText.trim();
       if (!userText || isProcessing) return;
 
       setInputText("");
-      setIsEditingTranscript(false);
-      setIsSilenceCountdown(false);
-      if (countdownTimerRef.current) {
-        clearTimeout(countdownTimerRef.current);
-        countdownTimerRef.current = null;
-      }
+      setPreviousTextForUndo(null);
+      isUserEditingRef.current = false;
+      setIsUserEditing(false);
 
       handleAddMessage("user", userText);
       setIsProcessing(true);
+      setAgentStatus("Analyzing request...");
 
-      const isUrduQuery =
-        /[\u0600-\u06FF]/.test(userText) ||
-        /\b(kya|hai|hain|karo|batao|kaise|theek|suno|bhai|yaar|acha|haan|nahi|karna|dekho|parho)\b/i.test(
+      try {
+        const activeProjId = projects[0]?.id ? String(projects[0].id) : undefined;
+        const res = await executeSuperAgentInstruction({
           userText,
-        );
+          projects,
+          activeProjectId: activeProjId,
+          selectedModel,
+          onStatusUpdate: (status) => {
+            setAgentStatus(status);
+          },
+        });
 
-      const lang: "urdu" | "english" = isUrduQuery ? "urdu" : "english";
-
-      // 1. Check for Note Creation commands
-      const noteMatch = userText.match(
-        /(?:note\s*(?:bana(?:o|en)?|likh(?:o|en)?|add\s*karo?)|add\s*note|create\s*note)\s*[:\-]?\s*(.+)/i,
-      );
-      if (noteMatch && noteMatch[1]) {
-        const noteContent = noteMatch[1].trim();
-        const noteTitle = noteContent.slice(0, 24).trim() || "Voice Note";
-        addNote(noteTitle, noteContent);
-
-        const reply =
-          lang === "urdu"
-            ? `Theek hai, maine aapke notes mein yeh add kar diya hai: "${noteTitle}".`
-            : `Got it! I have saved this note: "${noteTitle}".`;
-
-        setTimeout(() => {
-          handleAddMessage("assistant", reply);
-          setIsProcessing(false);
-          speakText(reply);
-        }, 500);
-        return;
-      }
-
-      // 2. Check for Note Inspection commands
-      if (
-        /\b(notes?\s*(?:parh(?:o|en)?|dekh(?:o|en)?|kya\s*hai|dikhao|batao|list)|check\s*notes)\b/i.test(
-          userText,
-        )
-      ) {
-        let reply = "";
-        if (notes.length === 0) {
-          reply =
-            lang === "urdu"
-              ? "Aapke paas is waqt koi active notes nahi hain. Agar koi note save karna ho to batayein."
-              : "You have no notes saved right now. Would you like me to create one?";
-        } else {
-          const notesSummary = notes
-            .slice(0, 5)
-            .map((n, i) => `${i + 1}. ${n.title}`)
-            .join(", ");
-          reply =
-            lang === "urdu"
-              ? `Aapke paas kul ${notes.length} notes hain: ${notesSummary}.`
-              : `You have ${notes.length} notes: ${notesSummary}.`;
-        }
-
-        setTimeout(() => {
-          handleAddMessage("assistant", reply);
-          setIsProcessing(false);
-          speakText(reply);
-        }, 500);
-        return;
-      }
-
-      // 3. Check for Project Overseer commands
-      if (
-        /\b(projects?\s*(?:dekh(?:o|en)?|status|kya\s*haal|list|check|batao)|check\s*projects)\b/i.test(
-          userText,
-        )
-      ) {
-        let reply = "";
-        if (projects.length === 0) {
-          reply =
-            lang === "urdu"
-              ? "Workspace mein is waqt koi active project load nahi hai."
-              : "No active projects found in the workspace right now.";
-        } else {
-          const projNames = projects
-            .slice(0, 5)
-            .map((p) => p.title || String(p.id))
-            .join(", ");
-          reply =
-            lang === "urdu"
-              ? `Workspace mein ${projects.length} projects hain: ${projNames}. Tamam projects healthy hain aur koi critical build error nahi mila.`
-              : `I am monitoring ${projects.length} projects: ${projNames}. All projects are healthy and operating normally.`;
-        }
-
-        setTimeout(() => {
-          handleAddMessage("assistant", reply);
-          setIsProcessing(false);
-          speakText(reply);
-        }, 500);
-        return;
-      }
-
-      // 4. Default Conversational Super Assistant response
-      let reply = "";
-      if (/\b(error|masla|kharabi|bug|solve|sort|fix)\b/i.test(userText)) {
-        reply =
-          lang === "urdu"
-            ? "Maine aapke workspace aur projects ko scan kiya hai. Agar kisi specific project mein koi masla ya error hai to batayein, kya main permission le kar isay sort aur solve kar doon?"
-            : "I have scanned the workspace. If you'd like me to investigate or fix an issue in any project, let me know and I will solve it upon your permission.";
-      } else if (/\b(kaise\s*ho|kya\s*haal|hello|hi|hey|salam|assalam)\b/i.test(userText)) {
-        reply =
-          lang === "urdu"
-            ? `Walaikum Assalam! Main theek hoon, aapka Super Call Assistant (${selectedModel}). Main aapke tamam projects aur workspace ko dekh raha hoon. Batayein aaj kya karna hai?`
-            : `Hello! I am your Super Call Assistant (${selectedModel}), overseeing your workspace projects and notes. How can I assist you today?`;
-      } else {
-        reply =
-          lang === "urdu"
-            ? `Theek hai, maine samajh liya hai: "${userText}". Main ${selectedModel} ke zariye is par research aur coordination kar raha hoon.`
-            : `Understood: "${userText}". I am coordinating this using ${selectedModel}.`;
-      }
-
-      setTimeout(() => {
-        handleAddMessage("assistant", reply);
+        handleAddMessage("assistant", res.reply);
+        speakText(res.spokenReply);
+      } catch (err) {
+        console.error("Super agent error:", err);
+        const errorMsg = isUrduLanguage(userText)
+          ? "Sorry, request process karte waqt network ya server error aya. Main dobara check karta hoon."
+          : "Sorry, a momentary network or server error occurred. Let me re-check.";
+        handleAddMessage("assistant", errorMsg);
+        speakText(errorMsg);
+      } finally {
         setIsProcessing(false);
-        speakText(reply);
-      }, 500);
+        setAgentStatus(null);
+      }
     },
-    [handleAddMessage, isProcessing, notes, projects, selectedModel],
+    [handleAddMessage, isProcessing, projects, selectedModel],
   );
 
-  // Voice Call Assistant integration for Super Agent
+  // Live Speech transcript update
   const handleTranscriptChange = useCallback((text: string) => {
+    // If user is actively typing / modifying, do not overwrite with ongoing speech
+    if (isUserEditingRef.current) return;
     setInputText(text);
-    if (!text.trim()) {
-      setIsSilenceCountdown(false);
-      return;
-    }
-
-    // While user is actively speaking: color is gray
-    setIsSilenceCountdown(false);
-
-    // Schedule the 1.5s countdown after speech pauses
-    if (countdownTimerRef.current) {
-      clearTimeout(countdownTimerRef.current);
-    }
-    countdownTimerRef.current = setTimeout(() => {
-      // User paused: text turns crisp white!
-      setIsSilenceCountdown(true);
-    }, 400);
   }, []);
 
   const {
@@ -255,8 +166,8 @@ export function SuperCallAssistantView() {
   } = useVoiceCallAssistant({
     onTranscriptChange: handleTranscriptChange,
     onAutoSend: () => {
-      // If user tapped to edit manually, DO NOT auto-send!
-      if (isEditingTranscript) return;
+      // If user clicked or focused to edit manually, DO NOT auto-send!
+      if (isUserEditingRef.current) return;
       if (inputText.trim()) {
         void handleSuperAgentDispatch(inputText);
       }
@@ -265,21 +176,51 @@ export function SuperCallAssistantView() {
     phase: isProcessing ? "running" : "ready",
   });
 
-  const handleTapToEdit = useCallback(() => {
-    // Cancel the auto-send countdown so user can modify text at leisure
-    if (countdownTimerRef.current) {
-      clearTimeout(countdownTimerRef.current);
-      countdownTimerRef.current = null;
-    }
-    setIsSilenceCountdown(false);
-    setIsEditingTranscript(true);
+  // User clicked on the input text: pause auto-send immediately
+  const handleInputFocusOrClick = useCallback(() => {
+    isUserEditingRef.current = true;
+    setIsUserEditing(true);
   }, []);
+
+  // Transliterate Urdu script to Roman Urdu
+  const handleTransliterateToRoman = useCallback(() => {
+    if (!inputText.trim()) return;
+    setPreviousTextForUndo(inputText);
+    setIsTransliterating(true);
+    isUserEditingRef.current = true;
+    setIsUserEditing(true);
+
+    setTimeout(() => {
+      const roman = transliterateUrduToRoman(inputText);
+      setInputText(roman);
+      setIsTransliterating(false);
+    }, 250);
+  }, [inputText]);
+
+  // Undo transliteration
+  const handleUndoTransliteration = useCallback(() => {
+    if (previousTextForUndo !== null) {
+      setInputText(previousTextForUndo);
+      setPreviousTextForUndo(null);
+    }
+  }, [previousTextForUndo]);
 
   const handleSendNow = useCallback(() => {
     if (inputText.trim()) {
       void handleSuperAgentDispatch(inputText);
     }
   }, [handleSuperAgentDispatch, inputText]);
+
+  // Determine text color for live transcript:
+  // - Gray when actively speaking
+  // - Crisp white when paused & preparing to auto-send
+  // - White when user is editing
+  const transcriptTextColorClass = useMemo(() => {
+    if (isUserEditing) return "text-white font-normal";
+    if (callStatus === "user-speaking") return "text-zinc-400";
+    if (inputText.trim().length > 0) return "text-white font-medium";
+    return "text-zinc-500";
+  }, [callStatus, inputText, isUserEditing]);
 
   return (
     <div className="flex h-full w-full bg-background text-foreground overflow-hidden relative">
@@ -375,22 +316,22 @@ export function SuperCallAssistantView() {
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 backdrop-blur-xs p-4 animate-in fade-in duration-150"
           onClick={() => setIsModelMenuOpen(false)}
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-sm rounded-2xl border border-border/80 bg-background/95 backdrop-blur-2xl p-5 shadow-2xl animate-in zoom-in-95 duration-150"
+            className="w-full max-w-sm rounded-2xl border border-zinc-800 bg-zinc-950/95 backdrop-blur-2xl p-5 shadow-2xl animate-in zoom-in-95 duration-150"
           >
-            <div className="flex items-center justify-between pb-3 border-b border-border/50">
+            <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
               <div className="flex items-center gap-2">
-                <Cpu className="size-4 text-primary" />
-                <h3 className="text-sm font-semibold">Select AI Model</h3>
+                <Cpu className="size-4 text-amber-400" />
+                <h3 className="text-sm font-semibold text-white">Select AI Model</h3>
               </div>
               <button
                 type="button"
                 onClick={() => setIsModelMenuOpen(false)}
-                className="p-1 rounded-md text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                className="p-1 rounded-md text-zinc-400 hover:text-white transition-colors cursor-pointer"
               >
                 <X className="size-4" />
               </button>
@@ -407,26 +348,47 @@ export function SuperCallAssistantView() {
                     className={cn(
                       "w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs transition-all text-left cursor-pointer",
                       isSelected
-                        ? "bg-primary/15 text-primary border border-primary/30 font-medium"
-                        : "hover:bg-muted/70 text-foreground border border-transparent",
+                        ? "bg-amber-500/15 text-amber-300 border border-amber-500/30 font-medium"
+                        : "hover:bg-zinc-800/60 text-zinc-300 border border-transparent",
                     )}
                   >
                     <div>
                       <div className="flex items-center gap-1.5">
                         <span>{m.name}</span>
                         {m.recommended && (
-                          <span className="px-1.5 py-0.5 rounded-md text-[9px] bg-primary/20 text-primary font-medium">
+                          <span className="px-1.5 py-0.5 rounded-md text-[9px] bg-amber-500/20 text-amber-400 font-medium">
                             Fast
                           </span>
                         )}
                       </div>
-                      <span className="text-[10px] text-muted-foreground">{m.provider}</span>
+                      <span className="text-[10px] text-zinc-500">{m.provider}</span>
                     </div>
-                    {isSelected && <Check className="size-3.5 text-primary" />}
+                    {isSelected && <Check className="size-3.5 text-amber-400" />}
                   </button>
                 );
               })}
             </div>
+
+            {/* Custom Model Input */}
+            <form
+              onSubmit={handleCustomModelSubmit}
+              className="pt-3 border-t border-zinc-800 flex gap-2"
+            >
+              <input
+                type="text"
+                value={customModelInput}
+                onChange={(e) => setCustomModelInput(e.target.value)}
+                placeholder="Or type custom model..."
+                className="flex-1 px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-700 text-xs text-white placeholder:text-zinc-500 focus:outline-hidden focus:border-amber-400"
+              />
+              <button
+                type="submit"
+                disabled={!customModelInput.trim()}
+                className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs text-white disabled:opacity-50 transition-colors cursor-pointer"
+              >
+                Set
+              </button>
+            </form>
           </div>
         </div>
       )}
@@ -494,7 +456,7 @@ export function SuperCallAssistantView() {
           {(!activeSession || activeSession.messages.length === 0) && (
             <div className="h-full flex flex-col items-center justify-center text-center p-6 text-muted-foreground">
               <div className="size-16 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mb-4 shadow-inner">
-                <Sparkles className="size-8 animate-pulse" />
+                <Sparkles className="size-8 animate-pulse text-amber-400" />
               </div>
               <h3 className="text-base font-semibold text-foreground mb-1">
                 Super Call Assistant Active
@@ -579,7 +541,9 @@ export function SuperCallAssistantView() {
               </div>
               <div className="rounded-2xl px-4 py-2.5 bg-muted/70 border border-border/60 text-muted-foreground rounded-tl-xs flex items-center gap-2">
                 <span className="size-1.5 rounded-full bg-primary animate-ping" />
-                <span className="text-xs">Super Assistant is thinking... / سوچ رہا ہوں</span>
+                <span className="text-xs">
+                  {agentStatus || "Super Assistant is thinking... / سوچ رہا ہوں"}
+                </span>
               </div>
             </div>
           )}
@@ -587,78 +551,100 @@ export function SuperCallAssistantView() {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Live Speech Transcription Area Above the Bottom Line */}
-        {inputText.trim().length > 0 && (
-          <div className="max-w-3xl w-full mx-auto px-4 sm:px-6 pb-2 shrink-0 animate-in fade-in slide-in-from-bottom-2 duration-150">
-            <div className="flex items-center justify-between gap-3">
-              {isEditingTranscript ? (
-                <input
-                  type="text"
-                  autoFocus
-                  value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      handleSendNow();
-                    }
-                  }}
-                  className="flex-1 bg-transparent text-sm text-foreground focus:outline-hidden border-b border-border pb-1"
-                  placeholder="Modify spoken text..."
-                />
-              ) : (
-                <div
-                  onClick={handleTapToEdit}
-                  className="flex-1 cursor-pointer group"
-                  title="Click to edit before auto-send"
+        {/* Seamless Borderless Input / Live Speech Transcription Line (NO box border, NO outline) */}
+        <div className="w-full max-w-2xl mx-auto px-4 pb-1 pt-2 shrink-0">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSendNow();
+            }}
+            className="flex items-center justify-between gap-3"
+          >
+            {/* The Borderless Text Input */}
+            <div className="flex-1 relative flex items-center">
+              <input
+                ref={inputRef}
+                type="text"
+                value={inputText}
+                onClick={handleInputFocusOrClick}
+                onFocus={handleInputFocusOrClick}
+                onChange={(e) => {
+                  isUserEditingRef.current = true;
+                  setIsUserEditing(true);
+                  setInputText(e.target.value);
+                }}
+                placeholder={
+                  isCallActive
+                    ? "Boleyn ya likhein (Auto-sends in 1.5s)..."
+                    : "Type a message or start call..."
+                }
+                className={cn(
+                  "w-full bg-transparent border-0 outline-hidden focus:outline-hidden focus:ring-0 shadow-none text-sm transition-colors tracking-wide",
+                  transcriptTextColorClass,
+                )}
+              />
+            </div>
+
+            {/* Action Buttons: Undo, Sparkles (Urdu -> Roman Urdu), and Send */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              {/* Back / Undo Arrow (Appears after transliterating) */}
+              {previousTextForUndo !== null && (
+                <button
+                  type="button"
+                  onClick={handleUndoTransliteration}
+                  className="p-1 rounded text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                  title="Undo / Wapas original Urdu script par layen"
                 >
-                  <p
-                    className={cn(
-                      "text-sm tracking-wide transition-colors duration-200 select-text",
-                      isSilenceCountdown
-                        ? "text-foreground font-medium animate-pulse"
-                        : "text-muted-foreground",
-                    )}
-                  >
-                    {inputText}
-                  </p>
-                  <span className="text-[10px] text-muted-foreground/70 group-hover:text-amber-500 transition-colors">
-                    {isSilenceCountdown
-                      ? "Sending in 1.5s · Click text to pause and edit"
-                      : "Transcribing..."}
-                  </span>
-                </div>
+                  <RotateCcw className="size-4" />
+                </button>
               )}
 
-              {/* Gray borderless send button */}
+              {/* Sparkles Button: Converts Urdu Script to Roman Urdu */}
+              {inputText.trim().length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleTransliterateToRoman}
+                  disabled={isTransliterating}
+                  className="p-1 rounded text-zinc-400 hover:text-amber-400 transition-colors cursor-pointer"
+                  title="Roman Urdu mein convert karein (Easy to edit)"
+                >
+                  {isTransliterating ? (
+                    <Loader2 className="size-4 animate-spin text-amber-400" />
+                  ) : (
+                    <Sparkles className="size-4" />
+                  )}
+                </button>
+              )}
+
+              {/* Gray Borderless Send Button */}
               <button
-                type="button"
-                onClick={handleSendNow}
-                className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer p-1.5 rounded-md hover:bg-muted/50 shrink-0"
+                type="submit"
+                disabled={!inputText.trim() || isProcessing}
+                className="p-1 rounded text-zinc-400 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
                 title="Send Message"
               >
                 <Send className="size-4" />
               </button>
             </div>
-          </div>
-        )}
+          </form>
+        </div>
 
-        {/* Bottom Horizontal Grey Line with Centered Model Selection Badge */}
-        <div className="relative w-full max-w-3xl mx-auto flex items-center justify-center py-4 px-4 shrink-0">
-          {/* Subtle Horizontal Divider Line */}
-          <div className="absolute inset-x-4 top-1/2 -translate-y-1/2 h-[1px] bg-border/60" />
+        {/* Bottom Horizontal Line with Centered Model Selection Badge */}
+        <div className="relative w-full max-w-2xl mx-auto flex items-center justify-center pb-5 pt-1.5 px-4 shrink-0">
+          {/* Shorter, sleek horizontal grey divider line */}
+          <div className="absolute inset-x-4 top-1/2 -translate-y-1/2 h-[1px] bg-zinc-700/60" />
 
           {/* Centered Model Dropdown Badge (Half above line, half below line) */}
           <div className="relative z-10 px-3 bg-background">
             <button
               type="button"
               onClick={() => setIsModelMenuOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1 rounded-full border border-border/80 bg-muted/40 hover:bg-muted text-foreground/80 hover:text-foreground text-xs font-medium transition-all shadow-xs cursor-pointer select-none"
-              title="Click to select AI Model"
+              className="flex items-center gap-1.5 px-3 py-0.5 rounded-full border border-zinc-700/80 bg-zinc-900/90 hover:bg-zinc-800 text-zinc-300 hover:text-white text-xs font-medium transition-all shadow-xs cursor-pointer select-none"
+              title="Click to select AI Model & Provider"
             >
-              <Sparkles className="size-3 text-amber-500" />
+              <Sparkles className="size-3 text-amber-400" />
               <span>{selectedModel}</span>
-              <ChevronDown className="size-3 text-muted-foreground" />
+              <ChevronDown className="size-3 text-zinc-400" />
             </button>
           </div>
         </div>
