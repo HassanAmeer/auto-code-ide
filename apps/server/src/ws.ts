@@ -2207,20 +2207,23 @@ const layerWsRpc = (
             if (input.instanceId === undefined) {
               yield* usageLimitSources.refresh;
             }
-            let providers = yield* input.cwd !== undefined && input.instanceId !== undefined
-              ? providerRegistry.refreshWorkspaceSnapshot({
-                  instanceId: input.instanceId,
-                  cwd: input.cwd,
-                  fresh: input.fresh === true,
-                })
-              : input.instanceId !== undefined
+            let providers = yield* input.refreshModels
+              ? input.instanceId !== undefined
                 ? providerRegistry.refreshInstance(input.instanceId)
-                : providerRegistry.refresh();
+                : providerRegistry.refresh()
+              : input.cwd !== undefined && input.instanceId !== undefined
+                ? providerRegistry.refreshWorkspaceSnapshot({
+                    instanceId: input.instanceId,
+                    cwd: input.cwd,
+                    fresh: input.fresh === true,
+                  })
+                : input.instanceId !== undefined
+                  ? providerRegistry.refreshInstance(input.instanceId)
+                  : providerRegistry.refresh();
             if (input.refreshModels) {
               const instances = yield* providerInstances.listInstances;
               for (const instance of instances) {
                 if (
-                  !instance.refreshModels ||
                   (input.instanceId !== undefined && input.instanceId !== instance.instanceId) ||
                   !providers.some(
                     (provider) =>
@@ -2230,17 +2233,26 @@ const layerWsRpc = (
                   )
                 )
                   continue;
-                yield* instance.refreshModels().pipe(
-                  Effect.mapError(
-                    (error) =>
-                      new ProviderSetupError({
-                        instanceId: instance.instanceId,
-                        operation: "refresh-models",
-                        detail: error.detail,
-                      }),
-                  ),
-                );
+                if (instance.refreshModels) {
+                  yield* instance.refreshModels().pipe(
+                    Effect.mapError(
+                      (error) =>
+                        new ProviderSetupError({
+                          instanceId: instance.instanceId,
+                          operation: "refresh-models",
+                          detail: error.detail,
+                        }),
+                    ),
+                  );
+                }
                 providers = yield* providerRegistry.refreshInstance(instance.instanceId);
+              }
+              if (input.cwd !== undefined && input.instanceId !== undefined) {
+                providers = yield* providerRegistry.refreshWorkspaceSnapshot({
+                  instanceId: input.instanceId,
+                  cwd: input.cwd,
+                  fresh: input.fresh === true,
+                });
               }
             }
             return { providers };

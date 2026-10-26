@@ -2233,11 +2233,15 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
    * again instead of a stale snapshot.
    */
   const handleRefreshProviderModels = useCallback(
-    (instanceId: ProviderInstanceId) => {
-      void refreshProviders({
-        environmentId,
-        input: { instanceId, cwd: gitCwd ?? undefined, refreshModels: true },
-      });
+    async (instanceId: ProviderInstanceId) => {
+      try {
+        await refreshProviders({
+          environmentId,
+          input: { instanceId, cwd: gitCwd ?? undefined, refreshModels: true, fresh: true },
+        });
+      } catch (err) {
+        console.warn("Failed to refresh provider models:", err);
+      }
     },
     [environmentId, gitCwd, refreshProviders],
   );

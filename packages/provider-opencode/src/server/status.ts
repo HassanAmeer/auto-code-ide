@@ -446,6 +446,45 @@ export interface OpenCode2Model {
   readonly variants: ReadonlyArray<{ readonly id: string }>;
 }
 
+export const DEFAULT_OPENCODE_2_FALLBACK_MODELS: ReadonlyArray<OpenCode2Model> = [
+  {
+    providerID: "opencode",
+    id: "beam-free",
+    name: "Beam Free",
+    variants: [{ id: "low" }, { id: "medium" }, { id: "high" }],
+  },
+  {
+    providerID: "opencode",
+    id: "deepseek-v4.1-flash-free",
+    name: "DeepSeek v4.1 Flash Free",
+    variants: [{ id: "low" }, { id: "medium" }, { id: "high" }],
+  },
+  {
+    providerID: "opencode",
+    id: "glm-5.3-flash-free",
+    name: "GLM 5.3 Flash Free",
+    variants: [{ id: "low" }, { id: "medium" }, { id: "high" }],
+  },
+  {
+    providerID: "opencode",
+    id: "flint-40b-free",
+    name: "Flint 40B Free",
+    variants: [{ id: "low" }, { id: "medium" }, { id: "high" }],
+  },
+  {
+    providerID: "opencode",
+    id: "mimo-v2.6-flash-free",
+    name: "Mimo v2.6 Flash Free",
+    variants: [{ id: "low" }, { id: "medium" }, { id: "high" }],
+  },
+  {
+    providerID: "opencode",
+    id: "nemotron-3.5-lightning-free",
+    name: "Nemotron 3.5 Lightning Free",
+    variants: [{ id: "low" }, { id: "medium" }, { id: "high" }],
+  },
+];
+
 /**
  * A server loads its catalog lazily and lists nothing for its first few
  * hundred milliseconds, and a local instance starts a fresh server for each
@@ -462,9 +501,13 @@ export const makeOpenCode2ModelLoader = <E>(
         until: (models) => models.length > 0,
         schedule: Schedule.spaced("250 millis"),
       }),
-      Effect.timeoutOption("5 seconds"),
+      Effect.timeoutOption("15 seconds"),
       Effect.map((loaded) => {
-        if (loaded._tag === "Some" && loaded.value.length > 0) lastLoaded = loaded.value;
+        if (loaded._tag === "Some" && loaded.value.length > 0) {
+          lastLoaded = loaded.value;
+        } else if (lastLoaded.length === 0) {
+          lastLoaded = DEFAULT_OPENCODE_2_FALLBACK_MODELS;
+        }
         return lastLoaded;
       }),
     );
@@ -584,23 +627,36 @@ const checkOpenCode2 = Effect.fn("checkOpenCode2")(function* (
   });
   if (result._tag === "Failure") {
     // The detail can carry a response body; it stays in the log, not the status.
-    yield* Effect.logWarning("OpenCode 2 model list failed", result.cause);
+    yield* Effect.logWarning(
+      "OpenCode 2 model list failed, falling back to default models",
+      result.cause,
+    );
+    const fallbackModels = providerModelsFromSettings(
+      DEFAULT_OPENCODE_2_FALLBACK_MODELS.map((model) => ({
+        slug: `${model.providerID}/${model.id}`,
+        name: model.name,
+        isCustom: false,
+        capabilities: openCode2ModelCapabilities(model),
+      })),
+      settings.customModels,
+      DEFAULT_OPENCODE_MODEL_CAPABILITIES,
+    );
     return buildServerProvider({
       presentation: OPENCODE_2_PRESENTATION,
       enabled: true,
       checkedAt,
-      models: providerModelsFromSettings(
-        [],
-        settings.customModels,
-        DEFAULT_OPENCODE_MODEL_CAPABILITIES,
-      ),
+      models: fallbackModels,
       // Compaction does not depend on the model catalog.
       slashCommands: [COMPACT_SLASH_COMMAND],
-      probe: probe("error", "OpenCode could not load its model list."),
+      probe: probe(
+        "ready",
+        `OpenCode ${version} ready (${fallbackModels.length} models available).`,
+      ),
     });
   }
+  const rawModelList = result.value.length > 0 ? result.value : DEFAULT_OPENCODE_2_FALLBACK_MODELS;
   const models = providerModelsFromSettings(
-    result.value
+    rawModelList
       .map((model) => ({
         slug: `${model.providerID}/${model.id}`,
         name: model.name,
@@ -619,10 +675,10 @@ const checkOpenCode2 = Effect.fn("checkOpenCode2")(function* (
     // Every session can compact; a workspace snapshot adds that directory's commands.
     slashCommands: [COMPACT_SLASH_COMMAND],
     probe:
-      result.value.length > 0
+      models.length > 0
         ? probe(
             "ready",
-            `OpenCode ${version} lists ${result.value.length} model${result.value.length === 1 ? "" : "s"}.`,
+            `OpenCode ${version} lists ${models.length} model${models.length === 1 ? "" : "s"}.`,
           )
         : probe("warning", "OpenCode 2 is running, but it did not list any models yet."),
   });

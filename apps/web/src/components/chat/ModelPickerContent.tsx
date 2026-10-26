@@ -199,7 +199,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
   onOpenProviderSetup?: (instanceId: ProviderInstanceId) => void;
   getModelDisabledReason?: (instanceId: ProviderInstanceId, model: string) => string | null;
   /** Re-read a provider's model catalog and show it again. */
-  onRefreshModels?: ((instanceId: ProviderInstanceId) => void) | undefined;
+  onRefreshModels?: ((instanceId: ProviderInstanceId) => Promise<unknown> | void) | undefined;
   onInstanceModelChange: (instanceId: ProviderInstanceId, model: string) => void;
 }) {
   const {
@@ -396,7 +396,11 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
         console.warn("Failed to refresh bypass models directly:", e);
       } finally {
         if (onRefreshModels) {
-          onRefreshModels(selectedInstanceId);
+          try {
+            await onRefreshModels(selectedInstanceId);
+          } catch (err) {
+            console.warn("Failed to refresh bypass models:", err);
+          }
         }
         setIsRefreshingModels(false);
       }
@@ -406,7 +410,9 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
     if (!onRefreshModels) return;
     setIsRefreshingModels(true);
     try {
-      onRefreshModels(selectedInstanceId);
+      await onRefreshModels(selectedInstanceId);
+    } catch (err) {
+      console.warn("Failed to refresh models:", err);
     } finally {
       setIsRefreshingModels(false);
     }

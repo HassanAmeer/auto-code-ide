@@ -38,6 +38,14 @@ export function getProviderStatusBannerKey(status: ServerProvider | null): strin
   ) {
     return null;
   }
+  // OpenCode / OpenCode Bypass with available models is ready for use; suppress transient warning banners.
+  if (
+    (status.driver === "opencode" || status.driver === "opencodebypasssetup") &&
+    status.models.length > 0 &&
+    status.status !== "error"
+  ) {
+    return null;
+  }
   return [status.instanceId, status.status, status.auth.status, status.message ?? ""].join(
     "\u0000",
   );
