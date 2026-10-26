@@ -233,7 +233,12 @@ export function SuperCallAssistantView() {
           : undefined;
 
         handleAddMessage("assistant", res.reply, meta);
-        speakText(res.spokenReply);
+        speakText(res.spokenReply, undefined, () => {
+          if (inputRef.current !== document.activeElement) {
+            isUserEditingRef.current = false;
+            setIsUserEditing(false);
+          }
+        });
       } catch (err: any) {
         console.error("Super agent error:", err);
         const errDetail = err?.message || String(err);
@@ -241,7 +246,12 @@ export function SuperCallAssistantView() {
           ? `⚠️ Issue: ${errDetail}. Main dobara check karta hoon.`
           : `⚠️ Issue: ${errDetail}. Let me re-check.`;
         handleAddMessage("assistant", errorMsg);
-        speakText(errorMsg);
+        speakText(errorMsg, undefined, () => {
+          if (inputRef.current !== document.activeElement) {
+            isUserEditingRef.current = false;
+            setIsUserEditing(false);
+          }
+        });
       } finally {
         setIsProcessing(false);
         setAgentStatus(null);
@@ -260,8 +270,13 @@ export function SuperCallAssistantView() {
 
   // Live Speech transcript update
   const handleTranscriptChange = useCallback((text: string) => {
-    // If user is actively typing / modifying, do not overwrite with ongoing speech
-    if (isUserEditingRef.current) return;
+    // If user is not actively focused on the text input with cursor, ensure isUserEditing is false
+    if (document.activeElement !== inputRef.current) {
+      isUserEditingRef.current = false;
+      setIsUserEditing(false);
+    } else if (isUserEditingRef.current) {
+      return;
+    }
     setInputText(text);
   }, []);
 
@@ -280,11 +295,12 @@ export function SuperCallAssistantView() {
     toggleMicMute,
   } = useVoiceCallAssistant({
     onTranscriptChange: handleTranscriptChange,
-    onAutoSend: () => {
-      // If user clicked or focused to edit manually, DO NOT auto-send!
-      if (isUserEditingRef.current) return;
-      if (inputText.trim()) {
-        void handleSuperAgentDispatch(inputText);
+    onAutoSend: (textToSend?: string) => {
+      // If user clicked or focused to edit manually with active keyboard cursor, DO NOT auto-send
+      if (document.activeElement === inputRef.current && isUserEditingRef.current) return;
+      const target = (typeof textToSend === "string" ? textToSend : inputText).trim();
+      if (target) {
+        void handleSuperAgentDispatch(target);
       }
     },
     prompt: inputText,
@@ -734,6 +750,12 @@ export function SuperCallAssistantView() {
                 value={inputText}
                 onClick={handleInputFocusOrClick}
                 onFocus={handleInputFocusOrClick}
+                onBlur={() => {
+                  if (!inputText.trim()) {
+                    isUserEditingRef.current = false;
+                    setIsUserEditing(false);
+                  }
+                }}
                 onChange={(e) => {
                   isUserEditingRef.current = true;
                   setIsUserEditing(true);
