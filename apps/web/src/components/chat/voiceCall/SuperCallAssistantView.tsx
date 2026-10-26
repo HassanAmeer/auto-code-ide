@@ -145,6 +145,22 @@ export function SuperCallAssistantView() {
     localStorage.setItem("super_call_assistant_model", model);
   }, []);
 
+  // Track if user clicked/focused the input field to pause auto-sending
+  const [isUserEditing, setIsUserEditing] = useState(false);
+  const isUserEditingRef = useRef(false);
+
+  // Transliteration & Undo state
+  const [isTransliterating, setIsTransliterating] = useState(false);
+  const [previousTextForUndo, setPreviousTextForUndo] = useState<string | null>(null);
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Auto scroll to latest message
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [activeSession?.messages, isProcessing]);
+
   const handleSuperAgentDispatch = useCallback(
     async (rawUserText: string) => {
       const userText = rawUserText.trim();
