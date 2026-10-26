@@ -37,44 +37,52 @@ export const VoiceCallFloatingWidget = memo(function VoiceCallFloatingWidget({
         className,
       )}
     >
-      {/* Single Unified Vertical Docked Capsule */}
-      <div
-        className={cn(
-          "relative flex flex-col items-center p-1 rounded-full border backdrop-blur-xl transition-all duration-300 shadow-2xl",
-          isCallActive
-            ? "bg-zinc-950/90 border-zinc-700/80 shadow-[0_8px_32px_rgba(0,0,0,0.65)]"
-            : "bg-zinc-950/80 hover:bg-zinc-900/90 border-zinc-800/80 hover:border-zinc-700 shadow-lg",
+      <div className="relative flex flex-col items-center">
+        {/* Top Attached Flag: 🇵🇰 Pakistani Flag (Hidden during call) */}
+        {!isCallActive && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onSwitchLanguage("urdu");
+              onToggleCall();
+            }}
+            className={cn(
+              "relative z-20 flex items-center justify-center w-11 h-7.5 rounded-[5px] transition-all duration-200 cursor-pointer shadow-md -mb-1.5 animate-in fade-in zoom-in-95",
+              callLanguage === "urdu"
+                ? "border-2 border-emerald-400 bg-emerald-950/90 shadow-[0_0_12px_rgba(16,185,129,0.55)] scale-105"
+                : "border border-zinc-600/80 bg-zinc-900/95 hover:border-zinc-400 opacity-80 hover:opacity-100",
+            )}
+            title="اردو (Urdu) - Click to call in Urdu"
+          >
+            <span className="text-2xl leading-none select-none">🇵🇰</span>
+          </button>
         )}
-      >
-        {/* Top Attached Flag: 🇵🇰 Urdu */}
-        <button
-          type="button"
+
+        {/* Center Gray Circle / Voice Wave Avatar */}
+        <div
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            onSwitchLanguage("urdu");
-            if (!isCallActive) {
+            if (isCallActive) {
+              if (callStatus === "speaking" || callStatus === "thinking") {
+                onInterrupt();
+              }
               onToggleCall();
             }
           }}
           className={cn(
-            "flex size-8 items-center justify-center rounded-full text-base transition-all duration-200 cursor-pointer",
-            callLanguage === "urdu"
-              ? "bg-emerald-500/25 border border-emerald-400/80 shadow-[0_0_12px_rgba(16,185,129,0.5)] scale-105"
-              : "border border-transparent opacity-70 hover:opacity-100 hover:bg-zinc-800/70",
+            "relative z-10 flex items-center justify-center size-14 sm:size-15 rounded-full border-2 transition-all duration-300 shadow-xl cursor-pointer",
+            isCallActive
+              ? "border-zinc-400 bg-zinc-950/95 shadow-[0_0_24px_rgba(0,0,0,0.7)]"
+              : "border-zinc-500/80 bg-zinc-950/95 hover:border-zinc-400",
           )}
-          title="اردو میں کال کریں / اردو زبان (Click to switch / call in Urdu)"
         >
-          🇵🇰
-        </button>
+          {/* Dual Voice Waves (Active whenever call is active or preparing) */}
+          <CircularVoiceWaves callStatus={callStatus} analyserNode={analyserNode} />
 
-        {/* Center Main Call Button with 360-degree Waves */}
-        <div className="relative my-1 flex items-center justify-center size-12 sm:size-13">
-          {/* Circular Voice Waves (Grey for thinking, Light green for speaking, Blue for user) */}
-          {isCallActive && (
-            <CircularVoiceWaves callStatus={callStatus} analyserNode={analyserNode} />
-          )}
-
+          {/* Centered Small Icon (Subtle Red during call, Gray when idle) */}
           <button
             type="button"
             onClick={(e) => {
@@ -86,40 +94,44 @@ export const VoiceCallFloatingWidget = memo(function VoiceCallFloatingWidget({
               onToggleCall();
             }}
             className={cn(
-              "relative z-10 flex size-11 sm:size-12 items-center justify-center rounded-full transition-all duration-200 cursor-pointer shadow-md active:scale-95",
+              "relative z-20 flex size-7 items-center justify-center rounded-full transition-all duration-200 cursor-pointer active:scale-90",
               isCallActive
-                ? "border-2 border-red-500/80 text-red-400 bg-red-950/40 hover:bg-red-500/30 shadow-[0_0_16px_rgba(239,68,68,0.5)]"
-                : "border-2 border-zinc-500/60 text-zinc-300 hover:text-white hover:border-zinc-400 bg-zinc-900/90 hover:bg-zinc-800 shadow-[0_0_12px_rgba(0,0,0,0.5)]",
+                ? "text-red-400/90 hover:text-red-400 bg-red-950/30 hover:bg-red-500/20 border border-red-500/30 shadow-[0_0_8px_rgba(239,68,68,0.3)]"
+                : "text-zinc-300 hover:text-white bg-zinc-800/60 hover:bg-zinc-700/70 border border-zinc-600/40 shadow-sm",
             )}
             title={
               isCallActive ? "End Voice Call (کال بند کریں)" : "Start Voice Call (کال شروع کریں)"
             }
           >
-            {isCallActive ? <PhoneOff className="size-5" /> : <PhoneCall className="size-5" />}
+            {isCallActive ? (
+              <PhoneOff className="size-3.5" strokeWidth={2.5} />
+            ) : (
+              <PhoneCall className="size-3.5" strokeWidth={2.5} />
+            )}
           </button>
         </div>
 
-        {/* Bottom Attached Flag: 🇺🇸 English */}
-        <button
-          type="button"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onSwitchLanguage("english");
-            if (!isCallActive) {
+        {/* Bottom Attached Flag: 🇺🇸 US Flag (Hidden during call) */}
+        {!isCallActive && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onSwitchLanguage("english");
               onToggleCall();
-            }
-          }}
-          className={cn(
-            "flex size-8 items-center justify-center rounded-full text-base transition-all duration-200 cursor-pointer",
-            callLanguage === "english"
-              ? "bg-blue-500/25 border border-blue-400/80 shadow-[0_0_12px_rgba(59,130,246,0.5)] scale-105"
-              : "border border-transparent opacity-70 hover:opacity-100 hover:bg-zinc-800/70",
-          )}
-          title="English Voice Call (Click to switch / call in English)"
-        >
-          🇺🇸
-        </button>
+            }}
+            className={cn(
+              "relative z-20 flex items-center justify-center w-11 h-7.5 rounded-[8px] transition-all duration-200 cursor-pointer shadow-md -mt-1.5 animate-in fade-in zoom-in-95",
+              callLanguage === "english"
+                ? "border-2 border-blue-400 bg-blue-950/90 shadow-[0_0_12px_rgba(59,130,246,0.55)] scale-105"
+                : "border border-zinc-600/80 bg-zinc-900/95 hover:border-zinc-400 opacity-80 hover:opacity-100",
+            )}
+            title="English - Click to call in English"
+          >
+            <span className="text-2xl leading-none select-none">🇺🇸</span>
+          </button>
+        )}
       </div>
     </aside>
   );
