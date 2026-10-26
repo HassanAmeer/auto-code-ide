@@ -23,6 +23,7 @@ import { cn } from "~/lib/utils";
 import { useProjects } from "~/state/entities";
 import { useNotes, openNotesSheet, addNote, type NoteItem } from "~/lib/notesStore";
 import { useScheduledTasks } from "~/lib/scheduledTasksStore";
+import { useProjectActivities } from "~/lib/projectActivityLedger";
 import {
   useCallSessions,
   type CallAssistantMessage,
@@ -69,6 +70,8 @@ export function SuperCallAssistantView() {
   } = useCallSessions();
 
   const { tasks: scheduledTasks, toggle: toggleTask, remove: removeTask } = useScheduledTasks();
+  const { activities, deleteActivity } = useProjectActivities();
+  const [tasksSheetTab, setTasksSheetTab] = useState<"scheduled" | "history">("scheduled");
   const [inputText, setInputText] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [agentStatus, setAgentStatus] = useState<string | null>(null);
@@ -315,10 +318,9 @@ export function SuperCallAssistantView() {
                   <ListTodo className="size-4" />
                 </div>
                 <div>
-                  <h2 className="text-sm font-semibold">Assigned Tasks</h2>
+                  <h2 className="text-sm font-semibold">Super Bot Tasks & Ledger</h2>
                   <p className="text-[11px] text-muted-foreground">
-                    {scheduledTasks.length} {scheduledTasks.length === 1 ? "task" : "tasks"}{" "}
-                    scheduled
+                    {scheduledTasks.length} scheduled · {activities.length} history records
                   </p>
                 </div>
               </div>
@@ -332,89 +334,191 @@ export function SuperCallAssistantView() {
               </button>
             </div>
 
-            {/* Tasks List */}
+            {/* Sheet Navigation Tabs */}
+            <div className="flex border-b border-border/50 px-4 pt-1 gap-2 bg-muted/20">
+              <button
+                type="button"
+                onClick={() => setTasksSheetTab("scheduled")}
+                className={cn(
+                  "pb-2 text-xs font-semibold border-b-2 transition-colors cursor-pointer",
+                  tasksSheetTab === "scheduled"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground",
+                )}
+              >
+                Scheduled Shifts ({scheduledTasks.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setTasksSheetTab("history")}
+                className={cn(
+                  "pb-2 text-xs font-semibold border-b-2 transition-colors cursor-pointer",
+                  tasksSheetTab === "history"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground",
+                )}
+              >
+                Execution Log ({activities.length})
+              </button>
+            </div>
+
+            {/* Tasks / History List */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {scheduledTasks.length === 0 ? (
+              {tasksSheetTab === "scheduled" ? (
+                scheduledTasks.length === 0 ? (
+                  <div className="h-64 flex flex-col items-center justify-center text-center p-6 text-muted-foreground">
+                    <div className="size-12 rounded-xl bg-muted/60 flex items-center justify-center mb-3">
+                      <ListTodo className="size-6 text-muted-foreground/60" />
+                    </div>
+                    <h3 className="text-sm font-medium text-foreground mb-1">
+                      No tasks scheduled yet
+                    </h3>
+                    <p className="text-xs text-muted-foreground max-w-xs leading-relaxed">
+                      Aap Super Assistant se bol saktay hain: &quot;Raat 2:00 baje chalne lag
+                      jaye&quot;. Woh khud schedule karega aur waqt par execute karega.
+                    </p>
+                  </div>
+                ) : (
+                  scheduledTasks.map((t) => (
+                    <div
+                      key={t.id}
+                      className="p-4 rounded-xl border border-border/70 bg-card/60 hover:bg-card transition-colors space-y-2.5"
+                    >
+                      {/* Top Row: Title & Actions */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <h4 className="text-xs font-semibold text-foreground truncate">
+                            {t.title}
+                          </h4>
+                          <div className="flex items-center gap-1.5 mt-1 text-[11px] text-muted-foreground">
+                            <FolderGit2 className="size-3 text-primary shrink-0" />
+                            <span className="font-medium text-primary truncate">
+                              {t.projectName || "General Workspace"}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => toggleTask(t.id)}
+                            className={cn(
+                              "px-2 py-0.5 rounded text-[10px] font-medium transition-colors cursor-pointer",
+                              t.enabled
+                                ? "bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25"
+                                : "bg-muted text-muted-foreground hover:bg-muted/80",
+                            )}
+                            title={t.enabled ? "Click to Pause" : "Click to Enable"}
+                          >
+                            {t.enabled ? "Active" : "Paused"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => removeTask(t.id)}
+                            className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+                            title="Delete Task"
+                          >
+                            <Trash2 className="size-3.5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Instruction / Prompt */}
+                      <div className="p-2.5 rounded-lg bg-muted/40 text-[11px] text-zinc-300 leading-relaxed font-mono whitespace-pre-wrap break-words">
+                        {t.prompt}
+                      </div>
+
+                      {/* Timing & Next Run */}
+                      <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-1 border-t border-border/40">
+                        <span className="flex items-center gap-1">
+                          <Clock className="size-3" />
+                          <span>
+                            {t.scheduleType === "fixed_time" && t.timeOfDay
+                              ? `Daily at ${t.timeOfDay}`
+                              : t.intervalMinutes
+                                ? `Every ${t.intervalMinutes}m`
+                                : "Scheduled"}
+                          </span>
+                        </span>
+                        {t.nextRunAt && (
+                          <span>
+                            Next:{" "}
+                            {new Date(t.nextRunAt).toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )
+              ) : /* History / Activity Ledger Tab */
+              activities.length === 0 ? (
                 <div className="h-64 flex flex-col items-center justify-center text-center p-6 text-muted-foreground">
                   <div className="size-12 rounded-xl bg-muted/60 flex items-center justify-center mb-3">
                     <ListTodo className="size-6 text-muted-foreground/60" />
                   </div>
                   <h3 className="text-sm font-medium text-foreground mb-1">
-                    No tasks assigned yet
+                    No project execution history yet
                   </h3>
                   <p className="text-xs text-muted-foreground max-w-xs leading-relaxed">
-                    Aap Call Assistant se voice call ya message par task assign karwa saktay hain.
-                    Woh khud schedule karega aur project agent se execute karwayega.
+                    Jab Super Bot kisi project mein task dispatch karega ya error fix karega, yahan
+                    date, time aur task description ke sath full ledger record hoga.
                   </p>
                 </div>
               ) : (
-                scheduledTasks.map((t) => (
+                activities.map((act) => (
                   <div
-                    key={t.id}
+                    key={act.id}
                     className="p-4 rounded-xl border border-border/70 bg-card/60 hover:bg-card transition-colors space-y-2.5"
                   >
-                    {/* Top Row: Title & Actions */}
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
-                        <h4 className="text-xs font-semibold text-foreground truncate">
-                          {t.title}
-                        </h4>
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className={cn(
+                              "size-2 rounded-full shrink-0",
+                              act.status === "completed"
+                                ? "bg-emerald-400"
+                                : act.status === "running"
+                                  ? "bg-amber-400 animate-pulse"
+                                  : "bg-blue-400",
+                            )}
+                          />
+                          <h4 className="text-xs font-semibold text-foreground truncate">
+                            {act.taskTitle}
+                          </h4>
+                        </div>
                         <div className="flex items-center gap-1.5 mt-1 text-[11px] text-muted-foreground">
                           <FolderGit2 className="size-3 text-primary shrink-0" />
                           <span className="font-medium text-primary truncate">
-                            {t.projectName || "General Workspace"}
+                            {act.projectName}
                           </span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => toggleTask(t.id)}
-                          className={cn(
-                            "px-2 py-0.5 rounded text-[10px] font-medium transition-colors cursor-pointer",
-                            t.enabled
-                              ? "bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25"
-                              : "bg-muted text-muted-foreground hover:bg-muted/80",
-                          )}
-                          title={t.enabled ? "Click to Pause" : "Click to Enable"}
-                        >
-                          {t.enabled ? "Active" : "Paused"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => removeTask(t.id)}
-                          className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
-                          title="Delete Task"
-                        >
-                          <Trash2 className="size-3.5" />
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Instruction / Prompt */}
-                    <div className="p-2.5 rounded-lg bg-muted/40 text-[11px] text-zinc-300 leading-relaxed font-mono whitespace-pre-wrap break-words">
-                      {t.prompt}
-                    </div>
-
-                    {/* Timing & Next Run */}
-                    <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-1 border-t border-border/40">
-                      <span className="flex items-center gap-1">
-                        <Clock className="size-3" />
-                        <span>
-                          {t.scheduleType === "fixed_time" && t.timeOfDay
-                            ? `Daily at ${t.timeOfDay}`
-                            : t.intervalMinutes
-                              ? `Every ${t.intervalMinutes}m`
-                              : "Scheduled"}
-                        </span>
+                      <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-primary/10 text-primary font-semibold shrink-0">
+                        {act.status}
                       </span>
-                      {t.nextRunAt && (
-                        <span>
-                          Next:{" "}
-                          {new Date(t.nextRunAt).toLocaleTimeString([], {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
+                    </div>
+
+                    {/* Full Task Description */}
+                    <div className="p-2.5 rounded-lg bg-muted/30 text-[11px] text-zinc-300 leading-relaxed font-mono whitespace-pre-wrap break-words">
+                      {act.description}
+                    </div>
+
+                    {/* Timestamp & Result Summary */}
+                    <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-1 border-t border-border/40">
+                      <span>
+                        {new Date(act.createdAt).toLocaleString([], {
+                          month: "short",
+                          day: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                      {act.resultSummary && (
+                        <span className="text-emerald-400 truncate max-w-[200px]">
+                          ✓ {act.resultSummary}
                         </span>
                       )}
                     </div>

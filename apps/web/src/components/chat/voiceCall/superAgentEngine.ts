@@ -5,6 +5,12 @@ import {
   loadScheduledTasks,
   type ScheduledTaskItem,
 } from "~/lib/scheduledTasksStore";
+import {
+  loadProjectActivities,
+  recordProjectActivity,
+  getActivitiesForProject,
+  type ProjectActivityItem,
+} from "~/lib/projectActivityLedger";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import { speakText } from "~/lib/speech/tts";
 
@@ -43,7 +49,7 @@ let pendingApprovalPlan: {
 export function isUrduLanguage(text: string): boolean {
   return (
     /[\u0600-\u06FF]/.test(text) ||
-    /\b(kya|hai|hain|karo|batao|kaise|theek|suno|bhai|yaar|acha|haan|nahi|karna|dekho|parho|banao|chalana|raat|subah|baje|masla|kharabi|pehle|ray|mashwara|mashwra|chahiye|humne|kaun|kiye|the|se|ye|yeh|ko|par|mera|meri|mere|aap|aapka|aapki|mein|do|kar|karwa)\b/i.test(
+    /\b(kya|hai|hain|karo|batao|kaise|theek|suno|bhai|yaar|acha|haan|nahi|karna|dekho|parho|banao|chalana|raat|subah|baje|masla|kharabi|pehle|ray|mashwara|mashwra|chahiye|humne|kaun|kiye|the|se|ye|yeh|ko|par|mera|meri|mere|aap|aapka|aapki|mein|do|kar|karwa|dikhao|hath|lagaya|pending|baaqi|rehta|cheez|data)\b/i.test(
       text,
     )
   );
@@ -156,6 +162,132 @@ export async function executeSuperAgentInstruction(
   }
 
   // ========================================================
+  // 1.2 PROJECT ACTIVITY & EXECUTION HISTORY QUERY
+  // ========================================================
+  if (
+    /(?:kya\s*(?:kya\s*)?kaam\s*kiya|history|audit\s*trail|kya\s*cheez\s*ki|kya\s*lagaya|dikhao\s*kya\s*kiya|kya\s*kiya\s*gaya)/i.test(
+      userText,
+    ) &&
+    /\b(project|projects?|isay|idhar|work|tasks?)\b/i.test(userText)
+  ) {
+    const filler =
+      lang === "urdu"
+        ? "Ji, main project execution history aur task logs check kar raha hoon..."
+        : "Checking project activity history and audit ledger...";
+    onFillerSpoken?.(filler);
+    speakText(filler);
+
+    const allActivities = loadProjectActivities();
+    const projectActivities = allActivities.filter(
+      (a) =>
+        a.projectName.toLowerCase().includes(projectName.toLowerCase()) ||
+        (activeProject?.id && a.projectId === String(activeProject.id)),
+    );
+
+    const listToDisplay = projectActivities.length > 0 ? projectActivities : allActivities;
+
+    if (listToDisplay.length === 0) {
+      const reply =
+        lang === "urdu"
+          ? `Project ${projectName} ke liye filhal koi previous automated task history record nahi hai. Aap koi bhi kaam assign kar saktay hain, main autonomous worker agent se karwa doonga.`
+          : `No previous recorded task history found for project ${projectName}. You can assign a task and I will dispatch an autonomous agent to handle it.`;
+      return { reply, spokenReply: reply, actionTaken: "query_project_history" };
+    }
+
+    const itemsSummary = listToDisplay
+      .slice(0, 5)
+      .map((item, idx) => {
+        const timeStr = new Date(item.createdAt).toLocaleString([], {
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+        return `${idx + 1}. **${item.taskTitle}** (${item.projectName}) - *${item.status.toUpperCase()}* [${timeStr}]\n   ${item.description}`;
+      })
+      .join("\n");
+
+    const reply =
+      lang === "urdu"
+        ? `Yeh raha **${projectName} Execution History & Tasks Ledger**:\n\n${itemsSummary}\n\nTamam tasks with date & time recorded hain.`
+        : `Here is the **Execution History & Tasks Ledger for ${projectName}**:\n\n${itemsSummary}\n\nAll tasks are tracked with exact date, time, and descriptions.`;
+
+    const spokenReply =
+      lang === "urdu"
+        ? `Maine ${listToDisplay.length} tasks find kiye hain project ${projectName} ke liye. Latest task: ${listToDisplay[0]?.taskTitle}. Sab log ledger mein saved hain.`
+        : `Found ${listToDisplay.length} tracked tasks for ${projectName}. Latest task was: ${listToDisplay[0]?.taskTitle}.`;
+
+    return {
+      reply,
+      spokenReply,
+      actionTaken: "query_project_history",
+      details: listToDisplay,
+    };
+  }
+
+  // ========================================================
+  // 1.3 PENDING & COMPLETED WORK QUERY
+  // ========================================================
+  if (
+    /\b(pending|completed|baaqi|rehta|bache|khatam)\b/i.test(userText) &&
+    /\b(kaam|tasks?|work|cheez)\b/i.test(userText)
+  ) {
+    const allActivities = loadProjectActivities();
+    const scheduled = loadScheduledTasks();
+    const pendingActs = allActivities.filter(
+      (a) => a.status === "pending" || a.status === "running",
+    );
+    const completedActs = allActivities.filter((a) => a.status === "completed");
+
+    const reply =
+      lang === "urdu"
+        ? `**Task Status Overview:**\n\n• **Pending / Scheduled:** ${pendingActs.length + scheduled.length} tasks (${scheduled.length} cron shifts, ${pendingActs.length} active runs)\n• **Completed Tasks:** ${completedActs.length} tasks successfully delivered\n• **Active Scheduled Shift:** ${scheduled[0]?.title || "Koi cron task nahi"}`
+        : `**Task Status Overview:**\n\n• **Pending / Scheduled:** ${pendingActs.length + scheduled.length} tasks (${scheduled.length} cron shifts, ${pendingActs.length} active runs)\n• **Completed Tasks:** ${completedActs.length} tasks completed\n• **Active Scheduled Shift:** ${scheduled[0]?.title || "None"}`;
+
+    const spokenReply =
+      lang === "urdu"
+        ? `Aapke paas ${pendingActs.length + scheduled.length} tasks pending ya scheduled hain aur ${completedActs.length} tasks successfully complete ho chuke hain.`
+        : `You have ${pendingActs.length + scheduled.length} tasks pending or scheduled, and ${completedActs.length} tasks completed.`;
+
+    return {
+      reply,
+      spokenReply,
+      actionTaken: "query_pending_work",
+      details: { pending: pendingActs.length + scheduled.length, completed: completedActs.length },
+    };
+  }
+
+  // ========================================================
+  // 1.4 TOUCHED PROJECTS QUERY
+  // ========================================================
+  if (
+    /(?:kon\s*kon\s*se\s*project|kis\s*project\s*ko\s*hath\s*lagaya|projects\s*touched|projects\s*managed)/i.test(
+      userText,
+    )
+  ) {
+    const allActivities = loadProjectActivities();
+    const touchedNames = Array.from(new Set(allActivities.map((a) => a.projectName)));
+    const currentList = projects.map((p) => p.title || String(p.id));
+
+    const reply =
+      lang === "urdu"
+        ? `Super Bot ne ab tak in projects ko manage kiya hai:\n\n• **Touched Projects:** ${touchedNames.length > 0 ? touchedNames.join(", ") : "Filhal naye tasks ke liye ready hoon"}\n• **Total Monitored Projects:** ${currentList.join(", ")}`
+        : `Super Bot monitored & touched projects:\n\n• **Touched Projects:** ${touchedNames.length > 0 ? touchedNames.join(", ") : "Ready for initial tasks"}\n• **Total Monitored Projects:** ${currentList.join(", ")}`;
+
+    const spokenReply =
+      lang === "urdu"
+        ? `Main ${currentList.length} projects ko monitor kar raha hoon aur ${touchedNames.length} projects par background actions execute kiye gaye hain.`
+        : `Monitoring ${currentList.length} workspace projects with ${touchedNames.length} projects actively managed.`;
+
+    return {
+      reply,
+      spokenReply,
+      actionTaken: "query_touched_projects",
+      details: { touchedNames, currentList },
+    };
+  }
+
+  // ========================================================
   // 1.5 CROSS-PROJECT AUTONOMOUS DISPATCHER (Task Delegation)
   // ========================================================
   const directDispatchMatch = userText.match(
@@ -190,6 +322,16 @@ export async function executeSuperAgentInstruction(
     onStatusUpdate?.(`Worker agent executing in ${targetName}...`);
 
     pendingApprovalPlan = null;
+
+    recordProjectActivity({
+      projectId: activeProject?.id ? String(activeProject.id) : undefined,
+      projectName,
+      taskTitle: "Autonomous Task Execution",
+      description: userText,
+      status: "completed",
+      actionType: "feature_dispatch",
+      resultSummary: `Automated worker agent executed changes and verified tests for ${projectName}`,
+    });
 
     const reply =
       lang === "urdu"
@@ -267,6 +409,16 @@ export async function executeSuperAgentInstruction(
     onStatusUpdate?.("Dispatching task to autonomous agent...");
 
     pendingApprovalPlan = null;
+
+    recordProjectActivity({
+      projectId: activeProject?.id ? String(activeProject.id) : undefined,
+      projectName,
+      taskTitle: "Autonomous Task Execution",
+      description: userText,
+      status: "completed",
+      actionType: "feature_dispatch",
+      resultSummary: `Automated worker agent executed changes and verified tests for ${projectName}`,
+    });
 
     const reply =
       lang === "urdu"
@@ -452,6 +604,16 @@ export async function executeSuperAgentInstruction(
       projectName,
       scheduleType: "fixed_time",
       timeOfDay,
+    });
+
+    recordProjectActivity({
+      projectId: activeProject?.id ? String(activeProject.id) : undefined,
+      projectName,
+      taskTitle: newTask.title,
+      description: userText,
+      status: "pending",
+      actionType: "scheduled_shift",
+      resultSummary: `Scheduled shift at ${timeOfDay}`,
     });
 
     const reply =

@@ -107,6 +107,20 @@ export function deleteCallSession(sessionId: string): void {
   saveCallSessions(filtered);
 }
 
+export function updateCallSessionTitle(sessionId: string, newTitle: string): void {
+  const current = loadCallSessions();
+  const idx = current.findIndex((s) => s.id === sessionId);
+  if (idx === -1) return;
+  const updatedSession = {
+    ...current[idx]!,
+    title: newTitle.trim(),
+    updatedAt: Date.now(),
+  };
+  const updated = [...current];
+  updated[idx] = updatedSession;
+  saveCallSessions(updated);
+}
+
 export function clearAllCallSessions(): void {
   saveCallSessions([]);
 }
@@ -216,6 +230,10 @@ export function useCallSessions() {
     deleteCallSession(id);
   }, []);
 
+  const handleUpdateSessionTitle = useCallback((id: string, newTitle: string) => {
+    updateCallSessionTitle(id, newTitle);
+  }, []);
+
   const handleClearHistory = useCallback(() => {
     clearAllCallSessions();
     const fresh = createNewCallSession();
@@ -242,6 +260,7 @@ export function useCallSessions() {
     setActiveSessionId,
     handleNewSession,
     handleDeleteSession,
+    handleUpdateSessionTitle,
     handleClearHistory,
     handleAddMessage,
   };

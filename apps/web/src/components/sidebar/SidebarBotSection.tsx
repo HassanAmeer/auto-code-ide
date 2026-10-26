@@ -7,7 +7,8 @@ import {
   MoreVertical,
   Plus,
   Trash2,
-  MessageSquare,
+  ListTodo,
+  Pencil,
   Sparkles,
 } from "lucide-react";
 import { cn } from "~/lib/utils";
@@ -15,6 +16,7 @@ import {
   useCallSessions,
   createNewCallSession,
   deleteCallSession,
+  updateCallSessionTitle,
   clearAllCallSessions,
   type CallAssistantSession,
 } from "~/lib/callAssistantStore";
@@ -26,6 +28,9 @@ export function SidebarBotSection() {
   const navigate = useNavigate();
   const location = useLocation();
   const { sessions, activeSessionId, setActiveSessionId } = useCallSessions();
+
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState("");
 
   const [isExpanded, setIsExpanded] = useState(() => {
     try {
@@ -182,32 +187,78 @@ export function SidebarBotSection() {
                     : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-foreground border border-transparent",
                 )}
               >
-                <div className="flex items-center gap-2 min-w-0 flex-1 pr-1">
-                  <MessageSquare
-                    className={cn("size-3.5 shrink-0", isActive ? "text-primary" : "opacity-60")}
+                <div className="flex items-center gap-1.5 min-w-0 flex-1 pr-1">
+                  <ListTodo
+                    className={cn("size-3 shrink-0", isActive ? "text-primary" : "opacity-60")}
                   />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate leading-tight text-xs">{session.title}</p>
-                    <span className="text-[10px] opacity-60 block truncate">
-                      {new Date(session.updatedAt || session.createdAt).toLocaleDateString([], {
-                        month: "short",
-                        day: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </span>
+                    {editingSessionId === session.id ? (
+                      <input
+                        type="text"
+                        autoFocus
+                        value={editingTitle}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => setEditingTitle(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (editingTitle.trim()) {
+                              updateCallSessionTitle(session.id, editingTitle.trim());
+                            }
+                            setEditingSessionId(null);
+                          } else if (e.key === "Escape") {
+                            e.stopPropagation();
+                            setEditingSessionId(null);
+                          }
+                        }}
+                        onBlur={() => {
+                          if (editingTitle.trim()) {
+                            updateCallSessionTitle(session.id, editingTitle.trim());
+                          }
+                          setEditingSessionId(null);
+                        }}
+                        className="text-xs bg-background border border-primary/50 rounded px-1 py-0.5 outline-hidden text-foreground w-full"
+                      />
+                    ) : (
+                      <>
+                        <p className="truncate leading-tight text-xs">{session.title}</p>
+                        <span className="text-[10px] opacity-60 block truncate">
+                          {new Date(session.updatedAt || session.createdAt).toLocaleDateString([], {
+                            month: "short",
+                            day: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                      </>
+                    )}
                   </div>
                 </div>
 
-                {/* Delete button on hover */}
-                <button
-                  type="button"
-                  onClick={(e) => handleDeleteSession(e, session.id)}
-                  className="opacity-0 group-hover:opacity-100 p-1 rounded hover:text-destructive hover:bg-destructive/10 transition-opacity cursor-pointer shrink-0"
-                  title="Delete chat"
-                >
-                  <Trash2 className="size-3" />
-                </button>
+                {/* Compact Action Buttons: Edit (Pencil) & Delete (Trash) with light shadow and no background */}
+                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditingSessionId(session.id);
+                      setEditingTitle(session.title);
+                    }}
+                    className="p-0.5 rounded bg-transparent hover:text-primary text-muted-foreground/80 drop-shadow-xs transition-colors cursor-pointer"
+                    title="Edit Title"
+                  >
+                    <Pencil className="size-2.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => handleDeleteSession(e, session.id)}
+                    className="p-0.5 rounded bg-transparent hover:text-destructive text-muted-foreground/80 drop-shadow-xs transition-colors cursor-pointer"
+                    title="Delete Chat"
+                  >
+                    <Trash2 className="size-2.5" />
+                  </button>
+                </div>
               </div>
             );
           })}

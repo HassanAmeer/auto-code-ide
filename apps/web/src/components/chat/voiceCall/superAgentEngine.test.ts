@@ -190,6 +190,36 @@ describe("superAgentEngine", () => {
       expect(res.reply).toContain("Projects (1)");
     });
 
+    it("queries project execution history and task ledger", async () => {
+      // First dispatch a task to record in the ledger
+      await executeSuperAgentInstruction({
+        userText: "project auto-code-ide mein fix login validation error karo",
+        projects: mockProjects,
+        selectedModel: "Gemini 2.5 Flash",
+      });
+
+      // Now query history
+      const res = await executeSuperAgentInstruction({
+        userText: "is project se dikhana kya kya kaam kiya gaya hai",
+        projects: mockProjects,
+        selectedModel: "Gemini 2.5 Flash",
+      });
+
+      expect(res.actionTaken).toBe("query_project_history");
+      expect(res.reply).toContain("Execution History & Tasks Ledger");
+    });
+
+    it("queries pending and completed work overview", async () => {
+      const res = await executeSuperAgentInstruction({
+        userText: "kon sa kaam pending hai aur kon sa complete hua hai",
+        projects: mockProjects,
+        selectedModel: "Gemini 2.5 Flash",
+      });
+
+      expect(res.actionTaken).toBe("query_pending_work");
+      expect(res.reply).toContain("Task Status Overview");
+    });
+
     it("handles hands-free project completion command", async () => {
       const res = await executeSuperAgentInstruction({
         userText: "is project ko complete karo aur handle karo",
