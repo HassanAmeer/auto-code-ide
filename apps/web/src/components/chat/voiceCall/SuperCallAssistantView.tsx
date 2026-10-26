@@ -9,12 +9,11 @@ import {
   Bot,
   History,
   X,
-  ChevronDown,
-  Check,
-  Cpu,
   RotateCcw,
   Loader2,
 } from "lucide-react";
+import { type ProviderInstanceId } from "@t3tools/contracts";
+import { useAtomValue } from "@effect/atom-react";
 import { cn } from "~/lib/utils";
 import { useProjects } from "~/state/entities";
 import { useNotes, addNote, type NoteItem } from "~/lib/notesStore";
@@ -24,43 +23,28 @@ import {
   type CallAssistantMessage,
   type CallAssistantSession,
 } from "~/lib/callAssistantStore";
+import { primaryServerProvidersAtom, primaryServerKeybindingsAtom } from "~/state/server";
+import { useClientSettings } from "~/hooks/useSettings";
+import {
+  getCustomProviders,
+  subscribeCustomProviders,
+  customProviderToServerProvider,
+  type CustomProvider,
+} from "~/lib/customProviders";
+import {
+  deriveProviderInstanceEntries,
+  sortProviderInstanceEntries,
+  applyProviderInstanceSettings,
+} from "~/providerInstances";
+import { getAppModelOptionsForInstance } from "~/modelSelection";
+import { ProviderModelPicker } from "../ProviderModelPicker";
+import type { ModelEsque } from "../providerIconUtils";
 import { buildSuperAgentSystemPrompt } from "./superAgentPrompt";
 import { VoiceCallFloatingWidget } from "./VoiceCallFloatingWidget";
 import { useVoiceCallAssistant } from "./useVoiceCallAssistant";
 import { speakText, stopSpeaking } from "~/lib/speech/tts";
 import { transliterateUrduToRoman } from "~/lib/speech/romanUrduTransliterate";
 import { executeSuperAgentInstruction, isUrduLanguage } from "./superAgentEngine";
-
-interface ModelOption {
-  id: string;
-  name: string;
-  provider: "Google" | "OpenAI" | "Anthropic" | "DeepSeek" | "Other";
-  recommended?: boolean;
-  fast?: boolean;
-}
-
-const AVAILABLE_MODELS: ModelOption[] = [
-  {
-    id: "gemini-2.5-flash",
-    name: "Gemini 2.5 Flash",
-    provider: "Google",
-    recommended: true,
-    fast: true,
-  },
-  { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro", provider: "Google" },
-  { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", provider: "Google", fast: true },
-  { id: "gpt-4o", name: "GPT-4o", provider: "OpenAI", recommended: true },
-  { id: "gpt-4o-mini", name: "GPT-4o Mini", provider: "OpenAI", fast: true },
-  { id: "gpt-4.5-preview", name: "GPT-4.5 Preview", provider: "OpenAI" },
-  { id: "o1", name: "o1", provider: "OpenAI" },
-  { id: "claude-3-7-sonnet", name: "Claude 3.7 Sonnet", provider: "Anthropic", recommended: true },
-  { id: "claude-3-5-sonnet", name: "Claude 3.5 Sonnet", provider: "Anthropic" },
-  { id: "claude-3-5-haiku", name: "Claude 3.5 Haiku", provider: "Anthropic", fast: true },
-  { id: "deepseek-v3", name: "DeepSeek V3", provider: "DeepSeek", recommended: true, fast: true },
-  { id: "deepseek-r1", name: "DeepSeek R1", provider: "DeepSeek" },
-  { id: "glm-4.5-flash", name: "GLM 4.5 Flash", provider: "Other", fast: true },
-  { id: "grok-2", name: "Grok 2", provider: "Other" },
-];
 
 export function SuperCallAssistantView() {
   const projects = useProjects();
@@ -81,46 +65,85 @@ export function SuperCallAssistantView() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [agentStatus, setAgentStatus] = useState<string | null>(null);
   const [isSessionsDrawerOpen, setIsSessionsDrawerOpen] = useState(false);
-  const [isModelMenuOpen, setIsModelMenuOpen] = useState(false);
-  const [modelSearchQuery, setModelSearchQuery] = useState("");
-  const [providerFilter, setProviderFilter] = useState<string>("all");
-  const [customModelInput, setCustomModelInput] = useState("");
-  const [selectedModel, setSelectedModel] = useState(() => {
-    return localStorage.getItem("super_call_assistant_model") || "Gemini 2.5 Flash";
-  });
 
-  // Track if user clicked/focused the input field to pause auto-sending
-  const [isUserEditing, setIsUserEditing] = useState(false);
-  const isUserEditingRef = useRef(false);
+  // Providers, models & settings
+  const rawServerProviders = useAtomValue(primaryServerProvidersAtom);
+  const keybindings = useAtomValue(primaryServerKeybindingsAtom);
+  const [customProvidersList, setCustomProvidersList] = useState<CustomProvider[]>(() =>
+    getCustomProviders(),
+  );
 
-  // Transliteration & Undo state
-  const [isTransliterating, setIsTransliterating] = useState(false);
-  const [previousTextForUndo, setPreviousTextForUndo] = useState<string | null>(null);
-
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  // Auto scroll to latest message
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [activeSession?.messages, isProcessing]);
-
-  const handleModelChange = useCallback((modelName: string) => {
-    setSelectedModel(modelName);
-    localStorage.setItem("super_call_assistant_model", modelName);
-    setIsModelMenuOpen(false);
+    return subscribeCustomProviders((list) => {
+      setCustomProvidersList(list);
+    });
   }, []);
 
-  const handleCustomModelSubmit = useCallback(
-    (e: React.FormEvent) => {
-      e.preventDefault();
-      if (customModelInput.trim()) {
-        handleModelChange(customModelInput.trim());
-        setCustomModelInput("");
-      }
-    },
-    [customModelInput, handleModelChange],
+  const providers = useMemo(() => {
+    const nonCustomRaw = rawServerProviders.filter(
+      (p) => p.driver !== "custom" && p.instanceId !== "custom",
+    );
+    if (!Array.isArray(customProvidersList) || customProvidersList.length === 0)
+      return nonCustomRaw;
+    const customStatuses = customProvidersList
+      .filter((cp): cp is CustomProvider => Boolean(cp && typeof cp === "object"))
+      .map(customProviderToServerProvider)
+      .filter(Boolean);
+    return [...nonCustomRaw, ...customStatuses];
+  }, [rawServerProviders, customProvidersList]);
+
+  const settings = useClientSettings();
+
+  const instanceEntries = useMemo(
+    () =>
+      sortProviderInstanceEntries(
+        applyProviderInstanceSettings(deriveProviderInstanceEntries(providers), settings),
+      ),
+    [providers, settings],
   );
+
+  const [activeInstanceId, setActiveInstanceId] = useState<ProviderInstanceId>(() => {
+    return (
+      (localStorage.getItem("super_call_assistant_instance_id") as ProviderInstanceId) ||
+      ("" as ProviderInstanceId)
+    );
+  });
+
+  const [selectedModel, setSelectedModel] = useState(() => {
+    return localStorage.getItem("super_call_assistant_model") || "";
+  });
+
+  const firstInstance = instanceEntries[0];
+  const effectiveInstanceId =
+    (instanceEntries.some((e) => e.instanceId === activeInstanceId)
+      ? activeInstanceId
+      : firstInstance?.instanceId) ?? ("" as ProviderInstanceId);
+
+  const effectiveModel = selectedModel || firstInstance?.models?.[0]?.slug || "gemini-2.5-flash";
+
+  const modelOptionsByInstance = useMemo<
+    ReadonlyMap<ProviderInstanceId, ReadonlyArray<ModelEsque>>
+  >(() => {
+    const out = new Map<ProviderInstanceId, ReadonlyArray<ModelEsque>>();
+    for (const entry of instanceEntries) {
+      out.set(
+        entry.instanceId,
+        getAppModelOptionsForInstance(
+          settings,
+          entry,
+          entry.instanceId === effectiveInstanceId ? effectiveModel : null,
+        ),
+      );
+    }
+    return out;
+  }, [instanceEntries, effectiveInstanceId, effectiveModel, settings]);
+
+  const handleModelChange = useCallback((instanceId: ProviderInstanceId, model: string) => {
+    setActiveInstanceId(instanceId);
+    setSelectedModel(model);
+    localStorage.setItem("super_call_assistant_instance_id", String(instanceId));
+    localStorage.setItem("super_call_assistant_model", model);
+  }, []);
 
   const handleSuperAgentDispatch = useCallback(
     async (rawUserText: string) => {
@@ -142,7 +165,7 @@ export function SuperCallAssistantView() {
           userText,
           projects,
           activeProjectId: activeProjId,
-          selectedModel,
+          selectedModel: effectiveModel,
           onStatusUpdate: (status) => {
             setAgentStatus(status);
           },
@@ -162,7 +185,7 @@ export function SuperCallAssistantView() {
         setAgentStatus(null);
       }
     },
-    [handleAddMessage, isProcessing, projects, selectedModel],
+    [handleAddMessage, isProcessing, projects, effectiveModel],
   );
 
   // Live Speech transcript update
@@ -233,19 +256,6 @@ export function SuperCallAssistantView() {
       void handleSuperAgentDispatch(inputText);
     }
   }, [handleSuperAgentDispatch, inputText]);
-
-  const filteredModels = useMemo(() => {
-    return AVAILABLE_MODELS.filter((m) => {
-      const matchesProvider =
-        providerFilter === "all" || m.provider.toLowerCase() === providerFilter.toLowerCase();
-      const matchesSearch =
-        !modelSearchQuery.trim() ||
-        m.name.toLowerCase().includes(modelSearchQuery.toLowerCase()) ||
-        m.provider.toLowerCase().includes(modelSearchQuery.toLowerCase()) ||
-        m.id.toLowerCase().includes(modelSearchQuery.toLowerCase());
-      return matchesProvider && matchesSearch;
-    });
-  }, [modelSearchQuery, providerFilter]);
 
   return (
     <div className="flex h-full w-full bg-background text-foreground overflow-hidden relative">
@@ -334,132 +344,6 @@ export function SuperCallAssistantView() {
             })}
           </div>
         </aside>
-      )}
-
-      {/* Model Selection Modal / Sheet */}
-      {isModelMenuOpen && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 backdrop-blur-xs p-4 animate-in fade-in duration-150"
-          onClick={() => setIsModelMenuOpen(false)}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-950/95 backdrop-blur-2xl p-5 shadow-2xl animate-in zoom-in-95 duration-150 flex flex-col max-h-[85vh]"
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-zinc-800 shrink-0">
-              <div className="flex items-center gap-2">
-                <Cpu className="size-4 text-amber-400" />
-                <h3 className="text-sm font-semibold text-white">Select AI Model & Provider</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsModelMenuOpen(false)}
-                className="p-1 rounded-md text-zinc-400 hover:text-white transition-colors cursor-pointer"
-              >
-                <X className="size-4" />
-              </button>
-            </div>
-
-            {/* Provider Filter Tabs */}
-            <div className="flex items-center gap-1.5 py-2.5 overflow-x-auto shrink-0 scrollbar-none">
-              {(["all", "Google", "OpenAI", "Anthropic", "DeepSeek", "Other"] as const).map(
-                (prov) => (
-                  <button
-                    key={prov}
-                    type="button"
-                    onClick={() => setProviderFilter(prov)}
-                    className={cn(
-                      "px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer whitespace-nowrap",
-                      providerFilter === prov
-                        ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
-                        : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 border border-transparent",
-                    )}
-                  >
-                    {prov === "all" ? "All Providers" : prov}
-                  </button>
-                ),
-              )}
-            </div>
-
-            {/* Search Input */}
-            <div className="pb-2 shrink-0">
-              <input
-                type="text"
-                value={modelSearchQuery}
-                onChange={(e) => setModelSearchQuery(e.target.value)}
-                placeholder="Search models or providers..."
-                className="w-full px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-white placeholder:text-zinc-500 focus:outline-hidden focus:border-amber-400"
-              />
-            </div>
-
-            {/* Models List */}
-            <div className="flex-1 py-1 space-y-1 overflow-y-auto min-h-48 max-h-72">
-              {filteredModels.map((m) => {
-                const isSelected = selectedModel.toLowerCase().includes(m.name.toLowerCase());
-                return (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => handleModelChange(m.name)}
-                    className={cn(
-                      "w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs transition-all text-left cursor-pointer",
-                      isSelected
-                        ? "bg-amber-500/15 text-amber-300 border border-amber-500/30 font-medium"
-                        : "hover:bg-zinc-800/60 text-zinc-300 border border-transparent",
-                    )}
-                  >
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-medium">{m.name}</span>
-                        {m.recommended && (
-                          <span className="px-1.5 py-0.5 rounded-md text-[9px] bg-amber-500/20 text-amber-400 font-medium">
-                            Recommended
-                          </span>
-                        )}
-                        {m.fast && (
-                          <span className="px-1.5 py-0.5 rounded-md text-[9px] bg-emerald-500/20 text-emerald-400 font-medium">
-                            Fast
-                          </span>
-                        )}
-                      </div>
-                      <span className="text-[10px] text-zinc-500">{m.provider}</span>
-                    </div>
-                    {isSelected && <Check className="size-3.5 text-amber-400" />}
-                  </button>
-                );
-              })}
-              {filteredModels.length === 0 && (
-                <div className="text-center py-6 text-xs text-zinc-500">
-                  No models found matching "{modelSearchQuery}"
-                </div>
-              )}
-            </div>
-
-            {/* Custom Model Input */}
-            <form
-              onSubmit={handleCustomModelSubmit}
-              className="pt-3 border-t border-zinc-800 flex gap-2 shrink-0"
-            >
-              <input
-                type="text"
-                value={customModelInput}
-                onChange={(e) => setCustomModelInput(e.target.value)}
-                placeholder="Or type custom model..."
-                className="flex-1 px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-700 text-xs text-white placeholder:text-zinc-500 focus:outline-hidden focus:border-amber-400"
-              />
-              <button
-                type="submit"
-                disabled={!customModelInput.trim()}
-                className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs text-white disabled:opacity-50 transition-colors cursor-pointer"
-              >
-                Set
-              </button>
-            </form>
-          </div>
-        </div>
       )}
 
       {/* Main Conversation Stream */}
@@ -699,16 +583,19 @@ export function SuperCallAssistantView() {
             <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[1px] bg-zinc-700/60" />
 
             {/* Centered Model Dropdown Badge (Half above line, half below line) */}
-            <button
-              type="button"
-              onClick={() => setIsModelMenuOpen(true)}
-              className="relative z-10 flex items-center gap-1.5 px-3 py-0.5 rounded-full border border-zinc-700/80 bg-background text-zinc-300 hover:text-white hover:border-zinc-500 text-xs font-medium transition-all shadow-xs cursor-pointer select-none"
-              title="Click to select AI Model & Provider"
-            >
-              <Sparkles className="size-3 text-amber-400" />
-              <span>{selectedModel}</span>
-              <ChevronDown className="size-3 text-zinc-400" />
-            </button>
+            <div className="relative z-10 flex items-center justify-center">
+              <ProviderModelPicker
+                activeInstanceId={effectiveInstanceId}
+                model={effectiveModel}
+                lockedProvider={null}
+                instanceEntries={instanceEntries}
+                modelOptionsByInstance={modelOptionsByInstance}
+                keybindings={keybindings}
+                size="xs"
+                triggerClassName="h-6 rounded-full border border-zinc-700/80 bg-background px-3 text-xs font-medium text-zinc-300 hover:text-white hover:border-zinc-500 shadow-xs cursor-pointer select-none max-w-none"
+                onInstanceModelChange={handleModelChange}
+              />
+            </div>
           </div>
         </div>
 
