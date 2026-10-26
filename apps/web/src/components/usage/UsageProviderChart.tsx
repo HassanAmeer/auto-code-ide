@@ -332,6 +332,25 @@ export function UsageProviderChart({
     [periods.length, positionTooltip],
   );
 
+  const handleTouch = useCallback(
+    (event: React.TouchEvent<HTMLDivElement>) => {
+      const touch = event.touches[0];
+      if (!touch) return;
+      const plot = plotRef.current;
+      if (plot === null || periods.length === 0) return;
+      const bounds = plot.getBoundingClientRect();
+      if (bounds.width === 0) return;
+      const localX = Math.min(bounds.width, Math.max(0, touch.clientX - bounds.left));
+      const localY = Math.min(bounds.height, Math.max(0, touch.clientY - bounds.top));
+      const fraction = localX / bounds.width;
+      const index = Math.round(fraction * (periods.length - 1));
+      hoverPositionRef.current = { x: localX, y: localY };
+      positionTooltip();
+      setHoverIndex(Math.min(periods.length - 1, Math.max(0, index)));
+    },
+    [periods.length, positionTooltip],
+  );
+
   const hoveredPeriod = hoverIndex === null ? undefined : periods[hoverIndex];
   const hoveredColumn = hoverIndex === null ? undefined : columns[hoverIndex];
   const partial = providers.some((provider) => loadingProviders.has(provider));
@@ -343,15 +362,15 @@ export function UsageProviderChart({
       : formatPeriod(period);
 
   return (
-    <div className="flex flex-col gap-1">
-      <div className="flex gap-2">
+    <div className="flex w-full min-w-0 flex-col gap-1">
+      <div className="flex gap-1.5 sm:gap-2">
         {/* Axis labels sit outside the plot so they stay aligned to gridlines. */}
-        <div className="relative h-56 w-14 shrink-0">
+        <div className="relative h-44 sm:h-56 w-10 sm:w-14 shrink-0">
           {scale.labeled
             ? scale.ticks.map((tick) => (
                 <span
                   key={tick}
-                  className="absolute right-0 -translate-y-1/2 text-3xs text-muted-foreground tabular-nums"
+                  className="absolute right-0 -translate-y-1/2 text-[10px] sm:text-3xs text-muted-foreground tabular-nums"
                   style={{ top: `${(toY(tick) / VIEW_HEIGHT) * 100}%` }}
                 >
                   {tick === 0 ? "0" : format(tick)}
@@ -362,8 +381,14 @@ export function UsageProviderChart({
 
         <div
           ref={plotRef}
-          className="relative h-56 flex-1"
+          className="relative h-44 sm:h-56 flex-1 min-w-0"
           onMouseMove={handleMove}
+          onTouchStart={handleTouch}
+          onTouchMove={handleTouch}
+          onTouchEnd={() => {
+            hoverPositionRef.current = null;
+            setHoverIndex(null);
+          }}
           onMouseLeave={() => {
             hoverPositionRef.current = null;
             setHoverIndex(null);
@@ -432,7 +457,7 @@ export function UsageProviderChart({
           {hoveredPeriod === undefined ? null : (
             <div
               ref={tooltipRef}
-              className="surface-glass pointer-events-none absolute z-10 min-w-36 max-w-full rounded-xl border border-border/50 px-2.5 py-2 text-xs shadow-lg"
+              className="surface-glass pointer-events-none absolute z-20 min-w-32 max-w-[calc(100vw-2rem)] rounded-xl border border-border/50 px-2.5 py-2 text-xs shadow-lg"
               style={{
                 left: "var(--usage-tooltip-left, 0px)",
                 top: "var(--usage-tooltip-top, 0px)",
@@ -482,7 +507,7 @@ export function UsageProviderChart({
         </div>
       </div>
 
-      <div className="flex justify-between pl-16 text-3xs text-muted-foreground uppercase">
+      <div className="flex justify-between pl-12 sm:pl-16 text-[10px] sm:text-3xs text-muted-foreground uppercase">
         <span>{periods[0] === undefined ? "" : formatPeriod(periods[0])}</span>
         <span>
           {periods[Math.floor(periods.length / 2)] === undefined

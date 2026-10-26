@@ -255,7 +255,7 @@ function PoolSegment({
             type="button"
             style={{ gridColumn: index, gridRow: 1 }}
             aria-label={`${account.displayName ?? (account.email ? accountInitials(account.email) : account.driver)}: ${remaining}% left${resetsIn ? `, ${resetsIn}` : ""}${credits ? `, ${credits} reset ${credits === 1 ? "credit" : "credits"} banked` : ""}`}
-            className="relative h-5 min-w-0 cursor-pointer overflow-hidden rounded-md bg-muted text-start outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background data-[popup-open]:ring-1 data-[popup-open]:ring-border @2xl/pool:h-8"
+            className="relative h-7 sm:h-8 @2xl/pool:h-8 min-w-0 cursor-pointer overflow-hidden rounded-md bg-muted text-start outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background data-[popup-open]:ring-1 data-[popup-open]:ring-border"
           />
         }
       >
@@ -507,25 +507,29 @@ function PoolWindowCard({
   // The soonest reset that hands anything back; an untouched account resets to no effect.
   const nextRefill = pool.resets.find((reset) => reset.restoresPercent > 0);
   return (
-    <div className="grid items-center gap-x-6 gap-y-3 rounded-lg border border-border/60 p-4 md:grid-cols-[11rem_minmax(0,1fr)]">
-      <div className="flex flex-col gap-1">
-        <span className="text-sm font-medium text-foreground">{label ?? pool.label}</span>
-        <span className="flex items-baseline gap-2">
-          <span className="text-3xl font-semibold text-foreground tabular-nums">
-            {pool.remainingPercent}%
+    <div className="grid items-center gap-x-6 gap-y-3 rounded-xl border border-border/60 p-3.5 sm:p-4 md:grid-cols-[11rem_minmax(0,1fr)]">
+      <div className="flex flex-row md:flex-col items-center md:items-start justify-between md:justify-start gap-1">
+        <div className="flex flex-col gap-0.5">
+          <span className="text-xs sm:text-sm font-medium text-foreground">
+            {label ?? pool.label}
           </span>
-          <span className="text-sm text-muted-foreground">left</span>
-          {pool.pace ? <PaceIcon pace={pool.pace} /> : null}
-        </span>
+          <div className="flex items-baseline gap-2">
+            <span className="text-2xl sm:text-3xl font-semibold text-foreground tabular-nums">
+              {pool.remainingPercent}%
+            </span>
+            <span className="text-xs sm:text-sm text-muted-foreground">left</span>
+            {pool.pace ? <PaceIcon pace={pool.pace} /> : null}
+          </div>
+        </div>
         {nextRefill && pool.columns.length > 1 ? (
-          <span className="text-xs font-medium text-foreground tabular-nums">
+          <span className="text-2xs sm:text-xs font-medium text-foreground tabular-nums rounded-full bg-muted/60 px-2 py-0.5 md:bg-transparent md:p-0">
             ↻ +{nextRefill.restoresPercent}%
           </span>
         ) : null}
       </div>
       <PoolBar pool={pool} color={color} now={now} />
       {description ? (
-        <p className="text-xs text-muted-foreground md:col-span-2">{description}</p>
+        <p className="text-2xs sm:text-xs text-muted-foreground md:col-span-2">{description}</p>
       ) : null}
     </div>
   );

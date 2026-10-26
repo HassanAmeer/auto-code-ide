@@ -165,31 +165,60 @@ export function LimitWindows({
   readonly compact?: boolean;
 }) {
   const color = barColor(driver);
+  if (compact) {
+    return (
+      <div className="grid grid-cols-[minmax(0,9rem)_minmax(3rem,1fr)_auto] gap-x-3 gap-y-0.5">
+        {windows.map((window) => {
+          const pace = paceOf(window, now);
+          const resetsIn = formatResetsIn(window, now);
+          return (
+            <Fragment key={window.id}>
+              <span className="flex min-w-0 items-center gap-2 text-xs">
+                <span className="truncate text-muted-foreground">{window.label}</span>
+                <span className="ms-auto shrink-0 font-medium text-foreground tabular-nums">
+                  {remainingPercent(window)}% left
+                </span>
+              </span>
+              <WindowBar color={color} window={window} now={now} />
+              <span className="flex items-center gap-2 text-xs whitespace-nowrap text-muted-foreground tabular-nums">
+                {pace ? <PaceIcon pace={pace} /> : null}
+                <span className="ms-auto shrink-0">{resetsIn ?? ""}</span>
+              </span>
+            </Fragment>
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
-    <div
-      className={
-        compact
-          ? "grid grid-cols-[minmax(0,9rem)_minmax(3rem,1fr)_auto] gap-x-3 gap-y-0.5"
-          : "grid grid-cols-[11rem_minmax(0,1fr)_7rem] gap-x-4 gap-y-1"
-      }
-    >
+    <div className="flex flex-col gap-3 sm:gap-2">
       {windows.map((window) => {
         const pace = paceOf(window, now);
         const resetsIn = formatResetsIn(window, now);
         return (
-          <Fragment key={window.id}>
-            <span className="flex min-w-0 items-center gap-2 text-xs">
-              <span className="truncate text-muted-foreground">{window.label}</span>
-              <span className="ms-auto shrink-0 font-medium text-foreground tabular-nums">
+          <div
+            key={window.id}
+            className="flex flex-col gap-1.5 sm:grid sm:grid-cols-[11rem_minmax(0,1fr)_7rem] sm:items-center sm:gap-x-4 sm:gap-y-1"
+          >
+            <div className="flex min-w-0 items-center justify-between sm:justify-start gap-2 text-xs">
+              <span className="truncate text-muted-foreground font-medium sm:font-normal">
+                {window.label}
+              </span>
+              <span className="sm:ms-auto shrink-0 font-medium text-foreground tabular-nums">
                 {remainingPercent(window)}% left
               </span>
-            </span>
-            <WindowBar color={color} window={window} now={now} />
-            <span className="flex items-center gap-2 text-xs whitespace-nowrap text-muted-foreground tabular-nums">
-              {pace ? <PaceIcon pace={pace} /> : null}
-              <span className="ms-auto shrink-0">{resetsIn ?? ""}</span>
-            </span>
-          </Fragment>
+            </div>
+            <div className="w-full min-w-0">
+              <WindowBar color={color} window={window} now={now} />
+            </div>
+            <div className="flex items-center justify-between sm:justify-end gap-2 text-xs whitespace-nowrap text-muted-foreground tabular-nums">
+              <span className="flex items-center gap-1.5">
+                {pace ? <PaceIcon pace={pace} /> : null}
+              </span>
+              <span className="sm:ms-auto shrink-0">{resetsIn ?? ""}</span>
+            </div>
+          </div>
         );
       })}
     </div>
