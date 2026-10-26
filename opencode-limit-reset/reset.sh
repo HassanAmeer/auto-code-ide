@@ -59,6 +59,19 @@ fi
 
 # Verify Privoxy Egress IP
 PRIVOXY_IP=$(curl -x http://127.0.0.1:8118 -s --max-time 6 https://api.ipify.org 2>/dev/null || echo "FAILED")
+
+# If Privoxy forwarding failed or returned empty, auto-recover using WARP (40000)
+if [ "$PRIVOXY_IP" = "FAILED" ] || [ -z "$PRIVOXY_IP" ]; then
+  echo -e "  ${YELLOW}!${NC} Privoxy connection failed. Auto-recovering via Cloudflare WARP (40000)..."
+  warp-cli --accept-tos mode proxy >/dev/null 2>&1 || true
+  warp-cli --accept-tos proxy port 40000 >/dev/null 2>&1 || true
+  warp-cli --accept-tos connect >/dev/null 2>&1 || true
+  sed -i "s/forward-socks5 \/ 127.0.0.1:[0-9]* ./forward-socks5 \/ 127.0.0.1:40000 ./" /etc/privoxy/config 2>/dev/null || true
+  systemctl restart privoxy 2>/dev/null || true
+  sleep 1
+  PRIVOXY_IP=$(curl -x http://127.0.0.1:8118 -s --max-time 6 https://api.ipify.org 2>/dev/null || echo "FAILED")
+fi
+
 echo -e "  ${GREEN}✓${NC} Current Outbound Privoxy IP: ${CYAN}${PRIVOXY_IP}${NC}"
 
 # 2. Session ID Generation (Canonical Bitwise Descending Layout)

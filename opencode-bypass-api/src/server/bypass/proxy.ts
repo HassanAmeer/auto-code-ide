@@ -90,6 +90,26 @@ export async function getDirectIp(): Promise<string> {
 }
 
 /**
+ * Ensure Privoxy is configured to bridge to WARP SOCKS5 (port 40000)
+ */
+export function ensurePrivoxyWarpBridge(): void {
+  try {
+    const configPath = "/etc/privoxy/config";
+    if (NodeFS.existsSync(configPath)) {
+      const content = NodeFS.readFileSync(configPath, "utf-8");
+      if (!content.includes("forward-socks5 / 127.0.0.1:40000 .")) {
+        const updated = content.replace(
+          /forward-socks5\s+\/\s+127\.0\.0\.1:[0-9]+\s+\./g,
+          "forward-socks5 / 127.0.0.1:40000 .",
+        );
+        NodeFS.writeFileSync(configPath, updated, "utf-8");
+        NodeChildProcess.execSync("systemctl restart privoxy >/dev/null 2>&1 || true");
+      }
+    }
+  } catch {}
+}
+
+/**
  * Get the currently active outgoing Cloudflare WARP proxy IP dynamically
  */
 export async function getWarpProxyIp(): Promise<string> {
@@ -99,6 +119,7 @@ export async function getWarpProxyIp(): Promise<string> {
     "https://api.ipify.org",
   ];
 
+  // 1. First attempt via Privoxy HTTP proxy (8118)
   for (const url of providers) {
     try {
       const out = NodeChildProcess.execSync(
@@ -116,6 +137,30 @@ export async function getWarpProxyIp(): Promise<string> {
         }
       } else if (out && !out.includes("<") && out.length >= 7 && out.length <= 45) {
         return out.replace(/[^0-9a-fA-F:.]/g, "");
+      }
+    } catch {}
+  }
+
+  // 2. Direct SOCKS5 check on port 40000 (WARP native) in case Privoxy config was misrouted
+  for (const url of providers) {
+    try {
+      const out = NodeChildProcess.execSync(
+        `curl -x socks5h://127.0.0.1:40000 -s --max-time 4 "${url}" 2>/dev/null`,
+        { encoding: "utf-8", timeout: 5000 },
+      ).trim();
+
+      let directWarpIp = "";
+      if (url.includes("trace")) {
+        const match = out.match(/^ip=(.+)$/m);
+        if (match && match[1]) directWarpIp = match[1].trim();
+      } else if (out && !out.includes("<") && out.length >= 7 && out.length <= 45) {
+        directWarpIp = out.replace(/[^0-9a-fA-F:.]/g, "");
+      }
+
+      if (directWarpIp && directWarpIp.length >= 7) {
+        // Auto-heal Privoxy config in background
+        ensurePrivoxyWarpBridge();
+        return directWarpIp;
       }
     } catch {}
   }
@@ -288,6 +333,7 @@ export async function rotateWarpIp(): Promise<{
   newIp: string;
   message?: string;
 }> {
+  ensurePrivoxyWarpBridge();
   const oldIp = await getWarpProxyIp();
 
   const candidateScriptPaths = [
