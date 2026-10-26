@@ -4,6 +4,7 @@ import {
   FolderGit2,
   Send,
   Sparkles,
+  Bot,
   X,
   RotateCcw,
   Loader2,
