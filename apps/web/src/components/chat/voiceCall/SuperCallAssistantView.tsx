@@ -198,11 +198,31 @@ export function SuperCallAssistantView() {
 
       try {
         const activeProjId = projects[0]?.id ? String(projects[0].id) : undefined;
+        const matchingCustomProvider = customProvidersList.find(
+          (cp) =>
+            cp.id === effectiveInstanceId ||
+            cp.name === effectiveInstanceId ||
+            String(cp.id) === String(effectiveInstanceId),
+        );
+
         const res = await executeSuperAgentInstruction({
           userText,
           projects,
           activeProjectId: activeProjId,
           selectedModel: effectiveModel,
+          selectedInstanceId: String(effectiveInstanceId),
+          conversationHistory: (activeSession?.messages || []).map((m) => ({
+            role: m.role === "user" ? ("user" as const) : ("assistant" as const),
+            text: m.text,
+          })),
+          providerConfig: matchingCustomProvider
+            ? {
+                baseUrl: matchingCustomProvider.baseUrl,
+                apiKey: matchingCustomProvider.apiKey,
+                headers: matchingCustomProvider.headers,
+                format: matchingCustomProvider.format,
+              }
+            : undefined,
           onStatusUpdate: (status) => {
             setAgentStatus(status);
           },
@@ -226,7 +246,15 @@ export function SuperCallAssistantView() {
         setAgentStatus(null);
       }
     },
-    [handleAddMessage, isProcessing, projects, effectiveModel],
+    [
+      handleAddMessage,
+      isProcessing,
+      projects,
+      effectiveModel,
+      effectiveInstanceId,
+      customProvidersList,
+      activeSession?.messages,
+    ],
   );
 
   // Live Speech transcript update

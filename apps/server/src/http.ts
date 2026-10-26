@@ -932,6 +932,185 @@ export const layerCustomProviderSyncRoute = HttpRouter.add(
   }),
 );
 
+export const layerSuperAgentChatRoute = HttpRouter.add(
+  "POST",
+  "/api/super-agent/chat",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      model?: string;
+      instanceId?: string;
+      messages?: Array<{ role: string; content: string }>;
+      baseUrl?: string;
+      apiKey?: string;
+      headers?: Array<{ key: string; value: string }>;
+      temperature?: number;
+      maxTokens?: number;
+    };
+
+    const model = bodyJson?.model?.trim() || "default";
+    const messages = Array.isArray(bodyJson?.messages) ? bodyJson.messages : [];
+    if (messages.length === 0) {
+      return HttpServerResponse.jsonUnsafe({
+        ok: false,
+        error: "Messages array cannot be empty.",
+      });
+    }
+
+    const config = yield* ServerConfig.ServerConfig;
+    const customProviders = listCustomProviders(config.dbPath);
+
+    let baseUrl = bodyJson?.baseUrl?.trim();
+    let apiKey = bodyJson?.apiKey?.trim();
+    let customHeaders = bodyJson?.headers || [];
+
+    if (!baseUrl && bodyJson?.instanceId) {
+      const match = customProviders.find(
+        (p: any) =>
+          p.id === bodyJson.instanceId ||
+          p.name === bodyJson.instanceId ||
+          String(p.id) === String(bodyJson.instanceId),
+      );
+      if (match) {
+        baseUrl = match.baseUrl;
+        if (!apiKey) apiKey = match.apiKey;
+        if (Array.isArray(match.headers) && match.headers.length > 0) {
+          customHeaders = [...match.headers, ...customHeaders];
+        }
+      }
+    }
+
+    if (!baseUrl) {
+      const openRouterMatch = customProviders.find(
+        (p: any) => p.baseUrl && p.baseUrl.includes("openrouter"),
+      );
+      if (openRouterMatch) {
+        baseUrl = openRouterMatch.baseUrl;
+        if (!apiKey) apiKey = openRouterMatch.apiKey;
+      } else {
+        baseUrl = "https://openrouter.ai/api/v1";
+      }
+    }
+
+    const result = yield* Effect.promise(async () => {
+      try {
+        if (typeof process !== "undefined" && process.env) {
+          process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+        }
+
+        const rawBase = (baseUrl || "").replace(/\/+$/, "");
+        let chatUrl: string;
+        if (rawBase.endsWith("/chat/completions")) {
+          chatUrl = rawBase;
+        } else if (rawBase.endsWith("/v1")) {
+          chatUrl = `${rawBase}/chat/completions`;
+        } else if (rawBase.includes("/v1/")) {
+          chatUrl = `${rawBase}/chat/completions`;
+        } else {
+          chatUrl = `${rawBase}/v1/chat/completions`;
+        }
+
+        const reqHeaders: Record<string, string> = {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "User-Agent": "AutoCode-SuperAgent/1.0",
+        };
+
+        if (apiKey) {
+          reqHeaders["Authorization"] = `Bearer ${apiKey.trim()}`;
+          reqHeaders["x-api-key"] = apiKey.trim();
+        }
+
+        if (Array.isArray(customHeaders)) {
+          for (const h of customHeaders) {
+            if (h && typeof h.key === "string" && h.key.trim()) {
+              reqHeaders[h.key.trim()] = String(h.value ?? "").trim();
+            }
+          }
+        }
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 60_000);
+
+        const response = await fetch(chatUrl, {
+          method: "POST",
+          headers: reqHeaders,
+          body: JSON.stringify({
+            model,
+            messages,
+            temperature: bodyJson?.temperature ?? 0.7,
+            max_tokens: bodyJson?.maxTokens ?? 1500,
+          }),
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        const responseText = await response.text();
+        let data: any;
+        try {
+          data = JSON.parse(responseText);
+        } catch {
+          data = { rawText: responseText };
+        }
+
+        if (!response.ok) {
+          const errDetail =
+            data?.error?.message ||
+            data?.error ||
+            data?.message ||
+            `HTTP ${response.status} ${response.statusText}`;
+          return {
+            ok: false,
+            status: response.status,
+            error: String(errDetail),
+            code: data?.error?.code || data?.code || "UPSTREAM_ERROR",
+          };
+        }
+
+        const content =
+          data?.choices?.[0]?.message?.content ||
+          data?.choices?.[0]?.text ||
+          data?.candidates?.[0]?.content?.parts?.[0]?.text ||
+          "";
+
+        if (!content && typeof data === "string") {
+          return { ok: true, reply: data };
+        }
+
+        if (!content) {
+          if (data?.error) {
+            return {
+              ok: false,
+              error: String(data.error.message || data.error),
+              code: "MODEL_ERROR",
+            };
+          }
+          return {
+            ok: false,
+            error: "Model returned an empty response.",
+            code: "EMPTY_RESPONSE",
+          };
+        }
+
+        return {
+          ok: true,
+          reply: content,
+          model: data?.model || model,
+        };
+      } catch (err: any) {
+        return {
+          ok: false,
+          error: err?.message || String(err),
+          code: err?.name === "AbortError" ? "TIMEOUT" : "NETWORK_ERROR",
+        };
+      }
+    });
+
+    return HttpServerResponse.jsonUnsafe(result);
+  }),
+);
+
 export const layerAppSettingsGetRoute = HttpRouter.add(
   "GET",
   "/api/app-settings",

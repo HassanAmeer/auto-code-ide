@@ -13,12 +13,21 @@ import {
 } from "~/lib/projectActivityLedger";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import { speakText } from "~/lib/speech/tts";
+import { buildSuperAgentSystemPrompt } from "./superAgentPrompt";
 
 export interface SuperAgentRunOptions {
   userText: string;
   projects: ReadonlyArray<EnvironmentProject>;
   activeProjectId?: string;
   selectedModel: string;
+  selectedInstanceId?: string;
+  conversationHistory?: Array<{ role: "user" | "assistant"; text: string }>;
+  providerConfig?: {
+    baseUrl?: string;
+    apiKey?: string;
+    headers?: Array<{ key: string; value: string }>;
+    format?: string;
+  };
   onFillerSpoken?: (filler: string) => void;
   onStatusUpdate?: (status: string) => void;
 }
@@ -53,6 +62,155 @@ export function isUrduLanguage(text: string): boolean {
       text,
     )
   );
+}
+
+export async function querySuperAgentLLM(
+  prompt: string,
+  options: {
+    model: string;
+    instanceId?: string;
+    providerConfig?: {
+      baseUrl?: string;
+      apiKey?: string;
+      headers?: Array<{ key: string; value: string }>;
+      format?: string;
+    };
+    systemPrompt: string;
+    history?: Array<{ role: "user" | "assistant"; text: string }>;
+  },
+): Promise<{ ok: boolean; reply?: string; error?: string; code?: string }> {
+  const { model, instanceId, providerConfig, systemPrompt, history = [] } = options;
+
+  const messages: Array<{ role: string; content: string }> = [
+    { role: "system", content: systemPrompt },
+  ];
+
+  const recentHistory = history.slice(-6);
+  for (const h of recentHistory) {
+    if (h.text && h.text.trim()) {
+      messages.push({
+        role: h.role === "user" ? "user" : "assistant",
+        content: h.text.trim(),
+      });
+    }
+  }
+
+  messages.push({ role: "user", content: prompt.trim() });
+
+  // 1. Try server-side proxy endpoint first (handles CORS, TLS, and stored provider secrets)
+  try {
+    const proxyResp = await fetch("/api/super-agent/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model,
+        instanceId,
+        messages,
+        baseUrl: providerConfig?.baseUrl,
+        apiKey: providerConfig?.apiKey,
+        headers: providerConfig?.headers,
+      }),
+      signal: AbortSignal.timeout(45000),
+    });
+
+    if (proxyResp.ok) {
+      const data = (await proxyResp.json()) as {
+        ok: boolean;
+        reply?: string;
+        error?: string;
+        code?: string;
+      };
+      if (data.ok && data.reply && data.reply.trim()) {
+        return { ok: true, reply: data.reply.trim() };
+      }
+      if (data.error) {
+        return { ok: false, error: data.error, code: data.code || "UPSTREAM_ERROR" };
+      }
+    }
+  } catch (proxyErr: any) {
+    console.warn("SuperAgent proxy fetch error, attempting direct fetch:", proxyErr);
+  }
+
+  // 2. Direct browser fetch fallback (if providerConfig has baseUrl)
+  if (providerConfig?.baseUrl) {
+    try {
+      const rawBase = providerConfig.baseUrl.trim().replace(/\/+$/, "");
+      let chatUrl = rawBase;
+      if (rawBase.endsWith("/chat/completions")) {
+        chatUrl = rawBase;
+      } else if (rawBase.endsWith("/v1")) {
+        chatUrl = `${rawBase}/chat/completions`;
+      } else if (rawBase.includes("/v1/")) {
+        chatUrl = `${rawBase}/chat/completions`;
+      } else {
+        chatUrl = `${rawBase}/v1/chat/completions`;
+      }
+
+      const reqHeaders: Record<string, string> = {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      };
+
+      if (providerConfig.apiKey) {
+        reqHeaders["Authorization"] = `Bearer ${providerConfig.apiKey.trim()}`;
+        reqHeaders["x-api-key"] = providerConfig.apiKey.trim();
+      }
+
+      if (Array.isArray(providerConfig.headers)) {
+        for (const h of providerConfig.headers) {
+          if (h?.key && h.key.trim()) {
+            reqHeaders[h.key.trim()] = String(h.value ?? "").trim();
+          }
+        }
+      }
+
+      const directResp = await fetch(chatUrl, {
+        method: "POST",
+        headers: reqHeaders,
+        body: JSON.stringify({
+          model,
+          messages,
+          temperature: 0.7,
+          max_tokens: 1500,
+        }),
+        signal: AbortSignal.timeout(45000),
+      });
+
+      const data = await directResp.json();
+      if (!directResp.ok) {
+        const errDetail =
+          data?.error?.message || data?.error || data?.message || `HTTP ${directResp.status}`;
+        return {
+          ok: false,
+          error: String(errDetail),
+          code: data?.error?.code || data?.code || String(directResp.status),
+        };
+      }
+
+      const content =
+        data?.choices?.[0]?.message?.content ||
+        data?.choices?.[0]?.text ||
+        data?.candidates?.[0]?.content?.parts?.[0]?.text ||
+        "";
+
+      if (content) {
+        return { ok: true, reply: content };
+      }
+      return { ok: false, error: "Empty response from AI model", code: "EMPTY_RESPONSE" };
+    } catch (directErr: any) {
+      return {
+        ok: false,
+        error: directErr?.message || "Direct connection failed",
+        code: "NETWORK_ERROR",
+      };
+    }
+  }
+
+  return {
+    ok: false,
+    error: "Could not connect to AI model endpoint. Please verify server or network.",
+    code: "NETWORK_ERROR",
+  };
 }
 
 /**
@@ -651,43 +809,76 @@ export async function executeSuperAgentInstruction(
   }
 
   // ========================================================
-  // 8. GENERAL GREETINGS & WORKSPACE STATUS
+  // 8. DYNAMIC REAL-TIME AI MODEL QUERY (No fake hardcoded responses)
   // ========================================================
-  if (/\b(kaise\s*ho|kya\s*haal|hello|hi|hey|salam|assalam)\b/i.test(userText)) {
-    const reply =
-      lang === "urdu"
-        ? `Walaikum Assalam! Main theek hoon, aapka Super Admin Call Assistant (${selectedModel}). Main aapke tamam projects, errors aur scheduled tasks ko dekh raha hoon. Batayein aaj kya hukum hai?`
-        : `Hello! I am your Super Admin Call Assistant (${selectedModel}), actively monitoring your workspace, projects, errors, and scheduled tasks. How can I assist you?`;
-    return { reply, spokenReply: reply, actionTaken: "greeting" };
+  const notes = loadNotes();
+  const scheduledTasks = loadScheduledTasks();
+  const systemPrompt = buildSuperAgentSystemPrompt({
+    projects,
+    notes,
+    scheduledTasks,
+    language: lang,
+    selectedModel,
+    activeProjectName: projectName,
+  });
+
+  onStatusUpdate?.(`Thinking with ${selectedModel}...`);
+
+  const llmRes = await querySuperAgentLLM(userText, {
+    model: selectedModel,
+    instanceId: options.selectedInstanceId,
+    providerConfig: options.providerConfig,
+    systemPrompt,
+    history: options.conversationHistory,
+  });
+
+  if (llmRes.ok && llmRes.reply && llmRes.reply.trim()) {
+    const cleanReply = llmRes.reply.trim();
+    return {
+      reply: cleanReply,
+      spokenReply: cleanReply,
+      actionTaken: "llm_completion",
+    };
   }
 
-  // Projects list check
+  // Handle errors: Only output friendly message when network/limit fails, as requested by user
+  const errText = llmRes.error || "Model returned an empty response";
+  const errCode = (llmRes.code || "").toLowerCase();
+
+  let friendlyError = "";
   if (
-    /\b(projects?\s*(?:dekh|list|status|kya\s*haal|check|batao)|check\s*projects)\b/i.test(userText)
+    errCode === "timeout" ||
+    errCode === "network_error" ||
+    /failed to fetch|network|timeout|connection/i.test(errText)
   ) {
-    if (projects.length === 0) {
-      const reply =
-        lang === "urdu"
-          ? "Workspace mein koi active project load nahi hai."
-          : "No projects found in the workspace.";
-      return { reply, spokenReply: reply, actionTaken: "list_projects" };
-    }
-    const names = projects
-      .slice(0, 4)
-      .map((p) => p.title || String(p.id))
-      .join(", ");
-    const reply =
+    friendlyError =
       lang === "urdu"
-        ? `Workspace mein kul ${projects.length} projects hain: ${names}. Tamam projects healthy hain.`
-        : `Monitoring ${projects.length} projects: ${names}. All systems healthy.`;
-    return { reply, spokenReply: reply, actionTaken: "list_projects" };
+        ? `⚠️ Network Error: AI model (${selectedModel}) se connection nahi ho saka. Barah-e-karam apna internet aur server connection check karein.`
+        : `⚠️ Network Error: Could not connect to AI model (${selectedModel}). Please verify your network and server connection.`;
+  } else if (
+    /rate|quota|limit|429|overloaded|pressure/i.test(errText) ||
+    errCode === "resource_pressure"
+  ) {
+    friendlyError =
+      lang === "urdu"
+        ? `⚠️ AI Rate Limit: Model "${selectedModel}" is waqt busy ya quota limit par hai (${errText}). Barah-e-karam dropdown se doosra model select karein.`
+        : `⚠️ AI Rate Limit: Model "${selectedModel}" hit rate or quota limit (${errText}). Please switch models via the dropdown.`;
+  } else if (/payment|balance|buyer_fault|unauthorized|401|403|auth/i.test(errText)) {
+    friendlyError =
+      lang === "urdu"
+        ? `⚠️ AI Auth / Credit Issue: Model "${selectedModel}" authentication ya balance issue de raha hai (${errText}). Barah-e-karam dropdown se doosra free ya active model select karein.`
+        : `⚠️ AI Auth / Credit Issue: Model "${selectedModel}" requires valid credentials or balance (${errText}). Please select another model from the dropdown.`;
+  } else {
+    friendlyError =
+      lang === "urdu"
+        ? `⚠️ Model Issue (${selectedModel}): ${errText}. Barah-e-karam dropdown se kisi doosre model ko aazmayen.`
+        : `⚠️ Model Issue (${selectedModel}): ${errText}. Please try another model from the dropdown.`;
   }
 
-  // Fallback conversational dialogue
-  const reply =
-    lang === "urdu"
-      ? `Maine samajh liya hai. Main ${selectedModel} ke zariye is par kaam kar raha hoon. Agar aap chahein to main isay schedule kar doon ya project mein direct prompt dispatch kar doon?`
-      : `Understood. Working on this using ${selectedModel}. Would you like me to schedule this or dispatch a direct prompt to the project agent?`;
-
-  return { reply, spokenReply: reply, actionTaken: "conversational_reply" };
+  return {
+    reply: friendlyError,
+    spokenReply: friendlyError,
+    actionTaken: "provider_error",
+    details: { error: errText, code: errCode },
+  };
 }
