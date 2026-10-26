@@ -102,7 +102,7 @@ export const make = Effect.gen(function* () {
         return emptyDiff;
       }
 
-      const projection = yield* threads.getCheckpointContext(input.threadId).pipe(
+      let projection = yield* threads.getCheckpointContext(input.threadId).pipe(
         Effect.mapError(
           () =>
             new CheckpointThreadNotFoundError({
@@ -112,6 +112,43 @@ export const make = Effect.gen(function* () {
         ),
         Effect.withSpan("checkpoint.turnDiff.lookupContext"),
       );
+
+      // Grace period / auto-retry:
+      // If the checkpoint for requested turn count is not ready yet because the turn
+      // was just completed and is currently finalizing (common right when assistant finishes),
+      // wait briefly and reload context instead of failing immediately.
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const completedRunIds = new Set(
+          projection.runs.filter((run) => run.status === "completed").map((run) => run.id),
+        );
+        const hasReadyCheckpoint = projection.checkpoints.some(
+          (checkpoint) =>
+            checkpoint.status === "ready" &&
+            checkpoint.appRunOrdinal === input.toTurnCount &&
+            checkpoint.runId !== null &&
+            completedRunIds.has(checkpoint.runId),
+        );
+        if (hasReadyCheckpoint) {
+          break;
+        }
+
+        const matchingRun = projection.runs.find((run) => (run.ordinal ?? 0) >= input.toTurnCount);
+        if (!matchingRun) {
+          break;
+        }
+
+        yield* Effect.sleep(350);
+        projection = yield* threads.getCheckpointContext(input.threadId).pipe(
+          Effect.mapError(
+            () =>
+              new CheckpointThreadNotFoundError({
+                operation,
+                threadId: input.threadId,
+              }),
+          ),
+        );
+      }
+
       const completedRunIds = new Set(
         projection.runs.filter((run) => run.status === "completed").map((run) => run.id),
       );

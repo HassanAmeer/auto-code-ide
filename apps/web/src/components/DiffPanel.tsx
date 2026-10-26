@@ -461,9 +461,34 @@ export default function DiffPanel({
     ...(baseRefQuery.trim().length === 0 ? [AUTOMATIC_BASE_REF] : []),
     ...matchingBaseRefChoices.map(valueForBaseRefChoice),
   ];
+  // Auto-retry when turn checkpoint diff encounters a transient race condition (e.g. right as task finishes)
+  const retryCountRef = useRef(0);
+  useEffect(() => {
+    if (selectedTurn && activeCheckpointDiff.error && !activeCheckpointDiff.isPending) {
+      if (retryCountRef.current < 4) {
+        retryCountRef.current += 1;
+        const timer = setTimeout(() => {
+          activeCheckpointDiff.refresh?.();
+        }, 800);
+        return () => clearTimeout(timer);
+      }
+    } else if (activeCheckpointDiff.data) {
+      retryCountRef.current = 0;
+    }
+  }, [
+    selectedTurn,
+    activeCheckpointDiff.error,
+    activeCheckpointDiff.isPending,
+    activeCheckpointDiff.data,
+    activeCheckpointDiff.refresh,
+  ]);
+
   const gitDiff = selectedGitSource?.diff;
 
-  const selectedPatch = selectedTurn ? activeCheckpointDiff.data?.diff : gitDiff;
+  const selectedPatch = selectedTurn
+    ? (activeCheckpointDiff.data?.diff ??
+      (activeCheckpointDiff.error && !activeCheckpointDiff.isPending ? gitDiff : undefined))
+    : gitDiff;
   const isSelectedPatchTruncated = !selectedTurn && selectedGitSource?.truncated === true;
   const isLoadingSelectedPatch = selectedTurn
     ? activeCheckpointDiff.isPending
@@ -1092,8 +1117,22 @@ export default function DiffPanel({
               </p>
             )}
             {selectedPatchError && !renderablePatch && (
-              <div className="px-3">
-                <p className="mb-2 text-2xs text-error/80">{selectedPatchError}</p>
+              <div className="mx-3 my-2 flex items-center justify-between gap-2 rounded border border-error/20 bg-error/5 p-2.5">
+                <p className="text-2xs text-error/80">{selectedPatchError}</p>
+                {selectedTurn && activeCheckpointDiff.refresh && (
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    className="h-5 px-2 text-3xs font-medium shrink-0"
+                    onClick={() => {
+                      retryCountRef.current = 0;
+                      activeCheckpointDiff.refresh?.();
+                    }}
+                  >
+                    <RefreshIcon className="mr-1 size-2.5" />
+                    Retry
+                  </Button>
+                )}
               </div>
             )}
             {!renderablePatch && !lazySource ? (
