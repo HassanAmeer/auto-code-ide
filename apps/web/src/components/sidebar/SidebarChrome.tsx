@@ -9,6 +9,7 @@ import {
   FileJsonIcon,
   SettingsIcon,
   TerminalSquareIcon,
+  PhoneCallIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { memo, useCallback, useState } from "react";
@@ -380,6 +381,30 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
                 <span className="text-[9px] text-muted-foreground truncate">
                   {isTerminalOpen ? "Active" : "Open shell"}
                 </span>
+              </div>
+            </button>
+
+            {/* Super Call Assistant */}
+            <button
+              type="button"
+              onClick={() => {
+                closeMobileSidebar();
+                void navigate({ to: "/call-assistant" });
+                setIsExpanded(false);
+              }}
+              className={cn(
+                "flex items-center gap-2 rounded-lg p-1.5 text-xs font-medium transition-all text-left cursor-pointer",
+                location.pathname === "/call-assistant"
+                  ? "bg-indigo-500/15 text-indigo-300 border border-indigo-500/30"
+                  : "hover:bg-sidebar-row-hover text-sidebar-foreground border border-transparent",
+              )}
+            >
+              <div className="size-6 rounded-md bg-indigo-500/10 text-indigo-400 flex items-center justify-center shrink-0">
+                <PhoneCallIcon className="size-3.5" />
+              </div>
+              <div className="flex flex-col min-w-0">
+                <span className="font-semibold text-[11px] truncate">Call Assistant</span>
+                <span className="text-[9px] text-muted-foreground truncate">Super Agent</span>
               </div>
             </button>
 

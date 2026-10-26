@@ -9648,14 +9648,6 @@ export default function ChatView(props: ChatViewProps) {
 
     // Do NOT attach runtime preview errors or debug logs to the user message.
     // Messages must remain clean as typed so prompts like "continue" or new tasks are not hijacked.
-
-    if (
-      isVoiceCallActive(threadIdForSend) &&
-      messageTextForSend &&
-      !messageTextForSend.startsWith("/")
-    ) {
-      messageTextForSend = `${messageTextForSend}\n\n[Voice Call Mode: You are in an interactive real-time voice call. Reply in the roman urdu  language. Keep your spoken response concise, conversational, and direct (1 to 3 short sentences max). Do NOT output code blocks or raw code lines unless explicitly requested.]`;
-    }
     // Records bind attachments by the id each side knows: the local id for the optimistic
     // row, the upload id (or local id on the data-URL path) on the wire; the server
     // rebinds them to the persisted id.

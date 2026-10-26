@@ -158,8 +158,8 @@ const FILLERS = [
   "just",
 ];
 
-const SILENCE_TIMEOUT_MS = 750;
-const FAST_FINAL_DISPATCH_MS = 400;
+const SILENCE_TIMEOUT_MS = 1500;
+const FAST_FINAL_DISPATCH_MS = 1500;
 
 function cleanForComparison(text: string): string {
   return text

@@ -4608,16 +4608,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       },
       [onPromptChange, scheduleDictationCleanup],
     ),
-    onAutoSend: useCallback(async () => {
-      const currentPrompt = promptRef.current;
-      const alreadyCleaned = currentPrompt === lastCleanedTextRef.current;
-      const cleanupMode = getSttCleanupMode(loadSttSettings().language);
-      if (currentPrompt.trim() && !alreadyCleaned && cleanupMode !== null) {
-        const nextPrompt = await runPromptTextGeneration(currentPrompt, cleanupMode);
-        if (nextPrompt && promptRef.current === currentPrompt) {
-          setPromptFromTraits(nextPrompt);
-        }
-      }
+    onAutoSend: useCallback(() => {
       submitComposer(
         undefined,
         resolveComposerDispatchMode({
@@ -4627,14 +4618,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         }),
         "foreground",
       );
-    }, [
-      phase,
-      promptRef,
-      runPromptTextGeneration,
-      setPromptFromTraits,
-      settings.followUpBehavior,
-      submitComposer,
-    ]),
+    }, [phase, settings.followUpBehavior, submitComposer]),
     onInterrupt: useCallback(() => {
       void onInterrupt();
     }, [onInterrupt]),

@@ -40,7 +40,7 @@ const RADIAL_BARS: RadialBarCoords[] = Array.from({ length: NUM_RADIAL_BARS }, (
   };
 });
 
-function CircularVoiceWaves({
+export function CircularVoiceWaves({
   callStatus,
   analyserNode,
 }: {
@@ -160,23 +160,26 @@ function CircularVoiceWaves({
       case "idle":
       case "listening":
         return {
-          stroke: "rgba(161, 161, 170, 0.75)",
-          filter: "drop-shadow(0 0 2px rgba(161, 161, 170, 0.4))",
+          stroke: "rgba(161, 161, 170, 0.4)",
+          filter: "drop-shadow(0 0 2px rgba(161, 161, 170, 0.25))",
         };
       case "user-speaking":
+        // User speaking: Blue color with 40% - 50% opacity
         return {
-          stroke: "#38bdf8",
-          filter: "drop-shadow(0 0 4px rgba(56, 189, 248, 0.85))",
+          stroke: "rgba(59, 130, 246, 0.45)",
+          filter: "drop-shadow(0 0 4px rgba(59, 130, 246, 0.45))",
         };
       case "thinking":
+        // Thinking: Grey color
         return {
-          stroke: "#fbbf24",
-          filter: "drop-shadow(0 0 4px rgba(251, 191, 36, 0.8))",
+          stroke: "rgba(156, 163, 175, 0.8)",
+          filter: "drop-shadow(0 0 3px rgba(156, 163, 175, 0.5))",
         };
       case "speaking":
+        // Assistant speaking: Light green with 30% - 40% opacity
         return {
-          stroke: "#a78bfa",
-          filter: "drop-shadow(0 0 4px rgba(167, 139, 250, 0.85))",
+          stroke: "rgba(74, 222, 128, 0.35)",
+          filter: "drop-shadow(0 0 4px rgba(74, 222, 128, 0.35))",
         };
     }
   };
