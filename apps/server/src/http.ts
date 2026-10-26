@@ -1043,7 +1043,8 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
 
         const systemMsg = messages.find((m) => m.role === "system")?.content;
         const userMsgs = messages.filter((m) => m.role !== "system");
-        let promptText = "";
+        let promptText =
+          "[Direct conversational response only. Do not invoke tools or shell commands. Answer immediately based on the provided context.]\n\n";
         if (systemMsg) {
           promptText += `${systemMsg}\n\n`;
         }
@@ -1089,8 +1090,8 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
           }
 
           const pollStart = Date.now();
-          while (Date.now() - pollStart < 40000) {
-            await new Promise((r) => setTimeout(r, 900));
+          while (Date.now() - pollStart < 30000) {
+            await new Promise((r) => setTimeout(r, 800));
             const mRes = await fetch(`${activeBase}/session/${sessionId}/message`, {
               headers: { Authorization: activeAuth },
               signal: AbortSignal.timeout(5000),
@@ -1098,11 +1099,12 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
             if (!mRes.ok) continue;
             const mData = (await mRes.json()) as any;
             const msgs = mData?.data || [];
-            const assistant = msgs.find((m: any) => m.type === "assistant");
-            if (assistant) {
-              if (assistant.finish === "error") {
-                const errDetail = assistant.error?.message || JSON.stringify(assistant.error);
-                if (assistant.error?.status === 429 || /free.*limit|quota|429/i.test(errDetail)) {
+
+            // Check for errors across any assistant message
+            for (const m of msgs) {
+              if (m.type === "assistant" && m.finish === "error") {
+                const errDetail = m.error?.message || JSON.stringify(m.error);
+                if (m.error?.status === 429 || /free.*limit|quota|429/i.test(errDetail)) {
                   try {
                     const { rotateWarpIp } =
                       await import("@t3tools/provider-opencodebypasssetup/server");
@@ -1116,11 +1118,26 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
                 }
                 return { ok: false, error: errDetail, code: "MODEL_ERROR" };
               }
-              const textParts = (assistant.content || [])
+            }
+
+            // Find assistant message with text
+            const assistantWithText = msgs
+              .filter((m: any) => m.type === "assistant")
+              .find((m: any) =>
+                (m.content || []).some((c: any) => c.type === "text" && c.text?.trim()),
+              );
+
+            if (assistantWithText) {
+              const textParts = (assistantWithText.content || [])
                 .filter((c: any) => c.type === "text" && c.text)
                 .map((c: any) => c.text);
               if (textParts.length > 0) {
-                return { ok: true, reply: textParts.join("\n").trim(), model: pureModel };
+                const isFinished =
+                  assistantWithText.finish === "stop" ||
+                  msgs.some((m: any) => m.type === "idle" && m.outcome === "succeeded");
+                if (isFinished || Date.now() - pollStart > 5000) {
+                  return { ok: true, reply: textParts.join("\n").trim(), model: pureModel };
+                }
               }
             }
           }
