@@ -234,11 +234,12 @@ export function SuperCallAssistantView() {
 
         handleAddMessage("assistant", res.reply, meta);
         speakText(res.spokenReply);
-      } catch (err) {
+      } catch (err: any) {
         console.error("Super agent error:", err);
+        const errDetail = err?.message || String(err);
         const errorMsg = isUrduLanguage(userText)
-          ? "Sorry, request process karte waqt network ya server error aya. Main dobara check karta hoon."
-          : "Sorry, a momentary network or server error occurred. Let me re-check.";
+          ? `⚠️ Issue: ${errDetail}. Main dobara check karta hoon.`
+          : `⚠️ Issue: ${errDetail}. Let me re-check.`;
         handleAddMessage("assistant", errorMsg);
         speakText(errorMsg);
       } finally {

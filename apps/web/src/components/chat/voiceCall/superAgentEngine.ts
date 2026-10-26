@@ -97,7 +97,7 @@ export async function querySuperAgentLLM(
 
   messages.push({ role: "user", content: prompt.trim() });
 
-  // 1. Try server-side proxy endpoint first (handles CORS, TLS, and stored provider secrets)
+  // 1. Try server-side proxy endpoint first (handles CORS, OpenCode daemon, TLS, and stored provider secrets)
   try {
     const proxyResp = await fetch("/api/super-agent/chat", {
       method: "POST",
@@ -110,22 +110,35 @@ export async function querySuperAgentLLM(
         apiKey: providerConfig?.apiKey,
         headers: providerConfig?.headers,
       }),
-      signal: AbortSignal.timeout(45000),
+      signal: AbortSignal.timeout(65000),
     });
 
-    if (proxyResp.ok) {
-      const data = (await proxyResp.json()) as {
-        ok: boolean;
-        reply?: string;
-        error?: string;
-        code?: string;
-      };
+    let data: any;
+    try {
+      data = await proxyResp.json();
+    } catch {
+      data = null;
+    }
+
+    if (data) {
       if (data.ok && data.reply && data.reply.trim()) {
         return { ok: true, reply: data.reply.trim() };
       }
       if (data.error) {
-        return { ok: false, error: data.error, code: data.code || "UPSTREAM_ERROR" };
+        return {
+          ok: false,
+          error: data.error,
+          code: data.code || (proxyResp.ok ? "UPSTREAM_ERROR" : `HTTP_${proxyResp.status}`),
+        };
       }
+    }
+
+    if (!proxyResp.ok) {
+      return {
+        ok: false,
+        error: `Server returned HTTP ${proxyResp.status}`,
+        code: `HTTP_${proxyResp.status}`,
+      };
     }
   } catch (proxyErr: any) {
     console.warn("SuperAgent proxy fetch error, attempting direct fetch:", proxyErr);

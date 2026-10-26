@@ -960,42 +960,226 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
     const config = yield* ServerConfig.ServerConfig;
     const customProviders = listCustomProviders(config.dbPath);
 
-    let baseUrl = bodyJson?.baseUrl?.trim();
-    let apiKey = bodyJson?.apiKey?.trim();
-    let customHeaders = bodyJson?.headers || [];
+    const OPENCODE_FREE_MODELS = [
+      "beam-free",
+      "big-pickle",
+      "flint-40b-free",
+      "deepseek-v4.1-flash-free",
+      "glm-5.3-flash-free",
+      "kimi-k2.5-free",
+      "minimax-01-free",
+      "chat-free",
+      "code-free",
+    ];
 
-    if (!baseUrl && bodyJson?.instanceId) {
-      const match = customProviders.find(
-        (p: any) =>
-          p.id === bodyJson.instanceId ||
-          p.name === bodyJson.instanceId ||
-          String(p.id) === String(bodyJson.instanceId),
-      );
-      if (match) {
-        baseUrl = match.baseUrl;
-        if (!apiKey) apiKey = match.apiKey;
-        if (Array.isArray(match.headers) && match.headers.length > 0) {
-          customHeaders = [...match.headers, ...customHeaders];
-        }
-      }
-    }
-
-    if (!baseUrl) {
-      const openRouterMatch = customProviders.find(
-        (p: any) => p.baseUrl && p.baseUrl.includes("openrouter"),
-      );
-      if (openRouterMatch) {
-        baseUrl = openRouterMatch.baseUrl;
-        if (!apiKey) apiKey = openRouterMatch.apiKey;
-      } else {
-        baseUrl = "https://openrouter.ai/api/v1";
-      }
-    }
+    const isOpenCode =
+      bodyJson?.instanceId === "opencodebypasssetup" ||
+      bodyJson?.instanceId === "opencode" ||
+      model.toLowerCase().startsWith("opencode/") ||
+      OPENCODE_FREE_MODELS.includes(model.toLowerCase());
 
     const result = yield* Effect.promise(async () => {
+      if (isOpenCode) {
+        // Run turn via OpenCode Local Runtime
+        let port = 4099;
+        let pid: number | undefined;
+        try {
+          const serversDir = NodePath.join(
+            config.dbPath ? NodePath.dirname(config.dbPath) : "/root/autojobs/data",
+            "userdata/opencode-servers",
+          );
+          if (NodeFS.existsSync(serversDir)) {
+            const files = NodeFS.readdirSync(serversDir).filter((f) => f.endsWith(".json"));
+            if (files.length > 0) {
+              const sInfo = JSON.parse(
+                NodeFS.readFileSync(NodePath.join(serversDir, files[0]), "utf8"),
+              );
+              if (sInfo.port) port = Number(sInfo.port);
+              if (sInfo.pid) pid = Number(sInfo.pid);
+            }
+          }
+        } catch {}
+
+        let password =
+          process.env.OPENCODE_SERVER_PASSWORD || process.env.OPENCODE_PASSWORD || "autocode123";
+        if (pid && NodeFS.existsSync(`/proc/${pid}/environ`)) {
+          try {
+            const envStr = NodeFS.readFileSync(`/proc/${pid}/environ`, "utf8");
+            const m = envStr.match(/OPENCODE_PASSWORD=([^\0]+)/);
+            if (m && m[1]) password = m[1];
+          } catch {}
+        }
+
+        const candidatePorts = [port, 4099, 45991].filter((p, i, a) => a.indexOf(p) === i);
+        let activeBase = `http://127.0.0.1:${port}/api`;
+        let activeAuth = "Basic " + Buffer.from(`opencode:${password}`).toString("base64");
+
+        for (const cp of candidatePorts) {
+          try {
+            const checkRes = await fetch(`http://127.0.0.1:${cp}/api/session`, {
+              headers: { Authorization: activeAuth },
+              signal: AbortSignal.timeout(2000),
+            });
+            if (checkRes.status === 200) {
+              activeBase = `http://127.0.0.1:${cp}/api`;
+              break;
+            }
+            if (checkRes.status === 401) {
+              const altAuth = "Basic " + Buffer.from(`opencode:autocode123`).toString("base64");
+              const altCheck = await fetch(`http://127.0.0.1:${cp}/api/session`, {
+                headers: { Authorization: altAuth },
+                signal: AbortSignal.timeout(2000),
+              });
+              if (altCheck.status === 200) {
+                activeBase = `http://127.0.0.1:${cp}/api`;
+                activeAuth = altAuth;
+                break;
+              }
+            }
+          } catch {}
+        }
+
+        const pureModel = model.replace(/^opencode\//i, "").trim() || "beam-free";
+
+        const systemMsg = messages.find((m) => m.role === "system")?.content;
+        const userMsgs = messages.filter((m) => m.role !== "system");
+        let promptText = "";
+        if (systemMsg) {
+          promptText += `${systemMsg}\n\n`;
+        }
+        for (const m of userMsgs.slice(-5)) {
+          promptText += `${m.role === "user" ? "User" : "Assistant"}: ${m.content}\n`;
+        }
+        promptText = promptText.trim() || "Hello";
+
+        let sessionId: string | undefined;
+        try {
+          const sRes = await fetch(`${activeBase}/session`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: activeAuth },
+            body: JSON.stringify({ title: `Super Bot Turn (${pureModel})` }),
+            signal: AbortSignal.timeout(10000),
+          });
+          const sData = (await sRes.json()) as any;
+          sessionId = sData?.data?.id;
+          if (!sessionId) {
+            return {
+              ok: false,
+              error: `Could not create session on OpenCode: ${JSON.stringify(sData)}`,
+              code: "SESSION_CREATION_FAILED",
+            };
+          }
+
+          await fetch(`${activeBase}/session/${sessionId}/model`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: activeAuth },
+            body: JSON.stringify({ model: { providerID: "opencode", id: pureModel } }),
+            signal: AbortSignal.timeout(10000),
+          });
+
+          const pRes = await fetch(`${activeBase}/session/${sessionId}/prompt`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: activeAuth },
+            body: JSON.stringify({ text: promptText }),
+            signal: AbortSignal.timeout(15000),
+          });
+          if (!pRes.ok) {
+            const pErr = await pRes.text();
+            return { ok: false, error: `Prompt failed: ${pErr}`, code: `HTTP_${pRes.status}` };
+          }
+
+          const pollStart = Date.now();
+          while (Date.now() - pollStart < 40000) {
+            await new Promise((r) => setTimeout(r, 900));
+            const mRes = await fetch(`${activeBase}/session/${sessionId}/message`, {
+              headers: { Authorization: activeAuth },
+              signal: AbortSignal.timeout(5000),
+            });
+            if (!mRes.ok) continue;
+            const mData = (await mRes.json()) as any;
+            const msgs = mData?.data || [];
+            const assistant = msgs.find((m: any) => m.type === "assistant");
+            if (assistant) {
+              if (assistant.finish === "error") {
+                const errDetail = assistant.error?.message || JSON.stringify(assistant.error);
+                if (assistant.error?.status === 429 || /free.*limit|quota|429/i.test(errDetail)) {
+                  try {
+                    const { rotateWarpIp } =
+                      await import("@t3tools/provider-opencodebypasssetup/server");
+                    await rotateWarpIp();
+                  } catch {}
+                  return {
+                    ok: false,
+                    error: `Model "${pureModel}" free quota reached. IP automatically rotated; please send your message again.`,
+                    code: "RATE_LIMIT",
+                  };
+                }
+                return { ok: false, error: errDetail, code: "MODEL_ERROR" };
+              }
+              const textParts = (assistant.content || [])
+                .filter((c: any) => c.type === "text" && c.text)
+                .map((c: any) => c.text);
+              if (textParts.length > 0) {
+                return { ok: true, reply: textParts.join("\n").trim(), model: pureModel };
+              }
+            }
+          }
+          return { ok: false, error: "Model timed out generating response.", code: "TIMEOUT" };
+        } catch (err: any) {
+          return { ok: false, error: err?.message || String(err), code: "NETWORK_ERROR" };
+        } finally {
+          if (sessionId) {
+            fetch(`${activeBase}/session/${sessionId}`, {
+              method: "DELETE",
+              headers: { Authorization: activeAuth },
+            }).catch(() => {});
+          }
+        }
+      }
+
+      // Custom Provider or OpenRouter fallback
       try {
         if (typeof process !== "undefined" && process.env) {
           process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+        }
+
+        let matchedProvider = customProviders.find(
+          (p: any) =>
+            p.id === bodyJson.instanceId ||
+            p.name === bodyJson.instanceId ||
+            String(p.id) === String(bodyJson.instanceId),
+        );
+
+        if (!matchedProvider) {
+          matchedProvider = customProviders.find(
+            (p: any) =>
+              Array.isArray(p.models) &&
+              p.models.some((m: any) => m.id === model || m.name === model),
+          );
+        }
+
+        let baseUrl = bodyJson?.baseUrl?.trim();
+        let apiKey = bodyJson?.apiKey?.trim();
+        let customHeaders = bodyJson?.headers || [];
+
+        if (matchedProvider) {
+          if (!baseUrl) baseUrl = matchedProvider.baseUrl;
+          if (!apiKey) apiKey = matchedProvider.apiKey;
+          if (Array.isArray(matchedProvider.headers) && matchedProvider.headers.length > 0) {
+            customHeaders = [...matchedProvider.headers, ...customHeaders];
+          }
+        }
+
+        if (!baseUrl) {
+          const openRouterMatch = customProviders.find(
+            (p: any) => p.baseUrl && p.baseUrl.includes("openrouter"),
+          );
+          if (openRouterMatch) {
+            baseUrl = openRouterMatch.baseUrl;
+            if (!apiKey) apiKey = openRouterMatch.apiKey;
+          } else {
+            baseUrl = "https://openrouter.ai/api/v1";
+          }
         }
 
         const rawBase = (baseUrl || "").replace(/\/+$/, "");
