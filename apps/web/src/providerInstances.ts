@@ -192,9 +192,13 @@ export function applyProviderInstanceSettings(
     ) {
       return entry;
     }
-    const explicitInstance = Object.hasOwn(settings.providerInstances, entry.instanceId)
-      ? settings.providerInstances[entry.instanceId]
-      : undefined;
+    const providerInstances = settings?.providerInstances;
+    const explicitInstance =
+      providerInstances &&
+      typeof providerInstances === "object" &&
+      Object.hasOwn(providerInstances, entry.instanceId)
+        ? providerInstances[entry.instanceId]
+        : undefined;
     const enabled = explicitInstance
       ? resolveProviderInstanceEnabled(explicitInstance)
       : entry.isDefault

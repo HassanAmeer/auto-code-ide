@@ -1,16 +1,14 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import {
-  Plus,
   Trash2,
   FolderGit2,
-  FileCheck2,
   Send,
   Sparkles,
-  Bot,
-  History,
   X,
   RotateCcw,
   Loader2,
+  ListTodo,
+  Clock,
 } from "lucide-react";
 import { type ProviderInstanceId } from "@t3tools/contracts";
 import { useAtomValue } from "@effect/atom-react";
@@ -23,7 +21,11 @@ import {
   type CallAssistantMessage,
   type CallAssistantSession,
 } from "~/lib/callAssistantStore";
-import { primaryServerProvidersAtom, primaryServerKeybindingsAtom } from "~/state/server";
+import {
+  primaryServerProvidersAtom,
+  primaryServerKeybindingsAtom,
+  primaryServerSettingsAtom,
+} from "~/state/server";
 import { useClientSettings } from "~/hooks/useSettings";
 import {
   getCustomProviders,
@@ -60,11 +62,11 @@ export function SuperCallAssistantView() {
     handleAddMessage,
   } = useCallSessions();
 
-  const { tasks: scheduledTasks } = useScheduledTasks();
+  const { tasks: scheduledTasks, toggle: toggleTask, remove: removeTask } = useScheduledTasks();
   const [inputText, setInputText] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [agentStatus, setAgentStatus] = useState<string | null>(null);
-  const [isSessionsDrawerOpen, setIsSessionsDrawerOpen] = useState(false);
+  const [isTasksSheetOpen, setIsTasksSheetOpen] = useState(false);
 
   // Providers, models & settings
   const rawServerProviders = useAtomValue(primaryServerProvidersAtom);
@@ -92,7 +94,16 @@ export function SuperCallAssistantView() {
     return [...nonCustomRaw, ...customStatuses];
   }, [rawServerProviders, customProvidersList]);
 
-  const settings = useClientSettings();
+  const clientSettings = useClientSettings();
+  const primaryServerSettings = useAtomValue(primaryServerSettingsAtom);
+  const settings = useMemo(
+    () => ({
+      ...primaryServerSettings,
+      ...clientSettings,
+      providerInstances: primaryServerSettings?.providerInstances ?? {},
+    }),
+    [primaryServerSettings, clientSettings],
+  );
 
   const instanceEntries = useMemo(
     () =>
@@ -275,147 +286,161 @@ export function SuperCallAssistantView() {
 
   return (
     <div className="flex h-full w-full bg-background text-foreground overflow-hidden relative">
-      {/* Sessions Slide-over Drawer / Panel */}
-      {isSessionsDrawerOpen && (
-        <aside className="absolute inset-y-0 left-0 z-30 w-72 border-r border-border/80 bg-background/95 backdrop-blur-xl shadow-2xl flex flex-col animate-in slide-in-from-left duration-200">
-          <div className="p-3.5 border-b border-border/50 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <History className="size-4 text-primary" />
-              <h2 className="text-sm font-semibold tracking-tight">Call Sessions</h2>
-            </div>
-            <button
-              type="button"
-              onClick={() => setIsSessionsDrawerOpen(false)}
-              className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
-            >
-              <X className="size-4" />
-            </button>
-          </div>
-
-          <div className="p-3 border-b border-border/40 flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                handleNewSession();
-                setIsSessionsDrawerOpen(false);
-              }}
-              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 text-xs font-medium transition-colors cursor-pointer shadow-xs"
-            >
-              <Plus className="size-3.5" />
-              <span>New Call</span>
-            </button>
-            {sessions.length > 0 && (
+      {/* Right-Side Scheduled Tasks Sheet / Drawer */}
+      {isTasksSheetOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-xs animate-in fade-in duration-150"
+          onClick={() => setIsTasksSheetOpen(false)}
+        >
+          <aside
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md h-full bg-background border-l border-border shadow-2xl flex flex-col animate-in slide-in-from-right duration-200"
+          >
+            {/* Sheet Header */}
+            <div className="h-14 px-5 border-b border-border/60 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="size-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                  <ListTodo className="size-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-semibold">Assigned Tasks</h2>
+                  <p className="text-[11px] text-muted-foreground">
+                    {scheduledTasks.length} {scheduledTasks.length === 1 ? "task" : "tasks"}{" "}
+                    scheduled
+                  </p>
+                </div>
+              </div>
               <button
                 type="button"
-                onClick={handleClearHistory}
-                className="p-1.5 rounded-lg border border-border/60 text-muted-foreground hover:text-destructive hover:border-destructive/40 transition-colors cursor-pointer"
-                title="Clear All Calls History"
+                onClick={() => setIsTasksSheetOpen(false)}
+                className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+                title="Close Sheet"
               >
-                <Trash2 className="size-3.5" />
+                <X className="size-4" />
               </button>
-            )}
-          </div>
+            </div>
 
-          <div className="flex-1 overflow-y-auto p-2 space-y-1">
-            {sessions.map((s) => {
-              const isActive = s.id === activeSessionId;
-              return (
-                <div
-                  key={s.id}
-                  onClick={() => {
-                    setActiveSessionId(s.id);
-                    setIsSessionsDrawerOpen(false);
-                  }}
-                  className={cn(
-                    "group flex items-center justify-between px-3 py-2 rounded-lg text-xs cursor-pointer transition-colors",
-                    isActive
-                      ? "bg-primary/10 text-primary font-medium border border-primary/20"
-                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
-                  )}
-                >
-                  <div className="min-w-0 flex-1 pr-2">
-                    <p className="truncate">{s.title}</p>
-                    <span className="text-[10px] opacity-60">
-                      {new Date(s.createdAt).toLocaleDateString([], {
-                        month: "short",
-                        day: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </span>
+            {/* Tasks List */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {scheduledTasks.length === 0 ? (
+                <div className="h-64 flex flex-col items-center justify-center text-center p-6 text-muted-foreground">
+                  <div className="size-12 rounded-xl bg-muted/60 flex items-center justify-center mb-3">
+                    <ListTodo className="size-6 text-muted-foreground/60" />
                   </div>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteSession(s.id);
-                    }}
-                    className="opacity-0 group-hover:opacity-100 p-1 hover:text-destructive transition-opacity cursor-pointer"
-                    title="Delete call"
-                  >
-                    <Trash2 className="size-3" />
-                  </button>
+                  <h3 className="text-sm font-medium text-foreground mb-1">
+                    No tasks assigned yet
+                  </h3>
+                  <p className="text-xs text-muted-foreground max-w-xs leading-relaxed">
+                    Aap Call Assistant se voice call ya message par task assign karwa saktay hain.
+                    Woh khud schedule karega aur project agent se execute karwayega.
+                  </p>
                 </div>
-              );
-            })}
-          </div>
-        </aside>
+              ) : (
+                scheduledTasks.map((t) => (
+                  <div
+                    key={t.id}
+                    className="p-4 rounded-xl border border-border/70 bg-card/60 hover:bg-card transition-colors space-y-2.5"
+                  >
+                    {/* Top Row: Title & Actions */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <h4 className="text-xs font-semibold text-foreground truncate">
+                          {t.title}
+                        </h4>
+                        <div className="flex items-center gap-1.5 mt-1 text-[11px] text-muted-foreground">
+                          <FolderGit2 className="size-3 text-primary shrink-0" />
+                          <span className="font-medium text-primary truncate">
+                            {t.projectName || "General Workspace"}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => toggleTask(t.id)}
+                          className={cn(
+                            "px-2 py-0.5 rounded text-[10px] font-medium transition-colors cursor-pointer",
+                            t.enabled
+                              ? "bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25"
+                              : "bg-muted text-muted-foreground hover:bg-muted/80",
+                          )}
+                          title={t.enabled ? "Click to Pause" : "Click to Enable"}
+                        >
+                          {t.enabled ? "Active" : "Paused"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeTask(t.id)}
+                          className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+                          title="Delete Task"
+                        >
+                          <Trash2 className="size-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Instruction / Prompt */}
+                    <div className="p-2.5 rounded-lg bg-muted/40 text-[11px] text-zinc-300 leading-relaxed font-mono whitespace-pre-wrap break-words">
+                      {t.prompt}
+                    </div>
+
+                    {/* Timing & Next Run */}
+                    <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-1 border-t border-border/40">
+                      <span className="flex items-center gap-1">
+                        <Clock className="size-3" />
+                        <span>
+                          {t.scheduleType === "fixed_time" && t.timeOfDay
+                            ? `Daily at ${t.timeOfDay}`
+                            : t.intervalMinutes
+                              ? `Every ${t.intervalMinutes}m`
+                              : "Scheduled"}
+                        </span>
+                      </span>
+                      {t.nextRunAt && (
+                        <span>
+                          Next:{" "}
+                          {new Date(t.nextRunAt).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </aside>
+        </div>
       )}
 
       {/* Main Conversation Stream */}
       <div className="flex-1 flex flex-col h-full min-w-0 relative">
         {/* Top Header */}
         <header className="h-14 border-b border-border/50 px-4 sm:px-6 flex items-center justify-between shrink-0 bg-background/80 backdrop-blur-md">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <button
-              type="button"
-              onClick={() => setIsSessionsDrawerOpen((prev) => !prev)}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-border/60 hover:border-border hover:bg-muted/50 text-xs font-medium transition-colors cursor-pointer"
-              title="Toggle Call Sessions Drawer"
-            >
-              <History className="size-3.5 text-muted-foreground" />
-              <span>Sessions ({sessions.length})</span>
-            </button>
-
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="size-7 rounded-lg bg-primary/15 text-primary flex items-center justify-center shrink-0">
-                <Bot className="size-4" />
-              </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <h1 className="text-sm font-semibold truncate leading-tight">
-                    Super Call Assistant
-                  </h1>
-                  <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-primary/15 text-primary font-medium">
-                    Super Admin
-                  </span>
-                </div>
-                <p className="text-[10px] text-muted-foreground truncate hidden sm:block">
-                  Workspace Overseer & Voice Intelligence
-                </p>
-              </div>
-            </div>
+          {/* Left: Just Projects */}
+          <div className="flex items-center gap-2 min-w-0">
+            <FolderGit2 className="size-4 text-primary shrink-0" />
+            <span className="text-sm font-semibold truncate text-foreground">
+              Projects ({projects.length})
+            </span>
           </div>
 
+          {/* Right: Only Tasks with Count */}
           <div className="flex items-center gap-2 shrink-0">
-            <div className="flex items-center gap-3 text-xs text-muted-foreground mr-2 hidden md:flex">
-              <span className="flex items-center gap-1">
-                <FolderGit2 className="size-3.5 text-primary" />
-                <span>{projects.length} Projects</span>
-              </span>
-              <span className="flex items-center gap-1">
-                <FileCheck2 className="size-3.5 text-amber-500" />
-                <span>{notes.length} Notes</span>
-              </span>
-            </div>
-
             <button
               type="button"
-              onClick={handleNewSession}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 text-xs font-medium transition-colors cursor-pointer shadow-xs"
+              onClick={() => setIsTasksSheetOpen(true)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border/70 hover:border-border hover:bg-muted/50 text-xs font-medium transition-colors cursor-pointer"
+              title="Click to view scheduled tasks"
             >
-              <Plus className="size-3.5" />
-              <span className="hidden sm:inline">New Call</span>
+              <ListTodo className="size-3.5 text-primary" />
+              <span>Tasks</span>
+              <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-primary/15 text-primary font-semibold">
+                {scheduledTasks.length}
+              </span>
             </button>
           </div>
         </header>
