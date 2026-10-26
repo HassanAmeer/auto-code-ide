@@ -143,7 +143,7 @@ export function SuperCallAssistantView() {
         } else {
           const projNames = projects
             .slice(0, 5)
-            .map((p) => p.name || p.projectKey)
+            .map((p) => p.title || String(p.id))
             .join(", ");
           reply =
             lang === "urdu"
@@ -208,7 +208,7 @@ export function SuperCallAssistantView() {
       }
     },
     prompt: inputText,
-    phase: isProcessing ? "running" : "idle",
+    phase: isProcessing ? "running" : "ready",
   });
 
   return (

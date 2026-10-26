@@ -328,7 +328,7 @@ import {
   getComposerSubmissionValidationMessage,
   submitComposerDraft,
 } from "./composerSubmission";
-import { useVoiceCallAssistant, VoiceCallButton, VoiceCallFloatingWidget } from "./voiceCall";
+import { useVoiceCallAssistant, VoiceCallFloatingWidget } from "./voiceCall";
 import { ComposerPromptLengthValidation } from "./ComposerPromptLengthValidation";
 import { PierreEntryIcon } from "./PierreEntryIcon";
 import { pendingDraftWork } from "./pendingDraftWork";
@@ -7350,21 +7350,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                 isComposerResting && "py-2 sm:py-2",
               )}
             >
-              {/* Call Assistant Button: Top-right corner inside the chat input box */}
-              {!isComposerCollapsedMobile && (
-                <VoiceCallButton
-                  isCallActive={isCallActive}
-                  callStatus={callStatus}
-                  analyserNode={analyserNode}
-                  onInterrupt={interruptSpeaking}
-                  onToggleCall={toggleVoiceCall}
-                  className={cn(
-                    "absolute z-10 transition-all",
-                    isComposerResting ? "top-1/2 -translate-y-1/2 right-2" : "top-2 right-2",
-                  )}
-                />
-              )}
-
               {isStashMenuOpen && !composerMenuOpen && !isComposerApprovalState && (
                 <ComposerCommandMenuLayer anchor={composerMenuAnchor}>
                   <ComposerStashMenu

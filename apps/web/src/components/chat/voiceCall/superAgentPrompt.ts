@@ -1,5 +1,5 @@
 import { loadNotes, addNote, type NoteItem } from "~/lib/notesStore";
-import type { EnvironmentProject } from "~/state/entities";
+import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 
 export function buildSuperAgentSystemPrompt(
   projects: ReadonlyArray<EnvironmentProject>,

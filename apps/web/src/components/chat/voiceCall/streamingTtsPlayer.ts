@@ -1,4 +1,10 @@
-import { speakText, stopSpeaking, sanitizeTextForSpeech, stripCodeBlocks } from "~/lib/speech/tts";
+import {
+  speakText,
+  stopSpeaking,
+  sanitizeTextForSpeech,
+  stripCodeBlocks,
+  type TtsSettings,
+} from "~/lib/speech/tts";
 
 /**
  * Splits streaming text incrementally into complete sentence chunks for low-latency TTS.
@@ -56,6 +62,7 @@ export interface StreamingTtsPlayerOptions {
   onStartSpeaking?: (() => void) | undefined;
   onFinished?: (() => void) | undefined;
   onChunkStarted?: ((chunk: string) => void) | undefined;
+  ttsOptions?: Partial<TtsSettings> | undefined;
 }
 
 /**
@@ -70,6 +77,7 @@ export class StreamingTtsPlayer {
   private onStartSpeakingCallback?: (() => void) | undefined;
   private onFinishedCallback?: (() => void) | undefined;
   private onChunkStartedCallback?: ((chunk: string) => void) | undefined;
+  private ttsOptions?: Partial<TtsSettings> | undefined;
   private stopped = false;
   private maxChunks?: number | undefined;
   private enqueuedChunksCount = 0;
@@ -80,6 +88,7 @@ export class StreamingTtsPlayer {
     this.onStartSpeakingCallback = options?.onStartSpeaking;
     this.onFinishedCallback = options?.onFinished;
     this.onChunkStartedCallback = options?.onChunkStarted;
+    this.ttsOptions = options?.ttsOptions;
   }
 
   private normalizeChunkSignature(text: string): string {
@@ -145,7 +154,7 @@ export class StreamingTtsPlayer {
 
     this.onChunkStartedCallback?.(nextChunk);
 
-    speakText(nextChunk, undefined, () => {
+    speakText(nextChunk, this.ttsOptions, () => {
       this.isPlaying = false;
       this.processNext();
     });

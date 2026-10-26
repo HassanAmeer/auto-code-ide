@@ -734,10 +734,23 @@ export function useVoiceCallAssistant({
             : "english";
         const processedSpeech = formatSttTranscript(rawSpeech, effectiveMode);
 
+        const isAiSpeakingOrBusy =
+          isTtsActiveRef.current ||
+          callStatusRef.current === "speaking" ||
+          callStatusRef.current === "thinking" ||
+          isCurrentlySpeaking() ||
+          Date.now() - lastTtsEndedTimestampRef.current < ACOUSTIC_ECHO_COOLDOWN_MS;
+
         // 1. Interrupt command ("stop", "ruko", "suno", "wait", etc.):
         // Triggers instantly at any moment, halting speech & model execution!
         if (containsInterruptCommand(processedSpeech) || containsInterruptCommand(rawSpeech)) {
           interruptSpeaking();
+          return;
+        }
+
+        // CRITICAL: If AI is actively speaking, thinking, or in post-TTS acoustic cooldown,
+        // NEVER allow speaker audio or acoustic echo into the composer input field!
+        if (isAiSpeakingOrBusy) {
           return;
         }
 
@@ -774,19 +787,6 @@ export function useVoiceCallAssistant({
         hasPendingSpeechRef.current = true;
         setLiveTranscript(speechToUse);
         onTranscriptChangeRef.current(combinedText);
-
-        const isAiBusy =
-          isTtsActiveRef.current ||
-          callStatusRef.current === "speaking" ||
-          callStatusRef.current === "thinking" ||
-          isCurrentlySpeaking();
-
-        if (isAiBusy) {
-          // AI is currently speaking or thinking:
-          // Keep user speech stored in the input field without auto-dispatching.
-          // Once the AI completes its current speech turn, onFinished will dispatch it!
-          return;
-        }
 
         // Normal listening state:
         updateCallStatus("user-speaking");
@@ -981,6 +981,9 @@ export function useVoiceCallAssistant({
 
     streamingPlayerRef.current = new StreamingTtsPlayer({
       maxChunks: 4,
+      ttsOptions: {
+        language: callLanguageRef.current === "english" ? "english" : "auto-male",
+      },
       onStartSpeaking: () => {
         thinkingAmbientSound.stop();
         updateCallStatus("speaking");
@@ -999,21 +1002,13 @@ export function useVoiceCallAssistant({
         lastTtsEndedTimestampRef.current = Date.now();
         thinkingAmbientSound.stop();
 
-        // Check if user spoke a follow-up message while AI was speaking
-        const queuedText = (promptRef.current || lastTranscribedTextRef.current || "").trim();
-        if (queuedText.length > 0 && !isAcousticEchoOfAi(queuedText)) {
-          // User spoke a message during response: dispatch it now!
-          updateCallStatus("thinking");
-          dispatchAutoSend();
-        } else {
-          // No user follow-up queued: clear composer and transition back to listening
-          promptRef.current = "";
-          lastTranscribedTextRef.current = "";
-          manualBaselineRef.current = "";
-          hasPendingSpeechRef.current = false;
-          onTranscriptChangeRef.current("");
-          updateCallStatus("listening");
-        }
+        // Ensure composer is clean and transition back to listening
+        promptRef.current = "";
+        lastTranscribedTextRef.current = "";
+        manualBaselineRef.current = "";
+        hasPendingSpeechRef.current = false;
+        onTranscriptChangeRef.current("");
+        updateCallStatus("listening");
       },
     });
 
