@@ -76,4 +76,13 @@ describe("VoiceCall Assistant & StreamingTtsPlayer", () => {
     expect(isFarewellOrEndCall("standby mode").isFarewell).toBe(false);
     expect(isFarewellOrEndCall("kya hal hai").isFarewell).toBe(false);
   });
+
+  it("verifies Urdu and English STT language mappings", async () => {
+    const { getRecognitionLanguageCodes } = await import("~/lib/speech/stt");
+    const urduCodes = getRecognitionLanguageCodes("natural-urdu");
+    expect(urduCodes).toContain("ur-PK");
+
+    const englishCodes = getRecognitionLanguageCodes("english");
+    expect(englishCodes).toContain("en-US");
+  });
 });

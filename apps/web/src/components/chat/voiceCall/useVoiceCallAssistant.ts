@@ -4,7 +4,10 @@ import {
   getRecognitionLanguageCodes,
   formatSttTranscript,
   loadSttSettings,
+  saveSttSettings,
   isMobileDevice,
+  type SttLanguageMode,
+  type SttSettings,
 } from "~/lib/speech/stt";
 import {
   speakText,
@@ -300,6 +303,21 @@ export interface UseVoiceCallAssistantOptions {
   threadId?: string | null;
 }
 
+export interface UseVoiceCallAssistantReturn {
+  isCallActive: boolean;
+  callStatus: VoiceCallStatus;
+  analyserNode: AnalyserNode | null;
+  toggleCall: () => void;
+  endCall: () => void;
+  interruptSpeaking: () => void;
+  callLanguage: "urdu" | "english";
+  setCallLanguage: (lang: "urdu" | "english") => void;
+  liveTranscript: string;
+  assistantSpokenText: string;
+  isMicMuted: boolean;
+  toggleMicMute: () => void;
+}
+
 export function useVoiceCallAssistant({
   onTranscriptChange,
   onAutoSend,
@@ -313,6 +331,17 @@ export function useVoiceCallAssistant({
 }: UseVoiceCallAssistantOptions) {
   const [isCallActive, setIsCallActive] = useState(false);
   const [callStatus, setCallStatus] = useState<VoiceCallStatus>("idle");
+  const [callLanguage, setCallLanguageState] = useState<"urdu" | "english">(() => {
+    const current = loadSttSettings().language;
+    return current === "english" ? "english" : "urdu";
+  });
+  const callLanguageRef = useRef<"urdu" | "english">(
+    loadSttSettings().language === "english" ? "english" : "urdu",
+  );
+  const [liveTranscript, setLiveTranscript] = useState<string>("");
+  const [assistantSpokenText, setAssistantSpokenText] = useState<string>("");
+  const isUserMutedRef = useRef(false);
+  const [isMicMuted, setIsMicMuted] = useState(false);
 
   const micStreamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -411,12 +440,22 @@ export function useVoiceCallAssistant({
 
   // Physically mute / unmute microphone tracks to guarantee zero echo leakage into audio analyser
   const setMicrophoneMuted = useCallback((muted: boolean) => {
+    const shouldMute = muted || isUserMutedRef.current;
     if (micStreamRef.current) {
       micStreamRef.current.getAudioTracks().forEach((track) => {
-        track.enabled = !muted;
+        track.enabled = !shouldMute;
       });
     }
   }, []);
+
+  const toggleMicMute = useCallback(() => {
+    setIsMicMuted((prev) => {
+      const next = !prev;
+      isUserMutedRef.current = next;
+      setMicrophoneMuted(next);
+      return next;
+    });
+  }, [setMicrophoneMuted]);
 
   // Completely aborts and detaches event listeners from current SpeechRecognition instance
   const cleanupRecognition = useCallback(() => {
@@ -453,6 +492,10 @@ export function useVoiceCallAssistant({
     recentAiSpokenPhrasesRef.current = [];
     recentAiSpokenWordsSetRef.current.clear();
     processedChunksSetRef.current.clear();
+    setIsMicMuted(false);
+    isUserMutedRef.current = false;
+    setLiveTranscript("");
+    setAssistantSpokenText("");
 
     setVoiceCallActiveState(false, null);
     stopMobileVoiceKeepAlive();
@@ -594,6 +637,8 @@ export function useVoiceCallAssistant({
         ? "Allah Hafiz! Apna khayal rakhiyega."
         : "Goodbye! Have a great day.";
 
+      setLiveTranscript("");
+      setAssistantSpokenText(farewellMessage);
       updateCallStatus("speaking");
       isTtsActiveRef.current = true;
 
@@ -634,10 +679,16 @@ export function useVoiceCallAssistant({
 
       const recognition = new SpeechRecognitionClass();
       const sttSettings = loadSttSettings();
-      const languageCodes = getRecognitionLanguageCodes(sttSettings.language);
+      const effectiveMode: SttLanguageMode =
+        callLanguageRef.current === "urdu"
+          ? sttSettings.language === "roman-urdu"
+            ? "roman-urdu"
+            : "natural-urdu"
+          : "english";
+      const languageCodes = getRecognitionLanguageCodes(effectiveMode);
       recognition.lang =
         languageCodes[Math.min(recognitionLanguageIndexRef.current, languageCodes.length - 1)] ??
-        "en-US";
+        (callLanguageRef.current === "urdu" ? "ur-PK" : "en-US");
       // On mobile devices (Android/iOS), continuous=true frequently fails or drops audio.
       recognition.continuous = !isMobileDevice;
       recognition.interimResults = true;
@@ -675,7 +726,13 @@ export function useVoiceCallAssistant({
         const rawSpeech = (accumulatedFinal + (currentInterim ? " " + currentInterim : "")).trim();
         if (!rawSpeech) return;
 
-        const processedSpeech = formatSttTranscript(rawSpeech, sttSettings.language);
+        const effectiveMode: SttLanguageMode =
+          callLanguageRef.current === "urdu"
+            ? sttSettings.language === "roman-urdu"
+              ? "roman-urdu"
+              : "natural-urdu"
+            : "english";
+        const processedSpeech = formatSttTranscript(rawSpeech, effectiveMode);
 
         // 1. Interrupt command ("stop", "ruko", "suno", "wait", etc.):
         // Triggers instantly at any moment, halting speech & model execution!
@@ -715,6 +772,7 @@ export function useVoiceCallAssistant({
         lastTranscribedTextRef.current = combinedText;
         lastSpeechTimestampRef.current = Date.now();
         hasPendingSpeechRef.current = true;
+        setLiveTranscript(speechToUse);
         onTranscriptChangeRef.current(combinedText);
 
         const isAiBusy =
@@ -818,6 +876,43 @@ export function useVoiceCallAssistant({
     [clearRestartTimer, startFreshRecognition],
   );
 
+  const setCallLanguage = useCallback(
+    (lang: "urdu" | "english") => {
+      callLanguageRef.current = lang;
+      setCallLanguageState(lang);
+      const currentSettings = loadSttSettings();
+      const targetMode: SttLanguageMode = lang === "urdu" ? "natural-urdu" : "english";
+      saveSttSettings({ ...currentSettings, language: targetMode });
+      recognitionLanguageIndexRef.current = 0;
+      if (isCallActiveRef.current) {
+        cleanupRecognition();
+        scheduleRestartRecognition(50);
+      }
+    },
+    [cleanupRecognition, scheduleRestartRecognition],
+  );
+
+  useEffect(() => {
+    const handleSettingsChange = (e: Event) => {
+      const custom = e as CustomEvent<SttSettings>;
+      const lang = custom.detail?.language;
+      if (lang) {
+        const mapped = lang === "english" ? "english" : "urdu";
+        callLanguageRef.current = mapped;
+        setCallLanguageState(mapped);
+        if (isCallActiveRef.current) {
+          recognitionLanguageIndexRef.current = 0;
+          cleanupRecognition();
+          scheduleRestartRecognition(50);
+        }
+      }
+    };
+    window.addEventListener("t3-stt-settings-changed", handleSettingsChange);
+    return () => {
+      window.removeEventListener("t3-stt-settings-changed", handleSettingsChange);
+    };
+  }, [cleanupRecognition, scheduleRestartRecognition]);
+
   // Global subscription to TTS speech state (e.g. Read Aloud button or settings voice tests)
   // Ensures microphone is physically aborted whenever ANY audio speech occurs outside the call
   useEffect(() => {
@@ -894,11 +989,13 @@ export function useVoiceCallAssistant({
       },
       onChunkStarted: (chunk: string) => {
         currentPlayingTtsChunkRef.current = chunk;
+        setAssistantSpokenText(chunk);
         addAiSpokenPhrase(chunk);
       },
       onFinished: () => {
         isTtsActiveRef.current = false;
         currentPlayingTtsChunkRef.current = "";
+        setAssistantSpokenText("");
         lastTtsEndedTimestampRef.current = Date.now();
         thinkingAmbientSound.stop();
 
@@ -923,6 +1020,7 @@ export function useVoiceCallAssistant({
     // Ensure promptRef and composer have current text synchronized before dispatch
     promptRef.current = currentText;
     onTranscriptChangeRef.current(currentText);
+    setLiveTranscript("");
 
     // Switch call status to thinking & start ambient sound
     updateCallStatus("thinking");
@@ -1042,6 +1140,8 @@ export function useVoiceCallAssistant({
     lastTranscribedTextRef.current = "";
     promptRef.current = "";
     onTranscriptChangeRef.current("");
+    setLiveTranscript("");
+    setAssistantSpokenText("");
 
     // 5. Instantly return to listening state
     updateCallStatus("listening");
@@ -1298,5 +1398,11 @@ export function useVoiceCallAssistant({
     toggleCall,
     endCall,
     interruptSpeaking,
+    callLanguage,
+    setCallLanguage,
+    liveTranscript,
+    assistantSpokenText,
+    isMicMuted,
+    toggleMicMute,
   };
 }

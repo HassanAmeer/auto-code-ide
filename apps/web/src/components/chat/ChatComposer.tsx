@@ -328,7 +328,7 @@ import {
   getComposerSubmissionValidationMessage,
   submitComposerDraft,
 } from "./composerSubmission";
-import { useVoiceCallAssistant, VoiceCallButton } from "./voiceCall";
+import { useVoiceCallAssistant, VoiceCallButton, VoiceCallFloatingWidget } from "./voiceCall";
 import { ComposerPromptLengthValidation } from "./ComposerPromptLengthValidation";
 import { PierreEntryIcon } from "./PierreEntryIcon";
 import { pendingDraftWork } from "./pendingDraftWork";
@@ -4593,6 +4593,12 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     toggleCall: toggleVoiceCall,
     endCall: _endVoiceCall,
     interruptSpeaking,
+    callLanguage,
+    setCallLanguage,
+    liveTranscript,
+    assistantSpokenText,
+    isMicMuted,
+    toggleMicMute,
   } = useVoiceCallAssistant({
     onTranscriptChange: useCallback(
       (text: string) => {
@@ -8096,6 +8102,20 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           </div>
         </ComposerSurface.Main>
       </div>
+
+      <VoiceCallFloatingWidget
+        isCallActive={isCallActive}
+        callStatus={callStatus}
+        analyserNode={analyserNode}
+        onToggleCall={toggleVoiceCall}
+        onInterrupt={interruptSpeaking}
+        callLanguage={callLanguage}
+        onSwitchLanguage={setCallLanguage}
+        liveTranscript={liveTranscript}
+        assistantSpokenText={assistantSpokenText}
+        isMicMuted={isMicMuted}
+        onToggleMicMute={toggleMicMute}
+      />
     </form>
   );
 });
