@@ -194,6 +194,7 @@ export function ServerBrowserSurface(props: {
     highlight: PreviewStreamElementHighlight;
     point: { x: number; y: number };
   } | null>(null);
+  const pendingSelectionRef = useRef<{ x: number; y: number } | null>(null);
   const lastInspectHoverRef = useRef(0);
   const access = usePreviewStreamAccess(environmentId);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -253,6 +254,7 @@ export function ServerBrowserSurface(props: {
     if (!pickActive) {
       setHoveredElement(null);
       setSelectedTarget(null);
+      pendingSelectionRef.current = null;
     }
   }, [pickActive]);
 
@@ -369,7 +371,15 @@ export function ServerBrowserSurface(props: {
 
   const handleConfirmAttach = useCallback(() => {
     if (!selectedTarget) return;
-    send({ type: "pickElement", x: selectedTarget.point.x, y: selectedTarget.point.y });
+    const targetX =
+      selectedTarget.highlight.rect.width > 0
+        ? selectedTarget.highlight.rect.x + selectedTarget.highlight.rect.width / 2
+        : selectedTarget.point.x;
+    const targetY =
+      selectedTarget.highlight.rect.height > 0
+        ? selectedTarget.highlight.rect.y + selectedTarget.highlight.rect.height / 2
+        : selectedTarget.point.y;
+    send({ type: "pickElement", x: targetX, y: targetY });
     setSelectedTarget(null);
     onCancelPick?.();
   }, [onCancelPick, selectedTarget, send]);
@@ -513,17 +523,25 @@ export function ServerBrowserSurface(props: {
         },
         onElementHovered: (target) => {
           setHoveredElement(target);
-          setSelectedTarget((prev) => {
-            if (
-              prev &&
-              prev.highlight.tag === "element" &&
-              prev.highlight.selector === "element" &&
-              target
-            ) {
-              return { highlight: target, point: prev.point };
+          if (pendingSelectionRef.current) {
+            const p = pendingSelectionRef.current;
+            pendingSelectionRef.current = null;
+            if (target) {
+              setSelectedTarget({ highlight: target, point: p });
             }
-            return prev;
-          });
+          } else {
+            setSelectedTarget((prev) => {
+              if (
+                prev &&
+                prev.highlight.tag === "element" &&
+                prev.highlight.selector === "element" &&
+                target
+              ) {
+                return { highlight: target, point: prev.point };
+              }
+              return prev;
+            });
+          }
         },
         onElementPicked: (annotation) => {
           setHoveredElement(null);
@@ -639,32 +657,37 @@ export function ServerBrowserSurface(props: {
     if (pickActive) {
       if (type === "pointermove") {
         const now = performance.now();
-        if (now - lastInspectHoverRef.current >= 40) {
+        if (now - lastInspectHoverRef.current >= 30) {
           lastInspectHoverRef.current = now;
           const point = pagePoint(clientX, clientY, false);
           if (point) {
             send({ type: "inspectHover", x: point.x, y: point.y });
           }
         }
-      } else if (type === "pointerdown" || type === "pointerup") {
+      } else if (type === "pointerdown") {
         event.preventDefault();
         event.stopPropagation();
-        if (type === "pointerup") {
-          const point = pagePoint(clientX, clientY, false);
-          if (point) {
-            if (hoveredElement) {
-              setSelectedTarget({ highlight: hoveredElement, point });
-            } else {
-              send({ type: "inspectHover", x: point.x, y: point.y });
-              setSelectedTarget({
-                highlight: {
-                  tag: "element",
-                  selector: "element",
-                  rect: { x: point.x - 10, y: point.y - 10, width: 20, height: 20 },
-                },
-                point,
-              });
-            }
+        const point = pagePoint(clientX, clientY, false);
+        if (point) {
+          send({ type: "inspectHover", x: point.x, y: point.y });
+        }
+      } else if (type === "pointerup") {
+        event.preventDefault();
+        event.stopPropagation();
+        const point = pagePoint(clientX, clientY, false);
+        if (point) {
+          const inBounds =
+            hoveredElement &&
+            point.x >= hoveredElement.rect.x &&
+            point.x <= hoveredElement.rect.x + hoveredElement.rect.width &&
+            point.y >= hoveredElement.rect.y &&
+            point.y <= hoveredElement.rect.y + hoveredElement.rect.height;
+          if (hoveredElement && inBounds) {
+            setSelectedTarget({ highlight: hoveredElement, point });
+            pendingSelectionRef.current = null;
+          } else {
+            pendingSelectionRef.current = point;
+            send({ type: "inspectHover", x: point.x, y: point.y });
           }
         }
       }
@@ -925,6 +948,53 @@ export function ServerBrowserSurface(props: {
           onMouseDown={(event) => event.preventDefault()}
           onContextMenu={(event) => event.preventDefault()}
         />
+        {/* Live Hover Outline on any hovered element (even if another element is selected) */}
+        {pickActive && hoveredElement
+          ? (() => {
+              const isSelected =
+                selectedTarget &&
+                selectedTarget.highlight.rect.x === hoveredElement.rect.x &&
+                selectedTarget.highlight.rect.y === hoveredElement.rect.y &&
+                selectedTarget.highlight.rect.width === hoveredElement.rect.width &&
+                selectedTarget.highlight.rect.height === hoveredElement.rect.height;
+              if (isSelected) return null;
+
+              const style = getHighlightStyleFor(hoveredElement);
+              if (!style) return null;
+              const isNearTop = style.rawTop < 28;
+              return (
+                <div
+                  style={{
+                    left: style.left,
+                    top: style.top,
+                    width: style.width,
+                    height: style.height,
+                  }}
+                  className="pointer-events-none absolute z-30 rounded-sm border-2 border-dashed border-sky-400 bg-sky-400/15 shadow-[0_0_12px_rgba(56,189,248,0.45)] transition-[top,left,width,height] duration-75 ease-out"
+                >
+                  <div
+                    className={cn(
+                      "absolute flex items-center gap-1.5 whitespace-nowrap rounded bg-sky-500 px-1.5 py-0.5 text-[10px] font-mono font-medium text-white shadow-sm",
+                      isNearTop ? "top-1 left-1" : "-top-6 left-0",
+                    )}
+                  >
+                    <span className="truncate max-w-[200px]">
+                      &lt;
+                      {hoveredElement.componentName ||
+                        hoveredElement.selector ||
+                        hoveredElement.tag}
+                      &gt;
+                    </span>
+                    <span className="opacity-80 shrink-0">
+                      {hoveredElement.rect.width}×{hoveredElement.rect.height}
+                    </span>
+                  </div>
+                </div>
+              );
+            })()
+          : null}
+
+        {/* Selected Element Box & Action Bar */}
         {pickActive && selectedTarget
           ? (() => {
               const style = getHighlightStyleFor(selectedTarget.highlight);
@@ -932,7 +1002,7 @@ export function ServerBrowserSurface(props: {
               const canvasBox = canvasRef.current?.getBoundingClientRect();
               const canvasH = canvasBox?.height ?? 600;
               const canvasW = canvasBox?.width ?? 600;
-              const cardWidth = Math.min(320, Math.max(200, canvasW - 20));
+              const cardWidth = Math.min(340, Math.max(220, canvasW - 20));
               const cardLeft = Math.max(
                 8,
                 Math.min(style.rawLeft, Math.max(8, canvasW - cardWidth - 8)),
@@ -941,6 +1011,7 @@ export function ServerBrowserSurface(props: {
               const cardTop = isNearBottom
                 ? Math.max(8, style.rawTop - 46)
                 : Math.min(canvasH - 46, style.rawTop + style.rawHeight + 8);
+              const isNearTop = style.rawTop < 28;
               return (
                 <>
                   <div
@@ -950,8 +1021,26 @@ export function ServerBrowserSurface(props: {
                       width: style.width,
                       height: style.height,
                     }}
-                    className="pointer-events-none absolute z-30 rounded-sm border-2 border-primary bg-primary/20 shadow-[0_0_16px_rgba(59,130,246,0.6)]"
-                  />
+                    className="pointer-events-none absolute z-35 rounded-sm border-2 border-primary bg-primary/20 ring-2 ring-primary/40 shadow-[0_0_20px_rgba(59,130,246,0.65)]"
+                  >
+                    <div
+                      className={cn(
+                        "absolute flex items-center gap-1.5 whitespace-nowrap rounded bg-primary px-1.5 py-0.5 text-[10px] font-mono font-medium text-primary-foreground shadow-md ring-1 ring-white/20",
+                        isNearTop ? "top-1 left-1" : "-top-6 left-0",
+                      )}
+                    >
+                      <span className="truncate max-w-[200px]">
+                        &lt;
+                        {selectedTarget.highlight.componentName ||
+                          selectedTarget.highlight.selector ||
+                          selectedTarget.highlight.tag}
+                        &gt;
+                      </span>
+                      <span className="opacity-80 shrink-0">
+                        {selectedTarget.highlight.rect.width}×{selectedTarget.highlight.rect.height}
+                      </span>
+                    </div>
+                  </div>
                   <div
                     style={{
                       left: `${cardLeft}px`,
@@ -962,13 +1051,13 @@ export function ServerBrowserSurface(props: {
                     onPointerUp={(e) => e.stopPropagation()}
                     onMouseDown={(e) => e.stopPropagation()}
                     onClick={(e) => e.stopPropagation()}
-                    className="absolute z-40 flex items-center gap-1.5 sm:gap-2 rounded-lg border border-border/80 bg-background/95 p-1.5 sm:px-2.5 sm:py-1.5 shadow-xl backdrop-blur-md animate-in fade-in zoom-in-95 duration-100 select-none"
+                    className="absolute z-40 flex items-center gap-1.5 sm:gap-2 rounded-lg border border-border/80 bg-background/95 p-1.5 sm:px-2.5 sm:py-1.5 shadow-2xl backdrop-blur-md animate-in fade-in zoom-in-95 duration-100 select-none ring-1 ring-primary/20"
                   >
                     <div
-                      className="flex items-center gap-1 min-w-0 max-w-[90px] sm:max-w-[130px] truncate mr-0.5"
+                      className="flex items-center gap-1 min-w-0 max-w-[100px] sm:max-w-[140px] truncate mr-0.5"
                       title={selectedTarget.highlight.selector}
                     >
-                      <span className="size-2 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.9)] shrink-0" />
+                      <span className="size-2 rounded-full bg-primary ring-2 ring-primary/30 shrink-0" />
                       <span className="font-mono text-xs font-semibold text-foreground truncate">
                         &lt;
                         {selectedTarget.highlight.componentName ||
@@ -1023,42 +1112,7 @@ export function ServerBrowserSurface(props: {
                 </>
               );
             })()
-          : pickActive && hoveredElement
-            ? (() => {
-                const style = getHighlightStyleFor(hoveredElement);
-                if (!style) return null;
-                const isNearTop = style.rawTop < 28;
-                return (
-                  <div
-                    style={{
-                      left: style.left,
-                      top: style.top,
-                      width: style.width,
-                      height: style.height,
-                    }}
-                    className="pointer-events-none absolute z-30 rounded-sm border-2 border-primary bg-primary/15 shadow-[0_0_12px_rgba(59,130,246,0.5)] transition-[top,left,width,height] duration-75 ease-out"
-                  >
-                    <div
-                      className={cn(
-                        "absolute flex items-center gap-1.5 whitespace-nowrap rounded bg-primary px-1.5 py-0.5 text-[10px] font-mono font-medium text-primary-foreground shadow-sm",
-                        isNearTop ? "top-1 left-1" : "-top-6 left-0",
-                      )}
-                    >
-                      <span className="truncate max-w-[180px]">
-                        &lt;
-                        {hoveredElement.componentName ||
-                          hoveredElement.selector ||
-                          hoveredElement.tag}
-                        &gt;
-                      </span>
-                      <span className="opacity-75 shrink-0">
-                        {hoveredElement.rect.width}×{hoveredElement.rect.height}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })()
-            : null}
+          : null}
         {agentCursor && control?.controller !== "you" ? (
           <AgentCursorMark
             {...agentCursor}

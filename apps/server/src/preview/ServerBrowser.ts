@@ -128,24 +128,43 @@ const EDITABLE_AT_POINT_SCRIPT = `(x, y) => {
   return !nonText.includes(element.type) && !element.disabled && !element.readOnly;
 }`;
 const INSPECT_HOVER_SCRIPT = `(x, y) => {
-  let element = document.elementFromPoint(x, y);
+  let element = null;
+  if (typeof document.elementsFromPoint === "function") {
+    const list = document.elementsFromPoint(x, y) || [];
+    element = list.find(el => el && el !== document.documentElement && el !== document.body) || list[0] || null;
+  }
+  if (!element) {
+    element = document.elementFromPoint(x, y);
+  }
   while (element && element.shadowRoot) {
-    const inner = element.shadowRoot.elementFromPoint(x, y);
+    let inner = null;
+    if (typeof element.shadowRoot.elementsFromPoint === "function") {
+      const inners = element.shadowRoot.elementsFromPoint(x, y) || [];
+      inner = inners.find(el => el && el !== element) || inners[0] || null;
+    }
+    if (!inner && typeof element.shadowRoot.elementFromPoint === "function") {
+      inner = element.shadowRoot.elementFromPoint(x, y);
+    }
     if (!inner || inner === element) break;
     element = inner;
   }
-  if (!element || element === document.documentElement || element === document.body) {
+  if (!element) {
     return null;
   }
-  const rect = element.getBoundingClientRect();
-  const tag = element.tagName.toLowerCase();
+  let rect = element.getBoundingClientRect();
+  if ((rect.width === 0 || rect.height === 0) && element.parentElement) {
+    rect = element.parentElement.getBoundingClientRect();
+  }
+  const tag = (element.tagName || 'element').toLowerCase();
   let selector = tag;
-  if (element.id) {
-    selector += '#' + CSS.escape(element.id);
-  } else if (element.className && typeof element.className === 'string') {
-    const classes = element.className.trim().split(/\\s+/).filter(Boolean);
+  const elId = element.id;
+  if (elId) {
+    selector += '#' + (window.CSS && CSS.escape ? CSS.escape(elId) : elId);
+  } else if (element.className) {
+    const rawClass = typeof element.className === 'string' ? element.className : (element.className.baseVal || '');
+    const classes = rawClass.trim().split(/\\s+/).filter(Boolean);
     if (classes.length > 0) {
-      selector += '.' + classes.slice(0, 3).map(c => CSS.escape(c)).join('.');
+      selector += '.' + classes.slice(0, 3).map(c => window.CSS && CSS.escape ? CSS.escape(c) : c).join('.');
     }
   }
   let componentName = null;
@@ -255,22 +274,41 @@ const INSPECT_HOVER_SCRIPT = `(x, y) => {
   };
 }`;
 const PICK_ELEMENT_SCRIPT = `(x, y) => {
-  let element = document.elementFromPoint(x, y);
+  let element = null;
+  if (typeof document.elementsFromPoint === "function") {
+    const list = document.elementsFromPoint(x, y) || [];
+    element = list.find(el => el && el !== document.documentElement && el !== document.body) || list[0] || null;
+  }
+  if (!element) {
+    element = document.elementFromPoint(x, y);
+  }
   while (element && element.shadowRoot) {
-    const inner = element.shadowRoot.elementFromPoint(x, y);
+    let inner = null;
+    if (typeof element.shadowRoot.elementsFromPoint === "function") {
+      const inners = element.shadowRoot.elementsFromPoint(x, y) || [];
+      inner = inners.find(el => el && el !== element) || inners[0] || null;
+    }
+    if (!inner && typeof element.shadowRoot.elementFromPoint === "function") {
+      inner = element.shadowRoot.elementFromPoint(x, y);
+    }
     if (!inner || inner === element) break;
     element = inner;
   }
   if (!element) return null;
-  const rect = element.getBoundingClientRect();
-  const tag = element.tagName.toLowerCase();
+  let rect = element.getBoundingClientRect();
+  if ((rect.width === 0 || rect.height === 0) && element.parentElement) {
+    rect = element.parentElement.getBoundingClientRect();
+  }
+  const tag = (element.tagName || 'element').toLowerCase();
   let selector = tag;
-  if (element.id) {
-    selector += '#' + CSS.escape(element.id);
-  } else if (element.className && typeof element.className === 'string') {
-    const classes = element.className.trim().split(/\\s+/).filter(Boolean);
+  const elId = element.id;
+  if (elId) {
+    selector += '#' + (window.CSS && CSS.escape ? CSS.escape(elId) : elId);
+  } else if (element.className) {
+    const rawClass = typeof element.className === 'string' ? element.className : (element.className.baseVal || '');
+    const classes = rawClass.trim().split(/\\s+/).filter(Boolean);
     if (classes.length > 0) {
-      selector += '.' + classes.slice(0, 3).map(c => CSS.escape(c)).join('.');
+      selector += '.' + classes.slice(0, 3).map(c => window.CSS && CSS.escape ? CSS.escape(c) : c).join('.');
     }
   }
 
