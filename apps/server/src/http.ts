@@ -2138,6 +2138,29 @@ export const layerTerminalQuickStatsRoute = HttpRouter.add(
     const usedMem = totalMem - freeMem;
     const memPercent = Math.round((usedMem / totalMem) * 100);
 
+    let swapPercent = 0;
+    let swapUsedGb = "0";
+    let swapTotalGb = "0";
+    try {
+      if (NodeFS.existsSync("/proc/meminfo")) {
+        const meminfo = NodeFS.readFileSync("/proc/meminfo", "utf8");
+        const totalMatch = meminfo.match(/SwapTotal:\s+(\d+)\s+kB/i);
+        const freeMatch = meminfo.match(/SwapFree:\s+(\d+)\s+kB/i);
+        if (totalMatch && freeMatch) {
+          const totalKb = parseInt(totalMatch[1], 10);
+          const freeKb = parseInt(freeMatch[1], 10);
+          if (totalKb > 0) {
+            const usedKb = Math.max(0, totalKb - freeKb);
+            swapPercent = Math.round((usedKb / totalKb) * 100);
+            swapUsedGb = (usedKb / (1024 * 1024)).toFixed(1);
+            swapTotalGb = (totalKb / (1024 * 1024)).toFixed(1);
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+
     let diskFreeGb = "0";
     let diskTotalGb = "0";
     let diskPercent = 0;
@@ -2166,6 +2189,9 @@ export const layerTerminalQuickStatsRoute = HttpRouter.add(
       memPercent,
       memUsedGb: (usedMem / (1024 * 1024 * 1024)).toFixed(1),
       memTotalGb: (totalMem / (1024 * 1024 * 1024)).toFixed(1),
+      swapPercent,
+      swapUsedGb,
+      swapTotalGb,
       diskPercent,
       diskFreeGb,
       diskTotalGb,

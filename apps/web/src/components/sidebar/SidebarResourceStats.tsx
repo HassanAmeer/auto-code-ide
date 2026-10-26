@@ -8,6 +8,9 @@ interface ResourceStats {
   memPercent: number;
   memUsedGb: string;
   memTotalGb: string;
+  swapPercent?: number;
+  swapUsedGb?: string;
+  swapTotalGb?: string;
   diskPercent: number;
   diskFreeGb: string;
   diskTotalGb: string;
@@ -36,6 +39,9 @@ export const SidebarResourceStats = memo(function SidebarResourceStats() {
             memPercent: typeof data.memPercent === "number" ? data.memPercent : 0,
             memUsedGb: data.memUsedGb || "0",
             memTotalGb: data.memTotalGb || "0",
+            swapPercent: typeof data.swapPercent === "number" ? data.swapPercent : 0,
+            swapUsedGb: data.swapUsedGb || "0",
+            swapTotalGb: data.swapTotalGb || "0",
             diskPercent: typeof data.diskPercent === "number" ? data.diskPercent : 0,
             diskFreeGb: data.diskFreeGb || "0",
             diskTotalGb: data.diskTotalGb || "0",
@@ -84,7 +90,7 @@ export const SidebarResourceStats = memo(function SidebarResourceStats() {
     return (
       <div
         className="w-full flex justify-center py-1.5 border-y border-border/40 bg-muted/20 select-none"
-        title={`Server Resources: CPU: ${stats.cpuPercent}% | RAM: ${stats.memUsedGb}/${stats.memTotalGb}GB (${stats.memPercent}%) | ROM: ${stats.diskFreeGb}GB free (${stats.diskPercent}%)`}
+        title={`Server Resources: CPU: ${stats.cpuPercent}% | RAM: ${stats.memUsedGb}/${stats.memTotalGb}GB (${stats.memPercent}%) | SWAP: ${stats.swapUsedGb || "0"}/${stats.swapTotalGb || "0"}GB (${stats.swapPercent ?? 0}%) | ROM: ${stats.diskFreeGb}GB free (${stats.diskPercent}%)`}
       >
         <div className="flex items-center justify-center font-mono font-bold text-[9px] text-zinc-300">
           ⚡{stats.cpuPercent}%
@@ -104,6 +110,8 @@ export const SidebarResourceStats = memo(function SidebarResourceStats() {
         {isLoading && !stats ? (
           // Cupertino shimmer skeleton loader
           <div className="flex items-center gap-2 animate-pulse min-w-max">
+            <div className="h-2.5 w-12 rounded-sm bg-zinc-700/50" />
+            <div className="w-px h-2.5 bg-zinc-700/50 shrink-0" />
             <div className="h-2.5 w-12 rounded-sm bg-zinc-700/50" />
             <div className="w-px h-2.5 bg-zinc-700/50 shrink-0" />
             <div className="h-2.5 w-12 rounded-sm bg-zinc-700/50" />
@@ -153,6 +161,29 @@ export const SidebarResourceStats = memo(function SidebarResourceStats() {
                 )}
               >
                 {stats.memPercent}%
+              </span>
+            </div>
+
+            {/* Separator line */}
+            <div className="w-px h-2.5 bg-zinc-700/60 shrink-0" />
+
+            {/* SWAP */}
+            <div
+              className="flex items-center gap-1 shrink-0"
+              title={`SWAP: ${stats.swapUsedGb || "0"} GB / ${stats.swapTotalGb || "0"} GB (${stats.swapPercent ?? 0}%)`}
+            >
+              <span className="text-zinc-500 font-semibold tracking-wider">SWAP:</span>
+              <span
+                className={cn(
+                  "font-bold transition-colors",
+                  (stats.swapPercent ?? 0) > 80
+                    ? "text-rose-400"
+                    : (stats.swapPercent ?? 0) > 50
+                      ? "text-amber-400"
+                      : "text-teal-400",
+                )}
+              >
+                {stats.swapPercent ?? 0}%
               </span>
             </div>
 
