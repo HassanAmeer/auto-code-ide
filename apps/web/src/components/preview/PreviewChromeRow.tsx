@@ -6,6 +6,7 @@ import {
   ExternalLink,
   Minus,
   MousePointerClick,
+  Pencil,
   PictureInPicture2,
   Plus,
   Smartphone,
@@ -59,6 +60,9 @@ interface Props {
   pickDisabled?: boolean | undefined;
   /** Optional reason string surfaced in the disabled tooltip. */
   pickDisabledReason?: string | undefined;
+  onDraw?: (() => void) | undefined;
+  drawActive?: boolean | undefined;
+  drawDisabled?: boolean | undefined;
   onToggleDeviceToolbar?: (() => void) | undefined;
   deviceToolbarVisible?: boolean | undefined;
   zoomFactor?: number | undefined;
@@ -105,6 +109,9 @@ export function PreviewChromeRow({
   pickActive,
   pickDisabled,
   pickDisabledReason,
+  onDraw,
+  drawActive,
+  drawDisabled,
   onToggleDeviceToolbar,
   deviceToolbarVisible,
   zoomFactor,
@@ -263,7 +270,7 @@ export function PreviewChromeRow({
                   size="icon-xs"
                   onClick={onPickElement}
                   disabled={pickDisabled}
-                  aria-label={pickActive ? "Cancel annotation" : "Annotate preview"}
+                  aria-label={pickActive ? "Cancel element picker" : "Inspect and pick element"}
                   aria-pressed={pickActive ? "true" : "false"}
                   type="button"
                   className="hidden md:inline-flex"
@@ -276,8 +283,33 @@ export function PreviewChromeRow({
               {pickDisabled && pickDisabledReason
                 ? pickDisabledReason
                 : pickActive
-                  ? "Cancel annotation (Esc)"
-                  : "Annotate elements, regions, and drawings"}
+                  ? "Cancel element picker (Esc)"
+                  : "Inspect and select element"}
+            </TooltipPopup>
+          </Tooltip>
+        ) : null}
+        {onDraw ? (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant={drawActive ? "secondary" : "ghost"}
+                  size="icon-xs"
+                  onClick={onDraw}
+                  disabled={drawDisabled}
+                  aria-label={drawActive ? "Exit drawing mode" : "Draw and annotate page"}
+                  aria-pressed={drawActive ? "true" : "false"}
+                  type="button"
+                  className="inline-flex"
+                />
+              }
+            >
+              <Pencil className={cn("size-3.5", drawActive && "text-primary")} />
+            </TooltipTrigger>
+            <TooltipPopup>
+              {drawActive
+                ? "Exit drawing mode (Esc)"
+                : "Draw on Page (Pencil, Shapes, Text & Attach to Chat)"}
             </TooltipPopup>
           </Tooltip>
         ) : null}

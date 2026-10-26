@@ -61,8 +61,10 @@ import { closePreviewSession } from "./closePreviewSession";
 import { openPreviewSession } from "./openPreviewSession";
 import { showPreviewPopup } from "./showPreviewPopup";
 import { PreviewChromeRow } from "./PreviewChromeRow";
+import { PreviewDrawOverlay } from "./PreviewDrawOverlay";
 import { PreviewEmptyState } from "./PreviewEmptyState";
 import { PreviewMoreMenu, type PreviewMoreMenuActions } from "./PreviewMoreMenu";
+import { dataUrlToFile } from "~/lib/imageCompression";
 import {
   commitBrowserViewportChange,
   subscribeBrowserViewportChange,
@@ -154,6 +156,7 @@ export function PreviewView({
 }: Props) {
   const [focusUrlNonce, setFocusUrlNonce] = useState<number | undefined>(undefined);
   const [pickActive, setPickActive] = useState(false);
+  const [drawActive, setDrawActive] = useState(false);
   const canSendAnnotation =
     useEnvironmentScope(threadRef.environmentId, AuthOrchestrationOperateScope) &&
     Boolean(onSendAnnotation);
@@ -829,7 +832,11 @@ export function PreviewView({
 
   const handlePickElement = useCallback(() => {
     if (isServerTab) {
-      setPickActive((prev) => !prev);
+      setPickActive((prev) => {
+        const next = !prev;
+        if (next) setDrawActive(false);
+        return next;
+      });
       return;
     }
     if (!previewBridge || !runtimeTabId) return;
@@ -848,6 +855,7 @@ export function PreviewView({
     const pickRequest = { cancelled: false };
     let submitted = false;
     pickActiveRef.current = pickRequest;
+    setDrawActive(false);
     setPickActive(true);
     void (async () => {
       try {
@@ -941,6 +949,56 @@ export function PreviewView({
       }
     })();
   }, [addImage, addPreviewAnnotation, isServerTab, onSendAnnotation, runtimeTabId, threadRef]);
+
+  const handleToggleDraw = useCallback(() => {
+    setDrawActive((prev) => {
+      const next = !prev;
+      if (next) setPickActive(false);
+      return next;
+    });
+  }, []);
+
+  const handleDrawAttach = useCallback(
+    (dataUrl: string) => {
+      setDrawActive(false);
+      try {
+        const file = dataUrlToFile(dataUrl, `preview-drawing-${Date.now()}.png`, "image/png");
+        if (file.size > 0) {
+          const image = {
+            type: "image",
+            id: crypto.randomUUID(),
+            name: file.name,
+            mimeType: file.type,
+            sizeBytes: file.size,
+            previewUrl: dataUrl,
+            file,
+          } satisfies ComposerImageAttachment;
+
+          addImage(threadRef, image);
+          toastManager.add({
+            type: "success",
+            title: "Drawing attached to chat",
+            description:
+              "Aapki drawing chat composer mein attach ho chuki hai. Ab aap prompt likh kar send kar sakte hain.",
+          });
+          setTimeout(() => {
+            const input = document.querySelector<HTMLTextAreaElement>(
+              "textarea[data-composer-input]",
+            );
+            input?.focus();
+          }, 100);
+        }
+      } catch (err) {
+        console.error("Failed to attach drawing:", err);
+        toastManager.add({
+          type: "error",
+          title: "Could not attach drawing",
+          description: err instanceof Error ? err.message : undefined,
+        });
+      }
+    },
+    [addImage, threadRef],
+  );
 
   const handleServerElementPicked = useCallback(
     (annotation: PreviewAnnotationPayload) => {
@@ -1153,6 +1211,9 @@ export function PreviewView({
         pickDisabledReason={
           isUnreachable ? "Page didn't load — pick unavailable until the page renders" : undefined
         }
+        onDraw={tabId ? handleToggleDraw : undefined}
+        drawActive={drawActive}
+        drawDisabled={!tabId || isUnreachable}
         leadingActions={
           // Only when it differs from the default: labelling every tab
           // "Default" would be noise on the common case, while a tab in
@@ -1216,6 +1277,18 @@ export function PreviewView({
       />
 
       <div ref={serverBodyRef} className="relative min-h-0 flex-1 overflow-hidden">
+        {drawActive ? (
+          <PreviewDrawOverlay
+            active={drawActive}
+            onClose={() => setDrawActive(false)}
+            onAttach={handleDrawAttach}
+            getUnderlyingCanvas={() =>
+              serverSurfaceRef.current?.canvas() ??
+              serverBodyRef.current?.querySelector("canvas") ??
+              null
+            }
+          />
+        ) : null}
         {pickActive ? (
           <div className="absolute inset-x-0 top-0 z-30 flex items-center justify-between border-b border-primary/30 bg-primary/10 px-3 py-1.5 backdrop-blur-sm">
             <div className="flex items-center gap-2 text-xs font-medium text-foreground">
