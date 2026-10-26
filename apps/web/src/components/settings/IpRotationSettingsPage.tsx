@@ -126,6 +126,15 @@ function formatTimeAgo(timestamp: number, now: number): string {
   return `${diffDays} days ago`;
 }
 
+function formatIpPort(ip?: string, port?: string): string {
+  if (!ip) return "";
+  const p = port || "8118";
+  if (ip.includes(":")) {
+    return `[${ip}]:${p}`;
+  }
+  return `${ip}:${p}`;
+}
+
 export function IpRotationSettingsPage() {
   const [warpStatus, setWarpStatus] = useState<"running" | "paused" | "stopped">("stopped");
   const [currentIp, setCurrentIp] = useState<string>("Checking...");
@@ -368,7 +377,7 @@ export function IpRotationSettingsPage() {
         toastManager.add({
           type: "success",
           title: "IP Rotated Successfully",
-          description: `Shifted from ${data.oldIp}:${data.port || "8118"} ➔ ${data.newIp}:${data.port || "8118"}${data.session ? " | Fresh session minted" : ""}`,
+          description: `Shifted from ${formatIpPort(data.oldIp, data.port)} ➔ ${formatIpPort(data.newIp, data.port)}${data.session ? " | Fresh session minted" : ""}`,
         });
       } else {
         toastManager.add({
@@ -612,7 +621,7 @@ export function IpRotationSettingsPage() {
                   Last IP:
                 </span>
                 <span className="font-mono text-[11px] text-muted-foreground">
-                  {lastIp}:{lastPort || "8118"}
+                  {formatIpPort(lastIp, lastPort)}
                 </span>
               </div>
             )}
@@ -632,7 +641,7 @@ export function IpRotationSettingsPage() {
                 {isRunning ? "Active IP:" : isPaused ? "Paused IP:" : "Direct IP:"}
               </span>
               <span className="font-mono text-[11px] font-bold">
-                {currentIp}:{port || "8118"}
+                {formatIpPort(currentIp, port)}
               </span>
               <span
                 className={`ml-1 rounded px-1.5 py-0.2 text-[9px] font-bold uppercase ${
@@ -1119,7 +1128,7 @@ export function IpRotationSettingsPage() {
                           {/* IP Shift Pill: Old IP in Muted Gray, New IP in Green (or Orange if paused) */}
                           <div className="flex items-center gap-1 rounded-lg border border-border/50 bg-muted/40 px-2 py-0.5 font-mono text-[11px]">
                             <span className="text-muted-foreground">
-                              {item.oldIp ? `${item.oldIp}:8118` : "Direct"}
+                              {item.oldIp ? formatIpPort(item.oldIp, "8118") : "Direct"}
                             </span>
                             <ArrowRightIcon
                               className={`size-3 ${isPaused ? "text-amber-500" : "text-emerald-500"}`}
@@ -1129,7 +1138,7 @@ export function IpRotationSettingsPage() {
                                 isPaused ? "text-amber-500" : "text-emerald-500"
                               }`}
                             >
-                              {item.newIp || currentIp}:8118
+                              {formatIpPort(item.newIp || currentIp, "8118")}
                             </span>
                           </div>
 
