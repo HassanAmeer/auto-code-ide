@@ -11,6 +11,11 @@ import {
   ListTodo,
   Clock,
   StickyNote,
+  PhoneCall,
+  PhoneOff,
+  Mic,
+  MicOff,
+  AudioLines,
 } from "lucide-react";
 import { type ProviderInstanceId } from "@t3tools/contracts";
 import { useAtomValue } from "@effect/atom-react";
@@ -44,7 +49,6 @@ import { getAppModelOptionsForInstance } from "~/modelSelection";
 import { ProviderModelPicker } from "../ProviderModelPicker";
 import type { ModelEsque } from "../providerIconUtils";
 import { buildSuperAgentSystemPrompt } from "./superAgentPrompt";
-import { VoiceCallFloatingWidget } from "./VoiceCallFloatingWidget";
 import { useVoiceCallAssistant } from "./useVoiceCallAssistant";
 import { speakText, stopSpeaking } from "~/lib/speech/tts";
 import { transliterateUrduToRoman } from "~/lib/speech/romanUrduTransliterate";
@@ -709,13 +713,13 @@ export function SuperCallAssistantView() {
             </div>
           </div>
 
-          {/* 2. Sleek Horizontal Divider with Centered Model Badge (Half above, half below line) */}
-          <div className="relative flex items-center justify-center my-1">
-            {/* The horizontal line */}
-            <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[1px] bg-zinc-700/60" />
+          {/* 2. Sleek Horizontal Divider with Left-Aligned Model Badge & Centered Call Controls (Screenshot 2 design) */}
+          <div className="relative flex items-center justify-between my-2 min-h-[32px]">
+            {/* The horizontal line spanning across */}
+            <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[1px] bg-zinc-800" />
 
-            {/* Centered Model Dropdown Badge (Half above line, half below line) */}
-            <div className="relative z-10 flex items-center justify-center">
+            {/* Left: AI Model Dropdown Badge (Half above, half below line) */}
+            <div className="relative z-10 flex items-center bg-background pr-2">
               <ProviderModelPicker
                 activeInstanceId={effectiveInstanceId}
                 model={effectiveModel}
@@ -724,27 +728,73 @@ export function SuperCallAssistantView() {
                 modelOptionsByInstance={modelOptionsByInstance}
                 keybindings={keybindings}
                 size="xs"
-                triggerClassName="h-6 rounded-full border border-zinc-700/80 bg-background px-3 text-xs font-medium text-zinc-300 hover:text-white hover:border-zinc-500 shadow-xs cursor-pointer select-none max-w-none"
+                triggerClassName="h-6 rounded-full border border-zinc-800 bg-background px-2.5 text-[11px] font-medium text-zinc-400 hover:text-white hover:border-zinc-600 shadow-xs cursor-pointer select-none max-w-none"
                 onInstanceModelChange={handleModelChange}
               />
             </div>
+
+            {/* Middle / Center: Compact Call Control(s) (Screenshot 2 design, NO flags, NO waves) */}
+            <div className="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 z-10 flex items-center gap-2 bg-background px-2">
+              {!isCallActive ? (
+                // Idle state: Just Call Button (Compact circle with phone icon, NO flags, NO waves)
+                <button
+                  type="button"
+                  onClick={toggleCall}
+                  className="size-7.5 rounded-full border border-zinc-700/80 bg-zinc-900/90 hover:bg-zinc-800 text-zinc-300 hover:text-white flex items-center justify-center transition-all cursor-pointer shadow-xs active:scale-95"
+                  title="Start Call"
+                >
+                  <PhoneCall className="size-3.5" />
+                </button>
+              ) : (
+                // Active Call state: Matches Screenshot 2 exactly (Mic Mute, Red End Call, Waveform)
+                <div className="flex items-center gap-1.5 animate-in fade-in zoom-in-95 duration-200">
+                  {/* Mic Mute Button */}
+                  <button
+                    type="button"
+                    onClick={toggleMicMute}
+                    className={cn(
+                      "size-7 rounded-full border flex items-center justify-center transition-all cursor-pointer shadow-xs active:scale-95",
+                      isMicMuted
+                        ? "bg-amber-500/20 border-amber-500/50 text-amber-400"
+                        : "bg-zinc-800/90 border-zinc-700/80 text-zinc-300 hover:text-white hover:bg-zinc-700",
+                    )}
+                    title={isMicMuted ? "Unmute Microphone" : "Mute Microphone"}
+                  >
+                    {isMicMuted ? <MicOff className="size-3" /> : <Mic className="size-3" />}
+                  </button>
+
+                  {/* Red End Call Button (Center) */}
+                  <button
+                    type="button"
+                    onClick={endCall}
+                    className="size-8 rounded-full bg-rose-600 hover:bg-rose-500 text-white flex items-center justify-center shadow-md transition-all cursor-pointer active:scale-95"
+                    title="End Call"
+                  >
+                    <PhoneOff className="size-3.5" />
+                  </button>
+
+                  {/* Audio Wave / Visualizer Button */}
+                  <div
+                    className="size-7 rounded-full border border-zinc-700/80 bg-zinc-800/90 text-zinc-300 flex items-center justify-center shadow-xs"
+                    title={callStatus === "speaking" ? "Assistant is speaking" : "Listening..."}
+                  >
+                    <AudioLines
+                      className={cn(
+                        "size-3.5 transition-colors",
+                        callStatus === "speaking"
+                          ? "text-emerald-400 animate-pulse"
+                          : "text-zinc-400",
+                      )}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Right: empty spacer to balance the layout */}
+            <div className="relative z-10 w-6 bg-background opacity-0 pointer-events-none" />
           </div>
         </div>
-
-        {/* Floating Action Button (FAB) on the bottom right */}
-        <VoiceCallFloatingWidget
-          isCallActive={isCallActive}
-          callStatus={callStatus}
-          analyserNode={analyserNode}
-          onToggleCall={toggleCall}
-          onInterrupt={interruptSpeaking}
-          callLanguage={callLanguage}
-          onSwitchLanguage={setCallLanguage}
-          liveTranscript={liveTranscript}
-          assistantSpokenText={assistantSpokenText}
-          isMicMuted={isMicMuted}
-          onToggleMicMute={toggleMicMute}
-        />
       </div>
     </div>
   );
