@@ -283,7 +283,7 @@ export async function executeSuperAgentInstruction(
     projects.find((p) => p.id === activeProjectId || p.title === activeProjectId) ||
     projects[0] ||
     null;
-  const projectCwd = activeProject?.path || process.cwd();
+  const projectCwd = activeProject?.path || "/";
   const projectName = activeProject?.title || String(activeProject?.id || "Workspace");
 
   // ========================================================
