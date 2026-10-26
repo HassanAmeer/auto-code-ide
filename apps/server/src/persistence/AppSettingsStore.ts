@@ -313,3 +313,110 @@ export function syncCustomProviders(dbPath: string, providers: StoredCustomProvi
     saveCustomProvider(dbPath, p);
   }
 }
+
+export interface ResolvedProjectTarget {
+  projectId: string;
+  projectName: string;
+  workspaceRoot: string;
+}
+
+export function resolveProjectTarget(
+  dbPath: string | undefined,
+  projectIdOrName: string,
+): ResolvedProjectTarget | null {
+  const clean = projectIdOrName.trim();
+  if (!clean) return null;
+
+  if (dbPath && NodeFS.existsSync(dbPath)) {
+    const db = getDb(dbPath);
+    if (db) {
+      try {
+        const stmt = db.prepare(`
+          SELECT project_id, title, workspace_root 
+          FROM projection_projects 
+          WHERE deleted_at IS NULL AND (project_id = ? OR LOWER(title) = LOWER(?) OR LOWER(project_id) = LOWER(?))
+          LIMIT 1
+        `);
+        const row = stmt.get(clean, clean, clean) as any;
+        if (row && row.workspace_root && NodeFS.existsSync(row.workspace_root)) {
+          return {
+            projectId: row.project_id,
+            projectName: row.title || clean,
+            workspaceRoot: row.workspace_root,
+          };
+        }
+      } catch (err) {
+        console.warn("resolveProjectTarget db query failed:", err);
+      }
+    }
+  }
+
+  // Fallback to filesystem locations
+  const possibleBases = [
+    "/root/autojobs/projects/autocode-storage",
+    "/root/autojobs/data/projects",
+    NodePath.join(process.cwd(), "projects"),
+    "/root/autojobs/projects",
+  ];
+
+  for (const base of possibleBases) {
+    const directPath = NodePath.join(base, clean);
+    if (NodeFS.existsSync(directPath) && NodeFS.statSync(directPath).isDirectory()) {
+      return {
+        projectId: clean,
+        projectName: clean,
+        workspaceRoot: directPath,
+      };
+    }
+  }
+
+  return null;
+}
+
+export function listAllProjects(dbPath: string | undefined): ResolvedProjectTarget[] {
+  const result: ResolvedProjectTarget[] = [];
+  if (dbPath && NodeFS.existsSync(dbPath)) {
+    const db = getDb(dbPath);
+    if (db) {
+      try {
+        const stmt = db.prepare(`
+          SELECT project_id, title, workspace_root 
+          FROM projection_projects 
+          WHERE deleted_at IS NULL
+          ORDER BY updated_at DESC
+        `);
+        const rows = (stmt.all?.() || []) as any[];
+        for (const row of rows) {
+          if (row.workspace_root && NodeFS.existsSync(row.workspace_root)) {
+            result.push({
+              projectId: row.project_id,
+              projectName: row.title,
+              workspaceRoot: row.workspace_root,
+            });
+          }
+        }
+      } catch (err) {
+        console.warn("listAllProjects db query error:", err);
+      }
+    }
+  }
+
+  const storageBase = "/root/autojobs/projects/autocode-storage";
+  if (NodeFS.existsSync(storageBase)) {
+    try {
+      const dirs = NodeFS.readdirSync(storageBase);
+      for (const d of dirs) {
+        const p = NodePath.join(storageBase, d);
+        if (NodeFS.statSync(p).isDirectory() && !result.some((r) => r.workspaceRoot === p)) {
+          result.push({
+            projectId: d,
+            projectName: d,
+            workspaceRoot: p,
+          });
+        }
+      }
+    } catch {}
+  }
+
+  return result;
+}
