@@ -114,9 +114,9 @@ export function ensurePrivoxyWarpBridge(): void {
  */
 export async function getWarpProxyIp(): Promise<string> {
   const providers = [
-    "https://checkip.amazonaws.com",
     "https://cloudflare.com/cdn-cgi/trace",
     "https://api.ipify.org",
+    "https://checkip.amazonaws.com",
   ];
 
   // 1. First attempt via Privoxy HTTP proxy (8118)
