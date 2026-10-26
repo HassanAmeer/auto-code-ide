@@ -42,7 +42,6 @@ import { ThemeEditorHost } from "../components/settings/ThemeEditorHost";
 import { GlobalProjectImportProgress } from "../components/project/GlobalProjectImportProgress";
 import { CreateNewProjectModal } from "../components/project/CreateNewProjectModal";
 import { RequestLogsFloatingButton } from "../components/logs/RequestLogsFloatingButton";
-import { GlobalVoiceCallWidget } from "../components/chat/voiceCall";
 import { NotesSheet } from "../components/notes/NotesSheet";
 import { BackgroundModeDialog } from "../components/background/BackgroundModeDialog";
 import { useCopyToClipboard } from "../hooks/useCopyToClipboard";
@@ -238,7 +237,6 @@ function RootRouteView() {
           <NightlyMobileBetaNotice />
           {appShell}
           <RequestLogsFloatingButton />
-          <GlobalVoiceCallWidget />
           <NotesSheet />
           <BackgroundModeDialog />
           {/* Above the router: a theme draft is judged by walking the app, so the

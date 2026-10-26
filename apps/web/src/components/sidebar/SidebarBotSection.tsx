@@ -4,7 +4,7 @@ import {
   Bot,
   ChevronDown,
   ChevronRight,
-  MoreHorizontal,
+  MoreVertical,
   Plus,
   Trash2,
   MessageSquare,
@@ -111,7 +111,7 @@ export function SidebarBotSection() {
                   aria-label="Bot options"
                   className="cursor-pointer text-muted-foreground hover:text-foreground"
                 >
-                  <MoreHorizontal className="size-3.5" />
+                  <MoreVertical className="size-3.5" />
                 </Button>
               }
             />

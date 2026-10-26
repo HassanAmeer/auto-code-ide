@@ -17,6 +17,26 @@ export interface CallAssistantSession {
 }
 
 const STORAGE_KEY = "t3code:super-call-assistant:v1";
+const ACTIVE_SESSION_STORAGE_KEY = "t3code:active-call-session-id";
+
+export function getActiveSessionId(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    return localStorage.getItem(ACTIVE_SESSION_STORAGE_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+export function setActiveSessionIdGlobal(id: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(ACTIVE_SESSION_STORAGE_KEY, id);
+    window.dispatchEvent(new CustomEvent("t3-call-session-selected", { detail: id }));
+  } catch (err) {
+    console.warn("Failed to set active session ID:", err);
+  }
+}
 
 export function loadCallSessions(): CallAssistantSession[] {
   if (typeof window === "undefined") return [];
@@ -125,10 +145,30 @@ export function useCallSessions() {
     return initial;
   });
 
-  const [activeSessionId, setActiveSessionId] = useState<string>(() => {
+  const [activeSessionId, setActiveSessionIdState] = useState<string>(() => {
+    const saved = getActiveSessionId();
     const initial = loadCallSessions();
+    if (saved && initial.some((s) => s.id === saved)) {
+      return saved;
+    }
     return initial[0]?.id || "";
   });
+
+  const setActiveSessionId = useCallback((id: string) => {
+    setActiveSessionIdState(id);
+    setActiveSessionIdGlobal(id);
+  }, []);
+
+  useEffect(() => {
+    const sessionSelectedHandler = (e: Event) => {
+      const custom = e as CustomEvent<string>;
+      if (custom.detail) {
+        setActiveSessionIdState(custom.detail);
+      }
+    };
+    window.addEventListener("t3-call-session-selected", sessionSelectedHandler);
+    return () => window.removeEventListener("t3-call-session-selected", sessionSelectedHandler);
+  }, []);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -136,7 +176,9 @@ export function useCallSessions() {
       if (custom.detail) {
         setSessions(custom.detail);
         if (!custom.detail.some((s) => s.id === activeSessionId)) {
-          setActiveSessionId(custom.detail[0]?.id || "");
+          const nextId = custom.detail[0]?.id || "";
+          setActiveSessionIdState(nextId);
+          setActiveSessionIdGlobal(nextId);
         }
       } else {
         const loaded = loadCallSessions();
@@ -152,7 +194,8 @@ export function useCallSessions() {
   const handleNewSession = useCallback(() => {
     const s = createNewCallSession();
     setActiveSessionId(s.id);
-  }, []);
+    return s;
+  }, [setActiveSessionId]);
 
   const handleDeleteSession = useCallback((id: string) => {
     deleteCallSession(id);
@@ -162,7 +205,7 @@ export function useCallSessions() {
     clearAllCallSessions();
     const fresh = createNewCallSession();
     setActiveSessionId(fresh.id);
-  }, []);
+  }, [setActiveSessionId]);
 
   const handleAddMessage = useCallback(
     (role: "user" | "assistant", text: string) => {
