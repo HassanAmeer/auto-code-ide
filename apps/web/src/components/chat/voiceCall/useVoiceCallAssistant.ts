@@ -568,6 +568,17 @@ export function useVoiceCallAssistant({
   }, []);
 
   const isAcousticEchoOfAi = useCallback((text: string): boolean => {
+    // Acoustic echo can ONLY physically occur while the AI is speaking or within the echo cooldown window!
+    const isWithinEchoWindow =
+      isTtsActiveRef.current ||
+      isCurrentlySpeaking() ||
+      Date.now() - lastTtsEndedTimestampRef.current < ACOUSTIC_ECHO_COOLDOWN_MS;
+
+    if (!isWithinEchoWindow) {
+      // AI is silent and cooldown has passed: this is 100% genuine user speech, NEVER filter it!
+      return false;
+    }
+
     const clean = cleanForComparison(text);
     if (!clean) return false;
 
@@ -851,14 +862,28 @@ export function useVoiceCallAssistant({
 
       recognition.onend = () => {
         if (isCallActiveRef.current) {
-          if (typeof document === "undefined" || document.visibilityState === "visible") {
-            scheduleRestartRecognition(isMobileDevice ? 60 : 100);
+          if (
+            !isTtsActiveRef.current &&
+            callStatusRef.current !== "speaking" &&
+            callStatusRef.current !== "thinking" &&
+            !isCurrentlySpeaking()
+          ) {
+            if (typeof document === "undefined" || document.visibilityState === "visible") {
+              scheduleRestartRecognition(isMobileDevice ? 60 : 100);
+            }
           }
         }
       };
 
-      recognition.start();
-      recognitionRef.current = recognition;
+      try {
+        recognition.start();
+        recognitionRef.current = recognition;
+      } catch (startErr: any) {
+        console.warn("SpeechRecognition start exception:", startErr?.message || startErr);
+        if (isCallActiveRef.current) {
+          scheduleRestartRecognition(250);
+        }
+      }
     } catch (err) {
       console.warn("Failed to instantiate fresh speech recognition:", err);
       if (isCallActiveRef.current) {
@@ -1059,6 +1084,9 @@ export function useVoiceCallAssistant({
     // Switch call status to thinking & start ambient sound
     updateCallStatus("thinking");
     thinkingAmbientSound.start();
+
+    // Cleanly abort previous recognition instance so it does not capture AI audio during thinking/speaking
+    cleanupRecognition();
 
     // Clear transcript baselines for the next turn
     manualBaselineRef.current = "";

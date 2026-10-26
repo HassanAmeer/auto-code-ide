@@ -457,6 +457,7 @@ export function getVoicesForMode(
 }
 
 let activeUtterance: SpeechSynthesisUtterance | null = null;
+const activeUtterancesSet = new Set<SpeechSynthesisUtterance>();
 const listeners = new Set<(isSpeaking: boolean, speakingText: string | null) => void>();
 
 function notifySpeechState(isSpeaking: boolean, text: string | null = null) {
@@ -484,7 +485,7 @@ function clearKeepAliveTimer(): void {
 
 export function isCurrentlySpeaking(): boolean {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return false;
-  return activeUtterance !== null;
+  return Boolean(activeUtterance !== null && window.speechSynthesis.speaking);
 }
 
 export function stopSpeaking(): void {
@@ -496,6 +497,7 @@ export function stopSpeaking(): void {
     // ignore
   }
   activeUtterance = null;
+  activeUtterancesSet.clear();
   notifySpeechState(false, null);
 }
 
@@ -663,33 +665,61 @@ export function speakText(text: string, options?: Partial<TtsSettings>, onEnd?: 
 
   utterance.volume = settings.volume;
 
+  activeUtterancesSet.add(utterance);
+
+  let hasEnded = false;
+  const finishSpeech = () => {
+    if (hasEnded) return;
+    hasEnded = true;
+    clearKeepAliveTimer();
+    activeUtterancesSet.delete(utterance);
+    if (activeUtterance === utterance) {
+      activeUtterance = null;
+    }
+    notifySpeechState(false, null);
+    onEnd?.();
+  };
+
   utterance.onstart = () => {
     activeUtterance = utterance;
     clearKeepAliveTimer();
+    // Safety interval: keeps Chrome alive and detects early finishes if onend is dropped
     keepAliveTimer = setInterval(() => {
-      if (typeof window !== "undefined" && "speechSynthesis" in window && activeUtterance) {
-        window.speechSynthesis.pause();
-        window.speechSynthesis.resume();
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        if (!window.speechSynthesis.speaking && !window.speechSynthesis.pending) {
+          finishSpeech();
+        } else {
+          try {
+            window.speechSynthesis.pause();
+            window.speechSynthesis.resume();
+          } catch {}
+        }
       } else {
-        clearKeepAliveTimer();
+        finishSpeech();
       }
-    }, 10000);
+    }, 500);
     notifySpeechState(true, clean);
   };
 
   utterance.onend = () => {
-    clearKeepAliveTimer();
-    activeUtterance = null;
-    notifySpeechState(false, null);
-    onEnd?.();
+    finishSpeech();
   };
 
   utterance.onerror = () => {
-    clearKeepAliveTimer();
-    activeUtterance = null;
-    notifySpeechState(false, null);
-    onEnd?.();
+    finishSpeech();
   };
+
+  // Maximum speech duration timeout: ensures state never hangs permanently
+  const maxSpeechDurationMs = Math.max(
+    5000,
+    Math.ceil((clean.split(/\s+/).length / 1.5) * 1000 + 6000),
+  );
+  setTimeout(() => {
+    if (!hasEnded && activeUtterance === utterance) {
+      console.warn("[TTS] Speech reached max expected duration, forcing completion.");
+      finishSpeech();
+    }
+  }, maxSpeechDurationMs);
 
   window.speechSynthesis.speak(utterance);
 }
