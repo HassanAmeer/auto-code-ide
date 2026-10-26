@@ -8071,20 +8071,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           </div>
         </ComposerSurface.Main>
       </div>
-
-      <VoiceCallFloatingWidget
-        isCallActive={isCallActive}
-        callStatus={callStatus}
-        analyserNode={analyserNode}
-        onToggleCall={toggleVoiceCall}
-        onInterrupt={interruptSpeaking}
-        callLanguage={callLanguage}
-        onSwitchLanguage={setCallLanguage}
-        liveTranscript={liveTranscript}
-        assistantSpokenText={assistantSpokenText}
-        isMicMuted={isMicMuted}
-        onToggleMicMute={toggleMicMute}
-      />
     </form>
   );
 });
