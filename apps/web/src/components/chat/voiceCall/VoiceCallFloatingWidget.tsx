@@ -60,7 +60,7 @@ export const VoiceCallFloatingWidget = memo(function VoiceCallFloatingWidget({
           </button>
         )}
 
-        {/* Center Gray Circle / Voice Wave Avatar */}
+        {/* Center Voice Wave Avatar (Borderless) */}
         <div
           onClick={(e) => {
             e.preventDefault();
@@ -73,10 +73,9 @@ export const VoiceCallFloatingWidget = memo(function VoiceCallFloatingWidget({
             }
           }}
           className={cn(
-            "relative z-10 flex items-center justify-center size-14 sm:size-15 rounded-full border-2 transition-all duration-300 shadow-xl cursor-pointer",
-            isCallActive
-              ? "border-zinc-400 bg-zinc-950/95 shadow-[0_0_24px_rgba(0,0,0,0.7)]"
-              : "border-zinc-500/80 bg-zinc-950/95 hover:border-zinc-400",
+            "relative z-10 flex items-center justify-center size-14 sm:size-15 rounded-full transition-all duration-300 cursor-pointer",
+            "bg-zinc-950/90 backdrop-blur-xl shadow-xl",
+            isCallActive && "shadow-[0_0_24px_rgba(0,0,0,0.7)]",
           )}
         >
           {/* Dual Voice Waves (Active whenever call is active or preparing) */}
