@@ -333,6 +333,49 @@ export async function executeSuperAgentInstruction(
   }
 
   // ========================================================
+  // 1.1b DIRECT TASK CREATION IN ACTIVITY LEDGER
+  // ========================================================
+  const createTaskMatch = userText.match(
+    /(?:task\s*(?:bana(?:o|en)?|add\s*karo?|create|likh(?:o|en)?)|add\s*task|create\s*task)\s*[:\-]?\s*(.+)/i,
+  );
+  if (createTaskMatch && createTaskMatch[1]) {
+    const rawTask = createTaskMatch[1].trim();
+    const filler =
+      lang === "urdu"
+        ? "Ji bilkul, main naya task record aur queue kar raha hoon..."
+        : "Creating and logging that task for you...";
+    onFillerSpoken?.(filler);
+    speakText(filler);
+
+    const newAct = recordProjectActivity({
+      projectId: activeProject?.id ? String(activeProject.id) : undefined,
+      projectName,
+      taskTitle: rawTask.slice(0, 60),
+      description: rawTask,
+      status: "pending",
+      actionType: "feature_dispatch",
+      resultSummary: "Task added to ledger and queued for autonomous worker agent",
+    });
+
+    const reply =
+      lang === "urdu"
+        ? `Maine naya task **${newAct.taskTitle}** create kar ke project **${projectName}** ke ledger mein record kar diya hai:\n\n• **Status:** ⏳ PENDING / QUEUED\n• **Date & Time:** ${new Date(newAct.createdAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}\n• **Project:** ${projectName}\n• **Details:** ${newAct.description}\n\nAap jab chahein main autonomous worker agent se isay execute karwa doon.`
+        : `Created new task **${newAct.taskTitle}** for project **${projectName}**:\n\n• **Status:** ⏳ PENDING / QUEUED\n• **Timestamp:** ${new Date(newAct.createdAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}\n• **Project:** ${projectName}\n• **Details:** ${newAct.description}\n\nReady for autonomous execution on demand.`;
+
+    const spokenReply =
+      lang === "urdu"
+        ? `Naya task create ho gaya hai: ${newAct.taskTitle}. Project ${projectName} ke ledger mein pending status ke sath save hai.`
+        : `New task created: ${newAct.taskTitle}. Recorded in ${projectName} ledger with pending status.`;
+
+    return {
+      reply,
+      spokenReply,
+      actionTaken: "create_task",
+      details: newAct,
+    };
+  }
+
+  // ========================================================
   // 1.2 PROJECT ACTIVITY & EXECUTION HISTORY QUERY
   // ========================================================
   if (
@@ -826,10 +869,12 @@ export async function executeSuperAgentInstruction(
   // ========================================================
   const notes = loadNotes();
   const scheduledTasks = loadScheduledTasks();
+  const activities = loadProjectActivities();
   const systemPrompt = buildSuperAgentSystemPrompt({
     projects,
     notes,
     scheduledTasks,
+    activities,
     language: lang,
     selectedModel,
     activeProjectName: projectName,

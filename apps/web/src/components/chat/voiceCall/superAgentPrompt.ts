@@ -1,11 +1,13 @@
 import type { NoteItem } from "~/lib/notesStore";
 import type { ScheduledTaskItem } from "~/lib/scheduledTasksStore";
+import type { ProjectActivityItem } from "~/lib/projectActivityLedger";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 
 export interface SuperAgentPromptContext {
   projects: ReadonlyArray<EnvironmentProject>;
   notes: NoteItem[];
   scheduledTasks?: ScheduledTaskItem[];
+  activities?: ProjectActivityItem[];
   language: "urdu" | "english";
   selectedModel: string;
   activeProjectName?: string;
@@ -22,6 +24,7 @@ export function buildSuperAgentSystemPrompt(context: SuperAgentPromptContext): s
     projects,
     notes,
     scheduledTasks = [],
+    activities = [],
     language,
     selectedModel,
     activeProjectName,
@@ -58,6 +61,22 @@ export function buildSuperAgentSystemPrompt(context: SuperAgentPromptContext): s
           )
           .join("\n")
       : "No scheduled tasks currently active.";
+
+  const activitiesListStr =
+    activities.length > 0
+      ? activities
+          .slice(0, 15)
+          .map((a, idx) => {
+            const dateStr = new Date(a.createdAt).toLocaleString([], {
+              month: "short",
+              day: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            });
+            return `${idx + 1}. [${a.status.toUpperCase()}] Project: ${a.projectName} | Task: "${a.taskTitle}" [${dateStr}]\n   Description: ${a.description}${a.resultSummary ? `\n   Summary: ${a.resultSummary}` : ""}`;
+          })
+          .join("\n")
+      : "No previous recorded tasks in activity ledger.";
 
   return `
 You are the **Super Admin Call Assistant** (سپر ایڈمن کال اسسٹنٹ) — the highest-level autonomous AI project manager, architect, and supervisor of this development workspace.
@@ -132,6 +151,9 @@ ${notesListStr}
 
 Active Scheduled Tasks:
 ${scheduledTasksListStr}
+
+Project Activity & Tasks Ledger (Touched Projects, History, Pending & Completed with Date/Time):
+${activitiesListStr}
 
 ==================================================
 4. INTERACTION PROTOCOL
