@@ -604,10 +604,20 @@ export async function executeSuperAgentInstruction(
     runtimeFacts += `\n[REQUEST: EXECUTIVE STANDUP BRIEFING]: Synthesize workspace projects, notes, and activity ledger into a sharp executive standup.\n`;
   }
 
-  // 5. Build Dynamic System Prompt with Live Facts
+  // 5. Build Dynamic System Prompt with Live Facts & Custom Project Rules
   const notes = loadNotes();
   const scheduledTasks = loadScheduledTasks();
   const activities = loadProjectActivities();
+
+  let customProjectRules: string[] = [];
+  try {
+    const kRes = await fetch(`/api/bot/knowledge?project=${encodeURIComponent(targetName)}`);
+    const kData = (await kRes.json()) as { ok: boolean; knowledge?: { rules?: string[] } };
+    if (kData.ok && Array.isArray(kData.knowledge?.rules)) {
+      customProjectRules = kData.knowledge.rules;
+    }
+  } catch {}
+
   const systemPrompt = buildSuperAgentSystemPrompt({
     projects,
     notes,
@@ -617,6 +627,7 @@ export async function executeSuperAgentInstruction(
     selectedModel,
     activeProjectName: targetName,
     runtimeFacts,
+    projectRules: customProjectRules,
   });
 
   onStatusUpdate?.(`Thinking with ${selectedModel}...`);

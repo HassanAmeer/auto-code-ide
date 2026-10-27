@@ -12,6 +12,7 @@ export interface SuperAgentPromptContext {
   selectedModel: string;
   activeProjectName?: string;
   runtimeFacts?: string;
+  projectRules?: string[];
 }
 
 /**
@@ -30,6 +31,7 @@ export function buildSuperAgentSystemPrompt(context: SuperAgentPromptContext): s
     selectedModel,
     activeProjectName,
     runtimeFacts,
+    projectRules = [],
   } = context;
 
   const projectListStr =
@@ -84,7 +86,17 @@ export function buildSuperAgentSystemPrompt(context: SuperAgentPromptContext): s
   return `
 You are the **Super Admin Call Assistant** (سپر ایڈمن کال اسسٹنٹ) — the highest-level autonomous AI project manager, architect, and supervisor of this development workspace.
 You communicate via real-time two-way voice call. You speak and behave exactly like an experienced, warm, intelligent, real-life human colleague on the telephone.
-
+${
+  projectRules.length > 0
+    ? `
+==================================================
+📌 MANDATORY CUSTOM RULES FOR THIS PROJECT (${activeProjectName || "ACTIVE PROJECT"})
+==================================================
+The user has established these strict, permanent rules for this workspace. You MUST adhere to them unconditionally in all responses and actions:
+${projectRules.map((r, i) => `${i + 1}. ${r}`).join("\n")}
+`
+    : ""
+}
 ==================================================
 1. VOICE PERSONA & HUMAN-LIKE BEHAVIOR
 ==================================================

@@ -1522,7 +1522,154 @@ export const layerBotWishlistUpdateStatusRoute = HttpRouter.add(
   }),
 );
 
-// ── End Bot Wishlist API ────────────────────────────────────────────────────
+// ── Bot Per-Project Knowledge & Rulebook API ────────────────────────────────
+export const layerBotKnowledgeGetRoute = HttpRouter.add(
+  "GET",
+  "/api/bot/knowledge",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const url = HttpServerRequest.toURL(request);
+    const projectName = Option.isSome(url)
+      ? (url.value.searchParams.get("project") ?? "Workspace")
+      : "Workspace";
+
+    const knowledge = yield* Effect.promise(async () => {
+      try {
+        const { loadProjectKnowledge } = await import(
+          "../../../bot/memory/projectKnowledgeVault.ts" as string
+        );
+        return (loadProjectKnowledge as (p: string) => unknown)(projectName);
+      } catch {
+        return { projectName, rules: [], bookmarks: [], lastUpdated: Date.now() };
+      }
+    });
+
+    return HttpServerResponse.jsonUnsafe({ ok: true, knowledge, projectName });
+  }),
+);
+
+export const layerBotKnowledgeRuleAddRoute = HttpRouter.add(
+  "POST",
+  "/api/bot/knowledge/rule/add",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const body = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      projectName?: string;
+      rule?: string;
+    };
+
+    const projectName = body?.projectName ?? "Workspace";
+    const rule = body?.rule ?? "";
+    if (!rule.trim()) {
+      return HttpServerResponse.jsonUnsafe({ ok: false, error: "rule required" });
+    }
+
+    const rules = yield* Effect.promise(async () => {
+      try {
+        const { addProjectRule } = await import(
+          "../../../bot/memory/projectKnowledgeVault.ts" as string
+        );
+        return (addProjectRule as (p: string, r: string) => string[])(projectName, rule);
+      } catch {
+        return [];
+      }
+    });
+
+    return HttpServerResponse.jsonUnsafe({ ok: true, rules });
+  }),
+);
+
+export const layerBotKnowledgeRuleRemoveRoute = HttpRouter.add(
+  "POST",
+  "/api/bot/knowledge/rule/remove",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const body = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      projectName?: string;
+      index?: number;
+    };
+
+    const projectName = body?.projectName ?? "Workspace";
+    const index = typeof body?.index === "number" ? body.index : -1;
+
+    const rules = yield* Effect.promise(async () => {
+      try {
+        const { removeProjectRule } = await import(
+          "../../../bot/memory/projectKnowledgeVault.ts" as string
+        );
+        return (removeProjectRule as (p: string, idx: number) => string[])(projectName, index);
+      } catch {
+        return [];
+      }
+    });
+
+    return HttpServerResponse.jsonUnsafe({ ok: true, rules });
+  }),
+);
+
+export const layerBotKnowledgeBookmarkAddRoute = HttpRouter.add(
+  "POST",
+  "/api/bot/knowledge/bookmark/add",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const body = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      projectName?: string;
+      bookmark?: { title: string; url: string; category?: string };
+    };
+
+    const projectName = body?.projectName ?? "Workspace";
+    const bookmark = body?.bookmark;
+    if (!bookmark?.title || !bookmark?.url) {
+      return HttpServerResponse.jsonUnsafe({ ok: false, error: "title and url required" });
+    }
+
+    const added = yield* Effect.promise(async () => {
+      try {
+        const { addProjectBookmark } = await import(
+          "../../../bot/memory/projectKnowledgeVault.ts" as string
+        );
+        return (addProjectBookmark as (p: string, b: unknown) => unknown)(projectName, bookmark);
+      } catch {
+        return null;
+      }
+    });
+
+    return HttpServerResponse.jsonUnsafe({ ok: Boolean(added), bookmark: added });
+  }),
+);
+
+export const layerBotKnowledgeBookmarkRemoveRoute = HttpRouter.add(
+  "POST",
+  "/api/bot/knowledge/bookmark/remove",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const body = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      projectName?: string;
+      bookmarkId?: string;
+    };
+
+    const projectName = body?.projectName ?? "Workspace";
+    const bookmarkId = body?.bookmarkId ?? "";
+
+    const ok = yield* Effect.promise(async () => {
+      try {
+        const { removeProjectBookmark } = await import(
+          "../../../bot/memory/projectKnowledgeVault.ts" as string
+        );
+        return (removeProjectBookmark as (p: string, id: string) => boolean)(
+          projectName,
+          bookmarkId,
+        );
+      } catch {
+        return false;
+      }
+    });
+
+    return HttpServerResponse.jsonUnsafe({ ok });
+  }),
+);
+
+// ── End Bot Wishlist & Knowledge API ────────────────────────────────────────
 
 export const layerProjectPreviewRoute = HttpRouter.add(
   "GET",

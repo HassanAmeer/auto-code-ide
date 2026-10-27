@@ -42,6 +42,10 @@ import {
   List,
   ArrowRight,
   RotateCcw,
+  Brain,
+  Bookmark,
+  ExternalLink,
+  Globe,
 } from "lucide-react";
 import { executeTerminalCommand } from "~/components/chat/terminal/terminalClient";
 import { Link } from "@tanstack/react-router";
@@ -369,7 +373,7 @@ export function SuperCallAssistantView() {
   // Command Center / Right Sidebar Drawer
   const [isCommandCenterOpen, setIsCommandCenterOpen] = useState(false);
   const [commandCenterTab, setCommandCenterTab] = useState<
-    "summary" | "wishlist" | "health" | "tasks" | "voice"
+    "summary" | "wishlist" | "health" | "memory" | "tasks" | "voice"
   >("summary");
 
   // Health & Diagnostics State in Command Center
@@ -447,6 +451,121 @@ export function SuperCallAssistantView() {
     [activeProjectName],
   );
 
+  // Knowledge & Memory Rulebook State in Command Center
+  const [selectedMemoryProject, setSelectedMemoryProject] = useState<string>(activeProjectName);
+  const [projectRules, setProjectRules] = useState<string[]>([]);
+  const [projectBookmarks, setProjectBookmarks] = useState<
+    Array<{ id: string; title: string; url: string; category?: string }>
+  >([]);
+  const [isKnowledgeLoading, setIsKnowledgeLoading] = useState(false);
+  const [newRuleInput, setNewRuleInput] = useState("");
+  const [newBookmarkTitle, setNewBookmarkTitle] = useState("");
+  const [newBookmarkUrl, setNewBookmarkUrl] = useState("");
+  const [newBookmarkCategory, setNewBookmarkCategory] = useState<string>("figma");
+
+  const fetchProjectKnowledge = useCallback(async (projName: string) => {
+    setIsKnowledgeLoading(true);
+    try {
+      const res = await fetch(`/api/bot/knowledge?project=${encodeURIComponent(projName)}`);
+      const data = (await res.json()) as {
+        ok: boolean;
+        knowledge?: {
+          rules?: string[];
+          bookmarks?: Array<{ id: string; title: string; url: string; category?: string }>;
+        };
+      };
+      if (data.ok && data.knowledge) {
+        setProjectRules(Array.isArray(data.knowledge.rules) ? data.knowledge.rules : []);
+        setProjectBookmarks(
+          Array.isArray(data.knowledge.bookmarks) ? data.knowledge.bookmarks : [],
+        );
+      }
+    } catch (e) {
+      console.warn("Failed to load knowledge:", e);
+    } finally {
+      setIsKnowledgeLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isCommandCenterOpen && commandCenterTab === "memory") {
+      void fetchProjectKnowledge(selectedMemoryProject || activeProjectName);
+    }
+  }, [
+    isCommandCenterOpen,
+    commandCenterTab,
+    selectedMemoryProject,
+    activeProjectName,
+    fetchProjectKnowledge,
+  ]);
+
+  const handleAddRule = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newRuleInput.trim()) return;
+    const ruleText = newRuleInput.trim();
+    setNewRuleInput("");
+    setProjectRules((prev) => [...prev, ruleText]);
+    try {
+      await fetch("/api/bot/knowledge/rule/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectName: selectedMemoryProject || activeProjectName,
+          rule: ruleText,
+        }),
+      });
+    } catch {}
+  };
+
+  const handleRemoveRule = async (index: number) => {
+    setProjectRules((prev) => prev.filter((_, i) => i !== index));
+    try {
+      await fetch("/api/bot/knowledge/rule/remove", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectName: selectedMemoryProject || activeProjectName, index }),
+      });
+    } catch {}
+  };
+
+  const handleAddBookmark = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newBookmarkTitle.trim() || !newBookmarkUrl.trim()) return;
+    const bm = {
+      id: `bm-${Date.now()}`,
+      title: newBookmarkTitle.trim(),
+      url: newBookmarkUrl.trim(),
+      category: newBookmarkCategory,
+    };
+    setProjectBookmarks((prev) => [...prev, bm]);
+    setNewBookmarkTitle("");
+    setNewBookmarkUrl("");
+    try {
+      await fetch("/api/bot/knowledge/bookmark/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectName: selectedMemoryProject || activeProjectName,
+          bookmark: bm,
+        }),
+      });
+    } catch {}
+  };
+
+  const handleRemoveBookmark = async (bookmarkId: string) => {
+    setProjectBookmarks((prev) => prev.filter((b) => b.id !== bookmarkId));
+    try {
+      await fetch("/api/bot/knowledge/bookmark/remove", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectName: selectedMemoryProject || activeProjectName,
+          bookmarkId,
+        }),
+      });
+    } catch {}
+  };
+
   // Fetch Wishlist Items
   const fetchDrawerWishlist = useCallback(async () => {
     setIsWishlistLoading(true);
@@ -498,6 +617,121 @@ export function SuperCallAssistantView() {
     },
     [activeProjectName],
   );
+
+  // Knowledge & Memory Rulebook State in Command Center
+  const [selectedMemoryProject, setSelectedMemoryProject] = useState<string>(activeProjectName);
+  const [projectRules, setProjectRules] = useState<string[]>([]);
+  const [projectBookmarks, setProjectBookmarks] = useState<
+    Array<{ id: string; title: string; url: string; category?: string }>
+  >([]);
+  const [isKnowledgeLoading, setIsKnowledgeLoading] = useState(false);
+  const [newRuleInput, setNewRuleInput] = useState("");
+  const [newBookmarkTitle, setNewBookmarkTitle] = useState("");
+  const [newBookmarkUrl, setNewBookmarkUrl] = useState("");
+  const [newBookmarkCategory, setNewBookmarkCategory] = useState<string>("figma");
+
+  const fetchProjectKnowledge = useCallback(async (projName: string) => {
+    setIsKnowledgeLoading(true);
+    try {
+      const res = await fetch(`/api/bot/knowledge?project=${encodeURIComponent(projName)}`);
+      const data = (await res.json()) as {
+        ok: boolean;
+        knowledge?: {
+          rules?: string[];
+          bookmarks?: Array<{ id: string; title: string; url: string; category?: string }>;
+        };
+      };
+      if (data.ok && data.knowledge) {
+        setProjectRules(Array.isArray(data.knowledge.rules) ? data.knowledge.rules : []);
+        setProjectBookmarks(
+          Array.isArray(data.knowledge.bookmarks) ? data.knowledge.bookmarks : [],
+        );
+      }
+    } catch (e) {
+      console.warn("Failed to load knowledge:", e);
+    } finally {
+      setIsKnowledgeLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isCommandCenterOpen && commandCenterTab === "memory") {
+      void fetchProjectKnowledge(selectedMemoryProject || activeProjectName);
+    }
+  }, [
+    isCommandCenterOpen,
+    commandCenterTab,
+    selectedMemoryProject,
+    activeProjectName,
+    fetchProjectKnowledge,
+  ]);
+
+  const handleAddRule = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newRuleInput.trim()) return;
+    const ruleText = newRuleInput.trim();
+    setNewRuleInput("");
+    setProjectRules((prev) => [...prev, ruleText]);
+    try {
+      await fetch("/api/bot/knowledge/rule/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectName: selectedMemoryProject || activeProjectName,
+          rule: ruleText,
+        }),
+      });
+    } catch {}
+  };
+
+  const handleRemoveRule = async (index: number) => {
+    setProjectRules((prev) => prev.filter((_, i) => i !== index));
+    try {
+      await fetch("/api/bot/knowledge/rule/remove", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectName: selectedMemoryProject || activeProjectName, index }),
+      });
+    } catch {}
+  };
+
+  const handleAddBookmark = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newBookmarkTitle.trim() || !newBookmarkUrl.trim()) return;
+    const bm = {
+      id: `bm-${Date.now()}`,
+      title: newBookmarkTitle.trim(),
+      url: newBookmarkUrl.trim(),
+      category: newBookmarkCategory,
+    };
+    setProjectBookmarks((prev) => [...prev, bm]);
+    setNewBookmarkTitle("");
+    setNewBookmarkUrl("");
+    try {
+      await fetch("/api/bot/knowledge/bookmark/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectName: selectedMemoryProject || activeProjectName,
+          bookmark: bm,
+        }),
+      });
+    } catch {}
+  };
+
+  const handleRemoveBookmark = async (bookmarkId: string) => {
+    setProjectBookmarks((prev) => prev.filter((b) => b.id !== bookmarkId));
+    try {
+      await fetch("/api/bot/knowledge/bookmark/remove", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectName: selectedMemoryProject || activeProjectName,
+          bookmarkId,
+        }),
+      });
+    } catch {}
+  };
 
   // Fetch Project Health & Git Info
   const fetchProjectHealth = useCallback(async () => {
