@@ -14,11 +14,26 @@ export interface CallAssistantMessage {
   role: "user" | "assistant";
   text: string;
   timestamp: number;
-  meta?: {
-    delegatedTask?: DelegatedTaskMeta;
-    actionType?: string;
-    details?: unknown;
-  };
+  meta?:
+    | {
+        delegatedTask?: DelegatedTaskMeta | undefined;
+        actionType?: string | undefined;
+        details?: unknown;
+        wishlistItems?: WishlistItem[] | undefined;
+        wishlistProject?: string | undefined;
+      }
+    | undefined;
+}
+
+export interface WishlistItem {
+  id: string;
+  title: string;
+  description?: string | undefined;
+  type: string;
+  priority: string;
+  status: string;
+  autoApprove: boolean;
+  createdAt: number;
 }
 
 export interface CallAssistantSession {

@@ -155,3 +155,20 @@ LLM response → User
 | "restaurant app banani hai, mashwara do"       | `BRAINSTORM_OR_CONSULT` |
 | "bana do", "shuru karo", "proceed"             | `CONFIRM_AND_BUILD`     |
 | (everything else)                              | `GENERAL_WORK` → LLM    |
+
+---
+
+## 7. Wishlist Auto-Approve Toggle (Enabled / Disabled Button ✅)
+
+Wishlist items ke sath UI aur backend level par **Auto Approve** feature shamil kiya gaya hai:
+
+### Features:
+
+1. **Interactive Toggle Switch:** Har pending feature ke samne ek modern toggle switch button (ON/OFF) bana diya gaya hai jo instant state update karta hai.
+   - **Enabled (ON):** Emerald glow toggle button indicator.
+   - **Disabled (OFF):** Muted neutral toggle switch.
+2. **Persistent Storage:** `autoApprove: boolean` flag `userdata/bot-memory/[project]-backlog.json` mein save hota hai.
+3. **Dedicated Endpoints:**
+   - `GET /api/bot/wishlist?project=<projectName>`: Wishlist items list karta hai.
+   - `POST /api/bot/wishlist/toggle-approve`: `{ projectName, itemId }` bhej kar auto-approve status toggle karta hai.
+4. **Rich Card UI:** Wishlist card mein title, type badge (⚡ Improve / ✨ Feature), priority tag (HIGH/MED/LOW), aur toggle button real-time sync rehta hai.

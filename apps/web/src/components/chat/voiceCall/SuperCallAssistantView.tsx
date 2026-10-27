@@ -119,6 +119,143 @@ function UsaFlagIcon({ className }: { className?: string }) {
   );
 }
 
+// ── Wishlist Card with Auto-Approve Toggle ─────────────────────────────────
+function WishlistCard({
+  items,
+  projectName,
+}: {
+  items: import("~/lib/callAssistantStore").WishlistItem[];
+  projectName: string;
+}) {
+  const [localItems, setLocalItems] = useState(items);
+
+  const handleToggle = async (itemId: string) => {
+    try {
+      const res = await fetch("/api/bot/wishlist/toggle-approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectName, itemId }),
+      });
+      const data = (await res.json()) as {
+        ok: boolean;
+        item?: import("~/lib/callAssistantStore").WishlistItem;
+      };
+      if (data.ok && data.item) {
+        setLocalItems((prev) =>
+          prev.map((it) =>
+            it.id === itemId ? { ...it, autoApprove: data.item!.autoApprove } : it,
+          ),
+        );
+      }
+    } catch {
+      // silent fail
+    }
+  };
+
+  const pending = localItems.filter((i) => i.status === "pending" || i.status === "in_progress");
+  const completed = localItems.filter((i) => i.status === "completed");
+
+  if (localItems.length === 0) return null;
+
+  return (
+    <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/5 overflow-hidden text-xs">
+      {/* Header */}
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-amber-500/20 bg-amber-500/10">
+        <span className="text-amber-400">📋</span>
+        <span className="font-semibold text-amber-300 text-[11px] uppercase tracking-wider">
+          Wishlist — {projectName}
+        </span>
+        <span className="ml-auto text-[10px] text-amber-400/70">
+          {pending.length} pending · {completed.length} done
+        </span>
+      </div>
+
+      {/* Pending Items */}
+      {pending.length > 0 && (
+        <div className="divide-y divide-border/30">
+          {pending.map((item) => (
+            <div key={item.id} className="flex items-start gap-3 px-3 py-2.5">
+              {/* Info */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="font-medium text-foreground truncate">{item.title}</span>
+                  <span
+                    className={cn(
+                      "text-[9px] px-1.5 py-0.5 rounded-full font-mono uppercase tracking-wider shrink-0",
+                      item.type === "improvement"
+                        ? "bg-blue-500/20 text-blue-400"
+                        : "bg-emerald-500/20 text-emerald-400",
+                    )}
+                  >
+                    {item.type === "improvement" ? "⚡ Improve" : "✨ Feature"}
+                  </span>
+                  <span
+                    className={cn(
+                      "text-[9px] px-1.5 py-0.5 rounded-full font-mono shrink-0",
+                      item.priority === "high"
+                        ? "bg-red-500/20 text-red-400"
+                        : item.priority === "medium"
+                          ? "bg-yellow-500/20 text-yellow-400"
+                          : "bg-zinc-500/20 text-zinc-400",
+                    )}
+                  >
+                    {item.priority.toUpperCase()}
+                  </span>
+                </div>
+                {item.description && (
+                  <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-2 leading-snug">
+                    {item.description}
+                  </p>
+                )}
+              </div>
+
+              {/* Auto-Approve Toggle */}
+              <div className="flex flex-col items-center gap-1 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => void handleToggle(item.id)}
+                  title={item.autoApprove ? "Auto Approve: ON" : "Auto Approve: OFF"}
+                  className={cn(
+                    "relative w-10 h-5 rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-emerald-500/50",
+                    item.autoApprove
+                      ? "bg-emerald-500 shadow-[0_0_8px_rgba(52,211,153,0.4)]"
+                      : "bg-zinc-600/60",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "absolute top-0.5 left-0.5 size-4 rounded-full bg-white shadow transition-transform duration-200",
+                      item.autoApprove ? "translate-x-5" : "translate-x-0",
+                    )}
+                  />
+                </button>
+                <span
+                  className={cn(
+                    "text-[8px] font-semibold uppercase tracking-wider",
+                    item.autoApprove ? "text-emerald-400" : "text-zinc-500",
+                  )}
+                >
+                  {item.autoApprove ? "ON" : "OFF"}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Completed */}
+      {completed.length > 0 && (
+        <div className="px-3 py-1.5 bg-border/10 border-t border-border/20">
+          <p className="text-[10px] text-muted-foreground">
+            ✅ {completed.length} feature{completed.length > 1 ? "s" : ""} completed
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+// ── End WishlistCard ────────────────────────────────────────────────────────
+
 export function SuperCallAssistantView() {
   const projects = useProjects();
   const { notes } = useNotes();
@@ -307,21 +444,55 @@ export function SuperCallAssistantView() {
             text: m.text,
           })),
           providerConfig: matchingCustomProvider
-            ? {
+            ? ({
                 baseUrl: matchingCustomProvider.baseUrl,
                 apiKey: matchingCustomProvider.apiKey,
-                headers: matchingCustomProvider.headers,
+                headers: matchingCustomProvider.headers as any,
                 format: matchingCustomProvider.format,
-              }
+              } as any)
             : undefined,
           onStatusUpdate: (status) => {
             setAgentStatus(status);
           },
         });
 
-        const meta = res.delegatedTask
-          ? { delegatedTask: res.delegatedTask, actionType: res.actionTaken }
-          : undefined;
+        const meta: any = res.delegatedTask
+          ? {
+              delegatedTask: {
+                projectName: res.delegatedTask.projectName,
+                taskTitle: res.delegatedTask.taskTitle,
+                status: res.delegatedTask.status,
+                progress: res.delegatedTask.progress,
+              },
+              actionType: res.actionTaken,
+            }
+          : res.actionTaken === "wishlist_listed" || res.actionTaken === "wishlist_item_added"
+            ? await (async () => {
+                try {
+                  const projectName =
+                    activeProjId ||
+                    activeSession?.messages.find((m) => m.role === "user")?.text ||
+                    "Workspace";
+                  const r = await fetch(
+                    `/api/bot/wishlist?project=${encodeURIComponent(projectName)}`,
+                  );
+                  const data = (await r.json()) as {
+                    ok: boolean;
+                    items: import("~/lib/callAssistantStore").WishlistItem[];
+                    projectName: string;
+                  };
+                  return {
+                    actionType: res.actionTaken,
+                    wishlistItems: data.ok ? data.items : [],
+                    wishlistProject: data.projectName,
+                  };
+                } catch {
+                  return { actionType: res.actionTaken };
+                }
+              })()
+            : res.actionTaken
+              ? { actionType: res.actionTaken }
+              : undefined;
 
         handleAddMessage("assistant", res.reply, meta);
         speakText(res.spokenReply, loadTtsSettings(), () => {
@@ -820,6 +991,14 @@ export function SuperCallAssistantView() {
                         />
                       </div>
                     </div>
+                  )}
+
+                  {/* Wishlist / Feature Backlog Card with Auto-Approve Toggles */}
+                  {msg.meta?.wishlistItems && msg.meta.wishlistItems.length > 0 && (
+                    <WishlistCard
+                      items={msg.meta.wishlistItems}
+                      projectName={msg.meta.wishlistProject ?? "Workspace"}
+                    />
                   )}
 
                   <span className="block text-[9px] opacity-60 mt-1 text-right">

@@ -1426,6 +1426,67 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
   }),
 );
 
+// ── Bot Wishlist API ────────────────────────────────────────────────────────
+
+export const layerBotWishlistGetRoute = HttpRouter.add(
+  "GET",
+  "/api/bot/wishlist",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const url = HttpServerRequest.toURL(request);
+    const projectName = Option.isSome(url)
+      ? (url.value.searchParams.get("project") ?? "Workspace")
+      : "Workspace";
+
+    const items = yield* Effect.promise(async () => {
+      try {
+        const { getBacklogItems } = await import("../../../bot/memory/featureBacklog.ts" as string);
+        return (getBacklogItems as (p: string) => unknown[])(projectName);
+      } catch {
+        return [];
+      }
+    });
+
+    return HttpServerResponse.jsonUnsafe({ ok: true, items, projectName });
+  }),
+);
+
+export const layerBotWishlistToggleApproveRoute = HttpRouter.add(
+  "POST",
+  "/api/bot/wishlist/toggle-approve",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const body = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      projectName?: string;
+      itemId?: string;
+    };
+
+    const projectName = body?.projectName ?? "Workspace";
+    const itemId = body?.itemId ?? "";
+    if (!itemId) {
+      return HttpServerResponse.jsonUnsafe({ ok: false, error: "itemId required" });
+    }
+
+    const updated = yield* Effect.promise(async () => {
+      try {
+        const { toggleAutoApprove } = await import(
+          "../../../bot/memory/featureBacklog.ts" as string
+        );
+        return (toggleAutoApprove as (p: string, id: string) => unknown)(projectName, itemId);
+      } catch {
+        return null;
+      }
+    });
+
+    if (!updated) {
+      return HttpServerResponse.jsonUnsafe({ ok: false, error: "Item not found" });
+    }
+    return HttpServerResponse.jsonUnsafe({ ok: true, item: updated });
+  }),
+);
+
+// ── End Bot Wishlist API ────────────────────────────────────────────────────
+
 export const layerProjectPreviewRoute = HttpRouter.add(
   "GET",
   "/api/projects/preview/*",

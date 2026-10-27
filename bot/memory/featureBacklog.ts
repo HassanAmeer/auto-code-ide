@@ -12,6 +12,7 @@ export interface BacklogItem {
   priority: "high" | "medium" | "low";
   status: BacklogItemStatus;
   requestedBy: "user" | "bot_suggestion";
+  autoApprove: boolean;
   createdAt: number;
   completedAt?: number | undefined;
 }
@@ -77,6 +78,7 @@ export function addBacklogItem(
     priority: input.priority || "medium",
     status: "pending",
     requestedBy: "user",
+    autoApprove: false,
     createdAt: Date.now(),
   };
 
@@ -87,6 +89,19 @@ export function addBacklogItem(
   backlog.items.push(newItem);
   saveProjectBacklog(backlog);
   return newItem;
+}
+
+export function toggleAutoApprove(projectName: string, itemId: string): BacklogItem | null {
+  const backlog = loadProjectBacklog(projectName);
+  const target = backlog.items.find((item) => item.id === itemId);
+  if (!target) return null;
+  target.autoApprove = !target.autoApprove;
+  saveProjectBacklog(backlog);
+  return target;
+}
+
+export function getBacklogItems(projectName: string): BacklogItem[] {
+  return loadProjectBacklog(projectName).items;
 }
 
 export function updateBacklogStatus(
