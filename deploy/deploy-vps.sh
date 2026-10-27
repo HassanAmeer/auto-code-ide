@@ -153,13 +153,14 @@ HEALTH_RESULT=$(ssh "${VPS_USER}@${VPS_HOST}" "bash -s" << EOF
   STATUS="unknown"
   HTTP_CODE="000"
 
-  for i in {1..12}; do
-    sleep 1
+  sleep 3
+  for i in {1..15}; do
     STATUS=\$(systemctl is-active ${SERVICE_NAME} 2>/dev/null || echo "unknown")
-    HTTP_CODE=\$(curl --noproxy '*' -s -m 2 -o /dev/null -w "%{http_code}" http://127.0.0.1:${VPS_PORT}/ 2>/dev/null || echo "000")
+    HTTP_CODE=\$(curl --noproxy '*' -s -m 3 -o /dev/null -w "%{http_code}" http://127.0.0.1:${VPS_PORT}/ 2>/dev/null || echo "000")
     if [ "\$STATUS" = "active" ] && [ "\$HTTP_CODE" = "200" ]; then
       break
     fi
+    sleep 1
   done
 
   PID=\$(pgrep -f "apps/server/dist/bin.mjs" | head -n 1 || echo "none")

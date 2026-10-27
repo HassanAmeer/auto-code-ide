@@ -204,4 +204,40 @@ describe("TTS 6 Voice Presets & Gender Distinction", () => {
     );
     expect(getActiveTtsPreset({ language: "english" }).id).toBe("english-male");
   });
+
+  it("detectTextLanguage correctly identifies Urdu script, Roman Urdu, and English", () => {
+    expect(detectTextLanguage("السلام علیکم! آپ کیسے ہیں؟")).toBe("natural-urdu");
+    expect(detectTextLanguage("Assalam o alaikum! Yeh Roman Urdu hai.")).toBe("roman-urdu");
+    expect(detectTextLanguage("Aap ka kya haal hai bhai")).toBe("roman-urdu");
+    expect(detectTextLanguage("Hello, how can I help you today?")).toBe("english");
+  });
+
+  it("identifies native Pakistani and Indian voices (Asad, Uzma, Ravi, etc.) correctly", () => {
+    const msAsad = {
+      name: "Microsoft Asad Online (Natural) - Urdu (Pakistan)",
+      lang: "ur-PK",
+      voiceURI: "Microsoft Asad",
+    } as SpeechSynthesisVoice;
+
+    const msUzma = {
+      name: "Microsoft Uzma Online (Natural) - Urdu (Pakistan)",
+      lang: "ur-PK",
+      voiceURI: "Microsoft Uzma",
+    } as SpeechSynthesisVoice;
+
+    const msRavi = {
+      name: "Microsoft Ravi Online (Natural) - English (India)",
+      lang: "en-IN",
+      voiceURI: "Microsoft Ravi",
+    } as SpeechSynthesisVoice;
+
+    expect(isMaleVoice(msAsad)).toBe(true);
+    expect(isFemaleVoice(msAsad)).toBe(false);
+
+    expect(isFemaleVoice(msUzma)).toBe(true);
+    expect(isMaleVoice(msUzma)).toBe(false);
+
+    expect(isMaleVoice(msRavi)).toBe(true);
+    expect(isFemaleVoice(msRavi)).toBe(false);
+  });
 });
