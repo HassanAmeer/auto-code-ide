@@ -1903,21 +1903,6 @@ export function SuperCallAssistantView() {
 
         {/* Unified Bottom Area: Input Field on Top, with Attached Floating Waves Divider directly below */}
         <div className="w-full max-w-2xl sm:max-w-3xl mx-auto px-2 sm:px-4 pb-[max(env(safe-area-inset-bottom),0.95rem)] pt-1 shrink-0 bg-background/95 backdrop-blur-xs">
-          {/* Barge-in / Stop Speaking Button (Displays when assistant is speaking) */}
-          {callStatus === "speaking" && (
-            <div className="flex justify-center mb-2 animate-in fade-in zoom-in-95 duration-200">
-              <button
-                type="button"
-                onClick={handleStopSpeaking}
-                className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-rose-500/25 border border-rose-500/60 text-rose-300 hover:bg-rose-500/35 hover:text-white text-xs font-semibold shadow-lg shadow-rose-950/40 backdrop-blur-md cursor-pointer transition-all active:scale-95 animate-pulse"
-                title="Interrupt AI speaking immediately (AI کی بات فورا روکیں)"
-              >
-                <Square className="size-3 fill-rose-400 text-rose-400" />
-                <span>Stop Speaking / روکیں</span>
-              </button>
-            </div>
-          )}
-
           {/* Attached File or Screenshot Preview Badge */}
           {attachedFile && (
             <div className="flex items-center gap-2 mb-1.5 px-3 py-1 rounded-xl bg-zinc-900/80 border border-zinc-700/60 w-fit max-w-full animate-in fade-in duration-150">
