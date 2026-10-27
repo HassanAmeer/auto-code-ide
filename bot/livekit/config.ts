@@ -31,8 +31,8 @@ export interface LiveKitConfig {
 export function loadLiveKitConfig(): LiveKitConfig {
   return {
     url: process.env.LIVEKIT_URL || "ws://127.0.0.1:7880",
-    apiKey: process.env.LIVEKIT_API_KEY || "devkey",
-    apiSecret: process.env.LIVEKIT_API_SECRET || "secret",
+    apiKey: process.env.LIVEKIT_API_KEY || "devkey_autojobs",
+    apiSecret: process.env.LIVEKIT_API_SECRET || "autojobs_livekit_secret_key_32chars_long_2026",
     defaultLanguage: (process.env.LIVEKIT_AGENT_LANG as any) || "bilingual",
     modelName: process.env.LIVEKIT_AGENT_MODEL || "groq/llama-3.3-70b-versatile",
     tts: {

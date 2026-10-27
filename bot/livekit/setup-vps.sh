@@ -30,7 +30,7 @@ rtc:
   port_range_end: 60000
   use_external_ip: true
 keys:
-  devkey: secret
+  devkey_autojobs: autojobs_livekit_secret_key_32chars_long_2026
 logging:
   level: info
 EOF
@@ -39,16 +39,14 @@ echo "✓ Configuration created at $CONFIG_DIR/livekit.yaml"
 
 # 3. Check if Docker is available
 if command -v docker &> /dev/null; then
-  echo "✓ Docker detected. Starting LiveKit Server container..."
+  echo "✓ Docker detected. Starting LiveKit Server container in host network mode..."
   docker stop livekit-server 2>/dev/null || true
-  docker rm livekit-server 2>/dev/null || true
+  docker rm -f livekit-server 2>/dev/null || true
 
   docker run -d \
     --name livekit-server \
     --restart unless-stopped \
-    -p 7880:7880 \
-    -p 7881:7881 \
-    -p 50000-50100:50000-50100/udp \
+    --net=host \
     -v "$CONFIG_DIR/livekit.yaml:/livekit.yaml" \
     livekit/livekit-server:latest \
     --config /livekit.yaml
