@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vite-plus/test";
-import { stripCodeBlocks, sanitizeTextForSpeech } from "./tts";
+import {
+  stripCodeBlocks,
+  sanitizeTextForSpeech,
+  TTS_ACCENTS,
+  getActiveTtsPreset,
+  isMaleVoice,
+  isFemaleVoice,
+} from "./tts";
 
 describe("stripCodeBlocks", () => {
   it("removes closed triple-backtick code blocks completely", () => {
@@ -85,5 +92,115 @@ describe("sanitizeTextForSpeech", () => {
     const input = "Call `getUserData()` to retrieve details.";
     const result = sanitizeTextForSpeech(input);
     expect(result).toBe("Call getUserData to retrieve details.");
+  });
+});
+
+describe("TTS 6 Voice Presets & Gender Distinction", () => {
+  it("contains exactly 6 presets for English, Roman Urdu, and Natural Urdu", () => {
+    expect(TTS_ACCENTS).toHaveLength(6);
+    const ids = TTS_ACCENTS.map((a) => a.id);
+    expect(ids).toEqual([
+      "english-male",
+      "english-female",
+      "roman-urdu-male",
+      "roman-urdu-female",
+      "natural-urdu-male",
+      "natural-urdu-female",
+    ]);
+  });
+
+  it("has exactly one male and one female preset for each language", () => {
+    const english = TTS_ACCENTS.filter((a) => a.category === "english");
+    expect(english).toHaveLength(2);
+    expect(english.map((a) => a.gender).sort()).toEqual(["female", "male"]);
+
+    const romanUrdu = TTS_ACCENTS.filter((a) => a.category === "roman-urdu");
+    expect(romanUrdu).toHaveLength(2);
+    expect(romanUrdu.map((a) => a.gender).sort()).toEqual(["female", "male"]);
+
+    const naturalUrdu = TTS_ACCENTS.filter((a) => a.category === "natural-urdu");
+    expect(naturalUrdu).toHaveLength(2);
+    expect(naturalUrdu.map((a) => a.gender).sort()).toEqual(["female", "male"]);
+  });
+
+  it("contains accurate test sample phrases in the correct language and script", () => {
+    const engMale = TTS_ACCENTS.find((a) => a.id === "english-male")!;
+    const engFemale = TTS_ACCENTS.find((a) => a.id === "english-female")!;
+    expect(engMale.sampleText).toContain("English");
+    expect(engFemale.sampleText).toContain("English");
+
+    const romanMale = TTS_ACCENTS.find((a) => a.id === "roman-urdu-male")!;
+    const romanFemale = TTS_ACCENTS.find((a) => a.id === "roman-urdu-female")!;
+    expect(romanMale.sampleText).toContain("Roman Urdu");
+    expect(romanFemale.sampleText).toContain("Roman Urdu");
+
+    const urduMale = TTS_ACCENTS.find((a) => a.id === "natural-urdu-male")!;
+    const urduFemale = TTS_ACCENTS.find((a) => a.id === "natural-urdu-female")!;
+    // Natural Urdu must be in Urdu script (Arabic unicode characters)
+    expect(/[\u0600-\u06FF]/.test(urduMale.sampleText)).toBe(true);
+    expect(/[\u0600-\u06FF]/.test(urduFemale.sampleText)).toBe(true);
+    expect(urduMale.sampleText).toContain("السلام علیکم");
+    expect(urduFemale.sampleText).toContain("السلام علیکم");
+  });
+
+  it("correctly identifies male and female voices and prevents female voices from being treated as male", () => {
+    const googleUsEnglish = {
+      name: "Google US English",
+      lang: "en-US",
+      voiceURI: "Google US English",
+      default: true,
+      localService: false,
+    } as SpeechSynthesisVoice;
+
+    const googleHindi = {
+      name: "Google हिन्दी",
+      lang: "hi-IN",
+      voiceURI: "Google हिन्दी",
+      default: false,
+      localService: false,
+    } as SpeechSynthesisVoice;
+
+    const msDavid = {
+      name: "Microsoft David - English (United States)",
+      lang: "en-US",
+      voiceURI: "Microsoft David",
+      default: false,
+      localService: true,
+    } as SpeechSynthesisVoice;
+
+    const msZira = {
+      name: "Microsoft Zira - English (United States)",
+      lang: "en-US",
+      voiceURI: "Microsoft Zira",
+      default: false,
+      localService: true,
+    } as SpeechSynthesisVoice;
+
+    // Google US English and Google Hindi must NOT be identified as male
+    expect(isMaleVoice(googleUsEnglish)).toBe(false);
+    expect(isMaleVoice(googleHindi)).toBe(false);
+
+    // Microsoft David is male
+    expect(isMaleVoice(msDavid)).toBe(true);
+    expect(isFemaleVoice(msDavid)).toBe(false);
+
+    // Microsoft Zira is female
+    expect(isFemaleVoice(msZira)).toBe(true);
+    expect(isMaleVoice(msZira)).toBe(false);
+  });
+
+  it("getActiveTtsPreset resolves correctly from settings", () => {
+    expect(getActiveTtsPreset({ voiceURI: "natural-urdu-male" }).id).toBe("natural-urdu-male");
+    expect(getActiveTtsPreset({ voiceURI: "natural-urdu-female" }).id).toBe("natural-urdu-female");
+    expect(getActiveTtsPreset({ voiceURI: "english-male" }).id).toBe("english-male");
+    expect(getActiveTtsPreset({ voiceURI: "english-female" }).id).toBe("english-female");
+    expect(getActiveTtsPreset({ voiceURI: "roman-urdu-male" }).id).toBe("roman-urdu-male");
+    expect(getActiveTtsPreset({ voiceURI: "roman-urdu-female" }).id).toBe("roman-urdu-female");
+
+    // Legacy fallbacks
+    expect(getActiveTtsPreset({ voiceURI: "accent:natural-urdu-male-1" }).id).toBe(
+      "natural-urdu-male",
+    );
+    expect(getActiveTtsPreset({ language: "english" }).id).toBe("english-male");
   });
 });
