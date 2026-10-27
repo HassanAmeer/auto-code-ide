@@ -26,7 +26,25 @@ export function loadSttSettings(): SttSettings {
   try {
     const raw = localStorage.getItem(STT_STORAGE_KEY);
     if (!raw) return DEFAULT_STT_SETTINGS;
-    return { ...DEFAULT_STT_SETTINGS, ...JSON.parse(raw) };
+    const parsed = JSON.parse(raw);
+    const validModes: SttLanguageMode[] = [
+      "auto",
+      "roman-urdu",
+      "natural-urdu",
+      "hindi",
+      "english",
+    ];
+    let mode: SttLanguageMode = "auto";
+    if (validModes.includes(parsed.language)) {
+      mode = parsed.language;
+    } else if (parsed.language === "urdu") {
+      mode = "natural-urdu";
+    }
+    return {
+      language: mode,
+      continuous: parsed.continuous ?? true,
+      interimResults: parsed.interimResults ?? true,
+    };
   } catch {
     return DEFAULT_STT_SETTINGS;
   }

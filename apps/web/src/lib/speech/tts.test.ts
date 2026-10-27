@@ -5,6 +5,7 @@ import {
   TTS_ACCENTS,
   getActiveTtsPreset,
   detectTextLanguage,
+  normalizeTtsLanguage,
   isMaleVoice,
   isFemaleVoice,
 } from "./tts";
@@ -239,5 +240,16 @@ describe("TTS 6 Voice Presets & Gender Distinction", () => {
 
     expect(isMaleVoice(msRavi)).toBe(true);
     expect(isFemaleVoice(msRavi)).toBe(false);
+  });
+
+  it("normalizes legacy language modes and sanitizes settings safely", () => {
+    expect(normalizeTtsLanguage("roman-urdu-male")).toBe("roman-urdu");
+    expect(normalizeTtsLanguage("roman-urdu-female")).toBe("roman-urdu");
+    expect(normalizeTtsLanguage("natural-urdu-male")).toBe("natural-urdu");
+    expect(normalizeTtsLanguage("english-female")).toBe("english");
+    expect(normalizeTtsLanguage("auto")).toBe("auto-male");
+    expect(normalizeTtsLanguage("auto-male")).toBe("auto-male");
+    expect(normalizeTtsLanguage("auto-female")).toBe("auto-female");
+    expect(normalizeTtsLanguage("invalid-mode")).toBe("roman-urdu");
   });
 });

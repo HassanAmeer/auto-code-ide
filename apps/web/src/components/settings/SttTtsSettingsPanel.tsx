@@ -3,7 +3,15 @@ import { Mic, MicOff, Volume2, Play, Square, Settings2, PhoneCall } from "lucide
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Switch } from "../ui/switch";
-import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
+import {
+  Select,
+  SelectGroup,
+  SelectGroupLabel,
+  SelectItem,
+  SelectPopup,
+  SelectTrigger,
+  SelectValue,
+} from "../ui/select";
 import { SettingsPageContainer, SettingsRow, SettingsSection } from "./settingsLayout";
 import {
   type TtsLanguageMode,
@@ -14,6 +22,7 @@ import {
   loadTtsSettings,
   saveTtsSettings,
   getActiveTtsPreset,
+  normalizeTtsLanguage,
   getAvailableVoices,
   speakText,
   stopSpeaking,
@@ -31,7 +40,7 @@ import {
 import { useVoiceCallSettings } from "../chat/voiceCall/voiceCallSettings";
 import { cn } from "~/lib/utils";
 
-const STT_LANG_LABELS: Record<SttLanguageMode, string> = {
+const STT_LANG_LABELS: Record<string, string> = {
   auto: "Auto Detect (Urdu / Hindi / English / Roman)",
   "roman-urdu": "Roman Urdu (Phonetic)",
   "natural-urdu": "Natural Urdu (اردو رسم الخط)",
@@ -45,9 +54,11 @@ export function SttTtsSettingsPanel() {
 
   // --- TTS State ---
   const [tts, setTts] = useState<TtsSettings>(loadTtsSettings);
-  const activePreset = useMemo(() => getActiveTtsPreset(tts), [tts]);
+  const activePreset = useMemo(() => getActiveTtsPreset(tts) || TTS_ACCENTS[0], [tts]);
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-  const [testText, setTestText] = useState(() => getActiveTtsPreset(loadTtsSettings()).sampleText);
+  const [testText, setTestText] = useState(
+    () => (getActiveTtsPreset(loadTtsSettings()) || TTS_ACCENTS[0]).sampleText,
+  );
   const [isSpeaking, setIsSpeaking] = useState(false);
 
   // --- STT State ---
@@ -189,14 +200,18 @@ export function SttTtsSettingsPanel() {
     }
   };
 
+  // Current rate & pitch with safety fallbacks
+  const currentRate = typeof tts.rate === "number" && !isNaN(tts.rate) ? tts.rate : 1.0;
+  const currentPitch = typeof tts.pitch === "number" && !isNaN(tts.pitch) ? tts.pitch : 1.0;
+
   // Slider progress ratios for native slider styling
-  const speedProgressRatio = (tts.rate - 0.5) / (1.75 - 0.5);
+  const speedProgressRatio = (currentRate - 0.5) / (1.75 - 0.5);
   const speedSliderStyle = {
     "--settings-slider-progress": `${Math.max(0, Math.min(1, speedProgressRatio)) * 100}%`,
     "--settings-slider-fill-offset": `${0.5 - speedProgressRatio}rem`,
   } as CSSProperties;
 
-  const pitchProgressRatio = (tts.pitch - 0.5) / (1.5 - 0.5);
+  const pitchProgressRatio = (currentPitch - 0.5) / (1.5 - 0.5);
   const pitchSliderStyle = {
     "--settings-slider-progress": `${Math.max(0, Math.min(1, pitchProgressRatio)) * 100}%`,
     "--settings-slider-fill-offset": `${0.5 - pitchProgressRatio}rem`,
@@ -323,7 +338,7 @@ export function SttTtsSettingsPanel() {
                 }}
               >
                 <SelectTrigger size="sm" className="w-full sm:w-56" aria-label="Dictation language">
-                  <SelectValue>{STT_LANG_LABELS[stt.language]}</SelectValue>
+                  <SelectValue>{STT_LANG_LABELS[stt.language] || STT_LANG_LABELS.auto}</SelectValue>
                 </SelectTrigger>
                 <SelectPopup align="end" alignItemWithTrigger={false}>
                   <SelectItem hideIndicator value="auto">
@@ -378,7 +393,7 @@ export function SttTtsSettingsPanel() {
               {isListening && (
                 <span className="flex items-center gap-1.5 font-sans font-medium text-destructive animate-pulse">
                   <span className="size-1.5 rounded-full bg-destructive" />
-                  Listening now in {STT_LANG_LABELS[stt.language]}...
+                  Listening now in {STT_LANG_LABELS[stt.language] || STT_LANG_LABELS.auto}...
                 </span>
               )}
             </div>
@@ -415,14 +430,15 @@ export function SttTtsSettingsPanel() {
             description="Select which language accent is used, or let auto-detect choose the language based on response text."
             control={
               <Select
-                value={tts.language}
+                value={normalizeTtsLanguage(tts.language)}
                 onValueChange={(val) => {
                   if (val) updateTtsLanguage(val as TtsLanguageMode);
                 }}
               >
                 <SelectTrigger size="sm" className="w-full sm:w-64" aria-label="Voice accent">
                   <SelectValue>
-                    {TTS_LANG_LABELS[tts.language] || "Auto Detect (Male Voice)"}
+                    {TTS_LANG_LABELS[normalizeTtsLanguage(tts.language)] ||
+                      "Auto Detect (Male Voice)"}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectPopup
@@ -436,7 +452,6 @@ export function SttTtsSettingsPanel() {
                   <SelectItem hideIndicator value="auto-female">
                     Auto Detect (Female Voice)
                   </SelectItem>
-                  <div className="my-1 border-t border-border/40" />
                   <SelectItem hideIndicator value="roman-urdu">
                     Roman Urdu
                   </SelectItem>
@@ -469,35 +484,35 @@ export function SttTtsSettingsPanel() {
                   alignItemWithTrigger={false}
                   className="max-h-80 overflow-y-auto"
                 >
-                  <div className="px-2 pt-1.5 pb-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                    English
-                  </div>
-                  <SelectItem hideIndicator value="english-male">
-                    English (Male Voice)
-                  </SelectItem>
-                  <SelectItem hideIndicator value="english-female">
-                    English (Female Voice)
-                  </SelectItem>
+                  <SelectGroup>
+                    <SelectGroupLabel>English</SelectGroupLabel>
+                    <SelectItem hideIndicator value="english-male">
+                      English (Male Voice)
+                    </SelectItem>
+                    <SelectItem hideIndicator value="english-female">
+                      English (Female Voice)
+                    </SelectItem>
+                  </SelectGroup>
 
-                  <div className="px-2 pt-2 pb-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider border-t border-border/40 mt-1">
-                    Roman Urdu
-                  </div>
-                  <SelectItem hideIndicator value="roman-urdu-male">
-                    Roman Urdu (Male Voice)
-                  </SelectItem>
-                  <SelectItem hideIndicator value="roman-urdu-female">
-                    Roman Urdu (Female Voice)
-                  </SelectItem>
+                  <SelectGroup>
+                    <SelectGroupLabel>Roman Urdu</SelectGroupLabel>
+                    <SelectItem hideIndicator value="roman-urdu-male">
+                      Roman Urdu (Male Voice)
+                    </SelectItem>
+                    <SelectItem hideIndicator value="roman-urdu-female">
+                      Roman Urdu (Female Voice)
+                    </SelectItem>
+                  </SelectGroup>
 
-                  <div className="px-2 pt-2 pb-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider border-t border-border/40 mt-1">
-                    Natural Urdu (اردو)
-                  </div>
-                  <SelectItem hideIndicator value="natural-urdu-male">
-                    Natural Urdu (Male Voice) - اردو
-                  </SelectItem>
-                  <SelectItem hideIndicator value="natural-urdu-female">
-                    Natural Urdu (Female Voice) - اردو
-                  </SelectItem>
+                  <SelectGroup>
+                    <SelectGroupLabel>Natural Urdu (اردو)</SelectGroupLabel>
+                    <SelectItem hideIndicator value="natural-urdu-male">
+                      Natural Urdu (Male Voice) - اردو
+                    </SelectItem>
+                    <SelectItem hideIndicator value="natural-urdu-female">
+                      Natural Urdu (Female Voice) - اردو
+                    </SelectItem>
+                  </SelectGroup>
                 </SelectPopup>
               </Select>
             }
@@ -509,7 +524,7 @@ export function SttTtsSettingsPanel() {
             control={
               <div className="flex w-full items-center gap-3 sm:w-56">
                 <span className="w-10 text-right font-mono text-xs tabular-nums text-muted-foreground">
-                  {tts.rate.toFixed(2)}x
+                  {currentRate.toFixed(2)}x
                 </span>
                 <input
                   aria-label="Speech speed"
@@ -520,7 +535,7 @@ export function SttTtsSettingsPanel() {
                   step={0.05}
                   type="range"
                   style={speedSliderStyle}
-                  value={tts.rate}
+                  value={currentRate}
                   onChange={(e: ChangeEvent<HTMLInputElement>) =>
                     updateTtsRate(parseFloat(e.currentTarget.value))
                   }
@@ -535,7 +550,7 @@ export function SttTtsSettingsPanel() {
             control={
               <div className="flex w-full items-center gap-3 sm:w-56">
                 <span className="w-10 text-right font-mono text-xs tabular-nums text-muted-foreground">
-                  {tts.pitch.toFixed(2)}x
+                  {currentPitch.toFixed(2)}x
                 </span>
                 <input
                   aria-label="Voice pitch"
@@ -546,7 +561,7 @@ export function SttTtsSettingsPanel() {
                   step={0.05}
                   type="range"
                   style={pitchSliderStyle}
-                  value={tts.pitch}
+                  value={currentPitch}
                   onChange={(e: ChangeEvent<HTMLInputElement>) =>
                     updateTtsPitch(parseFloat(e.currentTarget.value))
                   }

@@ -179,12 +179,50 @@ export function getActiveTtsPreset(settings?: Partial<TtsSettings>): TtsAccentPr
   return TTS_ACCENTS[2]; // Default: roman-urdu-male
 }
 
+export function normalizeTtsLanguage(
+  lang: unknown,
+): "auto-male" | "auto-female" | "roman-urdu" | "natural-urdu" | "english" {
+  if (lang === "auto-female") return "auto-female";
+  if (lang === "auto" || lang === "auto-male") return "auto-male";
+  if (lang === "english" || lang === "english-male" || lang === "english-female") return "english";
+  if (lang === "natural-urdu" || lang === "natural-urdu-male" || lang === "natural-urdu-female")
+    return "natural-urdu";
+  if (lang === "roman-urdu" || lang === "roman-urdu-male" || lang === "roman-urdu-female")
+    return "roman-urdu";
+  return "roman-urdu";
+}
+
 export function loadTtsSettings(): TtsSettings {
   if (typeof window === "undefined") return DEFAULT_TTS_SETTINGS;
   try {
     const raw = localStorage.getItem(TTS_STORAGE_KEY);
     if (!raw) return DEFAULT_TTS_SETTINGS;
-    return { ...DEFAULT_TTS_SETTINGS, ...JSON.parse(raw) };
+    const parsed = JSON.parse(raw);
+    const normalizedLang = normalizeTtsLanguage(parsed.language);
+    const validPresetIds: TtsVoiceId[] = [
+      "english-male",
+      "english-female",
+      "roman-urdu-male",
+      "roman-urdu-female",
+      "natural-urdu-male",
+      "natural-urdu-female",
+    ];
+    let voiceURI = parsed.voiceURI;
+    if (!validPresetIds.includes(voiceURI)) {
+      if (normalizedLang === "english") voiceURI = "english-male";
+      else if (normalizedLang === "natural-urdu") voiceURI = "natural-urdu-male";
+      else voiceURI = "roman-urdu-male";
+    }
+    const rate = typeof parsed.rate === "number" && !isNaN(parsed.rate) ? parsed.rate : 1.0;
+    const pitch = typeof parsed.pitch === "number" && !isNaN(parsed.pitch) ? parsed.pitch : 1.0;
+    const volume = typeof parsed.volume === "number" && !isNaN(parsed.volume) ? parsed.volume : 1.0;
+    return {
+      language: normalizedLang,
+      voiceURI,
+      rate,
+      pitch,
+      volume,
+    };
   } catch {
     return DEFAULT_TTS_SETTINGS;
   }

@@ -866,7 +866,7 @@ export function SuperCallAssistantView() {
           </div>
 
           {/* 2. Sleek Horizontal Divider with Left-Aligned Model Badge & Centered Wave Call Button */}
-          <div className="relative flex items-center justify-between my-2 min-h-[64px]">
+          <div className="relative flex items-center justify-between my-1.5 min-h-[44px]">
             {/* The horizontal line spanning across */}
             <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[1px] bg-zinc-800" />
 
@@ -901,11 +901,11 @@ export function SuperCallAssistantView() {
                   }
                 }}
                 className={cn(
-                  "relative z-10 flex items-center justify-center size-8 sm:size-8.5 rounded-full transition-all duration-300 cursor-pointer select-none",
+                  "relative z-10 flex items-center justify-center size-7.5 rounded-full transition-all duration-300 cursor-pointer select-none",
                   "bg-zinc-950/95 border border-zinc-800/90 backdrop-blur-xl shadow-md",
                 )}
               >
-                {/* When Call Active: Compact Grok Geometric Soundwave (Proportional to 32px button)
+                {/* When Call Active: Compact Grok Geometric Soundwave
                     When Call Inactive/Ended: Existing original circular wave in grey color */}
                 {isCallActive ? (
                   <GrokGeometricVoiceWaves callStatus={callStatus} analyserNode={analyserNode} />
@@ -913,7 +913,7 @@ export function SuperCallAssistantView() {
                   <CircularVoiceWaves
                     callStatus="idle"
                     analyserNode={null}
-                    className="size-[48px] -inset-[8px]"
+                    className="size-[42px] -inset-[6px]"
                   />
                 )}
 
@@ -933,7 +933,7 @@ export function SuperCallAssistantView() {
                     }
                   }}
                   className={cn(
-                    "relative z-20 flex size-5 items-center justify-center rounded-full transition-all duration-200 cursor-pointer active:scale-90 bg-transparent border-0 shadow-none outline-none focus:outline-none",
+                    "relative z-20 flex size-4 items-center justify-center rounded-full transition-all duration-200 cursor-pointer active:scale-90 bg-transparent border-0 shadow-none outline-none focus:outline-none",
                     isCallActive
                       ? "text-rose-400/90 hover:text-rose-300"
                       : "text-zinc-300 hover:text-white",
