@@ -82,7 +82,7 @@ import {
 import * as ServerEnvironment from "./environment/ServerEnvironment.ts";
 import { WEBHOOK_ROUTE_PREFIX } from "./scheduledTasks/ScheduledTaskService.ts";
 import { browserApiCorsAllowedHeaders, browserApiCorsAllowedMethods } from "./httpCors.ts";
-import { runSuperBotTurn, getLiveKitToken } from "./botBridge.ts";
+import { runSuperBotTurn, getLiveKitToken, getLiveKitRoomInfo } from "./botBridge.ts";
 
 const OTLP_TRACES_PROXY_PATH = "/api/observability/v1/traces";
 const LOOPBACK_HOSTNAMES = new Set(["127.0.0.1", "::1", "localhost"]);
@@ -954,6 +954,19 @@ export const layerLiveKitTokenRoute = HttpRouter.add(
       }),
     );
 
+    return HttpServerResponse.jsonUnsafe(res);
+  }),
+);
+
+export const layerLiveKitStatusRoute = HttpRouter.add(
+  "GET",
+  "/api/livekit/status",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const url = new URL(request.url, "http://127.0.0.1");
+    const room = url.searchParams.get("room") || "autojobs-call-room";
+
+    const res = yield* Effect.promise(() => getLiveKitRoomInfo(room));
     return HttpServerResponse.jsonUnsafe(res);
   }),
 );

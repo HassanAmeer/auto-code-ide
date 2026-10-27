@@ -89,6 +89,7 @@ import { CircularVoiceWaves } from "./VoiceCallButton";
 import { GrokGeometricVoiceWaves } from "./GrokGeometricVoiceWaves";
 import { buildSuperAgentSystemPrompt } from "./superAgentPrompt";
 import { useVoiceCallAssistant } from "./useVoiceCallAssistant";
+import { useLiveKitCall } from "./useLiveKitCall";
 import {
   speakText,
   stopSpeaking,
@@ -669,6 +670,7 @@ export function SuperCallAssistantView() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const livekitRef = useRef<ReturnType<typeof useLiveKitCall> | null>(null);
 
   const adjustTextareaHeight = useCallback((el: HTMLTextAreaElement | null) => {
     if (!el) return;
@@ -717,6 +719,11 @@ export function SuperCallAssistantView() {
       );
       setIsProcessing(true);
       setAgentStatus("Analyzing request...");
+      void livekitRef.current?.sendDataMessage({
+        type: "user_turn",
+        text: userText,
+        timestamp: Date.now(),
+      });
 
       try {
         const activeProjId = projects[0]?.id ? String(projects[0].id) : undefined;
@@ -880,6 +887,48 @@ export function SuperCallAssistantView() {
     phase: isProcessing ? "running" : "ready",
     isUserEditing,
   });
+
+  const livekit = useLiveKitCall({
+    onDataReceived: (data) => {
+      if (data && typeof data === "object") {
+        if (data.type === "filler" && data.text) {
+          setAgentStatus(data.text);
+          speakText(data.text, loadTtsSettings());
+        } else if (data.type === "tool_status" && data.tool) {
+          setAgentStatus(`Tool Calling: ${data.tool}...`);
+        }
+      }
+    },
+    onError: (err) => {
+      console.warn("[LiveKit Call Notice]:", err);
+    },
+  });
+
+  useEffect(() => {
+    livekitRef.current = livekit;
+  }, [livekit]);
+
+  const handleToggleCallSession = useCallback(async () => {
+    if (isCallActive) {
+      if (callStatus === "speaking" || callStatus === "thinking") {
+        interruptSpeaking();
+      }
+      endCall();
+      await livekit.disconnect();
+    } else {
+      toggleCall();
+      try {
+        await livekit.connect("autojobs-call-room");
+      } catch (err) {
+        console.warn("[LiveKit auto-connect notice]:", err);
+      }
+    }
+  }, [isCallActive, callStatus, interruptSpeaking, endCall, livekit, toggleCall]);
+
+  const handleToggleMicMute = useCallback(() => {
+    toggleMicMute();
+    void livekit.toggleMute();
+  }, [toggleMicMute, livekit]);
 
   const isUsaSelected = sttSettings.language === "english" || callLanguage === "english";
   const isPakSelected = !isUsaSelected;
@@ -1511,8 +1560,36 @@ export function SuperCallAssistantView() {
       <div className="flex-1 flex flex-col h-full min-w-0 relative">
         {/* Top Header */}
         <header className="h-14 border-b border-border/50 px-3 sm:px-6 flex items-center justify-between shrink-0 bg-background/80 backdrop-blur-md gap-2">
-          {/* Left: Empty (Nothing shown on left) */}
-          <div className="flex-1" />
+          {/* Left: LiveKit WebRTC Real-Time Status Pill */}
+          <div className="flex-1 flex items-center gap-2 overflow-hidden">
+            {livekit.isConnected ? (
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[11px] font-medium shadow-xs">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                <span className="font-semibold">LiveKit WebRTC</span>
+                <span className="hidden sm:inline text-emerald-500/80 font-mono text-[10px]">
+                  {livekit.participantCount > 1
+                    ? `(${livekit.participantCount} in room)`
+                    : "Active"}
+                </span>
+              </div>
+            ) : livekit.isConnecting ? (
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-[11px] font-medium animate-pulse">
+                <Loader2 className="size-3 animate-spin text-amber-400" />
+                <span className="truncate">Connecting LiveKit WebRTC...</span>
+              </div>
+            ) : livekit.error ? (
+              <div
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-400 text-[11px] font-medium"
+                title={livekit.error}
+              >
+                <span className="size-1.5 rounded-full bg-rose-500" />
+                <span className="truncate max-w-[140px] sm:max-w-xs">{livekit.error}</span>
+              </div>
+            ) : null}
+          </div>
 
           {/* Right: Copy Transcript, Notes & Command Center Sheet Button */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
@@ -2036,14 +2113,7 @@ export function SuperCallAssistantView() {
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  if (isCallActive) {
-                    if (callStatus === "speaking" || callStatus === "thinking") {
-                      interruptSpeaking();
-                    }
-                    endCall();
-                  } else {
-                    toggleCall();
-                  }
+                  void handleToggleCallSession();
                 }}
                 className={cn(
                   "relative z-10 flex items-center justify-center size-7 sm:size-9 rounded-full transition-all duration-300 cursor-pointer select-none",
@@ -2064,14 +2134,7 @@ export function SuperCallAssistantView() {
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    if (isCallActive) {
-                      if (callStatus === "speaking" || callStatus === "thinking") {
-                        interruptSpeaking();
-                      }
-                      endCall();
-                    } else {
-                      toggleCall();
-                    }
+                    void handleToggleCallSession();
                   }}
                   className={cn(
                     "relative z-20 flex size-4.5 sm:size-6 items-center justify-center rounded-full transition-all duration-200 cursor-pointer active:scale-90 bg-transparent border-0 shadow-none outline-none focus:outline-none",
@@ -2102,7 +2165,7 @@ export function SuperCallAssistantView() {
               {isCallActive ? (
                 <button
                   type="button"
-                  onClick={toggleMicMute}
+                  onClick={handleToggleMicMute}
                   className={cn(
                     "size-6 sm:size-7 rounded-full border flex items-center justify-center transition-all cursor-pointer shadow-xs active:scale-95",
                     isMicMuted

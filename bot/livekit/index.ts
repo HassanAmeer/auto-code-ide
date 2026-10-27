@@ -6,3 +6,4 @@ export * from "./config.ts";
 export * from "./tokenService.ts";
 export * from "./agent.ts";
 export * from "./livekitServer.ts";
+export * from "./agentWorker.ts";

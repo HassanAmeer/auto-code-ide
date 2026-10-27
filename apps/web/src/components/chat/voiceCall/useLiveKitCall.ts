@@ -22,11 +22,13 @@ export interface LiveKitCallState {
   error: string | null;
   serverUrl: string | null;
   roomName: string | null;
+  participantCount: number;
 }
 
 export function useLiveKitCall(options?: {
   onAudioTrackSubscribed?: (track: RemoteTrack) => void;
   onAudioTrackUnsubscribed?: (track: RemoteTrack) => void;
+  onDataReceived?: (data: any, participant?: RemoteParticipant) => void;
   onError?: (err: Error) => void;
 }) {
   const [state, setState] = useState<LiveKitCallState>({
@@ -36,6 +38,7 @@ export function useLiveKitCall(options?: {
     error: null,
     serverUrl: null,
     roomName: null,
+    participantCount: 0,
   });
 
   const roomRef = useRef<Room | null>(null);
@@ -57,16 +60,24 @@ export function useLiveKitCall(options?: {
         );
         const tokenData = (await tokenRes.json()) as {
           ok: boolean;
-          token?: string;
+          token?: string | { token: string };
           serverUrl?: string;
           error?: string;
         };
 
-        if (!tokenData.ok || !tokenData.token) {
+        const rawToken = tokenData.token;
+        const jwtString = typeof rawToken === "string" ? rawToken : rawToken?.token || "";
+
+        if (!tokenData.ok || !jwtString) {
           throw new Error(tokenData.error || "Failed to acquire LiveKit AccessToken from server");
         }
 
-        const targetUrl = tokenData.serverUrl || "ws://201.18.218.29:7880";
+        // Determine secure wss:// endpoint to avoid Mixed Content error when loaded over HTTPS
+        let targetUrl = tokenData.serverUrl || "ws://201.18.218.29:7880";
+        if (typeof window !== "undefined" && window.location.protocol === "https:") {
+          // If browser is on https://, use secure WSS through Nginx proxy
+          targetUrl = `wss://${window.location.host}/rtc`;
+        }
 
         // 2. Initialize LiveKit WebRTC Room
         const room = new Room({
@@ -115,16 +126,39 @@ export function useLiveKitCall(options?: {
           },
         );
 
+        room.on(RoomEvent.DataReceived, (payload: Uint8Array, participant?: RemoteParticipant) => {
+          try {
+            const str = new TextDecoder().decode(payload);
+            const data = JSON.parse(str);
+            options?.onDataReceived?.(data, participant);
+          } catch {
+            options?.onDataReceived?.(payload, participant);
+          }
+        });
+
+        const updateParticipantCount = () => {
+          if (room) {
+            setState((s) => ({
+              ...s,
+              participantCount: (room.remoteParticipants?.size || 0) + 1,
+            }));
+          }
+        };
+
+        room.on(RoomEvent.ParticipantConnected, updateParticipantCount);
+        room.on(RoomEvent.ParticipantDisconnected, updateParticipantCount);
+
         room.on(RoomEvent.Disconnected, () => {
           setState((s) => ({
             ...s,
             isConnected: false,
             isConnecting: false,
+            participantCount: 0,
           }));
         });
 
         // 4. Connect to WebRTC Server & Publish Mic
-        await room.connect(targetUrl, tokenData.token);
+        await room.connect(targetUrl, jwtString);
         await room.localParticipant.setMicrophoneEnabled(true);
 
         roomRef.current = room;
@@ -136,6 +170,7 @@ export function useLiveKitCall(options?: {
           error: null,
           serverUrl: targetUrl,
           roomName: customRoomName,
+          participantCount: (room.remoteParticipants?.size || 0) + 1,
         });
       } catch (err: any) {
         console.error("[LiveKit] Connection error:", err);
@@ -168,7 +203,22 @@ export function useLiveKitCall(options?: {
       isConnected: false,
       isConnecting: false,
       error: null,
+      participantCount: 0,
     }));
+  }, []);
+
+  // Send Data Channel message to Room
+  const sendDataMessage = useCallback(async (data: any) => {
+    if (!roomRef.current || !roomRef.current.localParticipant) return false;
+    try {
+      const jsonStr = typeof data === "string" ? data : JSON.stringify(data);
+      const bytes = new TextEncoder().encode(jsonStr);
+      await roomRef.current.localParticipant.publishData(bytes, { reliable: true });
+      return true;
+    } catch (e) {
+      console.warn("[LiveKit] sendDataMessage error:", e);
+      return false;
+    }
   }, []);
 
   // Mute / Unmute Local Microphone
@@ -194,6 +244,7 @@ export function useLiveKitCall(options?: {
     ...state,
     connect,
     disconnect,
+    sendDataMessage,
     toggleMute,
     room: roomRef.current,
   };
