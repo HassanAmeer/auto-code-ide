@@ -380,18 +380,21 @@ export async function executeSuperAgentInstruction(
   let actionTag = "llm_completion";
   let delegatedTaskInfo: DelegatedTaskInfo | undefined;
 
-  // Fast conversational recognition for Greetings and Farewells
+  // Fast conversational recognition for Greetings and Farewells (Roman Urdu, Arabic Script & English)
   const isFarewell =
     /\b(baad\s+(?:me|mein|mai|main)\s+baat\s+kar(?:e|en|eng[ey]|enge|ungi|o)|phir\s+baat\s+kar|phir\s+milte\s+hain|allah\s*hafiz|alvida|khuda\s*hafiz|bye|goodbye|talk\s+later|see\s+you\s+later|catch\s+you\s+later)\b/i.test(
       userText.trim(),
     ) ||
     /^(chalo\s+)?theek\s+hai\s*$/i.test(userText.trim()) ||
-    /^(ok\s+)?(bye|chalo\s+bye|take\s+care)\s*$/i.test(userText.trim());
+    /^(ok\s+)?(bye|chalo\s+bye|take\s+care)\s*$/i.test(userText.trim()) ||
+    /(اللہ\s*حافظ|خدا\s*حافظ|الوداع|بعد\s*میں\s*بات|پھر\s*ملتے)/.test(userText.trim());
 
   const isGreeting =
-    /^(as*alam\s*o\s*alaikum|salam|hello|hi|hey|kya\s+haal\s+hai|kaise\s+ho|kaisay\s+ho|good\s+morning|good\s+evening)\b/i.test(
+    (/^(as*alam\s*o\s*alaikum|salam|hello|hi|hey|kya\s+haal\s+hai|kaise\s+ho|kaisay\s+ho|good\s+morning|good\s+evening)\b/i.test(
       userText.trim(),
-    ) && !/(project|status|code|error|feature|banao|fix|inspect)/i.test(userText);
+    ) ||
+      /(السلام\s*علیکم|سلام|کیا\s*حال\s*ہے|کیسے\s*ہو|صبح\s*بخیر|شام\s*بخیر)/.test(userText.trim())) &&
+    !/(project|status|code|error|feature|banao|fix|inspect)/i.test(userText);
 
   if (isFarewell) {
     const text =
@@ -653,8 +656,8 @@ export async function executeSuperAgentInstruction(
   }
 
   // 7. Dynamic User-Friendly Error Recovery (Only when network/model truly fails)
-  const errText = llmRes.error || "Model returned an empty response";
-  const errCode = (llmRes.code || "").toLowerCase();
+  const errText = String(llmRes.error || "Model returned an empty response");
+  const errCode = String(llmRes.code || "").toLowerCase();
 
   let friendlyError = "";
   if (

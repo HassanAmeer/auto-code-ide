@@ -68,9 +68,10 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
 
       const cx = width / 2;
       const cy = height / 2;
-      const scale = 0.85; // 15% scale reduction
-      const W = Math.min(width * 0.48, 220 * scale); // 187px half-width
-      const R_core = 20.0; // 20% smaller core radius matching smaller transparent center button
+      const isMobile = width < 380 || height < 65;
+      const scale = isMobile ? 0.6 : 0.85;
+      const W = Math.min(width * 0.45, 220 * scale);
+      const R_core = isMobile ? 15.0 : 20.0;
 
       // Audio analysis with responsive speech attack & smooth release
       let rawMicEnergy = 0;
@@ -169,7 +170,7 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
 
       // Dynamics multipliers - calm, normal, realistic speed (NOT hyperactive)
       let waveSpeed = 0.0015;
-      let waveAmp = 4.5 * scale;
+      let waveAmp = (isMobile ? 2.6 : 4.5) * scale;
 
       // AI speech rhythm synthesis (cadence with natural pauses)
       let aiSpeechCadence = 0;
@@ -316,14 +317,17 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
         const twinkle = Math.sin(timestamp * p.speed + p.phase) * 0.4 + 0.6;
         const pAlpha = p.baseAlpha * twinkle;
 
-        let px = cx + p.x;
+        let px = cx + p.x * (isMobile ? 0.65 : 1);
         if (callStatus === "thinking") {
           // Left-to-right particle drift
-          px = cx + (((p.x + 180 + timestamp * 0.04) % 360) - 180);
+          px = cx + (((p.x * (isMobile ? 0.65 : 1) + 180 + timestamp * 0.04) % 360) - 180);
         }
 
+        const maxY = height / 2 - 3;
+        const py = Math.max(-maxY, Math.min(maxY, p.y * (isMobile ? 0.55 : 1)));
+
         ctx.beginPath();
-        ctx.arc(px, cy + p.y, p.size, 0, Math.PI * 2);
+        ctx.arc(px, cy + py, p.size * (isMobile ? 0.8 : 1), 0, Math.PI * 2);
         ctx.fillStyle = `rgba(${colors.accentRgb}, ${pAlpha})`;
         ctx.fill();
       }
@@ -344,7 +348,7 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
       aria-hidden="true"
       className={cn(
         "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2",
-        "w-[340px] sm:w-[420px] md:w-[460px] h-[96px] sm:h-[110px] overflow-visible z-0 select-none",
+        "w-[240px] xs:w-[290px] sm:w-[420px] md:w-[460px] h-[46px] sm:h-[96px] overflow-visible z-0 select-none",
         className,
       )}
     >

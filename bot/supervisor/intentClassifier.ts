@@ -36,16 +36,18 @@ export function classifyIntent(userText: string): IntentAnalysis {
       t,
     ) ||
     /^(chalo\s+)?theek\s+hai\s*$/i.test(t) ||
-    /^(ok\s+)?(bye|chalo\s+bye|take\s+care)\s*$/i.test(t)
+    /^(ok\s+)?(bye|chalo\s+bye|take\s+care)\s*$/i.test(t) ||
+    /(اللہ\s*حافظ|خدا\s*حافظ|الوداع|بعد\s*میں\s*بات|پھر\s*ملتے)/.test(t)
   ) {
     return { intent: "FAREWELL_OR_EXIT", confidence: 0.95, isUrdu };
   }
 
-  // 2. Greeting / ChitChat Check (e.g. "hello", "hi", "salam", "kya haal hai", "kaise ho")
+  // 2. Greeting / ChitChat Check (e.g. "hello", "hi", "salam", "kya haal hai", "kaise ho", "السلام علیکم")
   if (
-    /^(as*alam\s*o\s*alaikum|salam|hello|hi|hey|kya\s+haal\s+hai|kaise\s+ho|kaisay\s+ho|suno|sun\s+rahe\s+ho|good\s+morning|good\s+evening|whats\s+up|wassup)\b/i.test(
+    (/^(as*alam\s*o\s*alaikum|salam|hello|hi|hey|kya\s+haal\s+hai|kaise\s+ho|kaisay\s+ho|suno|sun\s+rahe\s+ho|good\s+morning|good\s+evening|whats\s+up|wassup)\b/i.test(
       t,
-    ) &&
+    ) ||
+      /(السلام\s*علیکم|سلام|کیا\s*حال\s*ہے|کیسے\s*ہو|صبح\s*بخیر|شام\s*بخیر)/.test(t)) &&
     !/(project|status|code|error|feature|banao|fix|kaam)/i.test(t)
   ) {
     return { intent: "GREETING_OR_CHITCHAT", confidence: 0.9, isUrdu };

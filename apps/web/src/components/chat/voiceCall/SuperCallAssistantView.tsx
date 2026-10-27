@@ -844,35 +844,38 @@ export function SuperCallAssistantView() {
       {/* Main Conversation Stream */}
       <div className="flex-1 flex flex-col h-full min-w-0 relative">
         {/* Top Header */}
-        <header className="h-14 border-b border-border/50 px-4 sm:px-6 flex items-center justify-between shrink-0 bg-background/80 backdrop-blur-md">
+        <header className="h-14 border-b border-border/50 px-3 sm:px-6 flex items-center justify-between shrink-0 bg-background/80 backdrop-blur-md gap-2">
           {/* Left: Active STT & TTS Settings indicator with direct link to Settings */}
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
             <Link
               to="/settings/stt-tts"
-              className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-border/60 hover:border-primary/50 bg-muted/30 hover:bg-muted/60 text-xs text-muted-foreground hover:text-foreground transition-all cursor-pointer group shadow-2xs max-w-xs sm:max-w-md truncate"
+              className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-2.5 py-1.5 rounded-lg border border-border/60 hover:border-primary/50 bg-muted/30 hover:bg-muted/60 text-xs text-muted-foreground hover:text-foreground transition-all cursor-pointer group shadow-2xs max-w-[170px] xs:max-w-[210px] sm:max-w-md truncate"
               title="Click to customize STT & TTS Voice, Speed, Pitch & Accent Settings"
             >
-              <div className="flex items-center gap-1.5 text-primary shrink-0">
+              <div className="flex items-center gap-1 text-primary shrink-0">
                 <Volume2 className="size-3.5 group-hover:scale-110 transition-transform" />
-                <span className="font-semibold text-foreground">Voice & Speech:</span>
+                <span className="font-semibold text-foreground hidden sm:inline">
+                  Voice & Speech:
+                </span>
+                <span className="font-semibold text-foreground sm:hidden">Voice:</span>
               </div>
-              <span className="truncate font-mono text-[11px] text-zinc-300">
-                {activeVoiceLabel} ({ttsSettings.rate.toFixed(2)}x) · STT: {sttSettings.language}
+              <span className="truncate font-mono text-[10px] sm:text-[11px] text-zinc-300">
+                {activeVoiceLabel} ({ttsSettings.rate.toFixed(1)}x)
               </span>
-              <Settings2 className="size-3 text-muted-foreground/70 group-hover:text-foreground shrink-0 ml-0.5" />
+              <Settings2 className="size-3 text-muted-foreground/70 group-hover:text-foreground shrink-0 ml-0.5 hidden xs:inline" />
             </Link>
           </div>
 
           {/* Right: Notes & Tasks */}
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             <button
               type="button"
               onClick={() => openNotesSheet()}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border/70 hover:border-border hover:bg-muted/50 text-xs font-medium transition-colors cursor-pointer"
+              className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-lg border border-border/70 hover:border-border hover:bg-muted/50 text-xs font-medium transition-colors cursor-pointer"
               title="Workspace Notes & Memory"
             >
               <StickyNote className="size-3.5 text-amber-400" />
-              <span>Notes</span>
+              <span className="hidden xs:inline">Notes</span>
               <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-amber-500/15 text-amber-400 font-semibold">
                 {notes.length}
               </span>
@@ -881,11 +884,11 @@ export function SuperCallAssistantView() {
             <button
               type="button"
               onClick={() => setIsTasksSheetOpen(true)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border/70 hover:border-border hover:bg-muted/50 text-xs font-medium transition-colors cursor-pointer"
+              className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 rounded-lg border border-border/70 hover:border-border hover:bg-muted/50 text-xs font-medium transition-colors cursor-pointer"
               title="Click to view scheduled tasks"
             >
               <ListTodo className="size-3.5 text-primary" />
-              <span>Tasks</span>
+              <span className="hidden xs:inline">Tasks</span>
               <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-primary/15 text-primary font-semibold">
                 {scheduledTasks.length}
               </span>
@@ -1030,9 +1033,9 @@ export function SuperCallAssistantView() {
         </div>
 
         {/* Unified Bottom Area: Input Field on Top, with Attached Floating Waves Divider directly below */}
-        <div className="w-full max-w-2xl sm:max-w-3xl mx-auto px-3 sm:px-4 pb-1 pt-0 shrink-0">
-          {/* 1. Attached Input Field on Top (Max 2 lines, borderless floating text, attached with no gap) */}
-          <div className="flex items-end justify-between gap-2 pt-0 pb-1">
+        <div className="w-full max-w-2xl sm:max-w-3xl mx-auto px-2.5 sm:px-4 pb-[max(env(safe-area-inset-bottom),0.85rem)] pt-1 shrink-0 bg-background/95 backdrop-blur-xs">
+          {/* 1. Attached Input Field on Top (Subtle rounded card, completely isolated and clean on mobile) */}
+          <div className="flex items-end justify-between gap-2 px-3 py-1.5 sm:px-3 sm:py-1 rounded-2xl bg-muted/25 border border-border/40 focus-within:border-zinc-700 focus-within:bg-muted/35 transition-all mb-1 sm:mb-0.5">
             <div className="flex-1 min-w-0">
               <textarea
                 ref={inputRef}
@@ -1077,7 +1080,7 @@ export function SuperCallAssistantView() {
                   }
                 }}
                 placeholder="Type a message or speak..."
-                className="w-full bg-transparent border-0 outline-hidden focus:outline-hidden focus:ring-0 p-0 text-sm text-zinc-300 placeholder:text-zinc-600 resize-none max-h-[50px] min-h-[26px] leading-snug overflow-y-auto tracking-normal font-normal"
+                className="w-full bg-transparent border-0 outline-hidden focus:outline-hidden focus:ring-0 p-0 text-sm text-zinc-200 placeholder:text-zinc-500 resize-none max-h-[56px] min-h-[26px] leading-snug overflow-y-auto tracking-normal font-normal"
                 aria-label="Message Input"
               />
             </div>
@@ -1123,9 +1126,9 @@ export function SuperCallAssistantView() {
           </div>
 
           {/* 2. Sleek Horizontal Divider Directly Below with End-to-End Controls & Floating Waves */}
-          <div className="relative flex items-center w-full min-h-[46px] sm:min-h-[50px]">
+          <div className="relative flex items-center justify-between w-full min-h-[38px] sm:min-h-[46px]">
             {/* Left End: AI Model Dropdown (At the very left end; NO line sticks out past it) */}
-            <div className="relative z-10 shrink-0 pr-1">
+            <div className="relative z-10 shrink-0 pr-1 max-w-[105px] xs:max-w-[130px] sm:max-w-none">
               <ProviderModelPicker
                 activeInstanceId={effectiveInstanceId}
                 model={effectiveModel}
@@ -1134,16 +1137,16 @@ export function SuperCallAssistantView() {
                 modelOptionsByInstance={modelOptionsByInstance}
                 keybindings={keybindings}
                 size="xs"
-                triggerClassName="h-6 rounded-full border border-zinc-800 bg-background px-2.5 text-[11px] font-medium text-zinc-400 hover:text-white hover:border-zinc-600 shadow-xs cursor-pointer select-none max-w-none"
+                triggerClassName="h-6 rounded-full border border-zinc-800 bg-background px-2 text-[10px] sm:text-[11px] font-medium text-zinc-400 hover:text-white hover:border-zinc-600 shadow-xs cursor-pointer select-none truncate"
                 onInstanceModelChange={handleModelChange}
               />
             </div>
 
             {/* Left Line Segment (starts at model picker right edge, stops at center wave) */}
-            <div className="flex-1 h-[1px] bg-zinc-800 self-center" />
+            <div className="flex-1 h-[1px] bg-zinc-800/80 self-center" />
 
             {/* Middle / Center: Call Button with Grok Geometric Soundwaves / Circular Wave (Floating in center) */}
-            <div className="relative z-10 flex items-center justify-center shrink-0 mx-2">
+            <div className="relative z-10 flex items-center justify-center shrink-0 mx-1.5 sm:mx-2">
               <div
                 onClick={(e) => {
                   e.preventDefault();
@@ -1158,7 +1161,7 @@ export function SuperCallAssistantView() {
                   }
                 }}
                 className={cn(
-                  "relative z-10 flex items-center justify-center size-9 sm:size-10 rounded-full transition-all duration-300 cursor-pointer select-none",
+                  "relative z-10 flex items-center justify-center size-8 sm:size-9 rounded-full transition-all duration-300 cursor-pointer select-none",
                   "bg-transparent border-0 shadow-none",
                 )}
               >
@@ -1207,7 +1210,7 @@ export function SuperCallAssistantView() {
             </div>
 
             {/* Right Line Segment (starts at center wave, stops at mic button left edge) */}
-            <div className="flex-1 h-[1px] bg-zinc-800 self-center" />
+            <div className="flex-1 h-[1px] bg-zinc-800/80 self-center" />
 
             {/* Right End: When Call Active -> Mic Mute/Unmute; When Idle -> Pakistan & USA Language Flags */}
             <div className="relative z-10 shrink-0 pl-1 flex items-center">
@@ -1216,17 +1219,21 @@ export function SuperCallAssistantView() {
                   type="button"
                   onClick={toggleMicMute}
                   className={cn(
-                    "size-7 rounded-full border flex items-center justify-center transition-all cursor-pointer shadow-xs active:scale-95",
+                    "size-6.5 sm:size-7 rounded-full border flex items-center justify-center transition-all cursor-pointer shadow-xs active:scale-95",
                     isMicMuted
                       ? "bg-amber-500/20 border-amber-500/50 text-amber-400"
                       : "bg-zinc-900 border-zinc-700/80 text-zinc-300 hover:text-white hover:bg-zinc-800",
                   )}
                   title={isMicMuted ? "Unmute Microphone" : "Mute Microphone"}
                 >
-                  {isMicMuted ? <MicOff className="size-3.5" /> : <Mic className="size-3.5" />}
+                  {isMicMuted ? (
+                    <MicOff className="size-3 sm:size-3.5" />
+                  ) : (
+                    <Mic className="size-3 sm:size-3.5" />
+                  )}
                 </button>
               ) : (
-                <div className="flex items-center gap-1.5 select-none bg-zinc-900/60 border border-zinc-800/80 rounded-full px-1.5 py-0.5 shadow-2xs">
+                <div className="flex items-center gap-1 select-none bg-zinc-900/60 border border-zinc-800/80 rounded-full px-1.5 py-0.5 shadow-2xs">
                   {/* Pakistan Flag (Urdu Transcription) */}
                   <button
                     type="button"
@@ -1242,7 +1249,7 @@ export function SuperCallAssistantView() {
                     )}
                     title="Urdu Transcription (اردو / Pakistan)"
                   >
-                    <PakistanFlagIcon className="w-4.5 h-3.5 rounded-xs" />
+                    <PakistanFlagIcon className="w-4 h-3 rounded-xs" />
                   </button>
 
                   {/* USA Flag (English Transcription) */}
@@ -1260,7 +1267,7 @@ export function SuperCallAssistantView() {
                     )}
                     title="English Transcription (English / USA)"
                   >
-                    <UsaFlagIcon className="w-4.5 h-3.5 rounded-xs" />
+                    <UsaFlagIcon className="w-4 h-3 rounded-xs" />
                   </button>
                 </div>
               )}
