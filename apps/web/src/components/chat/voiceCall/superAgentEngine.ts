@@ -637,9 +637,16 @@ export async function executeSuperAgentInstruction(
     if (spokenMatch && spokenMatch[1]) {
       spokenReply = spokenMatch[1].trim();
       fullReply = fullReply.replace(/\[SPOKEN\]:\s*([\s\S]+)$/i, "").trim();
-    } else {
-      // Natural full spoken text (code blocks and markdown stripped cleanly for TTS)
-      spokenReply = sanitizeTextForSpeech(fullReply);
+    }
+
+    // Natural full spoken text (code blocks and markdown stripped cleanly for TTS)
+    const sanitizedFull = sanitizeTextForSpeech(fullReply);
+    const userWantsBrief =
+      /\b(brief|short|summary|mukhtasir|ek line|one sentence|1 sentence)\b/i.test(userText);
+
+    // If spokenReply is missing or artificially truncated compared to fullReply, use sanitized full reply
+    if (!spokenReply || (!userWantsBrief && sanitizedFull.length > spokenReply.length * 1.5)) {
+      spokenReply = sanitizedFull || fullReply;
     }
 
     return {

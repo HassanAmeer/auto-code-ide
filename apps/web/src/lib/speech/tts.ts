@@ -825,9 +825,18 @@ export function speakText(text: string, options?: Partial<TtsSettings>, onEnd?: 
     finishSpeech();
   };
 
-  // Maximum speech duration timeout: ensures state never hangs permanently while allowing complete natural speech
-  const wordsCount = clean.split(/\s+/).filter(Boolean).length;
-  const maxSpeechDurationMs = Math.max(15000, Math.ceil((wordsCount / 0.7) * 1000 + 20000));
+  // Maximum speech duration timeout: ensures state never hangs permanently while allowing complete natural speech.
+  // Dynamically accounts for slow rates, non-English & Urdu phonemes/scripts so speech is NEVER cut off mid-sentence.
+  const charCount = clean.length;
+  const wordsCount = Math.max(clean.split(/\s+/).filter(Boolean).length, Math.ceil(charCount / 5));
+  const isNonEnglishOrUrdu =
+    /[\u0600-\u06FF]/.test(clean) ||
+    Boolean(options?.lang && !options.lang.toLowerCase().startsWith("en"));
+  const wps = isNonEnglishOrUrdu ? 0.6 : 1.0;
+  const effectiveRate = Math.max(0.25, Math.min(2.0, options?.rate ?? 1.0));
+  const adjustedWps = Math.max(0.3, wps * effectiveRate);
+  const estimatedMs = Math.ceil((wordsCount / adjustedWps) * 1000 + 45000);
+  const maxSpeechDurationMs = Math.max(60000, estimatedMs);
   setTimeout(() => {
     if (!hasEnded && activeUtterance === utterance) {
       console.warn("[TTS] Speech reached max expected duration, forcing completion.");

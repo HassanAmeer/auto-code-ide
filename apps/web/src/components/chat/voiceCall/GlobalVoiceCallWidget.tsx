@@ -7,19 +7,15 @@ import { executeSuperAgentInstruction } from "./superAgentEngine";
 import { speakText } from "~/lib/speech/tts";
 
 /**
- * Global Voice Call Assistant Widget
- * Floats permanently across the entire Auto Code IDE (on all routes, including /).
- * On the dedicated `/call-assistant` page, it yields so that view renders its own full layout.
+ * Inner component that mounts the voice call assistant hook & floating widget.
+ * Rendered conditionally to guarantee zero background speech listeners or interference
+ * when the user is navigating on the dedicated /call-assistant or /bot page.
  */
-export const GlobalVoiceCallWidget = memo(function GlobalVoiceCallWidget() {
-  const location = useLocation();
+const GlobalVoiceCallWidgetInner = memo(function GlobalVoiceCallWidgetInner() {
   const projects = useProjects();
   const [spokenText, setSpokenText] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const spokenTextRef = useRef("");
-
-  const isCallAssistantPage =
-    location.pathname.startsWith("/bot") || location.pathname.startsWith("/call-assistant");
 
   const handleTranscriptChange = useCallback((text: string) => {
     spokenTextRef.current = text;
@@ -70,13 +66,8 @@ export const GlobalVoiceCallWidget = memo(function GlobalVoiceCallWidget() {
     onAutoSend: handleAutoSend,
     prompt: spokenText,
     phase: isProcessing ? "running" : "ready",
-    disabled: isCallAssistantPage,
+    disabled: false,
   });
-
-  // If user is already on the dedicated /call-assistant screen, that page renders its own focused layout
-  if (isCallAssistantPage) {
-    return null;
-  }
 
   return (
     <VoiceCallFloatingWidget
@@ -93,4 +84,25 @@ export const GlobalVoiceCallWidget = memo(function GlobalVoiceCallWidget() {
       onToggleMicMute={toggleMicMute}
     />
   );
+});
+
+/**
+ * Global Voice Call Assistant Widget
+ * Floats across the Auto Code IDE on regular workspace pages.
+ * On the dedicated `/call-assistant` or `/bot` page, it completely unmounts and yields
+ * so that view renders its own full layout without any parallel speech recognition listeners.
+ */
+export const GlobalVoiceCallWidget = memo(function GlobalVoiceCallWidget() {
+  const location = useLocation();
+
+  const isCallAssistantPage =
+    location.pathname.startsWith("/bot") || location.pathname.startsWith("/call-assistant");
+
+  // If user is already on the dedicated /call-assistant screen or /bot, completely yield
+  // and do NOT mount any speech recognition listeners, hooks, or floating widgets.
+  if (isCallAssistantPage) {
+    return null;
+  }
+
+  return <GlobalVoiceCallWidgetInner />;
 });
