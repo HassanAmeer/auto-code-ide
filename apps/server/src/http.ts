@@ -82,6 +82,7 @@ import {
 import * as ServerEnvironment from "./environment/ServerEnvironment.ts";
 import { WEBHOOK_ROUTE_PREFIX } from "./scheduledTasks/ScheduledTaskService.ts";
 import { browserApiCorsAllowedHeaders, browserApiCorsAllowedMethods } from "./httpCors.ts";
+import { runSuperBotTurn } from "./botBridge.ts";
 
 const OTLP_TRACES_PROXY_PATH = "/api/observability/v1/traces";
 const LOOPBACK_HOSTNAMES = new Set(["127.0.0.1", "::1", "localhost"]);
@@ -960,6 +961,32 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
       });
     }
 
+    // ── Super Bot: Intent classification & short-circuit ──────────────────────
+    const lastUserMsg = [...messages].reverse().find((m) => m.role === "user")?.content || "";
+    const botResult = yield* Effect.promise(() =>
+      runSuperBotTurn({
+        userText: lastUserMsg,
+        projectName: bodyJson?.instanceId || "Workspace",
+        projectRoot: "/root/autojobs",
+        selectedModel: bodyJson?.model || "gemini-2.5-flash",
+        language: "urdu",
+      }),
+    );
+
+    // If bot handled it fully (greeting / farewell / wishlist / heal / watchdog),
+    // return immediately — no need to call OpenCode or custom provider.
+    if (botResult && botResult.reply) {
+      return HttpServerResponse.jsonUnsafe({
+        ok: true,
+        reply: botResult.reply,
+        spokenReply: botResult.spokenReply,
+        intent: botResult.intent,
+        actionTaken: botResult.actionTaken,
+        model: "super-bot",
+      });
+    }
+    // ── End Super Bot short-circuit ────────────────────────────────────────────
+
     const config = yield* ServerConfig.ServerConfig;
     const customProviders = listCustomProviders(config.dbPath);
     const allKnownProjects = listAllProjects(config.dbPath);
@@ -1066,14 +1093,19 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
 
         const systemMsg = messages.find((m) => m.role === "system")?.content;
         const userMsgs = messages.filter((m) => m.role !== "system");
-        const lastUserMsg = [...userMsgs].reverse().find((m) => m.role === "user")?.content || "";
+        const lastUserMsgText =
+          [...userMsgs].reverse().find((m) => m.role === "user")?.content || "";
         const isProjectRelated =
           /\b(project|files?|status|preview|error|build|fix|run|inspect|code|task|worker|audit|summary)\b/i.test(
-            lastUserMsg,
+            lastUserMsgText,
           );
 
         let promptText = "";
-        if (systemMsg) {
+        // Use Smart Bot system prompt from supervisor if available, else fallback
+        const smartSystemPrompt = botResult?.systemPrompt;
+        if (smartSystemPrompt) {
+          promptText += `${smartSystemPrompt}\n\n`;
+        } else if (systemMsg) {
           promptText += `${systemMsg}\n\n`;
         } else {
           promptText +=
@@ -2876,8 +2908,8 @@ export const layerTerminalQuickStatsRoute = HttpRouter.add(
         const totalMatch = meminfo.match(/SwapTotal:\s+(\d+)\s+kB/i);
         const freeMatch = meminfo.match(/SwapFree:\s+(\d+)\s+kB/i);
         if (totalMatch && freeMatch) {
-          const totalKb = parseInt(totalMatch[1], 10);
-          const freeKb = parseInt(freeMatch[1], 10);
+          const totalKb = parseInt(totalMatch[1] ?? "0", 10);
+          const freeKb = parseInt(freeMatch[1] ?? "0", 10);
           if (totalKb > 0) {
             const usedKb = Math.max(0, totalKb - freeKb);
             swapPercent = Math.round((usedKb / totalKb) * 100);

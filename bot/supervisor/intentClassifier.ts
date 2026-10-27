@@ -78,9 +78,9 @@ export function classifyIntent(userText: string): IntentAnalysis {
     return { intent: "WISHLIST_LIST", confidence: 0.95, isUrdu };
   }
 
-  // 3.3 Wishlist / Feature Backlog Add Request (e.g. "mujhe ye feature bhi chahiye", "ye improvement karni hai", "ye bhi add karna")
+  // 3.3 Wishlist / Feature Backlog Add Request (e.g. "mujhe ye feature bhi chahiye", "ye improvement karni hai", "wishlist me X add karo")
   if (
-    /\b(feature\s*(?:bhi\s*)?(?:chahiye|add\s*karna|hona\s*chahiye|save\s*karo)|improvement\s*(?:karni\s*hai|chahiye|add\s*karo)|wishlist\s*m(?:ein|e)\s*(?:daal|rakh|save)|ye\s*bhi\s*(?:daal\s*do|add\s*karna|chahiye))\b/i.test(
+    /\b(feature\s*(?:bhi\s*)?(?:chahiye|add\s*karna|hona\s*chahiye|save\s*karo)|improvement\s*(?:karni\s*hai|chahiye|add\s*karo)|wishlist\s*m(?:ein|e)\s*.{1,60}?\s*(?:add|daal|rakh|save)\s*(?:karo|do|karna)?|ye\s*bhi\s*(?:daal\s*do|add\s*karna|chahiye))\b/i.test(
       t,
     ) &&
     !/\b(theek\s+hai\s+bana\s+do|shuru\s+karo)\b/i.test(t)

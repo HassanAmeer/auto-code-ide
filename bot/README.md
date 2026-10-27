@@ -104,3 +104,54 @@ Jab aap bahar hotay hain, yeh background mein har 25 second baad project aur pre
 ## 4. Kaise Connect Hai?
 
 Aapka Web Chat UI (`/bot`) aur Server Routes (`/api/super-agent/chat`) is `bot/index.ts` ke zariye connect hotay hain. Tamam logic is ek folder ke andar mefooz hai aur koi aadhi-adhoori file idhar udhar bikhri hui nahi hai.
+
+---
+
+## 5. Server Integration (v2 — Wired ✅)
+
+### `apps/server/src/http.ts` → `/api/super-agent/chat` Route
+
+Is session mein `bot/index.ts` ko directly `/api/super-agent/chat` route ke sath **wire** kar diya gaya hai:
+
+**Flow:**
+
+```
+User Message
+    ↓
+processSuperBotTurn() — intentClassifier chalata hai
+    ↓ (agar GREETING / FAREWELL / WISHLIST / HEAL / WATCHDOG)
+Direct Reply (OpenCode bypass) ← fast, no API call
+    ↓ (baaki sab intents: BRAINSTORM / WORK / STATUS)
+botResult.systemPrompt → OpenCode / Custom Provider
+    ↓
+LLM response → User
+```
+
+**Faida:**
+
+- Greeting / Farewell par **OpenCode API call nahi hogi** — instant reply.
+- Wishlist add/list bhi instantly respond hoga bina kisi model call ke.
+- Baaki sab (brainstorm, build, status) ke liye `buildSmartBotSystemPrompt()` se generate hone wala intelligent system prompt model ko diya jata hai.
+
+**Files Changed:**
+
+- `apps/server/src/http.ts` — `processSuperBotTurn` import + short-circuit before OpenCode block
+- `bot/supervisor/intentClassifier.ts` — Wishlist Add regex improved: "wishlist me X add karo" ab correctly detect hota hai
+
+---
+
+## 6. Intent Classifier Regex Coverage (Updated)
+
+| Pattern Example                                | Intent Detected         |
+| ---------------------------------------------- | ----------------------- |
+| "Assalam o Alaikum", "Hello", "Kaisay ho"      | `GREETING_OR_CHITCHAT`  |
+| "Allah hafiz", "Bye", "Baad mein baat karenge" | `FAREWELL_OR_EXIT`      |
+| "meri wishlist me dark mode add karo"          | `WISHLIST_ADD` ✅       |
+| "ye feature bhi chahiye, save karo"            | `WISHLIST_ADD`          |
+| "wishlist dikhao", "backlog dikhao"            | `WISHLIST_LIST`         |
+| "kya features pending hain"                    | `WISHLIST_LIST`         |
+| "auto heal karo", "errors fix karo"            | `AUTO_HEAL_REQUEST`     |
+| "main ja raha hoon, project dekh lena"         | `AWAY_SUPERVISION`      |
+| "restaurant app banani hai, mashwara do"       | `BRAINSTORM_OR_CONSULT` |
+| "bana do", "shuru karo", "proceed"             | `CONFIRM_AND_BUILD`     |
+| (everything else)                              | `GENERAL_WORK` → LLM    |
