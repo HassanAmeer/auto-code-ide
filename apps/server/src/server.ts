@@ -683,6 +683,7 @@ const layerMakeRoutes = Layer.mergeAll(
     ServerHttp.layerCustomProviderSaveRoute,
     ServerHttp.layerCustomProviderDeleteRoute,
     ServerHttp.layerCustomProviderSyncRoute,
+    ServerHttp.layerLiveKitTokenRoute,
     ServerHttp.layerSuperAgentChatRoute,
     ServerHttp.layerBotWishlistGetRoute,
     ServerHttp.layerBotWishlistToggleApproveRoute,

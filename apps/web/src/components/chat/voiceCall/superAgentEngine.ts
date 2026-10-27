@@ -439,21 +439,83 @@ export async function executeSuperAgentInstruction(
     };
   }
 
-  // 2. Latency masking verbal filler (ONLY for real project work/inspection)
+  // Fast capabilities recognition (e.g. "aap kya kar sakte hain", "اپ کیا کر سکتے ہیں")
+  const isCapabilities =
+    /(کیا\s*(?:کچھ\s*)?کر\s*سکتے\s*(?:ہو|ہیں)|کیا\s*کام\s*کرتے\s*(?:ہو|ہیں)|کون\s*ہو|کیا\s*صلاحیتیں\s*ہیں|کیا\s*مدد\s*کر\s*سکتے)/.test(
+      userText.trim(),
+    ) ||
+    /\b(kya\s*(?:kuch\s*)?kar\s*sakt(?:ey|e|i)\s*(?:ho|hain|hai)|kaam\s*kya\s*hai|tum\s*kya\s*ho|tum\s*kaun\s*ho|aap\s*kaun\s*hain|kya\s*features?\s*hain|kya\s*madad\s*kar\s*sakt(?:ey|e)|kya\s*help\s*kar\s*sakt(?:ey|e)|kya\s*kar\s*leta\s*hai|what\s+can\s+you\s+do|what\s+are\s+your\s+capabilities|how\s+can\s+you\s+help|who\s+are\s+you|what\s+do\s+you\s+do)\b/i.test(
+      userText.trim(),
+    );
+
+  if (isCapabilities) {
+    const text =
+      lang === "urdu"
+        ? "Main aapka Voice Call Assistant aur Workspace Lead hoon! Main aawaz ke zariye yeh sab kar sakta hoon:\n\n• **Git & Workspace Audit:** Status check karna, modified files aur recent commits dekhna.\n• **Auto-Healer:** Code syntax, missing imports aur build errors theek karna.\n• **Wishlist & Tasks:** Feature ideas aur notes save karna.\n• **Autonomous Supervision:** Background watchdog chala kar project monitor karna.\n\nBatayein, abhi kis project ya kaam par madad chahiye?"
+        : "I am your Voice Call Assistant and Workspace Lead! Here is what I can do via voice:\n\n• **Git & Workspace Audit:** Check status, inspect modified files and commits.\n• **Auto-Healer:** Diagnose and repair code errors and failing builds.\n• **Wishlist & Tasks:** Save feature requests and track improvements.\n• **Autonomous Supervision:** Monitor your project in the background.\n\nWhat would you like to work on right now?";
+
+    const spoken =
+      lang === "urdu"
+        ? "Main aapka voice call assistant hoon! Main aapke projects inspect kar sakta hoon, git status aur commits check kar sakta hoon, auto-healer se errors theek kar sakta hoon, aur wishlist manage kar sakta hoon. Batayein abhi kya karna hai?"
+        : "I am your voice assistant! I can inspect projects, check git status, auto-heal build errors, and manage your wishlist. What would you like to work on?";
+
+    return {
+      reply: text,
+      spokenReply: spoken,
+      actionTaken: "capabilities_ack",
+    };
+  }
+
+  // 2. Intelligent Latency-Masking Conversational Spoken Fillers (Live phone call experience)
+  const isGitFeaturesReq =
+    /\b(feature|features|commits?|git\s*history|recent\s*changes)\b/i.test(userText) &&
+    /\b(search|dekh|check|batao|list|last|kya|add)\b/i.test(userText);
+
+  const isHealthRadarReq =
+    /\b(audit|radar|scan|health|error|errors|masla|kharabi|bug|failing|tests?|issue|issues|kahan\s*error)\b/i.test(
+      userText,
+    ) && !/\b(fix|theek\s*karo|solve|sort)\b/i.test(userText);
+
   const isInspectionOrWork =
     !isFarewell &&
     !isGreeting &&
+    !isCapabilities &&
     /\b(project\s+files?|preview\s+check|syntax\s+error|worker\s*agent|prompt\s*de|inspect\s+files?|kaam\s*karwa)\b/i.test(
       userText,
     );
-  if (isInspectionOrWork) {
-    const filler =
+
+  let filler = "";
+  if (isGitFeaturesReq) {
+    filler =
+      lang === "urdu"
+        ? "Ji bilkul, main abhi recent commits aur git history check kar ke batata hoon..."
+        : "Sure thing, checking the recent git commits and repository history right now...";
+  } else if (isHealthRadarReq) {
+    filler =
+      lang === "urdu"
+        ? "Ek second dein, main workspace health radar aur modified files scan kar raha hoon..."
+        : "Give me one second, scanning workspace health and active changes...";
+  } else if (isInspectionOrWork) {
+    filler =
       lang === "urdu"
         ? `Ji bilkul! Main project ${targetName} ke files inspect kar ke check kar raha hoon...`
         : `Inspecting project files and checking status for ${targetName}...`;
+  } else if (/\b(search|dhoond|kahan\s*hai|find|look\s*up)\b/i.test(userText)) {
+    filler =
+      lang === "urdu"
+        ? "Ji zaroor, main abhi search kar ke batata hoon..."
+        : "Searching the workspace for that right now...";
+  } else {
+    filler =
+      lang === "urdu"
+        ? "Ji bilkul, main abhi check kar ke batata hoon..."
+        : "Understood, checking that for you right now...";
+  }
+
+  if (filler) {
     onFillerSpoken?.(filler);
     speakText(filler);
-    onStatusUpdate?.(`Inspecting files in ${targetName}...`);
+    onStatusUpdate?.(filler);
   }
 
   // 3. Action execution (if commanded)
@@ -658,9 +720,6 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
   }
 
   // 3d. Git Commits / Features Inspection
-  const isGitFeaturesReq =
-    /\b(feature|features|commits?|git\s*history|recent\s*changes)\b/i.test(userText) &&
-    /\b(search|dekh|check|batao|list|last|kya|add)\b/i.test(userText);
   if (isGitFeaturesReq) {
     try {
       onStatusUpdate?.("Tool Calling: git log -n 5...");
@@ -682,10 +741,6 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
   }
 
   // 3e. Error Radar / Health Check
-  const isHealthRadarReq =
-    /\b(audit|radar|scan|health|error|errors|masla|kharabi|bug|failing|tests?|issue|issues|kahan\s*error)\b/i.test(
-      userText,
-    ) && !/\b(fix|theek\s*karo|solve|sort)\b/i.test(userText);
   if (isHealthRadarReq) {
     try {
       onStatusUpdate?.("Tool Calling: git status --short...");

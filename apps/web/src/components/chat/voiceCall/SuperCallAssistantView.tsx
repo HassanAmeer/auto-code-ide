@@ -749,6 +749,10 @@ export function SuperCallAssistantView() {
           onStatusUpdate: (status) => {
             setAgentStatus(status);
           },
+          onFillerSpoken: (fillerText) => {
+            setAgentStatus(fillerText);
+            speakText(fillerText, loadTtsSettings());
+          },
         });
 
         const meta: any = res.delegatedTask

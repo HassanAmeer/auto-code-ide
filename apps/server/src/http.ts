@@ -82,7 +82,7 @@ import {
 import * as ServerEnvironment from "./environment/ServerEnvironment.ts";
 import { WEBHOOK_ROUTE_PREFIX } from "./scheduledTasks/ScheduledTaskService.ts";
 import { browserApiCorsAllowedHeaders, browserApiCorsAllowedMethods } from "./httpCors.ts";
-import { runSuperBotTurn } from "./botBridge.ts";
+import { runSuperBotTurn, getLiveKitToken } from "./botBridge.ts";
 
 const OTLP_TRACES_PROXY_PATH = "/api/observability/v1/traces";
 const LOOPBACK_HOSTNAMES = new Set(["127.0.0.1", "::1", "localhost"]);
@@ -933,6 +933,28 @@ export const layerCustomProviderSyncRoute = HttpRouter.add(
       ok: true,
       count: bodyJson?.providers?.length ?? 0,
     });
+  }),
+);
+
+export const layerLiveKitTokenRoute = HttpRouter.add(
+  "GET",
+  "/api/livekit/token",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const url = new URL(request.url, "http://127.0.0.1");
+    const room = url.searchParams.get("room") || "autojobs-call-room";
+    const identity = url.searchParams.get("identity") || `user_${Date.now().toString(36)}`;
+    const name = url.searchParams.get("name") || "AutoCode User";
+
+    const res = yield* Effect.promise(() =>
+      getLiveKitToken({
+        roomName: room,
+        participantIdentity: identity,
+        participantName: name,
+      }),
+    );
+
+    return HttpServerResponse.jsonUnsafe(res);
   }),
 );
 
