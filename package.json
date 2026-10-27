@@ -27,6 +27,9 @@
     "deploy:quick": "./deploy/deploy-vps.sh --skip-build",
     "clean": "rm -rf node_modules apps/*/node_modules packages/*/node_modules apps/*/dist apps/*/dist-electron packages/*/dist .vite-plus apps/*/.vite-plus packages/*/.vite-plus"
   },
+  "dependencies": {
+    "livekit-server-sdk": "^2.19.2"
+  },
   "devDependencies": {
     "@effect/tsgo": "catalog:",
     "@shadcn/lint": "0.1.5",
