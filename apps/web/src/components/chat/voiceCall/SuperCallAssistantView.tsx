@@ -787,7 +787,7 @@ export function SuperCallAssistantView() {
         </div>
 
         {/* Unified Bottom Area: Live Transcribed Text directly above Divider Line with Centered Model Badge */}
-        <div className="w-full max-w-xl mx-auto px-4 pb-5 pt-1 shrink-0 space-y-2">
+        <div className="w-full max-w-3xl sm:max-w-4xl mx-auto px-4 pb-5 pt-1 shrink-0 space-y-2">
           {/* 1. Live Transcribed Text (Gray color, NO box, NO border, NO outline, looks like floating plain text) */}
           <div className="flex items-center justify-between gap-2 py-1 min-h-[34px]">
             {/* Pure text input - borderless, outline-none, transparent */}
@@ -901,8 +901,8 @@ export function SuperCallAssistantView() {
                   }
                 }}
                 className={cn(
-                  "relative z-10 flex items-center justify-center size-12 sm:size-13 rounded-full transition-all duration-300 cursor-pointer select-none",
-                  "bg-zinc-950/95 border border-zinc-800/90 backdrop-blur-xl shadow-xl",
+                  "relative z-10 flex items-center justify-center size-9 sm:size-10 rounded-full transition-all duration-300 cursor-pointer select-none",
+                  "bg-transparent border-0 shadow-none",
                 )}
               >
                 {/* When Call Active: Grok Geometric Soundwave
@@ -929,7 +929,7 @@ export function SuperCallAssistantView() {
                     }
                   }}
                   className={cn(
-                    "relative z-20 flex size-6 items-center justify-center rounded-full transition-all duration-200 cursor-pointer active:scale-90 bg-transparent border-0 shadow-none outline-none focus:outline-none",
+                    "relative z-20 flex size-5 sm:size-6 items-center justify-center rounded-full transition-all duration-200 cursor-pointer active:scale-90 bg-transparent border-0 shadow-none outline-none focus:outline-none",
                     isCallActive
                       ? "text-rose-400/90 hover:text-rose-300"
                       : "text-zinc-300 hover:text-white",
@@ -941,9 +941,9 @@ export function SuperCallAssistantView() {
                   }
                 >
                   {isCallActive ? (
-                    <PhoneOff className="size-4" strokeWidth={2.4} />
+                    <PhoneOff className="size-3.5 sm:size-4" strokeWidth={2.4} />
                   ) : (
-                    <PhoneCall className="size-4" strokeWidth={2.2} />
+                    <PhoneCall className="size-3.5 sm:size-4" strokeWidth={2.2} />
                   )}
                 </button>
               </div>

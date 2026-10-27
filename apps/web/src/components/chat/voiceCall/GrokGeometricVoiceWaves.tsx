@@ -68,11 +68,11 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
 
       const cx = width / 2;
       const cy = height / 2;
-      const scale = 0.85; // Exact 15% scale reduction requested by user
-      const W = Math.min(width * 0.48, 220 * scale); // 187px half-width (clears model badge & mic)
-      const R_core = 24.0; // Black hole core radius around call button
+      const scale = 0.85; // 15% scale reduction
+      const W = Math.min(width * 0.48, 220 * scale); // 187px half-width
+      const R_core = 20.0; // 20% smaller core radius matching smaller transparent center button
 
-      // Audio analysis
+      // Audio analysis with responsive speech attack & smooth release
       let rawMicEnergy = 0;
       if (callStatus === "user-speaking" && analyserNode && freqData) {
         analyserNode.getByteFrequencyData(freqData);
@@ -83,9 +83,12 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
         }
         rawMicEnergy = sum / (count - 2);
       }
-      smoothedEnergy += (rawMicEnergy - smoothedEnergy) * 0.25;
+      const attack = 0.4;
+      const release = 0.12;
+      smoothedEnergy +=
+        (rawMicEnergy - smoothedEnergy) * (rawMicEnergy > smoothedEnergy ? attack : release);
 
-      // Color Palette Configurations (exact same as screenshot)
+      // Color Palette Configurations
       type ColorConfig = {
         primaryRgb: string;
         accentRgb: string;
@@ -143,12 +146,12 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
       ctx.lineWidth = 1;
       ctx.stroke();
 
-      // ── 2. Gravitational Lensing Orbital Rings around the Event Horizon (Scaled by 0.85) ──
+      // ── 2. Compact Gravitational Lensing Orbital Rings around 20% Smaller Center ──
       const rings = [
-        { r: R_core + 2.0, alpha: 0.65, lw: 1.2 },
-        { r: R_core + 7.0 * scale, alpha: 0.45, lw: 0.9 },
-        { r: R_core + 14.0 * scale, alpha: 0.28, lw: 0.75 },
-        { r: R_core + 22.0 * scale, alpha: 0.15, lw: 0.6 },
+        { r: R_core + 1.8, alpha: 0.65, lw: 1.1 },
+        { r: R_core + 5.5, alpha: 0.45, lw: 0.85 },
+        { r: R_core + 11.0, alpha: 0.28, lw: 0.7 },
+        { r: R_core + 17.5, alpha: 0.15, lw: 0.55 },
       ];
 
       for (const ring of rings) {
@@ -159,22 +162,39 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
         ctx.stroke();
       }
 
-      // ── 3. Flowing Silk Ribbon Strands (Exact Formula from 87c358ac scaled by 0.85) ──
+      // ── 3. Flowing Silk Ribbon Strands (Speech & Thinking Dynamics) ──
       const numStrands = 14;
+      const tSec = timestamp * 0.001;
 
-      // Dynamics multipliers (15% scaled)
+      // Dynamics multipliers according to user speech and AI speaking cadence
       let waveSpeed = 0.0022;
-      let waveAmp = 5.5 * scale;
+      let waveAmp = 5.0 * scale;
+
+      // AI speech rhythm synthesis (syllable bursts & natural pauses)
+      let aiSpeechCadence = 0;
+      if (callStatus === "speaking") {
+        const syllable = Math.sin(tSec * 2 * Math.PI * 3.6) * 0.5 + 0.5;
+        const phrase = Math.sin(tSec * 2 * Math.PI * 0.85);
+        const pauseFactor = phrase < -0.7 ? 0.25 : 1.0;
+        aiSpeechCadence =
+          Math.pow(syllable, 1.4) * (0.35 + 0.65 * Math.max(0, phrase)) * pauseFactor;
+      }
 
       if (callStatus === "user-speaking") {
-        waveSpeed = 0.0055;
-        waveAmp = (4.0 + (smoothedEnergy / 255) * 11.0) * scale;
-      } else if (callStatus === "thinking") {
-        waveSpeed = 0.006;
-        waveAmp = 7.0 * scale;
+        const speechNorm = Math.min(1.0, smoothedEnergy / 160);
+        waveSpeed = 0.0035 + speechNorm * 0.005;
+        waveAmp = (3.5 + speechNorm * 8.5) * scale;
       } else if (callStatus === "speaking") {
-        waveSpeed = 0.0045;
-        waveAmp = 6.5 * scale;
+        waveSpeed = 0.003 + aiSpeechCadence * 0.0035;
+        waveAmp = (4.0 + aiSpeechCadence * 5.0) * scale;
+      } else if (callStatus === "thinking") {
+        waveSpeed = 0.0055;
+        waveAmp = 5.8 * scale;
+      } else {
+        // idle / listening: tranquil breathing
+        const breath = Math.sin(timestamp * 0.0016) * 0.5 + 0.5;
+        waveSpeed = 0.0018;
+        waveAmp = (3.5 + breath * 1.5) * scale;
       }
 
       ctx.shadowColor = colors.glowColor;
@@ -184,13 +204,25 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
       for (const side of [-1, 1]) {
         for (let s = 0; s < numStrands; s++) {
           const norm_s = s / (numStrands - 1); // 0 to 1
-          const C = (1.0 + norm_s * 28.0) * scale; // Vertical dispersion scaled by 0.85
+          const C = (1.0 + norm_s * 28.0) * scale;
 
           // Alpha distribution: bright primary core ribbons, delicate ethereal outer filaments
           const distFromCore = Math.abs(norm_s - 0.38);
           const strandAlpha = Math.max(0.12, 0.95 - Math.pow(distFromCore, 1.2) * 1.0);
           const isCoreStrand = s === 4 || s === 5;
           const lw = isCoreStrand ? 1.85 : 0.82;
+
+          // Per-strand speech harmonic reactivity
+          let strandEnergyBonus = 0;
+          if (callStatus === "user-speaking" && freqData) {
+            const binIdx = Math.min(freqData.length - 1, Math.floor(2 + norm_s * 24));
+            strandEnergyBonus = ((freqData[binIdx] || 0) / 255) * 3.2 * scale;
+          } else if (callStatus === "speaking") {
+            strandEnergyBonus =
+              aiSpeechCadence * (0.8 + Math.sin(s * 1.2 + timestamp * 0.006) * 0.6) * scale;
+          }
+
+          const effectiveStrandAmp = waveAmp + strandEnergyBonus;
 
           ctx.beginPath();
           let started = false;
@@ -205,16 +237,22 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
             const deflection = (R_core * R_core * C) / Math.max(R_core * R_core, x * x + C * C);
             const y_base = C + deflection;
 
-            // Harmonic fluid undulation across x
-            let phase = timestamp * waveSpeed;
+            // Phase undulation:
+            // Thinking: smooth wave visibly propagating from LEFT to RIGHT across the black hole!
+            // Speaking: outward acoustic resonance pulses
+            let phase: number;
             if (callStatus === "thinking") {
-              // Shimmer travelling outward from center
-              phase -= abs_u * 4.5;
+              // Left-to-right traveling wave: sin(k*u - omega*t)
+              phase = u * Math.PI * 3.2 - timestamp * 0.006 + s * 0.18;
+            } else if (callStatus === "speaking") {
+              phase = timestamp * waveSpeed - abs_u * 2.5 + s * 0.18;
+            } else {
+              phase = timestamp * waveSpeed + s * 0.18;
             }
 
             const waveFactor =
-              Math.sin(u * Math.PI * 3.2 + s * 0.18 + phase) *
-              (waveAmp + norm_s * 3.5 * scale) *
+              Math.sin(u * Math.PI * 3.2 + phase) *
+              (effectiveStrandAmp + norm_s * 3.5 * scale) *
               Math.exp(-Math.pow(abs_u - 0.42, 2) / 0.09);
 
             let y_actual = (y_base + waveFactor) * envelope;
@@ -224,8 +262,8 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
               const x_dist = abs_u * W;
               const void_y =
                 Math.sqrt(Math.max(0, (R_core + 2.0) * (R_core + 2.0) - x_dist * x_dist)) +
-                1.0 +
-                s * 1.5 * scale;
+                0.8 +
+                s * 1.3 * scale;
               y_actual = Math.max(void_y, y_actual);
             }
 
@@ -250,13 +288,19 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
 
       ctx.shadowBlur = 0; // Reset shadow for fine particles
 
-      // ── 4. Twinkling Stardust Glitter Particles ──
+      // ── 4. Twinkling Stardust Glitter Particles (with Left-to-Right drift during thinking) ──
       for (const p of PARTICLES) {
         const twinkle = Math.sin(timestamp * p.speed + p.phase) * 0.4 + 0.6;
         const pAlpha = p.baseAlpha * twinkle;
 
+        let px = cx + p.x;
+        if (callStatus === "thinking") {
+          // Left-to-right particle drift
+          px = cx + (((p.x + 180 + timestamp * 0.05) % 360) - 180);
+        }
+
         ctx.beginPath();
-        ctx.arc(cx + p.x, cy + p.y, p.size, 0, Math.PI * 2);
+        ctx.arc(px, cy + p.y, p.size, 0, Math.PI * 2);
         ctx.fillStyle = `rgba(${colors.accentRgb}, ${pAlpha})`;
         ctx.fill();
       }
