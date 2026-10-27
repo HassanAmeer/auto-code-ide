@@ -9,10 +9,23 @@
  */
 
 import { loadLiveKitConfig } from "./config.ts";
-import { executeTerminalCommand } from "../cline/tools.ts";
+import { executeBash } from "../cline/tools.ts";
 import { autoHealProject } from "../cline/auto-healer.ts";
 import { classifyIntent } from "../supervisor/intentClassifier.ts";
 import { buildSmartBotSystemPrompt } from "../supervisor/prompt.ts";
+
+export async function executeTerminalCommand(
+  cmd: string,
+  cwd?: string,
+  timeoutMs = 15000,
+): Promise<{ ok: boolean; stdout?: string; stderr?: string }> {
+  const res = await executeBash(cmd, cwd, timeoutMs);
+  return {
+    ok: res.ok,
+    stdout: res.output,
+    stderr: res.error,
+  };
+}
 
 export interface AgentContext {
   projectName: string;
