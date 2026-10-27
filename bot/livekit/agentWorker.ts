@@ -2,13 +2,14 @@
  * LiveKit Agent Worker (bot/livekit/agentWorker.ts)
  *
  * Implements Point 2: Active AI Agent Worker Participant in LiveKit Room.
- * 1. Joins the LiveKit room as "agent_autojobs" (AutoJobs AI Agent).
- * 2. Remains connected as an active participant in "autojobs-call-room".
- * 3. Broadcasts instant spoken fillers and background tool status updates to room participants via WebRTC DataChannel.
- * 4. Auto-reconnects if disconnected.
+ * 1. Native zero-dependency WebSocket & Twirp integration (no protobuf / livekit-server-sdk version issues).
+ * 2. Joins the LiveKit room as "agent_autojobs" (AutoJobs AI Agent).
+ * 3. Remains connected as an active participant in "autojobs-call-room".
+ * 4. Broadcasts instant spoken fillers and background tool status updates to room participants via WebRTC DataChannel.
+ * 5. Auto-reconnects if disconnected.
  */
 
-import { RoomServiceClient, DataPacket_Kind } from "livekit-server-sdk";
+import * as crypto from "node:crypto";
 import { createVoiceCallToken } from "./tokenService.ts";
 import { loadLiveKitConfig } from "./config.ts";
 import { processLiveKitVoiceTurn, type AgentContext } from "./agent.ts";
@@ -28,7 +29,34 @@ export function getAgentWorkerStatus() {
 }
 
 /**
- * Broadcasts a structured event to all participants in the room via LiveKit SFU DataChannel
+ * Creates an internal admin JWT for RoomService Twirp calls
+ */
+function createAdminToken(roomName: string): string {
+  const config = loadLiveKitConfig();
+  const now = Math.floor(Date.now() / 1000);
+  const payload = {
+    name: "RoomServiceAdmin",
+    video: {
+      roomAdmin: true,
+      roomCreate: true,
+      roomList: true,
+      room: roomName,
+    },
+    iss: config.apiKey,
+    exp: now + 3600,
+    nbf: now - 5,
+    sub: "admin_room_service",
+  };
+  const header = { alg: "HS256", typ: "JWT" };
+  const b64Header = Buffer.from(JSON.stringify(header)).toString("base64url");
+  const b64Payload = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const data = `${b64Header}.${b64Payload}`;
+  const sig = crypto.createHmac("sha256", config.apiSecret).update(data).digest("base64url");
+  return `${data}.${sig}`;
+}
+
+/**
+ * Broadcasts a structured event to all participants in the room via LiveKit Twirp SendData
  */
 export async function broadcastToRoom(
   roomName: string,
@@ -36,22 +64,56 @@ export async function broadcastToRoom(
 ): Promise<boolean> {
   try {
     const config = loadLiveKitConfig();
-    const serverUrl = config.url.replace(/^ws/, "http");
-    const client = new RoomServiceClient(serverUrl, config.apiKey, config.apiSecret);
+    const serverUrl = config.url.replace(/^ws/, "http").replace(/\/rtc$/, "");
+    const adminToken = createAdminToken(roomName);
 
     const jsonStr = JSON.stringify({
       ...payload,
       sender: "agent_autojobs",
       timestamp: Date.now(),
     });
-    const data = new TextEncoder().encode(jsonStr);
+    const packetData = Buffer.from(jsonStr).toString("base64");
 
-    await client.sendData(roomName, data, DataPacket_Kind.RELIABLE);
-    return true;
-  } catch (err: any) {
-    // If room is empty or doesn't exist yet, ignore silently
+    const res = await fetch(`${serverUrl}/twirp/livekit.RoomService/SendData`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${adminToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        room: roomName,
+        data: packetData,
+        kind: 0, // 0 = RELIABLE
+      }),
+    });
+
+    return res.ok;
+  } catch (err) {
     return false;
   }
+}
+
+/**
+ * Ensures room exists on LiveKit SFU via Twirp CreateRoom
+ */
+async function ensureRoomExists(roomName: string): Promise<void> {
+  try {
+    const config = loadLiveKitConfig();
+    const serverUrl = config.url.replace(/^ws/, "http").replace(/\/rtc$/, "");
+    const adminToken = createAdminToken(roomName);
+
+    await fetch(`${serverUrl}/twirp/livekit.RoomService/CreateRoom`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${adminToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: roomName,
+        empty_timeout: 3600,
+      }),
+    });
+  } catch {}
 }
 
 /**
@@ -68,14 +130,8 @@ async function connectAgentParticipant(roomName = "autojobs-call-room") {
   try {
     const config = loadLiveKitConfig();
 
-    // 1. Ensure Room exists on SFU
-    const httpUrl = config.url.replace(/^ws/, "http");
-    const roomClient = new RoomServiceClient(httpUrl, config.apiKey, config.apiSecret);
-    try {
-      await roomClient.createRoom({ name: roomName, emptyTimeout: 3600 });
-    } catch {
-      // Room might already exist
-    }
+    // 1. Ensure Room exists
+    await ensureRoomExists(roomName);
 
     // 2. Generate Agent Worker token
     const tokenRes = await createVoiceCallToken({
