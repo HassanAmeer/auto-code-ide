@@ -384,6 +384,7 @@ export function SuperCallAssistantView() {
   // Command Center / Right Sidebar Drawer
   const [isCommandCenterOpen, setIsCommandCenterOpen] = useState(false);
   const [commandCenterTab, setCommandCenterTab] = useState<"memory" | "tasks" | "voice">("memory");
+  const [isInputFocused, setIsInputFocused] = useState(false);
 
   // Universal Attachment State (Images, Code files, Logs, PDFs, etc.)
   const [attachedFile, setAttachedFile] = useState<{
@@ -878,10 +879,11 @@ export function SuperCallAssistantView() {
   const isUsaSelected = sttSettings.language === "english" || callLanguage === "english";
   const isPakSelected = !isUsaSelected;
 
-  // User clicked on the input text: pause auto-send immediately
+  // User clicked on the input text: pause auto-send immediately and mark focused
   const handleInputFocusOrClick = useCallback(() => {
     isUserEditingRef.current = true;
     setIsUserEditing(true);
+    setIsInputFocused(true);
   }, []);
 
   // Transliterate Urdu script to Roman Urdu
@@ -1888,6 +1890,7 @@ export function SuperCallAssistantView() {
                 onClick={handleInputFocusOrClick}
                 onFocus={handleInputFocusOrClick}
                 onBlur={() => {
+                  setIsInputFocused(false);
                   if (!inputText.trim()) {
                     isUserEditingRef.current = false;
                     setIsUserEditing(false);
@@ -1896,6 +1899,7 @@ export function SuperCallAssistantView() {
                 onChange={(e) => {
                   isUserEditingRef.current = true;
                   setIsUserEditing(true);
+                  setIsInputFocused(true);
                   setInputText(e.target.value);
                   adjustTextareaHeight(e.target);
                 }}
@@ -1933,7 +1937,7 @@ export function SuperCallAssistantView() {
               />
             </div>
 
-            {/* Gray Action Buttons: Paperclip Attachment, Sparkles/ArrowLeft, and Send */}
+            {/* Gray Action Buttons: Paperclip Attachment, Sparkles/ArrowLeft (on focus/tap), Stop, and Send */}
             <div className="flex items-center gap-1 shrink-0 pb-0.5">
               {/* Universal Attachment Button (Paperclip) */}
               <button
@@ -1948,10 +1952,12 @@ export function SuperCallAssistantView() {
                 <Paperclip className="size-3.5 text-zinc-400" />
               </button>
 
-              {inputText.trim().length > 0 &&
+              {/* Sparkles / Undo Transliteration (Only visible when focused, tapped or user is editing text) */}
+              {(isInputFocused || isUserEditing || inputText.trim().length > 0) &&
                 (previousTextForUndo !== null ? (
                   <button
                     type="button"
+                    onMouseDown={(e) => e.preventDefault()}
                     onClick={handleUndoTransliteration}
                     className="p-1 rounded text-zinc-400 hover:text-white transition-colors cursor-pointer"
                     title="Wapas original Urdu par layen (Undo)"
@@ -1961,9 +1967,10 @@ export function SuperCallAssistantView() {
                 ) : (
                   <button
                     type="button"
+                    onMouseDown={(e) => e.preventDefault()}
                     onClick={handleTransliterateToRoman}
-                    disabled={isTransliterating}
-                    className="p-1 rounded text-zinc-400 hover:text-amber-400 disabled:opacity-50 transition-colors cursor-pointer"
+                    disabled={isTransliterating || !inputText.trim()}
+                    className="p-1 rounded text-zinc-400 hover:text-amber-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
                     title="Urdu ko Roman Urdu mein convert karein"
                   >
                     {isTransliterating ? (
@@ -1974,6 +1981,19 @@ export function SuperCallAssistantView() {
                   </button>
                 ))}
 
+              {/* Stop Speaking / Stop AI Button (Right next to Send button) */}
+              {(callStatus === "speaking" || isProcessing) && (
+                <button
+                  type="button"
+                  onClick={handleStopSpeaking}
+                  className="p-1 rounded text-rose-400 hover:text-rose-300 hover:bg-rose-500/15 transition-colors cursor-pointer animate-pulse"
+                  title="Stop AI Response / Speaking (روکیں)"
+                >
+                  <Square className="size-3.5 fill-rose-400 text-rose-400" />
+                </button>
+              )}
+
+              {/* Send Button */}
               <button
                 type="button"
                 onClick={handleSendNow}
