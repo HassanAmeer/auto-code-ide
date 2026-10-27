@@ -1485,6 +1485,43 @@ export const layerBotWishlistToggleApproveRoute = HttpRouter.add(
   }),
 );
 
+export const layerBotWishlistUpdateStatusRoute = HttpRouter.add(
+  "POST",
+  "/api/bot/wishlist/update-status",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const body = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      projectName?: string;
+      itemId?: string;
+      status?: "pending" | "in_progress" | "completed" | "discarded";
+    };
+
+    const projectName = body?.projectName ?? "Workspace";
+    const itemId = body?.itemId ?? "";
+    const status = body?.status ?? "pending";
+    if (!itemId) {
+      return HttpServerResponse.jsonUnsafe({ ok: false, error: "itemId required" });
+    }
+
+    const success = yield* Effect.promise(async () => {
+      try {
+        const { updateBacklogStatus } = await import(
+          "../../../bot/memory/featureBacklog.ts" as string
+        );
+        return (updateBacklogStatus as (p: string, id: string, s: string) => boolean)(
+          projectName,
+          itemId,
+          status,
+        );
+      } catch {
+        return false;
+      }
+    });
+
+    return HttpServerResponse.jsonUnsafe({ ok: success, status, itemId });
+  }),
+);
+
 // ── End Bot Wishlist API ────────────────────────────────────────────────────
 
 export const layerProjectPreviewRoute = HttpRouter.add(

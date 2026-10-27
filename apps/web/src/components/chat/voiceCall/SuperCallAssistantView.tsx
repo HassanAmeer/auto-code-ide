@@ -38,6 +38,10 @@ import {
   ShieldCheck,
   ChevronDown,
   ChevronUp,
+  LayoutGrid,
+  List,
+  ArrowRight,
+  RotateCcw,
 } from "lucide-react";
 import { executeTerminalCommand } from "~/components/chat/terminal/terminalClient";
 import { Link } from "@tanstack/react-router";
@@ -397,7 +401,7 @@ export function SuperCallAssistantView() {
   // Transcript Copy & Export State
   const [isTranscriptCopied, setIsTranscriptCopied] = useState(false);
 
-  // Wishlist State in Command Center
+  // Wishlist & Kanban State in Command Center
   const activeProjectName = useMemo(() => {
     return projects[0]?.title || (projects[0]?.id ? String(projects[0].id) : "Workspace");
   }, [projects]);
@@ -405,8 +409,43 @@ export function SuperCallAssistantView() {
     import("~/lib/callAssistantStore").WishlistItem[]
   >([]);
   const [isWishlistLoading, setIsWishlistLoading] = useState(false);
+  const [drawerWishlistViewMode, setDrawerWishlistViewMode] = useState<"kanban" | "list">("kanban");
   const [newWishlistTitle, setNewWishlistTitle] = useState("");
   const [newWishlistType, setNewWishlistType] = useState<"feature" | "improvement">("feature");
+
+  // Kanban Column Lists
+  const kanbanPending = useMemo(
+    () => drawerWishlistItems.filter((i) => i.status === "pending" || !i.status),
+    [drawerWishlistItems],
+  );
+  const kanbanInProgress = useMemo(
+    () => drawerWishlistItems.filter((i) => i.status === "in_progress"),
+    [drawerWishlistItems],
+  );
+  const kanbanCompleted = useMemo(
+    () => drawerWishlistItems.filter((i) => i.status === "completed"),
+    [drawerWishlistItems],
+  );
+
+  // Update Item Status in Kanban Board
+  const handleUpdateItemStatus = useCallback(
+    async (itemId: string, newStatus: "pending" | "in_progress" | "completed") => {
+      setDrawerWishlistItems((prev) =>
+        prev.map((it) => (it.id === itemId ? { ...it, status: newStatus } : it)),
+      );
+
+      try {
+        await fetch("/api/bot/wishlist/update-status", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ projectName: activeProjectName, itemId, status: newStatus }),
+        });
+      } catch (err) {
+        console.error("Status update error:", err);
+      }
+    },
+    [activeProjectName],
+  );
 
   // Fetch Wishlist Items
   const fetchDrawerWishlist = useCallback(async () => {
@@ -1210,28 +1249,67 @@ export function SuperCallAssistantView() {
                 </div>
               )}
 
-              {/* TAB 2: WISHLIST & AUTO-APPROVE */}
+              {/* TAB 2: WISHLIST & SPRINT KANBAN BOARD */}
               {commandCenterTab === "wishlist" && (
                 <div className="space-y-4">
-                  {/* Header & Refresh */}
-                  <div className="flex items-center justify-between">
+                  {/* Header with Kanban / List Toggle & Refresh */}
+                  <div className="flex items-center justify-between gap-2">
                     <div>
-                      <h3 className="text-xs font-semibold text-foreground">
-                        {activeProjectName} Wishlist
+                      <h3 className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                        <ShoppingBag className="size-3.5 text-primary" />
+                        {activeProjectName} Sprint Board
                       </h3>
                       <p className="text-[10px] text-muted-foreground">
-                        Review pending improvements & toggle Auto-Approve
+                        {kanbanPending.length} backlog · {kanbanInProgress.length} working ·{" "}
+                        {kanbanCompleted.length} done
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => void fetchDrawerWishlist()}
-                      disabled={isWishlistLoading}
-                      className="p-1.5 rounded-lg border border-border/70 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                      title="Refresh Wishlist"
-                    >
-                      <RefreshCw className={cn("size-3.5", isWishlistLoading && "animate-spin")} />
-                    </button>
+
+                    <div className="flex items-center gap-1.5">
+                      {/* View Mode Toggle: Kanban vs List */}
+                      <div className="flex items-center bg-muted/50 p-0.5 rounded-lg border border-border/60">
+                        <button
+                          type="button"
+                          onClick={() => setDrawerWishlistViewMode("kanban")}
+                          className={cn(
+                            "flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold transition-colors cursor-pointer",
+                            drawerWishlistViewMode === "kanban"
+                              ? "bg-primary text-primary-foreground shadow-xs"
+                              : "text-muted-foreground hover:text-foreground",
+                          )}
+                          title="Kanban Board View (To-Do, Working, Done)"
+                        >
+                          <LayoutGrid className="size-3" />
+                          <span className="hidden xs:inline">Kanban</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDrawerWishlistViewMode("list")}
+                          className={cn(
+                            "flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold transition-colors cursor-pointer",
+                            drawerWishlistViewMode === "list"
+                              ? "bg-primary text-primary-foreground shadow-xs"
+                              : "text-muted-foreground hover:text-foreground",
+                          )}
+                          title="Compact List View"
+                        >
+                          <List className="size-3" />
+                          <span className="hidden xs:inline">List</span>
+                        </button>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => void fetchDrawerWishlist()}
+                        disabled={isWishlistLoading}
+                        className="p-1.5 rounded-lg border border-border/70 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                        title="Refresh Wishlist"
+                      >
+                        <RefreshCw
+                          className={cn("size-3.5", isWishlistLoading && "animate-spin")}
+                        />
+                      </button>
+                    </div>
                   </div>
 
                   {/* Add New Wishlist Quick Form */}
@@ -1249,7 +1327,7 @@ export function SuperCallAssistantView() {
                   >
                     <span className="text-[11px] font-medium text-foreground flex items-center gap-1">
                       <Plus className="size-3 text-primary" />
-                      Add Quick Wishlist Item
+                      Add to Backlog
                     </span>
                     <div className="flex gap-2">
                       <input
@@ -1277,22 +1355,224 @@ export function SuperCallAssistantView() {
                     </div>
                   </form>
 
-                  {/* Wishlist Items List */}
+                  {/* Loading State */}
                   {isWishlistLoading && drawerWishlistItems.length === 0 ? (
                     <div className="py-8 flex flex-col items-center justify-center text-muted-foreground">
                       <Loader2 className="size-5 animate-spin mb-2" />
-                      <span className="text-xs">Loading wishlist...</span>
+                      <span className="text-xs">Loading sprint board...</span>
                     </div>
                   ) : drawerWishlistItems.length === 0 ? (
                     <div className="py-8 text-center text-muted-foreground space-y-2">
                       <ShoppingBag className="size-8 mx-auto opacity-40" />
-                      <p className="text-xs font-medium text-foreground">Wishlist khali hai</p>
+                      <p className="text-xs font-medium text-foreground">Sprint Board khali hai</p>
                       <p className="text-[11px] max-w-xs mx-auto">
                         Aap assistant se bol sakte hain: &quot;Wishlist mein feature add karo&quot;
                         ya upar se direct add karein.
                       </p>
                     </div>
+                  ) : drawerWishlistViewMode === "kanban" ? (
+                    /* ── VISUAL KANBAN / SPRINT BOARD (3 COLUMNS) ── */
+                    <div className="space-y-4">
+                      {/* 1. BACKLOG / TO-DO COLUMN */}
+                      <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 space-y-2.5">
+                        <div className="flex items-center justify-between pb-1 border-b border-amber-500/20">
+                          <span className="text-xs font-semibold text-amber-300 flex items-center gap-1.5 uppercase tracking-wider">
+                            📌 Backlog / To-Do
+                          </span>
+                          <span className="text-[10px] font-mono font-bold px-2 py-0.2 rounded-full bg-amber-500/20 text-amber-400">
+                            {kanbanPending.length}
+                          </span>
+                        </div>
+
+                        {kanbanPending.length === 0 ? (
+                          <p className="text-[11px] text-muted-foreground/70 italic py-2 text-center">
+                            No pending items in backlog.
+                          </p>
+                        ) : (
+                          <div className="space-y-2">
+                            {kanbanPending.map((item) => (
+                              <div
+                                key={item.id}
+                                className="p-2.5 rounded-lg border border-border/80 bg-background/90 shadow-xs space-y-2 hover:border-amber-500/40 transition-colors"
+                              >
+                                <div className="flex items-start justify-between gap-1.5">
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-1 flex-wrap">
+                                      <span className="font-semibold text-xs text-foreground truncate">
+                                        {item.title}
+                                      </span>
+                                      <span
+                                        className={cn(
+                                          "text-[8.5px] px-1.5 py-0.2 rounded-full font-mono uppercase",
+                                          item.type === "improvement"
+                                            ? "bg-blue-500/15 text-blue-400"
+                                            : "bg-emerald-500/15 text-emerald-400",
+                                        )}
+                                      >
+                                        {item.type === "improvement" ? "⚡ Improve" : "✨ Feature"}
+                                      </span>
+                                    </div>
+                                    {item.description && (
+                                      <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-2">
+                                        {item.description}
+                                      </p>
+                                    )}
+                                  </div>
+
+                                  {/* Auto-Approve Switch */}
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleToggleAutoApprove(item.id)}
+                                    title={
+                                      item.autoApprove ? "Auto Approve: ON" : "Auto Approve: OFF"
+                                    }
+                                    className={cn(
+                                      "relative w-7 h-4 rounded-full transition-colors duration-200 shrink-0 cursor-pointer",
+                                      item.autoApprove ? "bg-emerald-500" : "bg-zinc-700/60",
+                                    )}
+                                  >
+                                    <span
+                                      className={cn(
+                                        "absolute top-0.5 left-0.5 size-3 rounded-full bg-white shadow transition-transform duration-200",
+                                        item.autoApprove ? "translate-x-3" : "translate-x-0",
+                                      )}
+                                    />
+                                  </button>
+                                </div>
+
+                                {/* Action: Move to In Progress */}
+                                <div className="flex items-center justify-between pt-1 border-t border-border/40">
+                                  <span className="text-[9px] text-muted-foreground font-mono">
+                                    {item.autoApprove ? "Auto-approve: ON" : "Manual review"}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      void handleUpdateItemStatus(item.id, "in_progress")
+                                    }
+                                    className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-500/15 text-blue-400 hover:bg-blue-500/25 text-[10px] font-semibold transition-colors cursor-pointer"
+                                  >
+                                    <span>Start</span>
+                                    <ArrowRight className="size-2.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* 2. WORKING ON / IN PROGRESS COLUMN */}
+                      <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 p-3 space-y-2.5">
+                        <div className="flex items-center justify-between pb-1 border-b border-blue-500/20">
+                          <span className="text-xs font-semibold text-blue-300 flex items-center gap-1.5 uppercase tracking-wider">
+                            <span className="size-2 rounded-full bg-blue-400 animate-pulse" />🔨
+                            Working On
+                          </span>
+                          <span className="text-[10px] font-mono font-bold px-2 py-0.2 rounded-full bg-blue-500/20 text-blue-400">
+                            {kanbanInProgress.length}
+                          </span>
+                        </div>
+
+                        {kanbanInProgress.length === 0 ? (
+                          <p className="text-[11px] text-muted-foreground/70 italic py-2 text-center">
+                            No active items in progress.
+                          </p>
+                        ) : (
+                          <div className="space-y-2">
+                            {kanbanInProgress.map((item) => (
+                              <div
+                                key={item.id}
+                                className="p-2.5 rounded-lg border border-blue-500/40 bg-background/90 shadow-xs space-y-2"
+                              >
+                                <div className="flex items-start justify-between gap-1.5">
+                                  <div className="min-w-0 flex-1">
+                                    <h4 className="font-semibold text-xs text-foreground truncate">
+                                      {item.title}
+                                    </h4>
+                                    {item.description && (
+                                      <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-2">
+                                        {item.description}
+                                      </p>
+                                    )}
+                                  </div>
+                                  <span className="text-[9px] uppercase font-mono px-1.5 py-0.2 rounded bg-blue-500/20 text-blue-400 shrink-0">
+                                    Active
+                                  </span>
+                                </div>
+
+                                {/* Actions: Move Back or Complete */}
+                                <div className="flex items-center justify-between pt-1 border-t border-border/40 gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleUpdateItemStatus(item.id, "pending")}
+                                    className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                                  >
+                                    <RotateCcw className="size-2.5" />
+                                    <span>Backlog</span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      void handleUpdateItemStatus(item.id, "completed")
+                                    }
+                                    className="flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 text-[10px] font-semibold transition-colors cursor-pointer"
+                                  >
+                                    <Check className="size-3 text-emerald-400" />
+                                    <span>Mark Done</span>
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* 3. COMPLETED COLUMN */}
+                      <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3 space-y-2.5">
+                        <div className="flex items-center justify-between pb-1 border-b border-emerald-500/20">
+                          <span className="text-xs font-semibold text-emerald-300 flex items-center gap-1.5 uppercase tracking-wider">
+                            ✅ Completed / Done
+                          </span>
+                          <span className="text-[10px] font-mono font-bold px-2 py-0.2 rounded-full bg-emerald-500/20 text-emerald-400">
+                            {kanbanCompleted.length}
+                          </span>
+                        </div>
+
+                        {kanbanCompleted.length === 0 ? (
+                          <p className="text-[11px] text-muted-foreground/70 italic py-2 text-center">
+                            Completed features will show here.
+                          </p>
+                        ) : (
+                          <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                            {kanbanCompleted.map((item) => (
+                              <div
+                                key={item.id}
+                                className="p-2 rounded-lg border border-border/60 bg-background/60 shadow-xs flex items-center justify-between gap-2"
+                              >
+                                <div className="min-w-0 flex-1 flex items-center gap-1.5">
+                                  <Check className="size-3 text-emerald-400 shrink-0" />
+                                  <span className="text-xs text-muted-foreground line-through truncate">
+                                    {item.title}
+                                  </span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => void handleUpdateItemStatus(item.id, "pending")}
+                                  className="text-[9px] text-muted-foreground hover:text-amber-400 transition-colors cursor-pointer shrink-0"
+                                  title="Reopen item"
+                                >
+                                  Reopen
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   ) : (
+                    /* ── COMPACT LIST VIEW ── */
                     <div className="space-y-2">
                       {drawerWishlistItems.map((item) => (
                         <div
@@ -1301,7 +1581,13 @@ export function SuperCallAssistantView() {
                         >
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="font-semibold text-xs text-foreground truncate">
+                              <span
+                                className={cn(
+                                  "font-semibold text-xs text-foreground truncate",
+                                  item.status === "completed" &&
+                                    "line-through text-muted-foreground",
+                                )}
+                              >
                                 {item.title}
                               </span>
                               <span
@@ -1314,8 +1600,17 @@ export function SuperCallAssistantView() {
                               >
                                 {item.type === "improvement" ? "⚡ Improve" : "✨ Feature"}
                               </span>
-                              <span className="text-[9px] text-muted-foreground">
-                                • {item.status}
+                              <span
+                                className={cn(
+                                  "text-[9px] px-1.5 py-0.2 rounded-full font-mono uppercase font-semibold",
+                                  item.status === "completed"
+                                    ? "bg-emerald-500/20 text-emerald-400"
+                                    : item.status === "in_progress"
+                                      ? "bg-blue-500/20 text-blue-400"
+                                      : "bg-amber-500/20 text-amber-400",
+                                )}
+                              >
+                                {item.status || "pending"}
                               </span>
                             </div>
                             {item.description && (
