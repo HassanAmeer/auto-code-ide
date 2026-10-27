@@ -8,13 +8,12 @@ export interface GrokGeometricVoiceWavesProps {
   className?: string;
 }
 
-// ── Compact, Low-Profile Black Hole Accretion Disk Specification ──
-// Mathematical formula: H(x) = H_peak * (1 - (x / W)^2)^1.6
-// Scaled proportionally: total height is ~44px (peak 22px above/below line), sleek and compact.
-const HALF_WIDTH = 96.0;
-const BAR_SPACING = 3.0;
-const CENTER_VOID_RADIUS = 15.0; // Snug radius around the 29px compact center button
-const MAX_BAR_HEIGHT = 22.5; // Peak height of accretion envelope
+// ── Low-Profile Black Hole Accretion Disk Specification ──
+// Fits proportionally around the 48-52px center call button.
+const HALF_WIDTH = 120.0;
+const BAR_SPACING = 3.6;
+const CENTER_VOID_RADIUS = 25.5; // Radius around the center button
+const MAX_BAR_HEIGHT = 36.0; // Peak reach of the accretion arch
 
 interface BarDef {
   index: number;
@@ -28,21 +27,20 @@ interface BarDef {
 }
 
 const BARS: BarDef[] = [];
-for (let x = -90; x <= 90; x += BAR_SPACING) {
+for (let x = -112; x <= 112; x += BAR_SPACING) {
   const normDist = Math.abs(x) / HALF_WIDTH;
   const isSplit = Math.abs(x) < CENTER_VOID_RADIUS;
   const innerVoidY = isSplit
-    ? Math.sqrt(Math.max(0, CENTER_VOID_RADIUS * CENTER_VOID_RADIUS - x * x)) + 1.0
+    ? Math.sqrt(Math.max(0, CENTER_VOID_RADIUS * CENTER_VOID_RADIUS - x * x)) + 1.2
     : 0;
 
-  // Compact Black Hole Accretion Curve: H(x) = H_peak * (1 - u^2)^1.6
+  // Compact Black Hole Accretion Curve: H(x) = H_peak * (1 - u^2)^1.5
   const u = Math.min(1.0, Math.abs(x) / HALF_WIDTH);
-  const rawH = MAX_BAR_HEIGHT * Math.pow(1.0 - u * u, 1.6);
-  // Ensure the outer curve is always convex and strictly clears the inner rim
-  const baseH = isSplit ? Math.max(innerVoidY + 3.2, rawH) : Math.max(0.5, rawH);
+  const rawH = MAX_BAR_HEIGHT * Math.pow(1.0 - u * u, 1.5);
+  const baseH = isSplit ? Math.max(innerVoidY + 3.5, rawH) : Math.max(0.6, rawH);
 
-  // Subtle stroke tapering at the outer tips (1.8px -> 0.8px)
-  const strokeWidth = u > 0.72 ? Math.max(0.8, 1.8 - (u - 0.72) * 3.6) : 1.8;
+  // Subtle stroke tapering at outer tips
+  const strokeWidth = u > 0.72 ? Math.max(0.9, 2.0 - (u - 0.72) * 3.5) : 2.0;
   const opacity = u > 0.82 ? Math.max(0.2, 1.0 - (u - 0.82) * 4.4) : 1.0;
 
   BARS.push({
@@ -101,7 +99,6 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
         switch (callStatus) {
           case "idle":
           case "listening": {
-            // Calm, low-profile breathing of the accretion wave
             energyFactor = 0.9 + 0.08 * Math.sin(timestamp * 0.0022 + bar.normDist * 2.4);
             break;
           }
@@ -123,7 +120,6 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
           }
 
           case "thinking": {
-            // Smooth shimmer wave across the lens
             const phase = timestamp * 0.005 - bar.normDist * 3.8;
             const shimmer = Math.pow(Math.max(0, Math.sin(phase)), 2.0);
             energyFactor = 0.78 + 0.28 * shimmer;
@@ -131,7 +127,6 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
           }
 
           case "speaking": {
-            // Undulating speech rhythm
             const cadence = Math.abs(
               Math.sin(timestamp * 0.0065) * Math.cos(timestamp * 0.003 + bar.normDist * 2.6),
             );
@@ -142,7 +137,7 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
 
         let targetH = bar.baseH * energyFactor;
         if (bar.isSplit) {
-          targetH = Math.max(bar.innerVoidY + 2.2, targetH);
+          targetH = Math.max(bar.innerVoidY + 2.5, targetH);
         }
 
         hArray[i] = hArray[i]! + (targetH - hArray[i]!) * 0.32;
@@ -224,10 +219,10 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
   return (
     <svg
       aria-hidden="true"
-      viewBox="-108 -26 216 52"
+      viewBox="-130 -40 260 80"
       className={cn(
         "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2",
-        "w-[210px] sm:w-[226px] h-[46px] sm:h-[50px] overflow-visible z-0 transition-all duration-300 select-none",
+        "w-[240px] sm:w-[260px] h-[64px] sm:h-[72px] overflow-visible z-0 transition-all duration-300 select-none",
         className,
       )}
       style={{ filter: palette.glow }}
@@ -253,9 +248,9 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
       </defs>
 
       {/* 1. Baseline Connector Line */}
-      <line x1="-106" y1="0" x2="106" y2="0" stroke="url(#blackHoleLineFade)" strokeWidth="1" />
+      <line x1="-128" y1="0" x2="128" y2="0" stroke="url(#blackHoleLineFade)" strokeWidth="1" />
 
-      {/* 2. Compact Soundwave Bars (Eye Contour & Black Hole Accretion Arch) */}
+      {/* 2. Compact Soundwave Bars */}
       {BARS.map((bar, i) => {
         if (bar.isSplit) {
           return (

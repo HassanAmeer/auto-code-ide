@@ -866,7 +866,7 @@ export function SuperCallAssistantView() {
           </div>
 
           {/* 2. Sleek Horizontal Divider with Left-Aligned Model Badge & Centered Wave Call Button */}
-          <div className="relative flex items-center justify-between my-1.5 min-h-[44px]">
+          <div className="relative flex items-center justify-between my-2 min-h-[56px]">
             {/* The horizontal line spanning across */}
             <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[1px] bg-zinc-800" />
 
@@ -901,20 +901,16 @@ export function SuperCallAssistantView() {
                   }
                 }}
                 className={cn(
-                  "relative z-10 flex items-center justify-center size-7.5 rounded-full transition-all duration-300 cursor-pointer select-none",
-                  "bg-zinc-950/95 border border-zinc-800/90 backdrop-blur-xl shadow-md",
+                  "relative z-10 flex items-center justify-center size-12 sm:size-13 rounded-full transition-all duration-300 cursor-pointer select-none",
+                  "bg-zinc-950/95 border border-zinc-800/90 backdrop-blur-xl shadow-xl",
                 )}
               >
-                {/* When Call Active: Compact Grok Geometric Soundwave
-                    When Call Inactive/Ended: Existing original circular wave in grey color */}
+                {/* When Call Active: Grok Geometric Soundwave
+                    When Call Inactive/Ended: Original circular wave in grey color */}
                 {isCallActive ? (
                   <GrokGeometricVoiceWaves callStatus={callStatus} analyserNode={analyserNode} />
                 ) : (
-                  <CircularVoiceWaves
-                    callStatus="idle"
-                    analyserNode={null}
-                    className="size-[42px] -inset-[6px]"
-                  />
+                  <CircularVoiceWaves callStatus="idle" analyserNode={null} />
                 )}
 
                 {/* Centered Phone Icon: Soft red (halka red) when active call, subtle grey when idle/ended */}
@@ -933,7 +929,7 @@ export function SuperCallAssistantView() {
                     }
                   }}
                   className={cn(
-                    "relative z-20 flex size-4 items-center justify-center rounded-full transition-all duration-200 cursor-pointer active:scale-90 bg-transparent border-0 shadow-none outline-none focus:outline-none",
+                    "relative z-20 flex size-6 items-center justify-center rounded-full transition-all duration-200 cursor-pointer active:scale-90 bg-transparent border-0 shadow-none outline-none focus:outline-none",
                     isCallActive
                       ? "text-rose-400/90 hover:text-rose-300"
                       : "text-zinc-300 hover:text-white",
@@ -945,9 +941,9 @@ export function SuperCallAssistantView() {
                   }
                 >
                   {isCallActive ? (
-                    <PhoneOff className="size-3.5" strokeWidth={2.2} />
+                    <PhoneOff className="size-4" strokeWidth={2.4} />
                   ) : (
-                    <PhoneCall className="size-3.5" strokeWidth={2.2} />
+                    <PhoneCall className="size-4" strokeWidth={2.2} />
                   )}
                 </button>
               </div>
