@@ -1932,6 +1932,26 @@ export function SuperCallAssistantView() {
                     />
                   )}
 
+                  {/* Attached Screenshot / User Image */}
+                  {msg.meta?.image && (
+                    <div className="mt-2 rounded-xl overflow-hidden border border-border/60 max-w-xs shadow-xs">
+                      <img
+                        src={msg.meta.image}
+                        alt={msg.meta?.imageName || "Attached screenshot"}
+                        className="w-full h-auto object-cover max-h-48 rounded-lg cursor-pointer hover:opacity-95 transition-opacity"
+                        onClick={() => window.open(msg.meta!.image, "_blank")}
+                      />
+                      {msg.meta?.imageName && (
+                        <span className="block text-[9px] text-muted-foreground px-2 py-0.5 bg-black/40 truncate">
+                          📷 {msg.meta.imageName}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Interactive Code Diff Viewer */}
+                  {msg.meta?.diff && <CodeDiffCard diffText={msg.meta.diff} />}
+
                   <span className="block text-[9px] opacity-60 mt-1 text-right">
                     {new Date(msg.timestamp).toLocaleTimeString([], {
                       hour: "2-digit",
@@ -1995,6 +2015,37 @@ export function SuperCallAssistantView() {
             ))}
           </div>
 
+          {/* Attached Screenshot / Image Preview Badge */}
+          {attachedImage && (
+            <div className="flex items-center gap-2 mb-1.5 px-3 py-1 rounded-xl bg-muted/60 border border-primary/40 w-fit max-w-full animate-in fade-in duration-150">
+              <img
+                src={attachedImage.dataUrl}
+                alt="Preview"
+                className="size-7 object-cover rounded-md border border-border"
+              />
+              <span className="text-[11px] text-foreground font-medium truncate max-w-[170px] xs:max-w-[220px]">
+                {attachedImage.name}
+              </span>
+              <button
+                type="button"
+                onClick={() => setAttachedImage(null)}
+                className="p-1 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer"
+                title="Remove attached image"
+              >
+                <X className="size-3" />
+              </button>
+            </div>
+          )}
+
+          {/* Hidden File Input for Image/Screenshot Upload */}
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleImageFileChange}
+          />
+
           {/* 1. Attached Input Field on Top (Subtle rounded card, completely isolated and clean on mobile) */}
           <div className="flex items-end justify-between gap-2 px-3 py-1.5 sm:px-3 sm:py-1 rounded-2xl bg-muted/25 border border-border/40 focus-within:border-zinc-700 focus-within:bg-muted/35 transition-all mb-1 sm:mb-0.5">
             <div className="flex-1 min-w-0">
@@ -2040,14 +2091,31 @@ export function SuperCallAssistantView() {
                     handleSendNow();
                   }
                 }}
-                placeholder="Type a message or speak..."
+                placeholder={
+                  attachedImage
+                    ? "Add a note or speak about this screenshot..."
+                    : "Type a message or speak..."
+                }
                 className="w-full bg-transparent border-0 outline-hidden focus:outline-hidden focus:ring-0 p-0 text-sm text-zinc-200 placeholder:text-zinc-500 resize-none max-h-[56px] min-h-[26px] leading-snug overflow-y-auto tracking-normal font-normal"
                 aria-label="Message Input"
               />
             </div>
 
-            {/* Gray Action Buttons: Sparkles/ArrowLeft (in-place toggle), and Send */}
+            {/* Gray Action Buttons: Image Upload, Sparkles/ArrowLeft, and Send */}
             <div className="flex items-center gap-1 shrink-0 pb-0.5">
+              {/* Attach Screenshot Button */}
+              <button
+                type="button"
+                onClick={() => imageInputRef.current?.click()}
+                className={cn(
+                  "p-1 rounded transition-colors cursor-pointer",
+                  attachedImage ? "text-primary" : "text-zinc-400 hover:text-white",
+                )}
+                title="Attach Screenshot / Error Photo (تصویر یا اسکرین شاٹ لگائیں)"
+              >
+                <ImageIcon className="size-3.5" />
+              </button>
+
               {inputText.trim().length > 0 &&
                 (previousTextForUndo !== null ? (
                   <button
@@ -2077,7 +2145,7 @@ export function SuperCallAssistantView() {
               <button
                 type="button"
                 onClick={handleSendNow}
-                disabled={!inputText.trim() || isProcessing}
+                disabled={(!inputText.trim() && !attachedImage) || isProcessing}
                 className="p-1 rounded text-zinc-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
                 title="Send Message"
               >
