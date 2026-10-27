@@ -32,6 +32,7 @@ import {
   CheckCircle2,
   Zap,
   Image as ImageIcon,
+  Paperclip,
   Activity,
   GitCommit,
   GitBranch,
@@ -383,19 +384,34 @@ export function SuperCallAssistantView() {
   const [isHealthLoading, setIsHealthLoading] = useState(false);
   const [isCommitting, setIsCommitting] = useState(false);
 
-  // Screenshot / Image Attachment State
-  const [attachedImage, setAttachedImage] = useState<{ dataUrl: string; name: string } | null>(
-    null,
-  );
-  const imageInputRef = useRef<HTMLInputElement>(null);
+  // Universal Attachment State (Images, Code files, Logs, PDFs, etc.)
+  const [attachedFile, setAttachedFile] = useState<{
+    dataUrl: string;
+    name: string;
+    size?: string;
+    isImage: boolean;
+  } | null>(null);
+  const fileAttachmentInputRef = useRef<HTMLInputElement>(null);
 
-  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAttachmentFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    const isImage = file.type.startsWith("image/");
+    const sizeStr =
+      file.size > 1024 * 1024
+        ? `${(file.size / (1024 * 1024)).toFixed(1)} MB`
+        : `${Math.round(file.size / 1024)} KB`;
+
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result === "string") {
-        setAttachedImage({ dataUrl: reader.result, name: file.name });
+        setAttachedFile({
+          dataUrl: reader.result,
+          name: file.name,
+          size: sizeStr,
+          isImage,
+        });
       }
     };
     reader.readAsDataURL(file);
@@ -822,23 +838,28 @@ export function SuperCallAssistantView() {
       const userText = rawUserText.trim();
       if (!userText || isProcessing) return;
 
-      const currentImage = attachedImage;
-      setAttachedImage(null);
+      const currentFile = attachedFile;
+      setAttachedFile(null);
 
       setInputText("");
       setPreviousTextForUndo(null);
       isUserEditingRef.current = false;
       setIsUserEditing(false);
 
-      const effectiveUserPrompt = currentImage
-        ? `${userText}\n[Screenshot/Image: ${currentImage.name}]`
+      const effectiveUserPrompt = currentFile
+        ? `${userText}\n[Attached ${currentFile.isImage ? "Image/Screenshot" : "File"}: ${currentFile.name}${currentFile.size ? ` (${currentFile.size})` : ""}]`
         : userText;
 
       handleAddMessage(
         "user",
         userText,
-        currentImage
-          ? ({ image: currentImage.dataUrl, imageName: currentImage.name } as any)
+        currentFile
+          ? ({
+              file: currentFile.dataUrl,
+              fileName: currentFile.name,
+              fileSize: currentFile.size,
+              isImage: currentFile.isImage,
+            } as any)
           : undefined,
       );
       setIsProcessing(true);
@@ -2392,25 +2413,19 @@ export function SuperCallAssistantView() {
       <div className="flex-1 flex flex-col h-full min-w-0 relative">
         {/* Top Header */}
         <header className="h-14 border-b border-border/50 px-3 sm:px-6 flex items-center justify-between shrink-0 bg-background/80 backdrop-blur-md gap-2">
-          {/* Left: Active STT & TTS Settings indicator with direct link to Settings */}
+          {/* Left: Assistant Title & Active Project */}
           <div className="flex items-center gap-2 min-w-0 flex-1">
-            <Link
-              to="/settings/stt-tts"
-              className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-2.5 py-1.5 rounded-lg border border-border/60 hover:border-primary/50 bg-muted/30 hover:bg-muted/60 text-xs text-muted-foreground hover:text-foreground transition-all cursor-pointer group shadow-2xs max-w-[170px] xs:max-w-[210px] sm:max-w-md truncate"
-              title="Click to customize STT & TTS Voice, Speed, Pitch & Accent Settings"
-            >
-              <div className="flex items-center gap-1 text-primary shrink-0">
-                <Volume2 className="size-3.5 group-hover:scale-110 transition-transform" />
-                <span className="font-semibold text-foreground hidden sm:inline">
-                  Voice & Speech:
-                </span>
-                <span className="font-semibold text-foreground sm:hidden">Voice:</span>
-              </div>
-              <span className="truncate font-mono text-[10px] sm:text-[11px] text-zinc-300">
-                {activeVoiceLabel} ({ttsSettings.rate.toFixed(1)}x)
+            <div className="size-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+              <Bot className="size-4" />
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-xs font-semibold text-foreground truncate">
+                Super Call Assistant
+              </h1>
+              <span className="text-[10px] text-muted-foreground truncate block">
+                {activeProjectName}
               </span>
-              <Settings2 className="size-3 text-muted-foreground/70 group-hover:text-foreground shrink-0 ml-0.5 hidden xs:inline" />
-            </Link>
+            </div>
           </div>
 
           {/* Right: Copy Transcript, Notes & Command Center Sheet Button */}
@@ -2569,18 +2584,39 @@ export function SuperCallAssistantView() {
                     />
                   )}
 
-                  {/* Attached Screenshot / User Image */}
-                  {msg.meta?.image && (
+                  {/* Attached File or Screenshot */}
+                  {(msg.meta?.file || msg.meta?.image) && (
                     <div className="mt-2 rounded-xl overflow-hidden border border-border/60 max-w-xs shadow-xs">
-                      <img
-                        src={msg.meta.image}
-                        alt={msg.meta?.imageName || "Attached screenshot"}
-                        className="w-full h-auto object-cover max-h-48 rounded-lg cursor-pointer hover:opacity-95 transition-opacity"
-                        onClick={() => window.open(msg.meta!.image, "_blank")}
-                      />
-                      {msg.meta?.imageName && (
+                      {msg.meta?.isImage || (!msg.meta?.file && msg.meta?.image) ? (
+                        <img
+                          src={msg.meta.file || msg.meta.image}
+                          alt={msg.meta?.fileName || msg.meta?.imageName || "Attached screenshot"}
+                          className="w-full h-auto object-cover max-h-48 rounded-lg cursor-pointer hover:opacity-95 transition-opacity"
+                          onClick={() => window.open(msg.meta!.file || msg.meta!.image, "_blank")}
+                        />
+                      ) : (
+                        <div
+                          onClick={() => window.open(msg.meta!.file, "_blank")}
+                          className="flex items-center gap-2.5 p-2.5 bg-muted/50 hover:bg-muted/80 rounded-lg cursor-pointer transition-colors"
+                        >
+                          <div className="p-2 rounded-md bg-primary/10 text-primary shrink-0">
+                            <FileText className="size-4" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <span className="text-xs font-semibold text-foreground truncate block">
+                              {msg.meta.fileName}
+                            </span>
+                            {msg.meta.fileSize && (
+                              <span className="text-[10px] text-muted-foreground font-mono">
+                                {msg.meta.fileSize}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      {(msg.meta?.fileName || msg.meta?.imageName) && msg.meta?.isImage && (
                         <span className="block text-[9px] text-muted-foreground px-2 py-0.5 bg-black/40 truncate">
-                          📷 {msg.meta.imageName}
+                          📎 {msg.meta.fileName || msg.meta.imageName}
                         </span>
                       )}
                     </div>
@@ -2652,35 +2688,47 @@ export function SuperCallAssistantView() {
             ))}
           </div>
 
-          {/* Attached Screenshot / Image Preview Badge */}
-          {attachedImage && (
+          {/* Attached File or Screenshot Preview Badge */}
+          {attachedFile && (
             <div className="flex items-center gap-2 mb-1.5 px-3 py-1 rounded-xl bg-muted/60 border border-primary/40 w-fit max-w-full animate-in fade-in duration-150">
-              <img
-                src={attachedImage.dataUrl}
-                alt="Preview"
-                className="size-7 object-cover rounded-md border border-border"
-              />
-              <span className="text-[11px] text-foreground font-medium truncate max-w-[170px] xs:max-w-[220px]">
-                {attachedImage.name}
-              </span>
+              {attachedFile.isImage ? (
+                <img
+                  src={attachedFile.dataUrl}
+                  alt="Preview"
+                  className="size-7 object-cover rounded-md border border-border"
+                />
+              ) : (
+                <div className="size-7 rounded-md bg-primary/15 text-primary flex items-center justify-center shrink-0">
+                  <FileText className="size-3.5" />
+                </div>
+              )}
+              <div className="min-w-0">
+                <span className="text-[11px] text-foreground font-medium truncate block max-w-[140px] xs:max-w-[200px]">
+                  {attachedFile.name}
+                </span>
+                {attachedFile.size && (
+                  <span className="text-[9px] text-muted-foreground font-mono block">
+                    {attachedFile.size}
+                  </span>
+                )}
+              </div>
               <button
                 type="button"
-                onClick={() => setAttachedImage(null)}
-                className="p-1 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer"
-                title="Remove attached image"
+                onClick={() => setAttachedFile(null)}
+                className="p-1 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer shrink-0"
+                title="Remove attachment"
               >
                 <X className="size-3" />
               </button>
             </div>
           )}
 
-          {/* Hidden File Input for Image/Screenshot Upload */}
+          {/* Hidden File Input for Any Attachment (Images, Documents, Code files) */}
           <input
-            ref={imageInputRef}
+            ref={fileAttachmentInputRef}
             type="file"
-            accept="image/*"
             className="hidden"
-            onChange={handleImageFileChange}
+            onChange={handleAttachmentFileChange}
           />
 
           {/* 1. Attached Input Field on Top (Subtle rounded card, completely isolated and clean on mobile) */}
@@ -2729,8 +2777,8 @@ export function SuperCallAssistantView() {
                   }
                 }}
                 placeholder={
-                  attachedImage
-                    ? "Add a note or speak about this screenshot..."
+                  attachedFile
+                    ? `Add instructions for ${attachedFile.name}...`
                     : "Type a message or speak..."
                 }
                 className="w-full bg-transparent border-0 outline-hidden focus:outline-hidden focus:ring-0 p-0 text-sm text-zinc-200 placeholder:text-zinc-500 resize-none max-h-[56px] min-h-[26px] leading-snug overflow-y-auto tracking-normal font-normal"
@@ -2738,19 +2786,19 @@ export function SuperCallAssistantView() {
               />
             </div>
 
-            {/* Gray Action Buttons: Image Upload, Sparkles/ArrowLeft, and Send */}
+            {/* Gray Action Buttons: Paperclip Attachment, Sparkles/ArrowLeft, and Send */}
             <div className="flex items-center gap-1 shrink-0 pb-0.5">
-              {/* Attach Screenshot Button */}
+              {/* Universal Attachment Button (Paperclip) */}
               <button
                 type="button"
-                onClick={() => imageInputRef.current?.click()}
+                onClick={() => fileAttachmentInputRef.current?.click()}
                 className={cn(
                   "p-1 rounded transition-colors cursor-pointer",
-                  attachedImage ? "text-primary" : "text-zinc-400 hover:text-white",
+                  attachedFile ? "text-primary" : "text-zinc-400 hover:text-white",
                 )}
-                title="Attach Screenshot / Error Photo (تصویر یا اسکرین شاٹ لگائیں)"
+                title="Attach File, Code or Screenshot (فائل یا اسکرین شاٹ لگائیں)"
               >
-                <ImageIcon className="size-3.5" />
+                <Paperclip className="size-3.5" />
               </button>
 
               {inputText.trim().length > 0 &&
@@ -2782,7 +2830,7 @@ export function SuperCallAssistantView() {
               <button
                 type="button"
                 onClick={handleSendNow}
-                disabled={(!inputText.trim() && !attachedImage) || isProcessing}
+                disabled={(!inputText.trim() && !attachedFile) || isProcessing}
                 className="p-1 rounded text-zinc-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
                 title="Send Message"
               >
