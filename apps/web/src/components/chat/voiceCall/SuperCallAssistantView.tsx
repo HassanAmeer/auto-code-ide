@@ -901,16 +901,20 @@ export function SuperCallAssistantView() {
                   }
                 }}
                 className={cn(
-                  "relative z-10 flex items-center justify-center size-13 sm:size-14 rounded-full transition-all duration-300 cursor-pointer select-none",
-                  "bg-zinc-950/95 border border-zinc-800/90 backdrop-blur-xl shadow-xl",
+                  "relative z-10 flex items-center justify-center size-8 sm:size-8.5 rounded-full transition-all duration-300 cursor-pointer select-none",
+                  "bg-zinc-950/95 border border-zinc-800/90 backdrop-blur-xl shadow-md",
                 )}
               >
-                {/* When Call Active: Compact Grok Geometric Soundwave (Clean, no outer boundary lines, compact width & height)
+                {/* When Call Active: Compact Grok Geometric Soundwave (Proportional to 32px button)
                     When Call Inactive/Ended: Existing original circular wave in grey color */}
                 {isCallActive ? (
                   <GrokGeometricVoiceWaves callStatus={callStatus} analyserNode={analyserNode} />
                 ) : (
-                  <CircularVoiceWaves callStatus="idle" analyserNode={null} />
+                  <CircularVoiceWaves
+                    callStatus="idle"
+                    analyserNode={null}
+                    className="size-[48px] -inset-[8px]"
+                  />
                 )}
 
                 {/* Centered Phone Icon: Soft red (halka red) when active call, subtle grey when idle/ended */}
@@ -929,7 +933,7 @@ export function SuperCallAssistantView() {
                     }
                   }}
                   className={cn(
-                    "relative z-20 flex size-7 items-center justify-center rounded-full transition-all duration-200 cursor-pointer active:scale-90 bg-transparent border-0 shadow-none outline-none focus:outline-none",
+                    "relative z-20 flex size-5 items-center justify-center rounded-full transition-all duration-200 cursor-pointer active:scale-90 bg-transparent border-0 shadow-none outline-none focus:outline-none",
                     isCallActive
                       ? "text-rose-400/90 hover:text-rose-300"
                       : "text-zinc-300 hover:text-white",
@@ -941,9 +945,9 @@ export function SuperCallAssistantView() {
                   }
                 >
                   {isCallActive ? (
-                    <PhoneOff className="size-4" strokeWidth={2.4} />
+                    <PhoneOff className="size-3.5" strokeWidth={2.2} />
                   ) : (
-                    <PhoneCall className="size-4" strokeWidth={2.2} />
+                    <PhoneCall className="size-3.5" strokeWidth={2.2} />
                   )}
                 </button>
               </div>

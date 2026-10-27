@@ -61,9 +61,11 @@ const INNER_RADIAL_BARS: RadialBarCoords[] = Array.from({ length: NUM_INNER_BARS
 export function CircularVoiceWaves({
   callStatus,
   analyserNode,
+  className,
 }: {
   callStatus: VoiceCallStatus;
   analyserNode: AnalyserNode | null;
+  className?: string;
 }) {
   const outerLinesRef = useRef<(SVGLineElement | null)[]>([]);
   const innerLinesRef = useRef<(SVGLineElement | null)[]>([]);
@@ -262,7 +264,10 @@ export function CircularVoiceWaves({
     <svg
       aria-hidden="true"
       viewBox="-38 -38 76 76"
-      className="pointer-events-none absolute -inset-[11px] size-[76px] overflow-visible z-0 transition-all duration-200"
+      className={cn(
+        "pointer-events-none absolute -inset-[11px] size-[76px] overflow-visible z-0 transition-all duration-200",
+        className,
+      )}
       style={{ filter: style.filter }}
     >
       {/* 1. Outer Larger Wave Ring */}
