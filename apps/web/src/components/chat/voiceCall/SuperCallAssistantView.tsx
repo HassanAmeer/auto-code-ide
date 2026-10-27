@@ -866,7 +866,7 @@ export function SuperCallAssistantView() {
           </div>
 
           {/* 2. Sleek Horizontal Divider with Left-Aligned Model Badge & Centered Wave Call Button */}
-          <div className="relative flex items-center justify-between my-2 min-h-[48px]">
+          <div className="relative flex items-center justify-between my-2 min-h-[64px]">
             {/* The horizontal line spanning across */}
             <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[1px] bg-zinc-800" />
 
