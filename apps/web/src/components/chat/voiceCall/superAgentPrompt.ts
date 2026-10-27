@@ -1,4 +1,5 @@
 import type { NoteItem } from "~/lib/notesStore";
+import type { MemoryRecord } from "~/lib/memoryStore";
 import type { ScheduledTaskItem } from "~/lib/scheduledTasksStore";
 import type { ProjectActivityItem } from "~/lib/projectActivityLedger";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
@@ -6,8 +7,7 @@ import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 export interface SuperAgentPromptContext {
   projects: ReadonlyArray<EnvironmentProject>;
   notes: NoteItem[];
-  scheduledTasks?: ScheduledTaskItem[];
-  activities?: ProjectActivityItem[];
+  chatMemories?: MemoryRecord[];
   language: "urdu" | "english";
   selectedModel: string;
   activeProjectName?: string;
@@ -19,12 +19,13 @@ export interface SuperAgentPromptContext {
  * Dedicated, Standalone Super Admin Agent System Prompt
  * Defines the real-life human conversational phone call persona,
  * workspace overseer capabilities, error analysis, scheduling,
- * notes management, and autonomous dispatching.
+ * workspace memory records management, and autonomous dispatching.
  */
 export function buildSuperAgentSystemPrompt(context: SuperAgentPromptContext): string {
   const {
     projects,
-    notes,
+    notes = [],
+    chatMemories = [],
     scheduledTasks = [],
     activities = [],
     language,
@@ -48,13 +49,24 @@ export function buildSuperAgentSystemPrompt(context: SuperAgentPromptContext): s
   const notesListStr =
     notes.length > 0
       ? notes
-          .slice(0, 5)
+          .slice(0, 10)
           .map(
             (n, idx) =>
               `${idx + 1}. [${n.title}] - ${n.content || "(No details)"} ${n.completed ? "✓" : "•"}`,
           )
           .join("\n")
       : "No notes saved yet.";
+
+  const chatMemoryListStr =
+    chatMemories.length > 0
+      ? chatMemories
+          .slice(0, 30)
+          .map(
+            (m, idx) =>
+              `${idx + 1}. [TITLE: "${m.title}"] -> ${m.description || "(Empty description)"} (${m.source === "imported_from_notes" ? "Imported from Notes" : "Custom written in this chat"})`,
+          )
+          .join("\n")
+      : "";
 
   const scheduledTasksListStr =
     scheduledTasks.length > 0
@@ -129,7 +141,12 @@ You adapt your response style based on the user's intent:
 5. **Action / Build Execution ("Shuru karo", "Fix this", "Run task"):**
    - Use clean Markdown with headers (\`### 🎮 Project Status\`, \`### 🛠️ Action Plan\`), concise bullet points, and live preview links if relevant: \`🌐 [Click to Open Live Preview](/api/projects/preview/{projectName}/{file})\`.
 
-6. **Spoken Output for Audio (Always Required at the End):**
+6. **Workspace Memory & Titled Records Lookups ("Memory ke andar [Title] file / note dekh lo", "Memory check karo"):**
+   - You have complete, instant access to all titled records in the "Workspace Memory Vault" (listed below under Workspace Memory).
+   - When anyone mentions that a note/record/file exists in Memory with a title (e.g. "Memory ke andar [Title] wali note/file bani hui hai, ja kar dekh le"), identify that title, pull its content, and recite or explain its contents accurately.
+   - If asked to save or update something in Memory, confirm that it is saved under that title.
+
+7. **Spoken Output for Audio (Always Required at the End):**
    - At the VERY END of your response, on a new line, provide:
      \`[SPOKEN]: <Complete natural conversational spoken text of your full response in Roman Urdu / English>\`
    - This section will be read aloud over the voice call. Keep it conversational, articulate, warm, and natural WITHOUT markdown syntax, asterisks, brackets, or raw URLs. Do NOT artificially truncate or restrict to 1 or 2 sentences unless the user explicitly requested a brief or short summary.
@@ -143,8 +160,9 @@ Active Project Target: ${activeProjectName || "op"}
 Workspace Projects:
 ${projectListStr}
 
-User Notes:
+Workspace Notes (General Reminders & Checklist):
 ${notesListStr}
+${chatMemoryListStr ? `\nActive Chat Memory Records (${chatMemories.length} records specific to this chat):\n${chatMemoryListStr}\n` : ""}
 
 Scheduled Tasks:
 ${scheduledTasksListStr}

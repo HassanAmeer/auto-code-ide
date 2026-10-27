@@ -14,6 +14,7 @@ import {
   CalendarIcon,
   TagIcon,
   SparklesIcon,
+  Brain,
 } from "lucide-react";
 import { useNotes, useNotesSheetState, type NoteItem } from "../../lib/notesStore";
 import { Button } from "../ui/button";
@@ -181,7 +182,7 @@ export function NotesSheet() {
                 size="xs"
                 variant="outline"
                 onClick={handleStartCreate}
-                className="h-7 text-xs gap-1 border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 rounded-full px-2.5"
+                className="h-7 text-xs gap-1 border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 rounded-full px-2.5 cursor-pointer"
               >
                 <PlusIcon className="size-3.5" />
                 <span className="hidden sm:inline">New Note</span>
@@ -276,7 +277,7 @@ export function NotesSheet() {
                 <button
                   type="button"
                   onClick={() => setIsCreating(false)}
-                  className="text-zinc-400 hover:text-zinc-200"
+                  className="text-zinc-400 hover:text-zinc-200 cursor-pointer"
                 >
                   <XIcon className="size-3.5" />
                 </button>
@@ -328,7 +329,7 @@ export function NotesSheet() {
                     size="xs"
                     variant="ghost"
                     onClick={() => setIsCreating(false)}
-                    className="h-7 text-xs text-zinc-400 hover:text-zinc-200"
+                    className="h-7 text-xs text-zinc-400 hover:text-zinc-200 cursor-pointer"
                   >
                     Cancel
                   </Button>
@@ -336,7 +337,7 @@ export function NotesSheet() {
                     type="submit"
                     size="xs"
                     disabled={!newTitle.trim()}
-                    className="h-7 text-xs bg-amber-500 hover:bg-amber-600 text-zinc-950 font-semibold"
+                    className="h-7 text-xs bg-amber-500 hover:bg-amber-600 text-zinc-950 font-semibold cursor-pointer"
                   >
                     Save Note
                   </Button>
@@ -362,7 +363,7 @@ export function NotesSheet() {
                   size="xs"
                   variant="outline"
                   onClick={handleStartCreate}
-                  className="mt-4 text-xs gap-1 border-amber-500/40 text-amber-300 hover:bg-amber-500/10"
+                  className="mt-4 text-xs gap-1 border-amber-500/40 text-amber-300 hover:bg-amber-500/10 cursor-pointer"
                 >
                   <PlusIcon className="size-3.5" />
                   Add Your First Note
@@ -425,9 +426,9 @@ export function NotesSheet() {
                             type="submit"
                             size="xs"
                             disabled={!editTitle.trim()}
-                            className="h-6 text-[11px] bg-amber-500 hover:bg-amber-600 text-zinc-950 font-semibold"
+                            className="h-6 text-[11px] bg-amber-500 hover:bg-amber-600 text-zinc-950 font-semibold cursor-pointer"
                           >
-                            Save
+                            Save Note
                           </Button>
                         </div>
                       </div>

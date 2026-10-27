@@ -11,6 +11,9 @@ export interface NoteItem {
   color?: "default" | "amber" | "emerald" | "blue" | "purple" | "rose";
 }
 
+/** Workspace Memory item alias */
+export type MemoryItem = NoteItem;
+
 const STORAGE_KEY = "t3code:user-notes:v1";
 
 // In-memory cache + event dispatch for cross-component reactivity
@@ -28,6 +31,30 @@ export function loadNotes(): NoteItem[] {
     console.warn("Failed to load user notes:", err);
     return [];
   }
+}
+
+/** Workspace Memory loader alias */
+export const loadMemories = loadNotes;
+
+/** Find specific memory record by title (fuzzy / substring matching) */
+export function findMemoryByTitle(query: string): NoteItem | undefined {
+  const notes = loadNotes();
+  if (!query || !query.trim()) return undefined;
+  const clean = query
+    .trim()
+    .toLowerCase()
+    .replace(/['"“”]/g, "");
+
+  // 1. Exact title match
+  const exact = notes.find((n) => n.title.trim().toLowerCase() === clean);
+  if (exact) return exact;
+
+  // 2. Partial containment match
+  const partial = notes.find((n) => {
+    const t = n.title.toLowerCase();
+    return t.length >= 2 && (t.includes(clean) || clean.includes(t));
+  });
+  return partial;
 }
 
 export function saveNotes(notes: NoteItem[]): void {
@@ -186,3 +213,14 @@ export function useNotesSheetState(): [boolean, (open: boolean) => void] {
 
   return [isOpen, notifyOpen];
 }
+
+// Memory aliases for convenience
+export const saveMemories = saveNotes;
+export const addMemory = addNote;
+export const updateMemory = updateNote;
+export const deleteMemory = deleteNote;
+export const useMemories = useNotes;
+export const openMemorySheet = openNotesSheet;
+export const closeMemorySheet = closeNotesSheet;
+export const toggleMemorySheet = toggleNotesSheet;
+export const useMemorySheetState = useNotesSheetState;

@@ -55,6 +55,7 @@ import { useAtomValue } from "@effect/atom-react";
 import { cn } from "~/lib/utils";
 import { useProjects } from "~/state/entities";
 import { useNotes, openNotesSheet, addNote, type NoteItem } from "~/lib/notesStore";
+import { useChatMemories, openMemorySheet, type MemoryRecord } from "~/lib/memoryStore";
 import { useScheduledTasks } from "~/lib/scheduledTasksStore";
 import { useProjectActivities } from "~/lib/projectActivityLedger";
 import {
@@ -363,6 +364,7 @@ export function SuperCallAssistantView() {
     handleClearHistory,
     handleAddMessage,
   } = useCallSessions();
+  const { memories: chatMemories } = useChatMemories(activeSessionId);
 
   const { tasks: scheduledTasks, toggle: toggleTask, remove: removeTask } = useScheduledTasks();
   const { activities, deleteActivity } = useProjectActivities();
@@ -880,6 +882,7 @@ export function SuperCallAssistantView() {
           activeProjectId: activeProjId,
           selectedModel: effectiveModel,
           selectedInstanceId: String(effectiveInstanceId),
+          chatId: activeSessionId,
           conversationHistory: (activeSession?.messages || []).map((m) => ({
             role: m.role === "user" ? ("user" as const) : ("assistant" as const),
             text: m.text,
@@ -940,6 +943,7 @@ export function SuperCallAssistantView() {
         const codeDiff = diffMatch ? diffMatch[1] : undefined;
         const enrichedMeta = {
           ...meta,
+          ...(res.referencedMemory ? { referencedMemory: res.referencedMemory } : {}),
           ...(codeDiff ? { diff: codeDiff } : {}),
         };
 
@@ -2424,12 +2428,26 @@ export function SuperCallAssistantView() {
               type="button"
               onClick={() => openNotesSheet()}
               className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-lg border border-border/70 hover:border-border hover:bg-muted/50 text-xs font-medium transition-colors cursor-pointer"
-              title="Workspace Notes & Memory"
+              title="Workspace Notes & Reminders"
             >
               <StickyNote className="size-3.5 text-amber-400" />
               <span className="hidden xs:inline">Notes</span>
-              <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-amber-500/15 text-amber-400 font-semibold">
+              <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-amber-500/15 text-amber-400 font-semibold font-mono">
                 {notes.length}
+              </span>
+            </button>
+
+            {/* Chat Memory Button */}
+            <button
+              type="button"
+              onClick={() => openMemorySheet()}
+              className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-lg border border-purple-500/30 hover:border-purple-500/50 bg-purple-500/10 hover:bg-purple-500/15 text-xs font-semibold text-purple-300 transition-colors cursor-pointer shadow-xs active:scale-95"
+              title="Chat Memory Vault (Custom records & rules for this specific chat)"
+            >
+              <Brain className="size-3.5 text-purple-400" />
+              <span className="hidden xs:inline">Memory</span>
+              <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-purple-500/25 text-purple-300 font-semibold font-mono">
+                {chatMemories.length}
               </span>
             </button>
 
@@ -2477,6 +2495,13 @@ export function SuperCallAssistantView() {
                   className="px-3 py-1.5 rounded-full border border-border/80 bg-muted/30 hover:bg-muted hover:border-border text-xs transition-colors cursor-pointer"
                 >
                   📝 Read Notes
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleSuperAgentDispatch("Is chat ki memory mein kya hai?")}
+                  className="px-3 py-1.5 rounded-full border border-purple-500/40 bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 text-xs transition-colors cursor-pointer"
+                >
+                  🧠 Chat Memory
                 </button>
                 <button
                   type="button"
@@ -2555,6 +2580,37 @@ export function SuperCallAssistantView() {
                       items={msg.meta.wishlistItems}
                       projectName={msg.meta.wishlistProject ?? "Workspace"}
                     />
+                  )}
+
+                  {/* Referenced Memory Card for this Chat */}
+                  {msg.meta?.referencedMemory && (
+                    <div className="mt-2.5 rounded-xl border border-purple-500/30 bg-purple-500/10 p-3 text-xs space-y-2">
+                      <div className="flex items-center justify-between font-medium">
+                        <span className="flex items-center gap-1.5 text-foreground min-w-0 flex-1">
+                          <Brain className="size-3.5 text-purple-400 shrink-0" />
+                          <span className="font-semibold text-purple-300 shrink-0">
+                            Chat Memory:
+                          </span>
+                          <span className="font-semibold text-foreground truncate">
+                            {msg.meta.referencedMemory.title}
+                          </span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => openMemorySheet()}
+                          className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 font-medium text-[11px] border border-purple-500/30 transition-all cursor-pointer active:scale-95 shrink-0 ml-2"
+                          title="Open Memory Drawer to view or edit this file"
+                        >
+                          <span>Khol kar dekhein</span>
+                          <ExternalLink className="size-3" />
+                        </button>
+                      </div>
+                      {msg.meta.referencedMemory.description && (
+                        <p className="text-[11px] text-muted-foreground whitespace-pre-wrap line-clamp-4 bg-background/60 p-2.5 rounded-lg border border-border/40 font-mono select-all">
+                          {msg.meta.referencedMemory.description}
+                        </p>
+                      )}
+                    </div>
                   )}
 
                   {/* Attached File or Screenshot */}

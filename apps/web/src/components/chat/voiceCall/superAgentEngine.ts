@@ -1,5 +1,6 @@
 import { executeTerminalCommand } from "~/components/chat/terminal/terminalClient";
 import { loadNotes, addNote, type NoteItem } from "~/lib/notesStore";
+import { loadChatMemories, addMemory as addChatMemory, type MemoryRecord } from "~/lib/memoryStore";
 import {
   addScheduledTask,
   loadScheduledTasks,
@@ -21,6 +22,7 @@ export interface SuperAgentRunOptions {
   activeProjectId?: string | undefined;
   selectedModel: string;
   selectedInstanceId?: string | undefined;
+  chatId?: string | undefined;
   conversationHistory?: Array<{ role: "user" | "assistant"; text: string }> | undefined;
   providerConfig?:
     | {
@@ -46,6 +48,13 @@ export interface SuperAgentResult {
   spokenReply: string;
   actionTaken?: string;
   delegatedTask?: DelegatedTaskInfo;
+  referencedMemory?: {
+    id: string;
+    title: string;
+    description: string;
+    updatedAt: number;
+    source: "manual" | "imported_from_notes";
+  };
   details?: unknown;
 }
 
@@ -459,7 +468,7 @@ export async function executeSuperAgentInstruction(
     runtimeFacts += `\n[ACTION EXECUTED - NEW TASK CREATED]:\n• Task: "${newAct.taskTitle}"\n• Project: ${targetName}\n• Status: PENDING / QUEUED\n• CreatedAt: ${new Date(newAct.createdAt).toISOString()}\n`;
   }
 
-  // 3b. Note Creation
+  // 3b-1. Notes Creation (Workspace Notes)
   const noteMatch = userText.match(
     /(?:note\s*(?:bana(?:o|en)?|likh(?:o|en)?|add\s*karo?)|add\s*note|create\s*note)\s*[:\-]?\s*(.+)/i,
   );
@@ -468,7 +477,117 @@ export async function executeSuperAgentInstruction(
     const noteTitle = noteContent.slice(0, 24).trim() || "Voice Note";
     const note = addNote(noteTitle, noteContent);
     actionTag = "add_note";
-    runtimeFacts += `\n[ACTION EXECUTED - NOTE CREATED]:\n• Note Title: "${note.title}"\n• Note Content: "${note.content}"\n`;
+    runtimeFacts += `\n[ACTION EXECUTED - NOTE CREATED IN WORKSPACE NOTES]:\n• Note Title: "${note.title}"\n• Note Content: "${note.content}"\n`;
+  }
+
+  // 3b-2. Per-Chat Memory Management
+  const chatId = options.chatId;
+  const chatMemories = loadChatMemories(chatId);
+  let referencedMemoryInfo: SuperAgentResult["referencedMemory"] | undefined = undefined;
+
+  // Chat Memory Creation: "memory mein save karo: ...", "memory banao: ..."
+  const memoryCreateMatch = userText.match(
+    /(?:(?:memory|yaad)\s*(?:mein|me)?\s*(?:save\s*karo?|bana(?:o|en)?|likh(?:o|en)?|add\s*karo?|rakh\s*lo)|add\s*(?:to\s*)?memory|create\s*memory|save\s*(?:to\s*)?memory)\s*[:\-]?\s*(.+)/i,
+  );
+  if (memoryCreateMatch && memoryCreateMatch[1]) {
+    const raw = memoryCreateMatch[1].trim();
+    const titleMatch = raw.match(
+      /(?:title|naam)\s*[:\-]?\s*["']?([^"':\n]+)["']?\s*[:\-\n]\s*(.+)/i,
+    );
+    let title = "";
+    let desc = "";
+    if (titleMatch && titleMatch[1] && titleMatch[2]) {
+      title = titleMatch[1].trim();
+      desc = titleMatch[2].trim();
+    } else {
+      const parts = raw.split(/[:\n]/);
+      if (parts.length > 1 && parts[0]!.trim().length < 40) {
+        title = parts[0]!.trim();
+        desc = parts.slice(1).join("\n").trim();
+      } else {
+        title = raw.slice(0, 32).trim() || "Chat Memory";
+        desc = raw;
+      }
+    }
+    const newRecord = addChatMemory(title, desc, { chatId, source: "manual" });
+    actionTag = "add_chat_memory";
+    referencedMemoryInfo = {
+      id: newRecord.id,
+      title: newRecord.title,
+      description: newRecord.description,
+      updatedAt: newRecord.updatedAt,
+      source: newRecord.source,
+    };
+    runtimeFacts += `\n[ACTION EXECUTED - NEW CHAT MEMORY SAVED]:\n• Title: "${newRecord.title}"\n• Description: "${newRecord.description}"\n• Saved exclusively for this chat session.\n`;
+  }
+
+  // 3b-3. Specific Chat Memory Lookup by Title
+  let matchedMemory: MemoryRecord | undefined = undefined;
+  for (const m of chatMemories) {
+    if (m.title && m.title.trim().length >= 2) {
+      const cleanTitle = m.title.trim().toLowerCase();
+      if (userText.toLowerCase().includes(cleanTitle)) {
+        matchedMemory = m;
+        break;
+      }
+    }
+  }
+
+  if (!matchedMemory) {
+    const memoryMentionMatch = userText.match(
+      /(?:memory|record)\s*(?:ke\s*andar|mein|me|se)?\s*(?:jo\s*)?(?:file|note|record)?\s*["'“]?([^"'”\n,?.!]{2,50}?)["'”]?\s*(?:wali|bana|bani|hai|dekh|check|parh|sunao|nikal|kholo|dhundo)/i,
+    );
+    if (memoryMentionMatch && memoryMentionMatch[1]) {
+      const queryTitle = memoryMentionMatch[1].trim().toLowerCase();
+      matchedMemory = chatMemories.find((m) => {
+        const t = m.title.toLowerCase();
+        return t.includes(queryTitle) || queryTitle.includes(t);
+      });
+    }
+  }
+
+  if (matchedMemory) {
+    actionTag = "lookup_chat_memory";
+    referencedMemoryInfo = {
+      id: matchedMemory.id,
+      title: matchedMemory.title,
+      description: matchedMemory.description,
+      updatedAt: matchedMemory.updatedAt,
+      source: matchedMemory.source,
+    };
+    runtimeFacts += `\n[REFERENCED MEMORY FROM THIS CHAT - FOUND BY TITLE]:
+• Title: "${matchedMemory.title}"
+• Description / Content:
+"""
+${matchedMemory.description || "(Empty description)"}
+"""
+• Source Origin: ${matchedMemory.source === "imported_from_notes" ? "Imported from Notes" : "Custom written in this chat"}
+• Updated: ${new Date(matchedMemory.updatedAt).toLocaleString()}
+INSTRUCTION: The user specifically referenced this chat's memory record ("${matchedMemory.title}"). Confirm that you retrieved it from this chat's memory, recite its details, and answer any questions accurately.
+`;
+  }
+
+  // 3b-4. User asks to read all memories for this chat
+  if (
+    !matchedMemory &&
+    !memoryCreateMatch &&
+    /\b(memory|memories|yaad)\b/i.test(userText) &&
+    /\b(read|sunao|parh|list|dikhao|batao|kya\s*hai|all|check)\b/i.test(userText)
+  ) {
+    actionTag = "read_chat_memories";
+    if (chatMemories.length > 0) {
+      runtimeFacts +=
+        `\n[ACTIVE CHAT MEMORY - ALL SAVED RECORDS (${chatMemories.length} ITEMS)]:\n` +
+        chatMemories
+          .map(
+            (m, i) =>
+              `${i + 1}. Title: "${m.title}"\n   Description: ${m.description || "(Empty)"}\n   Origin: ${m.source === "imported_from_notes" ? "Imported from Notes" : "Custom written"}`,
+          )
+          .join("\n\n") +
+        `\nINSTRUCTION: Summarize or list this chat's memory records clearly for the user.\n`;
+    } else {
+      runtimeFacts += `\n[ACTIVE CHAT MEMORY]: Is chat ke liye koi custom memory saved nahi hai. Default AI behavior active hai.\n`;
+    }
   }
 
   // 3c. Scheduled Task Creation
@@ -621,6 +740,7 @@ export async function executeSuperAgentInstruction(
   const systemPrompt = buildSuperAgentSystemPrompt({
     projects,
     notes,
+    chatMemories,
     scheduledTasks,
     activities,
     language: lang,
@@ -667,6 +787,7 @@ export async function executeSuperAgentInstruction(
       spokenReply: spokenReply || fullReply,
       actionTaken: actionTag,
       delegatedTask: delegatedTaskInfo,
+      referencedMemory: referencedMemoryInfo,
     };
   }
 
@@ -708,6 +829,7 @@ export async function executeSuperAgentInstruction(
     reply: friendlyError,
     spokenReply: friendlyError,
     actionTaken: "provider_error",
+    referencedMemory: referencedMemoryInfo,
     details: { error: errText, code: errCode },
   };
 }
