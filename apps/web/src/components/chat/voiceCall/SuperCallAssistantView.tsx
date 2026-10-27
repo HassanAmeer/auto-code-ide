@@ -887,22 +887,6 @@ export function SuperCallAssistantView() {
 
             {/* Middle / Center: Call Button with Grok Geometric Soundwaves / Circular Wave (Centered on divider) */}
             <div className="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center">
-              {isCallActive && (
-                <button
-                  type="button"
-                  onClick={toggleMicMute}
-                  className={cn(
-                    "absolute -left-9 top-1/2 -translate-y-1/2 size-7 rounded-full border flex items-center justify-center transition-all cursor-pointer shadow-xs active:scale-95 bg-background z-20",
-                    isMicMuted
-                      ? "bg-amber-500/20 border-amber-500/50 text-amber-400"
-                      : "bg-zinc-900/90 border-zinc-700/80 text-zinc-300 hover:text-white hover:bg-zinc-800",
-                  )}
-                  title={isMicMuted ? "Unmute Microphone" : "Mute Microphone"}
-                >
-                  {isMicMuted ? <MicOff className="size-3" /> : <Mic className="size-3" />}
-                </button>
-              )}
-
               <div
                 onClick={(e) => {
                   e.preventDefault();
@@ -921,7 +905,7 @@ export function SuperCallAssistantView() {
                   "bg-zinc-950/95 border border-zinc-800/90 backdrop-blur-xl shadow-xl",
                 )}
               >
-                {/* When Call Active: New Grok Geometric Soundwave Eye design (Grey on idle, Blue on speak, Orange on think, Green on TTS).
+                {/* When Call Active: Compact Grok Geometric Soundwave (Clean, no outer boundary lines, compact width & height)
                     When Call Inactive/Ended: Existing original circular wave in grey color */}
                 {isCallActive ? (
                   <GrokGeometricVoiceWaves callStatus={callStatus} analyserNode={analyserNode} />
@@ -965,8 +949,26 @@ export function SuperCallAssistantView() {
               </div>
             </div>
 
-            {/* Right: empty spacer to balance the layout */}
-            <div className="relative z-10 w-6 bg-background opacity-0 pointer-events-none" />
+            {/* Right: Mic Mute / Unmute Button (Placed neatly on right, leaves center soundwave completely clear) */}
+            <div className="relative z-10 flex items-center justify-end bg-background pl-2 min-w-[28px]">
+              {isCallActive ? (
+                <button
+                  type="button"
+                  onClick={toggleMicMute}
+                  className={cn(
+                    "size-7 rounded-full border flex items-center justify-center transition-all cursor-pointer shadow-xs active:scale-95",
+                    isMicMuted
+                      ? "bg-amber-500/20 border-amber-500/50 text-amber-400"
+                      : "bg-zinc-900 border-zinc-700/80 text-zinc-300 hover:text-white hover:bg-zinc-800",
+                  )}
+                  title={isMicMuted ? "Unmute Microphone" : "Mute Microphone"}
+                >
+                  {isMicMuted ? <MicOff className="size-3.5" /> : <Mic className="size-3.5" />}
+                </button>
+              ) : (
+                <div className="size-7 opacity-0 pointer-events-none" />
+              )}
+            </div>
           </div>
         </div>
       </div>
