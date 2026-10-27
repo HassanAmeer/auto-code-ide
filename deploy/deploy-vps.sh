@@ -62,9 +62,16 @@ cd "$ROOT_DIR" || exit 1
 # ------------------------------------------------------------------------------
 # 1. LOCAL GIT STAGE & COMMIT
 # ------------------------------------------------------------------------------
-echo -e "\n${C_BOLD}${C_BLUE}[1/5] Checking Local Git Changes...${C_RESET}"
+echo -e "\n${C_BOLD}${C_BLUE}[1/5] Checking Local Git Changes & Syncing Across Sessions...${C_RESET}"
+
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+
+# Pull any remote changes from other chat sessions/machines first
+echo -e "  ${C_DIM}Checking for remote commits from parallel sessions...${C_RESET}"
+git pull --rebase origin "${CURRENT_BRANCH}" 2>/dev/null || true
+
 if [ -n "$(git status --porcelain)" ]; then
-  echo -e "  ${C_DIM}Staging modified files and committing...${C_RESET}"
+  echo -e "  ${C_DIM}Staging all modified files across workspace...${C_RESET}"
   git add .
   git commit -m "$COMMIT_MSG" || {
     echo -e "${C_YELLOW}  ⚠️ Nothing new committed or pre-commit hook skipped.${C_RESET}"
@@ -74,7 +81,6 @@ else
 fi
 
 CURRENT_COMMIT=$(git rev-parse --short HEAD)
-CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 echo -e "  ${C_DIM}Active Branch:${C_RESET} ${C_BOLD}${CURRENT_BRANCH}${C_RESET} (${CURRENT_COMMIT})"
 
 # ------------------------------------------------------------------------------
