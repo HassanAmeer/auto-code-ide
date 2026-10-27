@@ -265,7 +265,7 @@ export function CircularVoiceWaves({
       aria-hidden="true"
       viewBox="-38 -38 76 76"
       className={cn(
-        "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 size-[76px] overflow-visible z-0 transition-all duration-200",
+        "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 size-[62px] sm:size-[76px] overflow-visible z-0 transition-all duration-200",
         className,
       )}
       style={{ filter: style.filter }}

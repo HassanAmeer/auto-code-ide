@@ -69,9 +69,9 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
       const cx = width / 2;
       const cy = height / 2;
       const isMobile = width < 380 || height < 65;
-      const scale = isMobile ? 0.6 : 0.85;
-      const W = Math.min(width * 0.45, 220 * scale);
-      const R_core = isMobile ? 15.0 : 20.0;
+      const scale = isMobile ? 0.48 : 0.85;
+      const W = Math.min(width * 0.38, 175 * scale);
+      const R_core = isMobile ? 12.0 : 20.0;
 
       // Audio analysis with responsive speech attack & smooth release
       let rawMicEnergy = 0;
@@ -150,10 +150,10 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
 
       // ── 2. Compact Gravitational Lensing Orbital Rings around 20% Smaller Center ──
       const rings = [
-        { r: R_core + 1.8, alpha: 0.65, lw: 1.1 },
-        { r: R_core + 5.5, alpha: 0.45, lw: 0.85 },
-        { r: R_core + 11.0, alpha: 0.28, lw: 0.7 },
-        { r: R_core + 17.5, alpha: 0.15, lw: 0.55 },
+        { r: R_core + (isMobile ? 1.2 : 1.8), alpha: 0.65, lw: isMobile ? 0.8 : 1.1 },
+        { r: R_core + (isMobile ? 3.6 : 5.5), alpha: 0.45, lw: isMobile ? 0.7 : 0.85 },
+        { r: R_core + (isMobile ? 7.2 : 11.0), alpha: 0.28, lw: isMobile ? 0.55 : 0.7 },
+        { r: R_core + (isMobile ? 11.5 : 17.5), alpha: 0.15, lw: isMobile ? 0.45 : 0.55 },
       ];
 
       for (const ring of rings) {
@@ -170,7 +170,7 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
 
       // Dynamics multipliers - calm, normal, realistic speed (NOT hyperactive)
       let waveSpeed = 0.0015;
-      let waveAmp = (isMobile ? 2.6 : 4.5) * scale;
+      let waveAmp = (isMobile ? 1.9 : 4.5) * scale;
 
       // AI speech rhythm synthesis (cadence with natural pauses)
       let aiSpeechCadence = 0;
@@ -348,7 +348,7 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
       aria-hidden="true"
       className={cn(
         "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2",
-        "w-[240px] xs:w-[290px] sm:w-[420px] md:w-[460px] h-[46px] sm:h-[96px] overflow-visible z-0 select-none",
+        "w-[195px] xs:w-[235px] sm:w-[420px] md:w-[460px] h-[34px] sm:h-[96px] overflow-visible z-0 select-none",
         className,
       )}
     >

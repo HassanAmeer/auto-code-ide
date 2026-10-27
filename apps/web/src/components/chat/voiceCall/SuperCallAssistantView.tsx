@@ -1033,7 +1033,7 @@ export function SuperCallAssistantView() {
         </div>
 
         {/* Unified Bottom Area: Input Field on Top, with Attached Floating Waves Divider directly below */}
-        <div className="w-full max-w-2xl sm:max-w-3xl mx-auto px-2.5 sm:px-4 pb-[max(env(safe-area-inset-bottom),0.85rem)] pt-1 shrink-0 bg-background/95 backdrop-blur-xs">
+        <div className="w-full max-w-2xl sm:max-w-3xl mx-auto px-2 sm:px-4 pb-[max(env(safe-area-inset-bottom),0.95rem)] pt-1 shrink-0 bg-background/95 backdrop-blur-xs">
           {/* 1. Attached Input Field on Top (Subtle rounded card, completely isolated and clean on mobile) */}
           <div className="flex items-end justify-between gap-2 px-3 py-1.5 sm:px-3 sm:py-1 rounded-2xl bg-muted/25 border border-border/40 focus-within:border-zinc-700 focus-within:bg-muted/35 transition-all mb-1 sm:mb-0.5">
             <div className="flex-1 min-w-0">
@@ -1125,10 +1125,10 @@ export function SuperCallAssistantView() {
             </div>
           </div>
 
-          {/* 2. Sleek Horizontal Divider Directly Below with End-to-End Controls & Floating Waves */}
-          <div className="relative flex items-center justify-between w-full min-h-[38px] sm:min-h-[46px]">
+          {/* 2. Sleek Horizontal Divider Directly Below with End-to-End Controls & Floating Waves (10-15% scaled down on mobile) */}
+          <div className="relative flex items-center justify-between w-full min-h-[34px] sm:min-h-[46px]">
             {/* Left End: AI Model Dropdown (At the very left end; NO line sticks out past it) */}
-            <div className="relative z-10 shrink-0 pr-1 max-w-[105px] xs:max-w-[130px] sm:max-w-none">
+            <div className="relative z-10 shrink-0 pr-1 max-w-[100px] xs:max-w-[125px] sm:max-w-none">
               <ProviderModelPicker
                 activeInstanceId={effectiveInstanceId}
                 model={effectiveModel}
@@ -1137,7 +1137,7 @@ export function SuperCallAssistantView() {
                 modelOptionsByInstance={modelOptionsByInstance}
                 keybindings={keybindings}
                 size="xs"
-                triggerClassName="h-6 rounded-full border border-zinc-800 bg-background px-2 text-[10px] sm:text-[11px] font-medium text-zinc-400 hover:text-white hover:border-zinc-600 shadow-xs cursor-pointer select-none truncate"
+                triggerClassName="h-5.5 sm:h-6 rounded-full border border-zinc-800 bg-background px-1.5 sm:px-2 text-[9.5px] sm:text-[11px] font-medium text-zinc-400 hover:text-white hover:border-zinc-600 shadow-xs cursor-pointer select-none truncate"
                 onInstanceModelChange={handleModelChange}
               />
             </div>
@@ -1146,7 +1146,7 @@ export function SuperCallAssistantView() {
             <div className="flex-1 h-[1px] bg-zinc-800/80 self-center" />
 
             {/* Middle / Center: Call Button with Grok Geometric Soundwaves / Circular Wave (Floating in center) */}
-            <div className="relative z-10 flex items-center justify-center shrink-0 mx-1.5 sm:mx-2">
+            <div className="relative z-10 flex items-center justify-center shrink-0 mx-1 sm:mx-2">
               <div
                 onClick={(e) => {
                   e.preventDefault();
@@ -1161,7 +1161,7 @@ export function SuperCallAssistantView() {
                   }
                 }}
                 className={cn(
-                  "relative z-10 flex items-center justify-center size-8 sm:size-9 rounded-full transition-all duration-300 cursor-pointer select-none",
+                  "relative z-10 flex items-center justify-center size-7 sm:size-9 rounded-full transition-all duration-300 cursor-pointer select-none",
                   "bg-transparent border-0 shadow-none",
                 )}
               >
@@ -1189,7 +1189,7 @@ export function SuperCallAssistantView() {
                     }
                   }}
                   className={cn(
-                    "relative z-20 flex size-5 sm:size-6 items-center justify-center rounded-full transition-all duration-200 cursor-pointer active:scale-90 bg-transparent border-0 shadow-none outline-none focus:outline-none",
+                    "relative z-20 flex size-4.5 sm:size-6 items-center justify-center rounded-full transition-all duration-200 cursor-pointer active:scale-90 bg-transparent border-0 shadow-none outline-none focus:outline-none",
                     isCallActive
                       ? "text-rose-400/90 hover:text-rose-300"
                       : "text-zinc-300 hover:text-white",
@@ -1201,9 +1201,9 @@ export function SuperCallAssistantView() {
                   }
                 >
                   {isCallActive ? (
-                    <PhoneOff className="size-3.5 sm:size-4" strokeWidth={2.4} />
+                    <PhoneOff className="size-3 sm:size-4" strokeWidth={2.4} />
                   ) : (
-                    <PhoneCall className="size-3.5 sm:size-4" strokeWidth={2.2} />
+                    <PhoneCall className="size-3 sm:size-4" strokeWidth={2.2} />
                   )}
                 </button>
               </div>
@@ -1219,7 +1219,7 @@ export function SuperCallAssistantView() {
                   type="button"
                   onClick={toggleMicMute}
                   className={cn(
-                    "size-6.5 sm:size-7 rounded-full border flex items-center justify-center transition-all cursor-pointer shadow-xs active:scale-95",
+                    "size-6 sm:size-7 rounded-full border flex items-center justify-center transition-all cursor-pointer shadow-xs active:scale-95",
                     isMicMuted
                       ? "bg-amber-500/20 border-amber-500/50 text-amber-400"
                       : "bg-zinc-900 border-zinc-700/80 text-zinc-300 hover:text-white hover:bg-zinc-800",
@@ -1227,9 +1227,9 @@ export function SuperCallAssistantView() {
                   title={isMicMuted ? "Unmute Microphone" : "Mute Microphone"}
                 >
                   {isMicMuted ? (
-                    <MicOff className="size-3 sm:size-3.5" />
+                    <MicOff className="size-2.5 sm:size-3.5" />
                   ) : (
-                    <Mic className="size-3 sm:size-3.5" />
+                    <Mic className="size-2.5 sm:size-3.5" />
                   )}
                 </button>
               ) : (
