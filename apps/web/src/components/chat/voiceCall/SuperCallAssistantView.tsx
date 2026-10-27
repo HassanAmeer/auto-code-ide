@@ -618,121 +618,6 @@ export function SuperCallAssistantView() {
     [activeProjectName],
   );
 
-  // Knowledge & Memory Rulebook State in Command Center
-  const [selectedMemoryProject, setSelectedMemoryProject] = useState<string>(activeProjectName);
-  const [projectRules, setProjectRules] = useState<string[]>([]);
-  const [projectBookmarks, setProjectBookmarks] = useState<
-    Array<{ id: string; title: string; url: string; category?: string }>
-  >([]);
-  const [isKnowledgeLoading, setIsKnowledgeLoading] = useState(false);
-  const [newRuleInput, setNewRuleInput] = useState("");
-  const [newBookmarkTitle, setNewBookmarkTitle] = useState("");
-  const [newBookmarkUrl, setNewBookmarkUrl] = useState("");
-  const [newBookmarkCategory, setNewBookmarkCategory] = useState<string>("figma");
-
-  const fetchProjectKnowledge = useCallback(async (projName: string) => {
-    setIsKnowledgeLoading(true);
-    try {
-      const res = await fetch(`/api/bot/knowledge?project=${encodeURIComponent(projName)}`);
-      const data = (await res.json()) as {
-        ok: boolean;
-        knowledge?: {
-          rules?: string[];
-          bookmarks?: Array<{ id: string; title: string; url: string; category?: string }>;
-        };
-      };
-      if (data.ok && data.knowledge) {
-        setProjectRules(Array.isArray(data.knowledge.rules) ? data.knowledge.rules : []);
-        setProjectBookmarks(
-          Array.isArray(data.knowledge.bookmarks) ? data.knowledge.bookmarks : [],
-        );
-      }
-    } catch (e) {
-      console.warn("Failed to load knowledge:", e);
-    } finally {
-      setIsKnowledgeLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (isCommandCenterOpen && commandCenterTab === "memory") {
-      void fetchProjectKnowledge(selectedMemoryProject || activeProjectName);
-    }
-  }, [
-    isCommandCenterOpen,
-    commandCenterTab,
-    selectedMemoryProject,
-    activeProjectName,
-    fetchProjectKnowledge,
-  ]);
-
-  const handleAddRule = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newRuleInput.trim()) return;
-    const ruleText = newRuleInput.trim();
-    setNewRuleInput("");
-    setProjectRules((prev) => [...prev, ruleText]);
-    try {
-      await fetch("/api/bot/knowledge/rule/add", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          projectName: selectedMemoryProject || activeProjectName,
-          rule: ruleText,
-        }),
-      });
-    } catch {}
-  };
-
-  const handleRemoveRule = async (index: number) => {
-    setProjectRules((prev) => prev.filter((_, i) => i !== index));
-    try {
-      await fetch("/api/bot/knowledge/rule/remove", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectName: selectedMemoryProject || activeProjectName, index }),
-      });
-    } catch {}
-  };
-
-  const handleAddBookmark = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newBookmarkTitle.trim() || !newBookmarkUrl.trim()) return;
-    const bm = {
-      id: `bm-${Date.now()}`,
-      title: newBookmarkTitle.trim(),
-      url: newBookmarkUrl.trim(),
-      category: newBookmarkCategory,
-    };
-    setProjectBookmarks((prev) => [...prev, bm]);
-    setNewBookmarkTitle("");
-    setNewBookmarkUrl("");
-    try {
-      await fetch("/api/bot/knowledge/bookmark/add", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          projectName: selectedMemoryProject || activeProjectName,
-          bookmark: bm,
-        }),
-      });
-    } catch {}
-  };
-
-  const handleRemoveBookmark = async (bookmarkId: string) => {
-    setProjectBookmarks((prev) => prev.filter((b) => b.id !== bookmarkId));
-    try {
-      await fetch("/api/bot/knowledge/bookmark/remove", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          projectName: selectedMemoryProject || activeProjectName,
-          bookmarkId,
-        }),
-      });
-    } catch {}
-  };
-
   // Fetch Project Health & Git Info
   const fetchProjectHealth = useCallback(async () => {
     setIsHealthLoading(true);
@@ -1266,13 +1151,13 @@ export function SuperCallAssistantView() {
               </button>
             </div>
 
-            {/* Navigation Tabs (5 Comprehensive Tabs) */}
-            <div className="grid grid-cols-5 border-b border-border/50 px-1 pt-1 bg-muted/30 text-center">
+            {/* Navigation Tabs (6 Comprehensive Tabs) */}
+            <div className="grid grid-cols-6 border-b border-border/50 px-1 pt-1 bg-muted/30 text-center">
               <button
                 type="button"
                 onClick={() => setCommandCenterTab("summary")}
                 className={cn(
-                  "pb-2 pt-1 text-[10.5px] font-semibold border-b-2 transition-colors cursor-pointer flex flex-col items-center justify-center gap-1",
+                  "pb-2 pt-1 text-[10px] font-semibold border-b-2 transition-colors cursor-pointer flex flex-col items-center justify-center gap-1",
                   commandCenterTab === "summary"
                     ? "border-primary text-primary"
                     : "border-transparent text-muted-foreground hover:text-foreground",
@@ -1289,16 +1174,16 @@ export function SuperCallAssistantView() {
                   void fetchDrawerWishlist();
                 }}
                 className={cn(
-                  "pb-2 pt-1 text-[10.5px] font-semibold border-b-2 transition-colors cursor-pointer flex flex-col items-center justify-center gap-1",
+                  "pb-2 pt-1 text-[10px] font-semibold border-b-2 transition-colors cursor-pointer flex flex-col items-center justify-center gap-1",
                   commandCenterTab === "wishlist"
                     ? "border-primary text-primary"
                     : "border-transparent text-muted-foreground hover:text-foreground",
                 )}
               >
                 <ShoppingBag className="size-3" />
-                <span>Wishlist</span>
+                <span>Sprint</span>
                 {drawerWishlistItems.length > 0 && (
-                  <span className="text-[8px] px-1 rounded-full bg-amber-500/20 text-amber-400 font-mono">
+                  <span className="text-[7.5px] px-1 rounded-full bg-amber-500/20 text-amber-400 font-mono">
                     {drawerWishlistItems.length}
                   </span>
                 )}
@@ -1311,7 +1196,7 @@ export function SuperCallAssistantView() {
                   void fetchProjectHealth();
                 }}
                 className={cn(
-                  "pb-2 pt-1 text-[10.5px] font-semibold border-b-2 transition-colors cursor-pointer flex flex-col items-center justify-center gap-1",
+                  "pb-2 pt-1 text-[10px] font-semibold border-b-2 transition-colors cursor-pointer flex flex-col items-center justify-center gap-1",
                   commandCenterTab === "health"
                     ? "border-primary text-primary"
                     : "border-transparent text-muted-foreground hover:text-foreground",
@@ -1320,8 +1205,30 @@ export function SuperCallAssistantView() {
                 <Activity className="size-3" />
                 <span>Health</span>
                 {healthModifiedFiles.length > 0 && (
-                  <span className="text-[8px] px-1 rounded-full bg-amber-500/20 text-amber-400 font-mono">
+                  <span className="text-[7.5px] px-1 rounded-full bg-amber-500/20 text-amber-400 font-mono">
                     {healthModifiedFiles.length}
+                  </span>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setCommandCenterTab("memory");
+                  void fetchProjectKnowledge(selectedMemoryProject || activeProjectName);
+                }}
+                className={cn(
+                  "pb-2 pt-1 text-[10px] font-semibold border-b-2 transition-colors cursor-pointer flex flex-col items-center justify-center gap-1",
+                  commandCenterTab === "memory"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <Brain className="size-3" />
+                <span>Memory</span>
+                {projectRules.length > 0 && (
+                  <span className="text-[7.5px] px-1 rounded-full bg-purple-500/20 text-purple-400 font-mono">
+                    {projectRules.length}
                   </span>
                 )}
               </button>
@@ -1330,7 +1237,7 @@ export function SuperCallAssistantView() {
                 type="button"
                 onClick={() => setCommandCenterTab("tasks")}
                 className={cn(
-                  "pb-2 pt-1 text-[10.5px] font-semibold border-b-2 transition-colors cursor-pointer flex flex-col items-center justify-center gap-1",
+                  "pb-2 pt-1 text-[10px] font-semibold border-b-2 transition-colors cursor-pointer flex flex-col items-center justify-center gap-1",
                   commandCenterTab === "tasks"
                     ? "border-primary text-primary"
                     : "border-transparent text-muted-foreground hover:text-foreground",
@@ -1339,7 +1246,7 @@ export function SuperCallAssistantView() {
                 <ListTodo className="size-3" />
                 <span>Tasks</span>
                 {scheduledTasks.length > 0 && (
-                  <span className="text-[8px] px-1 rounded-full bg-primary/20 text-primary font-mono">
+                  <span className="text-[7.5px] px-1 rounded-full bg-primary/20 text-primary font-mono">
                     {scheduledTasks.length}
                   </span>
                 )}
@@ -1349,7 +1256,7 @@ export function SuperCallAssistantView() {
                 type="button"
                 onClick={() => setCommandCenterTab("voice")}
                 className={cn(
-                  "pb-2 pt-1 text-[10.5px] font-semibold border-b-2 transition-colors cursor-pointer flex flex-col items-center justify-center gap-1",
+                  "pb-2 pt-1 text-[10px] font-semibold border-b-2 transition-colors cursor-pointer flex flex-col items-center justify-center gap-1",
                   commandCenterTab === "voice"
                     ? "border-primary text-primary"
                     : "border-transparent text-muted-foreground hover:text-foreground",
@@ -2019,7 +1926,208 @@ export function SuperCallAssistantView() {
                 </div>
               )}
 
-              {/* TAB 4: TASKS & LEDGER */}
+              {/* TAB: WORKSPACE MEMORY & PROJECT RULEBOOK */}
+              {commandCenterTab === "memory" && (
+                <div className="space-y-4">
+                  {/* Header & Project Selector */}
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <h3 className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                        <Brain className="size-3.5 text-purple-400" />
+                        Project Rulebook & Memories
+                      </h3>
+                      <p className="text-[10px] text-muted-foreground">
+                        Permanent instructions & bookmarks for {selectedMemoryProject}
+                      </p>
+                    </div>
+
+                    {/* Project Selector Dropdown if multiple projects */}
+                    {projects.length > 1 && (
+                      <select
+                        value={selectedMemoryProject}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setSelectedMemoryProject(val);
+                          void fetchProjectKnowledge(val);
+                        }}
+                        className="bg-muted border border-border/80 rounded-lg px-2 py-1 text-[10px] text-foreground focus:outline-none"
+                      >
+                        {projects.map((p) => {
+                          const pName = p.title || String(p.id);
+                          return (
+                            <option key={p.id} value={pName}>
+                              {pName}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    )}
+                  </div>
+
+                  {/* 1. PER-PROJECT RULES VAULT */}
+                  <div className="p-3.5 rounded-xl border border-purple-500/30 bg-purple-500/5 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-purple-300 flex items-center gap-1.5 uppercase tracking-wider">
+                        📜 Mandatory Project Rules ({projectRules.length})
+                      </span>
+                      <span className="text-[9px] text-muted-foreground">
+                        Bot strictly follows these in every prompt
+                      </span>
+                    </div>
+
+                    {/* Add Rule Form */}
+                    <form onSubmit={handleAddRule} className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newRuleInput}
+                        onChange={(e) => setNewRuleInput(e.target.value)}
+                        placeholder='e.g., "Hamesha Tailwind CSS use karna"...'
+                        className="flex-1 bg-background border border-border/80 rounded-lg px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-purple-500"
+                      />
+                      <button
+                        type="submit"
+                        disabled={!newRuleInput.trim()}
+                        className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs disabled:opacity-40 transition-opacity cursor-pointer shrink-0"
+                      >
+                        Add Rule
+                      </button>
+                    </form>
+
+                    {/* Rules List */}
+                    {isKnowledgeLoading && projectRules.length === 0 ? (
+                      <div className="py-4 text-center text-xs text-muted-foreground">
+                        Loading rules...
+                      </div>
+                    ) : projectRules.length === 0 ? (
+                      <p className="text-[11px] text-muted-foreground/70 italic py-2 text-center">
+                        Koi custom rule set nahi kiya gaya. Upar se naya rule add karein.
+                      </p>
+                    ) : (
+                      <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                        {projectRules.map((rule, idx) => (
+                          <div
+                            key={idx}
+                            className="p-2 rounded-lg bg-background/80 border border-border/70 flex items-start justify-between gap-2 shadow-2xs hover:border-purple-500/40 transition-colors"
+                          >
+                            <div className="flex items-start gap-2 min-w-0 flex-1">
+                              <span className="text-purple-400 font-mono text-[10px] mt-0.5 font-bold">
+                                #{idx + 1}
+                              </span>
+                              <span className="text-xs text-foreground leading-snug break-words">
+                                {rule}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => void handleRemoveRule(idx)}
+                              className="text-muted-foreground hover:text-destructive p-1 rounded transition-colors cursor-pointer shrink-0"
+                              title="Delete rule"
+                            >
+                              <X className="size-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 2. SMART BOOKMARKS & DOCS VAULT */}
+                  <div className="p-3.5 rounded-xl border border-border/70 bg-card/60 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                        <Bookmark className="size-3.5 text-amber-400" />
+                        Project Bookmarks & Links ({projectBookmarks.length})
+                      </span>
+                      <span className="text-[9px] text-muted-foreground">
+                        Figma, GitHub, Docs & Live URLs
+                      </span>
+                    </div>
+
+                    {/* Add Bookmark Form */}
+                    <form onSubmit={handleAddBookmark} className="space-y-2">
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={newBookmarkTitle}
+                          onChange={(e) => setNewBookmarkTitle(e.target.value)}
+                          placeholder="Title (e.g. Figma Design, API Docs)..."
+                          className="flex-1 bg-background border border-border/80 rounded-lg px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
+                        />
+                        <select
+                          value={newBookmarkCategory}
+                          onChange={(e) => setNewBookmarkCategory(e.target.value)}
+                          className="bg-background border border-border/80 rounded-lg px-2 py-1.5 text-[11px] text-foreground focus:outline-none"
+                        >
+                          <option value="figma">🎨 Figma</option>
+                          <option value="github">🐙 GitHub</option>
+                          <option value="docs">📖 Docs</option>
+                          <option value="production">🚀 Prod URL</option>
+                          <option value="other">🔗 Other</option>
+                        </select>
+                      </div>
+                      <div className="flex gap-2">
+                        <input
+                          type="url"
+                          value={newBookmarkUrl}
+                          onChange={(e) => setNewBookmarkUrl(e.target.value)}
+                          placeholder="https://..."
+                          className="flex-1 bg-background border border-border/80 rounded-lg px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary font-mono text-[11px]"
+                        />
+                        <button
+                          type="submit"
+                          disabled={!newBookmarkTitle.trim() || !newBookmarkUrl.trim()}
+                          className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground font-semibold text-xs disabled:opacity-40 transition-opacity cursor-pointer shrink-0"
+                        >
+                          Save Link
+                        </button>
+                      </div>
+                    </form>
+
+                    {/* Bookmarks List */}
+                    {projectBookmarks.length === 0 ? (
+                      <p className="text-[11px] text-muted-foreground italic py-2 text-center">
+                        Koi bookmarks save nahi hain.
+                      </p>
+                    ) : (
+                      <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                        {projectBookmarks.map((bm) => (
+                          <div
+                            key={bm.id}
+                            className="p-2 rounded-lg bg-muted/30 border border-border/50 flex items-center justify-between gap-2 hover:bg-muted/60 transition-colors"
+                          >
+                            <a
+                              href={bm.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="flex items-center gap-2 min-w-0 flex-1 group cursor-pointer"
+                            >
+                              <ExternalLink className="size-3 text-primary shrink-0 group-hover:scale-110 transition-transform" />
+                              <div className="min-w-0">
+                                <span className="text-xs font-semibold text-foreground group-hover:text-primary transition-colors truncate block">
+                                  {bm.title}
+                                </span>
+                                <span className="text-[10px] text-muted-foreground font-mono truncate block">
+                                  {bm.url}
+                                </span>
+                              </div>
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => void handleRemoveBookmark(bm.id)}
+                              className="text-muted-foreground hover:text-destructive p-1 rounded transition-colors cursor-pointer shrink-0"
+                              title="Delete bookmark"
+                            >
+                              <X className="size-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* TAB: TASKS & LEDGER */}
               {commandCenterTab === "tasks" && (
                 <div className="space-y-4">
                   {/* Sub-tab switcher */}
