@@ -825,11 +825,9 @@ export function speakText(text: string, options?: Partial<TtsSettings>, onEnd?: 
     finishSpeech();
   };
 
-  // Maximum speech duration timeout: ensures state never hangs permanently
-  const maxSpeechDurationMs = Math.max(
-    5000,
-    Math.ceil((clean.split(/\s+/).length / 1.5) * 1000 + 6000),
-  );
+  // Maximum speech duration timeout: ensures state never hangs permanently while allowing complete natural speech
+  const wordsCount = clean.split(/\s+/).filter(Boolean).length;
+  const maxSpeechDurationMs = Math.max(15000, Math.ceil((wordsCount / 0.7) * 1000 + 20000));
   setTimeout(() => {
     if (!hasEnded && activeUtterance === utterance) {
       console.warn("[TTS] Speech reached max expected duration, forcing completion.");

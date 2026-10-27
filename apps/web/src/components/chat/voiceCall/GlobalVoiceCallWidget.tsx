@@ -70,6 +70,7 @@ export const GlobalVoiceCallWidget = memo(function GlobalVoiceCallWidget() {
     onAutoSend: handleAutoSend,
     prompt: spokenText,
     phase: isProcessing ? "running" : "ready",
+    disabled: isCallAssistantPage,
   });
 
   // If user is already on the dedicated /call-assistant screen, that page renders its own focused layout

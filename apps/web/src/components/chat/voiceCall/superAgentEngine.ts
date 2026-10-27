@@ -12,7 +12,7 @@ import {
   type ProjectActivityItem,
 } from "~/lib/projectActivityLedger";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
-import { speakText } from "~/lib/speech/tts";
+import { speakText, sanitizeTextForSpeech } from "~/lib/speech/tts";
 import { buildSuperAgentSystemPrompt } from "./superAgentPrompt";
 
 export interface SuperAgentRunOptions {
@@ -638,18 +638,13 @@ export async function executeSuperAgentInstruction(
       spokenReply = spokenMatch[1].trim();
       fullReply = fullReply.replace(/\[SPOKEN\]:\s*([\s\S]+)$/i, "").trim();
     } else {
-      // Natural spoken summary from first 1-2 clean sentences
-      const cleanedText = fullReply
-        .replace(/[*#_`\[\]()]/g, "")
-        .replace(/\n+/g, " ")
-        .trim();
-      const sentences = cleanedText.match(/[^.!?]+[.!?]+/g) || [cleanedText];
-      spokenReply = sentences.slice(0, 2).join(" ").trim();
+      // Natural full spoken text (code blocks and markdown stripped cleanly for TTS)
+      spokenReply = sanitizeTextForSpeech(fullReply);
     }
 
     return {
       reply: fullReply,
-      spokenReply: spokenReply || fullReply.slice(0, 160),
+      spokenReply: spokenReply || fullReply,
       actionTaken: actionTag,
       delegatedTask: delegatedTaskInfo,
     };

@@ -26,7 +26,7 @@ import { StreamingTtsPlayer, extractSpeechChunks } from "./streamingTtsPlayer";
 import type { VoiceCallStatus } from "./VoiceVisualizerWaves";
 import type { ChatMessage, SessionPhase } from "~/types";
 
-const ACOUSTIC_ECHO_COOLDOWN_MS = 600;
+const ACOUSTIC_ECHO_COOLDOWN_MS = 300;
 
 const END_CALL_TRIGGERS = [
   "end call",
@@ -692,14 +692,23 @@ export function useVoiceCallAssistant({
     [clearFinalDispatchTimer, clearRestartTimer, endCall, updateCallStatus],
   );
 
-  // Creates and starts a fresh SpeechRecognition instance
+  // Creates and starts a SpeechRecognition instance (keeps the same instance alive across turns)
   const startFreshRecognition = useCallback(() => {
     // Only proceed if call is active
     if (!isCallActiveRef.current) {
       return;
     }
 
-    cleanupRecognition();
+    // If an instance already exists, do NOT destroy it; just ensure it is running
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.start();
+      } catch {
+        // already started or running
+      }
+      return;
+    }
+
     clearRestartTimer();
 
     // Ensure mic hardware track is unmuted so speech and "stop" interrupts can be detected
@@ -851,57 +860,32 @@ export function useVoiceCallAssistant({
       };
 
       recognition.onerror = (event: any) => {
+        // "aborted" and "no-speech" are routine browser events.
+        // DO NOT log warnings and DO NOT restart from them (onend will handle clean restart).
+        if (event.error === "aborted" || event.error === "no-speech") {
+          return;
+        }
         console.warn("Speech recognition error:", event?.error);
         if (event.error === "not-allowed" || event.error === "service-not-allowed") {
-          endCall();
-        } else if (event.error === "audio-capture") {
-          // Hardware mic conflict on mobile: clean any streams and restart
-          if (micStreamRef.current) {
-            micStreamRef.current.getTracks().forEach((track) => track.stop());
-            micStreamRef.current = null;
-          }
-          scheduleRestartRecognition(300);
-        } else if (event.error === "no-speech") {
-          if (isCallActiveRef.current) {
-            scheduleRestartRecognition(80);
-          }
-        } else if (event.error === "aborted") {
-          if (typeof document === "undefined" || document.visibilityState === "visible") {
-            scheduleRestartRecognition(120);
-          }
-        } else if (event.error === "language-not-supported") {
-          const effectiveMode: SttLanguageMode =
-            callLanguageRef.current === "english"
-              ? "english"
-              : loadSttSettings().language === "english"
-                ? "roman-urdu"
-                : loadSttSettings().language;
-          const languageCodes = getRecognitionLanguageCodes(effectiveMode);
-          if (recognitionLanguageIndexRef.current < languageCodes.length - 1) {
-            recognitionLanguageIndexRef.current += 1;
-          }
-          scheduleRestartRecognition(200);
-        } else if (event.error === "network") {
-          scheduleRestartRecognition(200);
-        } else {
-          if (isCallActiveRef.current) {
-            scheduleRestartRecognition(isMobileDevice ? 100 : 250);
+          if (callStatusRef.current === "idle") {
+            endCall();
           }
         }
       };
 
       recognition.onend = () => {
-        if (isCallActiveRef.current) {
-          if (
-            !isTtsActiveRef.current &&
-            callStatusRef.current !== "speaking" &&
-            callStatusRef.current !== "thinking" &&
-            !isCurrentlySpeaking()
-          ) {
-            if (typeof document === "undefined" || document.visibilityState === "visible") {
-              scheduleRestartRecognition(isMobileDevice ? 60 : 100);
+        // When speech recognition session ends naturally on mobile, resume the SAME instance cleanly
+        if (isCallActiveRef.current && recognitionRef.current === recognition) {
+          clearRestartTimer();
+          restartTimerRef.current = setTimeout(() => {
+            if (isCallActiveRef.current && recognitionRef.current === recognition) {
+              try {
+                recognition.start();
+              } catch {
+                // already active
+              }
             }
-          }
+          }, 100);
         }
       };
 
@@ -910,17 +894,11 @@ export function useVoiceCallAssistant({
         recognitionRef.current = recognition;
       } catch (startErr: any) {
         console.warn("SpeechRecognition start exception:", startErr?.message || startErr);
-        if (isCallActiveRef.current) {
-          scheduleRestartRecognition(250);
-        }
       }
     } catch (err) {
       console.warn("Failed to instantiate fresh speech recognition:", err);
-      if (isCallActiveRef.current) {
-        scheduleRestartRecognition(500);
-      }
     }
-  }, [cleanupRecognition, clearRestartTimer, endCall, updateCallStatus, setMicrophoneMuted]);
+  }, [clearRestartTimer, endCall, updateCallStatus, setMicrophoneMuted]);
 
   const scheduleRestartRecognition = useCallback(
     (delay = 150) => {
@@ -929,7 +907,14 @@ export function useVoiceCallAssistant({
       }
       clearRestartTimer();
       restartTimerRef.current = setTimeout(() => {
-        startFreshRecognition();
+        if (!isCallActiveRef.current) return;
+        if (recognitionRef.current) {
+          try {
+            recognitionRef.current.start();
+          } catch {}
+        } else {
+          startFreshRecognition();
+        }
       }, delay);
     },
     [clearRestartTimer, startFreshRecognition],
@@ -1004,14 +989,13 @@ export function useVoiceCallAssistant({
         isTtsActiveRef.current = true;
         updateCallStatus("speaking");
         thinkingAmbientSound.stop();
-        cleanupRecognition(); // Ensure mic is completely stopped while audio is playing
         if (speakingText) {
           setAssistantSpokenText(speakingText);
           addAiSpokenPhrase(speakingText);
         }
       } else {
         // If a streaming player is currently active playing sentence chunks or awaiting stream completion,
-        // do not switch status or re-arm microphone yet!
+        // do not switch status or reset state yet!
         if (streamingPlayerRef.current?.isActive?.()) {
           return;
         }
@@ -1033,22 +1017,21 @@ export function useVoiceCallAssistant({
             lastTranscribedTextRef.current = "";
             manualBaselineRef.current = "";
             hasPendingSpeechRef.current = false;
+            onTranscriptChangeRef.current("");
+            setLiveTranscript("");
             updateCallStatus("listening");
 
-            // Cleanly re-arm speech recognition so user speech is immediately captured
-            cleanupRecognition();
-            scheduleRestartRecognition(100);
+            // Ensure recognition session remains alive
+            if (isCallActiveRef.current && recognitionRef.current) {
+              try {
+                recognitionRef.current.start();
+              } catch {}
+            }
           }
         }, ACOUSTIC_ECHO_COOLDOWN_MS);
       }
     });
-  }, [
-    cleanupRecognition,
-    clearTurnTimeout,
-    scheduleRestartRecognition,
-    updateCallStatus,
-    addAiSpokenPhrase,
-  ]);
+  }, [clearTurnTimeout, updateCallStatus, addAiSpokenPhrase]);
 
   const dispatchAutoSend = useCallback(() => {
     clearRestartTimer();
@@ -1100,14 +1083,12 @@ export function useVoiceCallAssistant({
 
     const currentTts = loadTtsSettings();
     streamingPlayerRef.current = new StreamingTtsPlayer({
-      maxChunks: 4,
       ttsOptions: currentTts,
       onStartSpeaking: () => {
         clearTurnTimeout();
         thinkingAmbientSound.stop();
         updateCallStatus("speaking");
         isTtsActiveRef.current = true;
-        cleanupRecognition(); // Ensure mic is STOPPED during speech playback
         setMicrophoneMuted(false);
       },
       onChunkStarted: (chunk: string) => {
@@ -1129,13 +1110,17 @@ export function useVoiceCallAssistant({
         manualBaselineRef.current = "";
         hasPendingSpeechRef.current = false;
         onTranscriptChangeRef.current("");
+        setLiveTranscript("");
 
         setTimeout(() => {
           if (!isCurrentlySpeaking() && isCallActiveRef.current) {
             isTtsActiveRef.current = false;
             updateCallStatus("listening");
-            cleanupRecognition();
-            scheduleRestartRecognition(100);
+            if (isCallActiveRef.current && recognitionRef.current) {
+              try {
+                recognitionRef.current.start();
+              } catch {}
+            }
           }
         }, ACOUSTIC_ECHO_COOLDOWN_MS);
       },
@@ -1150,9 +1135,6 @@ export function useVoiceCallAssistant({
     updateCallStatus("thinking");
     thinkingAmbientSound.start();
 
-    // Cleanly abort previous recognition instance so it does not capture AI audio during thinking/speaking
-    cleanupRecognition();
-
     // Safety turn timeout: If assistant fails to stream or backend errors out, return to listening after 15s
     clearTurnTimeout();
     turnTimeoutRef.current = setTimeout(() => {
@@ -1166,8 +1148,11 @@ export function useVoiceCallAssistant({
         waitingForAssistantResponseRef.current = false;
         thinkingAmbientSound.stop();
         updateCallStatus("listening");
-        cleanupRecognition();
-        scheduleRestartRecognition(100);
+        if (isCallActiveRef.current && recognitionRef.current) {
+          try {
+            recognitionRef.current.start();
+          } catch {}
+        }
       }
     }, 15000);
 
@@ -1181,10 +1166,7 @@ export function useVoiceCallAssistant({
     clearRestartTimer,
     clearTtsCooldownTimer,
     clearTurnTimeout,
-    cleanupRecognition,
-    scheduleRestartRecognition,
     setMicrophoneMuted,
-    startFreshRecognition,
     updateCallStatus,
   ]);
 
@@ -1435,7 +1417,13 @@ export function useVoiceCallAssistant({
             callStatusRef.current !== "thinking" &&
             !isCurrentlySpeaking()
           ) {
-            startFreshRecognition();
+            if (recognitionRef.current) {
+              try {
+                recognitionRef.current.start();
+              } catch {}
+            } else {
+              startFreshRecognition();
+            }
           }
         },
         onHangup: () => {
@@ -1474,7 +1462,6 @@ export function useVoiceCallAssistant({
       if (callStatusRef.current !== "thinking" && callStatusRef.current !== "speaking") {
         updateCallStatus("thinking");
         thinkingAmbientSound.start();
-        cleanupRecognition();
       }
     } else {
       // Phase is idle/ready:
@@ -1490,11 +1477,10 @@ export function useVoiceCallAssistant({
         thinkingAmbientSound.stop();
         if (callStatusRef.current === "thinking") {
           updateCallStatus("listening");
-          scheduleRestartRecognition(100);
         }
       }
     }
-  }, [isCallActive, phase, updateCallStatus, scheduleRestartRecognition, cleanupRecognition]);
+  }, [isCallActive, phase, updateCallStatus]);
 
   // Monitor streaming assistant tokens in real time & feed into streaming sentence TTS player
   useEffect(() => {

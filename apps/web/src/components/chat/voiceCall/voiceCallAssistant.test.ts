@@ -85,4 +85,14 @@ describe("VoiceCall Assistant & StreamingTtsPlayer", () => {
     const englishCodes = getRecognitionLanguageCodes("english");
     expect(englishCodes).toContain("en-US");
   });
+
+  it("ensures multi-sentence responses are preserved completely without truncation", async () => {
+    const { sanitizeTextForSpeech } = await import("~/lib/speech/tts");
+    const longReply =
+      "Theek hai bhai, maine project check kiya hai. Pehla error login function mein tha jahan token null aa raha tha. Doosra error styling mein tha. Maine dono issues fix kar diye hain aur ab application bilkul theek kaam kar rahi hai.";
+    const spoken = sanitizeTextForSpeech(longReply);
+    expect(spoken).toContain("Pehla error login");
+    expect(spoken).toContain("Doosra error styling");
+    expect(spoken).toContain("theek kaam kar rahi hai");
+  });
 });
