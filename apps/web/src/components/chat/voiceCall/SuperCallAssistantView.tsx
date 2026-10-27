@@ -1120,21 +1120,6 @@ export function SuperCallAssistantView() {
     };
   }, [activeSession]);
 
-  // Smart Suggested Quick-Action Chips
-  const quickSuggestions = useMemo(
-    () => [
-      { label: "📊 Project Status", prompt: "Tamam projects ka status report do" },
-      { label: "📋 Wishlist Check", prompt: "Active project ki Wishlist check karo" },
-      { label: "🔍 Scan Bugs & Errors", prompt: "Kya kisi project mein koi bug ya error hai?" },
-      {
-        label: "📝 Summarize Call",
-        prompt: "Ab tak ki conversation ko 3 bullet points mein summarize karo",
-      },
-      { label: "⚡ Next Priority?", prompt: "Is waqt meri sab se bari priority kya honi chahiye?" },
-    ],
-    [],
-  );
-
   return (
     <div className="flex h-full w-full bg-background text-foreground overflow-hidden relative">
       {/* Right-Side Command Center / Smart Drawer */}
@@ -2670,24 +2655,6 @@ export function SuperCallAssistantView() {
             </div>
           )}
 
-          {/* Quick-Reply Suggested Action Chips */}
-          <div className="flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden py-1 mb-1.5 px-0.5">
-            <span className="text-[10px] uppercase font-bold text-muted-foreground/70 shrink-0 select-none pl-1">
-              Suggestions:
-            </span>
-            {quickSuggestions.map((item, idx) => (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => void handleSuperAgentDispatch(item.prompt)}
-                disabled={isProcessing}
-                className="shrink-0 px-2.5 py-1 rounded-full border border-border/70 bg-muted/40 hover:bg-muted text-[11px] font-medium text-muted-foreground hover:text-foreground transition-all cursor-pointer disabled:opacity-40 shadow-2xs active:scale-95"
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-
           {/* Attached File or Screenshot Preview Badge */}
           {attachedFile && (
             <div className="flex items-center gap-2 mb-1.5 px-3 py-1 rounded-xl bg-muted/60 border border-primary/40 w-fit max-w-full animate-in fade-in duration-150">
@@ -2731,8 +2698,8 @@ export function SuperCallAssistantView() {
             onChange={handleAttachmentFileChange}
           />
 
-          {/* 1. Attached Input Field on Top (Subtle rounded card, completely isolated and clean on mobile) */}
-          <div className="flex items-end justify-between gap-2 px-3 py-1.5 sm:px-3 sm:py-1 rounded-2xl bg-muted/25 border border-border/40 focus-within:border-zinc-700 focus-within:bg-muted/35 transition-all mb-1 sm:mb-0.5">
+          {/* 1. Attached Input Field on Top (Clean, transparent, no background, no outline/border) */}
+          <div className="flex items-end justify-between gap-2 px-2 py-1 bg-transparent border-0 outline-none focus-within:outline-none focus-within:ring-0 shadow-none mb-0.5">
             <div className="flex-1 min-w-0">
               <textarea
                 ref={inputRef}
@@ -2781,7 +2748,7 @@ export function SuperCallAssistantView() {
                     ? `Add instructions for ${attachedFile.name}...`
                     : "Type a message or speak..."
                 }
-                className="w-full bg-transparent border-0 outline-hidden focus:outline-hidden focus:ring-0 p-0 text-sm text-zinc-200 placeholder:text-zinc-500 resize-none max-h-[56px] min-h-[26px] leading-snug overflow-y-auto tracking-normal font-normal"
+                className="w-full bg-transparent border-0 outline-none focus:outline-none focus:ring-0 p-0 text-sm text-zinc-200 placeholder:text-zinc-500 resize-none max-h-[56px] min-h-[26px] leading-snug overflow-y-auto tracking-normal font-normal shadow-none"
                 aria-label="Message Input"
               />
             </div>
