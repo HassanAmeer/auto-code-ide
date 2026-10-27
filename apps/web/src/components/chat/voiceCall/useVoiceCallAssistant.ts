@@ -5,6 +5,7 @@ import {
   formatSttTranscript,
   loadSttSettings,
   saveSttSettings,
+  subscribeSttSettings,
   isMobileDevice,
   type SttLanguageMode,
   type SttSettings,
@@ -14,6 +15,9 @@ import {
   stopSpeaking,
   subscribeSpeechState,
   isCurrentlySpeaking,
+  loadTtsSettings,
+  subscribeTtsSettings,
+  type TtsSettings,
 } from "~/lib/speech/tts";
 import { thinkingAmbientSound } from "./thinkingAmbientSound";
 import { setVoiceCallActiveState } from "./voiceCallState";
@@ -666,7 +670,15 @@ export function useVoiceCallAssistant({
         }
       };
 
-      speakText(farewellMessage, undefined, safeEnd);
+      const currentTts = loadTtsSettings();
+      speakText(
+        farewellMessage,
+        {
+          ...currentTts,
+          ...(callLanguageRef.current === "english" ? { language: "english" } : {}),
+        },
+        safeEnd,
+      );
       setTimeout(safeEnd, 2000);
     },
     [clearFinalDispatchTimer, clearRestartTimer, endCall, updateCallStatus],
@@ -695,15 +707,15 @@ export function useVoiceCallAssistant({
       const recognition = new SpeechRecognitionClass();
       const sttSettings = loadSttSettings();
       const effectiveMode: SttLanguageMode =
-        callLanguageRef.current === "urdu"
-          ? sttSettings.language === "roman-urdu"
+        callLanguageRef.current === "english"
+          ? "english"
+          : sttSettings.language === "english"
             ? "roman-urdu"
-            : "natural-urdu"
-          : "english";
+            : sttSettings.language;
       const languageCodes = getRecognitionLanguageCodes(effectiveMode);
       recognition.lang =
         languageCodes[Math.min(recognitionLanguageIndexRef.current, languageCodes.length - 1)] ??
-        (callLanguageRef.current === "urdu" ? "ur-PK" : "en-US");
+        (callLanguageRef.current === "english" ? "en-US" : "ur-PK");
       // On mobile devices (Android/iOS), continuous=true frequently fails or drops audio.
       recognition.continuous = !isMobileDevice;
       recognition.interimResults = true;
@@ -742,11 +754,11 @@ export function useVoiceCallAssistant({
         if (!rawSpeech) return;
 
         const effectiveMode: SttLanguageMode =
-          callLanguageRef.current === "urdu"
-            ? sttSettings.language === "roman-urdu"
+          callLanguageRef.current === "english"
+            ? "english"
+            : sttSettings.language === "english"
               ? "roman-urdu"
-              : "natural-urdu"
-            : "english";
+              : sttSettings.language;
         const processedSpeech = formatSttTranscript(rawSpeech, effectiveMode);
 
         const isAiSpeakingOrBusy =
@@ -846,7 +858,13 @@ export function useVoiceCallAssistant({
             scheduleRestartRecognition(120);
           }
         } else if (event.error === "language-not-supported") {
-          const languageCodes = getRecognitionLanguageCodes(loadSttSettings().language);
+          const effectiveMode: SttLanguageMode =
+            callLanguageRef.current === "english"
+              ? "english"
+              : loadSttSettings().language === "english"
+                ? "roman-urdu"
+                : loadSttSettings().language;
+          const languageCodes = getRecognitionLanguageCodes(effectiveMode);
           if (recognitionLanguageIndexRef.current < languageCodes.length - 1) {
             recognitionLanguageIndexRef.current += 1;
           }
@@ -910,7 +928,14 @@ export function useVoiceCallAssistant({
       callLanguageRef.current = lang;
       setCallLanguageState(lang);
       const currentSettings = loadSttSettings();
-      const targetMode: SttLanguageMode = lang === "urdu" ? "natural-urdu" : "english";
+      let targetMode: SttLanguageMode = currentSettings.language;
+      if (lang === "urdu") {
+        if (targetMode === "english") {
+          targetMode = "roman-urdu";
+        }
+      } else {
+        targetMode = "english";
+      }
       saveSttSettings({ ...currentSettings, language: targetMode });
       recognitionLanguageIndexRef.current = 0;
       if (isCallActiveRef.current) {
@@ -922,25 +947,28 @@ export function useVoiceCallAssistant({
   );
 
   useEffect(() => {
-    const handleSettingsChange = (e: Event) => {
-      const custom = e as CustomEvent<SttSettings>;
-      const lang = custom.detail?.language;
-      if (lang) {
-        const mapped = lang === "english" ? "english" : "urdu";
-        callLanguageRef.current = mapped;
-        setCallLanguageState(mapped);
-        if (isCallActiveRef.current) {
-          recognitionLanguageIndexRef.current = 0;
-          cleanupRecognition();
-          scheduleRestartRecognition(50);
-        }
+    return subscribeSttSettings((newSettings) => {
+      const mapped = newSettings.language === "english" ? "english" : "urdu";
+      callLanguageRef.current = mapped;
+      setCallLanguageState(mapped);
+      if (isCallActiveRef.current) {
+        recognitionLanguageIndexRef.current = 0;
+        cleanupRecognition();
+        scheduleRestartRecognition(50);
       }
-    };
-    window.addEventListener("t3-stt-settings-changed", handleSettingsChange);
-    return () => {
-      window.removeEventListener("t3-stt-settings-changed", handleSettingsChange);
-    };
+    });
   }, [cleanupRecognition, scheduleRestartRecognition]);
+
+  useEffect(() => {
+    return subscribeTtsSettings((newSettings) => {
+      if (streamingPlayerRef.current) {
+        streamingPlayerRef.current.updateTtsOptions({
+          ...newSettings,
+          ...(callLanguageRef.current === "english" ? { language: "english" } : {}),
+        });
+      }
+    });
+  }, []);
 
   // Global subscription to TTS speech state (e.g. speakText(), Read Aloud, or voice tests)
   // Ensures microphone is synchronized whenever ANY audio speech starts or finishes
@@ -1043,10 +1071,12 @@ export function useVoiceCallAssistant({
       streamingPlayerRef.current.stop();
     }
 
+    const currentTts = loadTtsSettings();
     streamingPlayerRef.current = new StreamingTtsPlayer({
       maxChunks: 4,
       ttsOptions: {
-        language: callLanguageRef.current === "english" ? "english" : "auto-male",
+        ...currentTts,
+        ...(callLanguageRef.current === "english" ? { language: "english" } : {}),
       },
       onStartSpeaking: () => {
         thinkingAmbientSound.stop();

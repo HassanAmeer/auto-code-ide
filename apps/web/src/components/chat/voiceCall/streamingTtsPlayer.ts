@@ -3,6 +3,7 @@ import {
   stopSpeaking,
   sanitizeTextForSpeech,
   stripCodeBlocks,
+  loadTtsSettings,
   type TtsSettings,
 } from "~/lib/speech/tts";
 
@@ -91,6 +92,10 @@ export class StreamingTtsPlayer {
     this.ttsOptions = options?.ttsOptions;
   }
 
+  updateTtsOptions(options: Partial<TtsSettings>): void {
+    this.ttsOptions = { ...this.ttsOptions, ...options };
+  }
+
   private normalizeChunkSignature(text: string): string {
     return text
       .toLowerCase()
@@ -154,7 +159,14 @@ export class StreamingTtsPlayer {
 
     this.onChunkStartedCallback?.(nextChunk);
 
-    speakText(nextChunk, this.ttsOptions, () => {
+    const mergedOptions: Partial<TtsSettings> = {
+      ...loadTtsSettings(),
+      ...(this.ttsOptions
+        ? Object.fromEntries(Object.entries(this.ttsOptions).filter(([_, v]) => v !== undefined))
+        : {}),
+    };
+
+    speakText(nextChunk, mergedOptions, () => {
       this.isPlaying = false;
       this.processNext();
     });

@@ -45,6 +45,22 @@ export function saveSttSettings(settings: SttSettings): void {
   }
 }
 
+export function subscribeSttSettings(callback: (settings: SttSettings) => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  const handler = (e: Event) => {
+    const custom = e as CustomEvent<SttSettings>;
+    if (custom.detail) {
+      callback(custom.detail);
+    } else {
+      callback(loadSttSettings());
+    }
+  };
+  window.addEventListener("t3-stt-settings-changed", handler);
+  return () => {
+    window.removeEventListener("t3-stt-settings-changed", handler);
+  };
+}
+
 export function isSpeechRecognitionSupported(): boolean {
   if (typeof window === "undefined") return false;
   return "webkitSpeechRecognition" in window || "SpeechRecognition" in window;

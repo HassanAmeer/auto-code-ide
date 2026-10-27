@@ -16,7 +16,10 @@ import {
   Mic,
   MicOff,
   AudioLines,
+  Volume2,
+  Settings2,
 } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { type ProviderInstanceId } from "@t3tools/contracts";
 import { useAtomValue } from "@effect/atom-react";
 import { cn } from "~/lib/utils";
@@ -50,9 +53,18 @@ import { getAppModelOptionsForInstance } from "~/modelSelection";
 import { ProviderModelPicker } from "../ProviderModelPicker";
 import type { ModelEsque } from "../providerIconUtils";
 import { CircularVoiceWaves } from "./VoiceCallButton";
+import { GrokGeometricVoiceWaves } from "./GrokGeometricVoiceWaves";
 import { buildSuperAgentSystemPrompt } from "./superAgentPrompt";
 import { useVoiceCallAssistant } from "./useVoiceCallAssistant";
-import { speakText, stopSpeaking } from "~/lib/speech/tts";
+import {
+  speakText,
+  stopSpeaking,
+  loadTtsSettings,
+  subscribeTtsSettings,
+  TTS_ACCENTS,
+  type TtsSettings,
+} from "~/lib/speech/tts";
+import { loadSttSettings, subscribeSttSettings, type SttSettings } from "~/lib/speech/stt";
 import { transliterateUrduToRoman } from "~/lib/speech/romanUrduTransliterate";
 import { executeSuperAgentInstruction, isUrduLanguage } from "./superAgentEngine";
 
@@ -77,6 +89,32 @@ export function SuperCallAssistantView() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [agentStatus, setAgentStatus] = useState<string | null>(null);
   const [isTasksSheetOpen, setIsTasksSheetOpen] = useState(false);
+
+  // Synchronized STT & TTS Settings from /settings/stt-tts
+  const [ttsSettings, setTtsSettings] = useState<TtsSettings>(loadTtsSettings);
+  const [sttSettings, setSttSettings] = useState<SttSettings>(loadSttSettings);
+
+  useEffect(() => {
+    const unsubTts = subscribeTtsSettings(setTtsSettings);
+    const unsubStt = subscribeSttSettings(setSttSettings);
+    return () => {
+      unsubTts();
+      unsubStt();
+    };
+  }, []);
+
+  const activeVoiceLabel = useMemo(() => {
+    if (ttsSettings.voiceURI?.startsWith("accent:")) {
+      const preset = TTS_ACCENTS.find((a) => a.id === ttsSettings.voiceURI);
+      if (preset) return preset.name.replace(/\s*\([^)]*\)/, "");
+    }
+    if (ttsSettings.language === "auto-female") return "Auto (Female)";
+    if (ttsSettings.language === "auto-male") return "Auto (Male)";
+    if (ttsSettings.language === "natural-urdu") return "Natural Urdu";
+    if (ttsSettings.language === "roman-urdu") return "Roman Urdu";
+    if (ttsSettings.language === "english") return "English";
+    return ttsSettings.language;
+  }, [ttsSettings]);
 
   // Providers, models & settings
   const rawServerProviders = useAtomValue(primaryServerProvidersAtom);
@@ -233,7 +271,7 @@ export function SuperCallAssistantView() {
           : undefined;
 
         handleAddMessage("assistant", res.reply, meta);
-        speakText(res.spokenReply, undefined, () => {
+        speakText(res.spokenReply, loadTtsSettings(), () => {
           if (inputRef.current !== document.activeElement) {
             isUserEditingRef.current = false;
             setIsUserEditing(false);
@@ -246,7 +284,7 @@ export function SuperCallAssistantView() {
           ? `⚠️ Issue: ${errDetail}. Main dobara check karta hoon.`
           : `⚠️ Issue: ${errDetail}. Let me re-check.`;
         handleAddMessage("assistant", errorMsg);
-        speakText(errorMsg, undefined, () => {
+        speakText(errorMsg, loadTtsSettings(), () => {
           if (inputRef.current !== document.activeElement) {
             isUserEditingRef.current = false;
             setIsUserEditing(false);
@@ -579,7 +617,25 @@ export function SuperCallAssistantView() {
       {/* Main Conversation Stream */}
       <div className="flex-1 flex flex-col h-full min-w-0 relative">
         {/* Top Header */}
-        <header className="h-14 border-b border-border/50 px-4 sm:px-6 flex items-center justify-end shrink-0 bg-background/80 backdrop-blur-md">
+        <header className="h-14 border-b border-border/50 px-4 sm:px-6 flex items-center justify-between shrink-0 bg-background/80 backdrop-blur-md">
+          {/* Left: Active STT & TTS Settings indicator with direct link to Settings */}
+          <div className="flex items-center gap-2 min-w-0">
+            <Link
+              to="/settings/stt-tts"
+              className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-border/60 hover:border-primary/50 bg-muted/30 hover:bg-muted/60 text-xs text-muted-foreground hover:text-foreground transition-all cursor-pointer group shadow-2xs max-w-xs sm:max-w-md truncate"
+              title="Click to customize STT & TTS Voice, Speed, Pitch & Accent Settings"
+            >
+              <div className="flex items-center gap-1.5 text-primary shrink-0">
+                <Volume2 className="size-3.5 group-hover:scale-110 transition-transform" />
+                <span className="font-semibold text-foreground">Voice & Speech:</span>
+              </div>
+              <span className="truncate font-mono text-[11px] text-zinc-300">
+                {activeVoiceLabel} ({ttsSettings.rate.toFixed(2)}x) · STT: {sttSettings.language}
+              </span>
+              <Settings2 className="size-3 text-muted-foreground/70 group-hover:text-foreground shrink-0 ml-0.5" />
+            </Link>
+          </div>
+
           {/* Right: Notes & Tasks */}
           <div className="flex items-center gap-2 shrink-0">
             <button
@@ -837,14 +893,14 @@ export function SuperCallAssistantView() {
               />
             </div>
 
-            {/* Middle / Center: Call Button with Circular Wave Animation and Colors Effect (NO flags) */}
-            <div className="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 z-10 flex items-center gap-2">
+            {/* Middle / Center: Call Button with Grok Geometric Soundwaves / Circular Wave (Centered on divider) */}
+            <div className="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center">
               {isCallActive && (
                 <button
                   type="button"
                   onClick={toggleMicMute}
                   className={cn(
-                    "size-7 rounded-full border flex items-center justify-center transition-all cursor-pointer shadow-xs active:scale-95 bg-background z-20",
+                    "absolute -left-9 top-1/2 -translate-y-1/2 size-7 rounded-full border flex items-center justify-center transition-all cursor-pointer shadow-xs active:scale-95 bg-background z-20",
                     isMicMuted
                       ? "bg-amber-500/20 border-amber-500/50 text-amber-400"
                       : "bg-zinc-900/90 border-zinc-700/80 text-zinc-300 hover:text-white hover:bg-zinc-800",
@@ -871,13 +927,17 @@ export function SuperCallAssistantView() {
                 className={cn(
                   "relative z-10 flex items-center justify-center size-13 sm:size-14 rounded-full transition-all duration-300 cursor-pointer select-none",
                   "bg-zinc-950/95 border border-zinc-800/90 backdrop-blur-xl shadow-xl",
-                  isCallActive && "shadow-[0_0_24px_rgba(225,29,72,0.4)] border-rose-500/40",
                 )}
               >
-                {/* Circular Voice Waves (Dual concentric animated waves with reactive color effects) */}
-                <CircularVoiceWaves callStatus={callStatus} analyserNode={analyserNode} />
+                {/* When Call Active: New Grok Geometric Soundwave Eye design (Grey on idle, Blue on speak, Orange on think, Green on TTS).
+                    When Call Inactive/Ended: Existing original circular wave in grey color */}
+                {isCallActive ? (
+                  <GrokGeometricVoiceWaves callStatus={callStatus} analyserNode={analyserNode} />
+                ) : (
+                  <CircularVoiceWaves callStatus="idle" analyserNode={null} />
+                )}
 
-                {/* Centered Phone Icon */}
+                {/* Centered Phone Icon: Soft red (halka red) when active call, subtle grey when idle/ended */}
                 <button
                   type="button"
                   onClick={(e) => {
@@ -895,7 +955,7 @@ export function SuperCallAssistantView() {
                   className={cn(
                     "relative z-20 flex size-7 items-center justify-center rounded-full transition-all duration-200 cursor-pointer active:scale-90 bg-transparent border-0 shadow-none outline-none focus:outline-none",
                     isCallActive
-                      ? "text-rose-400 hover:text-rose-300"
+                      ? "text-rose-400/90 hover:text-rose-300"
                       : "text-zinc-300 hover:text-white",
                   )}
                   title={

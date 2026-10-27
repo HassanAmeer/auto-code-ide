@@ -2,6 +2,7 @@ export * from "./voiceCallSettings";
 export * from "./thinkingAmbientSound";
 export * from "./VoiceVisualizerWaves";
 export * from "./VoiceCallButton";
+export * from "./GrokGeometricVoiceWaves";
 export * from "./VoiceCallFloatingWidget";
 export * from "./GlobalVoiceCallWidget";
 export * from "./useVoiceCallAssistant";

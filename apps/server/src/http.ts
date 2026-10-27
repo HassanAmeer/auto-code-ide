@@ -1066,115 +1066,156 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
         const systemMsg = messages.find((m) => m.role === "system")?.content;
         const userMsgs = messages.filter((m) => m.role !== "system");
         let promptText =
-          "[You are the Super Bot (Executive Commander). You have full oversight of all projects, tools, and Autonomous Worker Agents. You have full access to inspect project files, dispatch workers to complete tasks, and provide live browser previews. Respond helpfully, concisely, and informatively.]\n\n";
+          "[You are the Super Bot (Executive Commander). Do not run external tools or shell commands. Directly answer the user in natural Roman Urdu using pretty Markdown with headings, bullet points, and preview links based on the live facts provided below.]\n\n";
         if (systemMsg) {
           promptText += `${systemMsg}\n\n`;
         }
         if (liveProjectContext) {
           promptText += `${liveProjectContext}\n\n`;
         }
-        for (const m of userMsgs.slice(-5)) {
+        for (const m of userMsgs.slice(-4)) {
           promptText += `${m.role === "user" ? "User" : "Assistant"}: ${m.content}\n`;
         }
         promptText = promptText.trim() || "Hello";
+        if (promptText.length > 3800) {
+          promptText = promptText.slice(0, 3800);
+        }
 
-        let sessionId: string | undefined;
-        try {
-          const sRes = await fetch(`${activeBase}/session`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: activeAuth },
-            body: JSON.stringify({ title: `Super Bot Turn (${pureModel})` }),
-            signal: AbortSignal.timeout(10000),
-          });
-          const sData = (await sRes.json()) as any;
-          sessionId = sData?.data?.id;
-          if (!sessionId) {
-            return {
-              ok: false,
-              error: `Could not create session on OpenCode: ${JSON.stringify(sData)}`,
-              code: "SESSION_CREATION_FAILED",
-            };
-          }
-
-          await fetch(`${activeBase}/session/${sessionId}/model`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: activeAuth },
-            body: JSON.stringify({ model: { providerID: "opencode", id: pureModel } }),
-            signal: AbortSignal.timeout(10000),
-          });
-
-          const pRes = await fetch(`${activeBase}/session/${sessionId}/prompt`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: activeAuth },
-            body: JSON.stringify({ text: promptText }),
-            signal: AbortSignal.timeout(15000),
-          });
-          if (!pRes.ok) {
-            const pErr = await pRes.text();
-            return { ok: false, error: `Prompt failed: ${pErr}`, code: `HTTP_${pRes.status}` };
-          }
-
-          const pollStart = Date.now();
-          while (Date.now() - pollStart < 30000) {
-            await new Promise((r) => setTimeout(r, 800));
-            const mRes = await fetch(`${activeBase}/session/${sessionId}/message`, {
-              headers: { Authorization: activeAuth },
-              signal: AbortSignal.timeout(5000),
+        const maxAttempts = 2;
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+          let sessionId: string | undefined;
+          try {
+            const sRes = await fetch(`${activeBase}/session`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: activeAuth },
+              body: JSON.stringify({ title: `Super Bot Turn (${pureModel})` }),
+              signal: AbortSignal.timeout(10000),
             });
-            if (!mRes.ok) continue;
-            const mData = (await mRes.json()) as any;
-            const msgs = mData?.data || [];
+            const sData = (await sRes.json()) as any;
+            sessionId = sData?.data?.id;
+            if (!sessionId) {
+              if (attempt < maxAttempts) {
+                await new Promise((r) => setTimeout(r, 1000));
+                continue;
+              }
+              return {
+                ok: false,
+                error: `Could not create session on OpenCode: ${JSON.stringify(sData)}`,
+                code: "SESSION_CREATION_FAILED",
+              };
+            }
 
-            // Check for errors across any assistant message
-            for (const m of msgs) {
-              if (m.type === "assistant" && m.finish === "error") {
-                const errDetail = m.error?.message || JSON.stringify(m.error);
-                if (m.error?.status === 429 || /free.*limit|quota|429/i.test(errDetail)) {
-                  try {
-                    const { rotateWarpIp } =
-                      await import("@t3tools/provider-opencodebypasssetup/server");
-                    await rotateWarpIp();
-                  } catch {}
-                  return {
-                    ok: false,
-                    error: `Model "${pureModel}" free quota reached. IP automatically rotated; please send your message again.`,
-                    code: "RATE_LIMIT",
-                  };
+            await fetch(`${activeBase}/session/${sessionId}/model`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: activeAuth },
+              body: JSON.stringify({ model: { providerID: "opencode", id: pureModel } }),
+              signal: AbortSignal.timeout(10000),
+            });
+
+            const pRes = await fetch(`${activeBase}/session/${sessionId}/prompt`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: activeAuth },
+              body: JSON.stringify({ text: promptText }),
+              signal: AbortSignal.timeout(15000),
+            });
+            if (!pRes.ok) {
+              const pErr = await pRes.text();
+              if (attempt < maxAttempts) {
+                await new Promise((r) => setTimeout(r, 1000));
+                continue;
+              }
+              return { ok: false, error: `Prompt failed: ${pErr}`, code: `HTTP_${pRes.status}` };
+            }
+
+            let gotSuccess = false;
+            let successReply = "";
+            let hitRateLimit = false;
+
+            const pollStart = Date.now();
+            while (Date.now() - pollStart < 60000) {
+              await new Promise((r) => setTimeout(r, 800));
+              const mRes = await fetch(`${activeBase}/session/${sessionId}/message`, {
+                headers: { Authorization: activeAuth },
+                signal: AbortSignal.timeout(5000),
+              });
+              if (!mRes.ok) continue;
+              const mData = (await mRes.json()) as any;
+              const msgs = mData?.data || [];
+
+              // Check for errors across any assistant message
+              for (const m of msgs) {
+                if (m.type === "assistant" && m.finish === "error") {
+                  const errDetail = m.error?.message || JSON.stringify(m.error);
+                  if (m.error?.status === 429 || /free.*limit|quota|429/i.test(errDetail)) {
+                    hitRateLimit = true;
+                    try {
+                      const { rotateWarpIp } =
+                        await import("@t3tools/provider-opencodebypasssetup/server");
+                      await rotateWarpIp();
+                    } catch {}
+                    break;
+                  }
+                  return { ok: false, error: errDetail, code: "MODEL_ERROR" };
                 }
-                return { ok: false, error: errDetail, code: "MODEL_ERROR" };
+              }
+
+              if (hitRateLimit) break;
+
+              // Find assistant message with text (check reverse to get latest)
+              const reversedMsgs = [...msgs].reverse();
+              const assistantWithText = reversedMsgs
+                .filter((m: any) => m.type === "assistant")
+                .find((m: any) =>
+                  (m.content || []).some((c: any) => c.type === "text" && c.text && c.text.trim()),
+                );
+
+              if (assistantWithText) {
+                const textParts = (assistantWithText.content || [])
+                  .filter((c: any) => c.type === "text" && c.text && c.text.trim())
+                  .map((c: any) => c.text.trim());
+                if (textParts.length > 0) {
+                  const isFinished =
+                    assistantWithText.finish === "stop" ||
+                    msgs.some((m: any) => m.type === "idle" && m.outcome === "succeeded");
+                  if (isFinished || Date.now() - pollStart > 7000) {
+                    gotSuccess = true;
+                    successReply = textParts.join("\n\n").trim();
+                    break;
+                  }
+                }
               }
             }
 
-            // Find assistant message with text
-            const assistantWithText = msgs
-              .filter((m: any) => m.type === "assistant")
-              .find((m: any) =>
-                (m.content || []).some((c: any) => c.type === "text" && c.text?.trim()),
-              );
-
-            if (assistantWithText) {
-              const textParts = (assistantWithText.content || [])
-                .filter((c: any) => c.type === "text" && c.text)
-                .map((c: any) => c.text);
-              if (textParts.length > 0) {
-                const isFinished =
-                  assistantWithText.finish === "stop" ||
-                  msgs.some((m: any) => m.type === "idle" && m.outcome === "succeeded");
-                if (isFinished || Date.now() - pollStart > 5000) {
-                  return { ok: true, reply: textParts.join("\n").trim(), model: pureModel };
-                }
-              }
+            if (gotSuccess && successReply) {
+              return { ok: true, reply: successReply, model: pureModel };
             }
-          }
-          return { ok: false, error: "Model timed out generating response.", code: "TIMEOUT" };
-        } catch (err: any) {
-          return { ok: false, error: err?.message || String(err), code: "NETWORK_ERROR" };
-        } finally {
-          if (sessionId) {
-            fetch(`${activeBase}/session/${sessionId}`, {
-              method: "DELETE",
-              headers: { Authorization: activeAuth },
-            }).catch(() => {});
+
+            if (hitRateLimit) {
+              if (attempt < maxAttempts) {
+                await new Promise((r) => setTimeout(r, 1200));
+                continue;
+              }
+              return {
+                ok: false,
+                error: `Model "${pureModel}" free quota reached. IP automatically rotated; please send your message again.`,
+                code: "RATE_LIMIT",
+              };
+            }
+
+            if (attempt === maxAttempts) {
+              return { ok: false, error: "Model timed out generating response.", code: "TIMEOUT" };
+            }
+          } catch (err: any) {
+            if (attempt === maxAttempts) {
+              return { ok: false, error: err?.message || String(err), code: "NETWORK_ERROR" };
+            }
+          } finally {
+            if (sessionId) {
+              fetch(`${activeBase}/session/${sessionId}`, {
+                method: "DELETE",
+                headers: { Authorization: activeAuth },
+              }).catch(() => {});
+            }
           }
         }
       }

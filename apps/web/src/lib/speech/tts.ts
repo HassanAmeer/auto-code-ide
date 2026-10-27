@@ -4,12 +4,21 @@
 
 import { saveServerSetting } from "../serverSettingsSync";
 
+export type TtsVoiceId =
+  | "english-male"
+  | "english-female"
+  | "roman-urdu-male"
+  | "roman-urdu-female"
+  | "natural-urdu-male"
+  | "natural-urdu-female";
+
 export type TtsLanguageMode =
-  | "auto-male"
-  | "auto-female"
+  | "english"
   | "roman-urdu"
   | "natural-urdu"
-  | "english";
+  | "auto-male"
+  | "auto-female"
+  | TtsVoiceId;
 
 export interface TtsSettings {
   language: TtsLanguageMode;
@@ -20,183 +29,101 @@ export interface TtsSettings {
 }
 
 export interface TtsAccentPreset {
-  id: string;
+  id: TtsVoiceId;
   name: string;
-  category: "roman-urdu" | "natural-urdu" | "hindi" | "english";
+  nameUrdu: string;
+  category: "english" | "roman-urdu" | "natural-urdu";
   gender: "male" | "female";
   preferredLangs: string[];
   pitch: number;
   rate: number;
+  sampleText: string;
   description: string;
 }
 
+/**
+ * Exactly 6 curated voice presets across 3 languages (English, Roman Urdu, Natural Urdu)
+ * with dedicated Male and Female options for each.
+ */
 export const TTS_ACCENTS: TtsAccentPreset[] = [
-  // Roman Urdu Accents (2 Male, 2 Female)
+  // 1. English Male & Female
   {
-    id: "accent:roman-urdu-male-1",
-    name: "Roman Urdu - Male Accent 1 (Smooth Pakistani)",
-    category: "roman-urdu",
+    id: "english-male",
+    name: "English (Male Voice)",
+    nameUrdu: "انگلش (مردانہ آواز)",
+    category: "english",
     gender: "male",
-    preferredLangs: ["hi-IN", "ur-PK", "en-IN", "en-US"],
-    pitch: 0.9,
-    rate: 0.98,
-    description: "Natural conversational tone suited for daily Roman Urdu chat.",
+    preferredLangs: ["en-US", "en-GB", "en-CA", "en-AU", "en"],
+    pitch: 0.88,
+    rate: 1.0,
+    sampleText: "Hello! This is a test of the English male voice. How can I assist you today?",
+    description: "Clear and natural English male voice.",
   },
   {
-    id: "accent:roman-urdu-male-2",
-    name: "Roman Urdu - Male Accent 2 (Deep Narrative)",
-    category: "roman-urdu",
-    gender: "male",
-    preferredLangs: ["hi-IN", "ur-PK", "en-IN", "en-US"],
-    pitch: 0.82,
-    rate: 0.95,
-    description: "Deep, resonant tone for clear explanation of code and steps.",
-  },
-  {
-    id: "accent:roman-urdu-female-1",
-    name: "Roman Urdu - Female Accent 1 (Melodic Clear)",
-    category: "roman-urdu",
+    id: "english-female",
+    name: "English (Female Voice)",
+    nameUrdu: "انگلش (زنانہ آواز)",
+    category: "english",
     gender: "female",
-    preferredLangs: ["hi-IN", "ur-PK", "en-IN", "en-US"],
-    pitch: 1.16,
-    rate: 1.02,
-    description: "Clear and fluent female voice for Roman Urdu assistance.",
-  },
-  {
-    id: "accent:roman-urdu-female-2",
-    name: "Roman Urdu - Female Accent 2 (Soft Expressive)",
-    category: "roman-urdu",
-    gender: "female",
-    preferredLangs: ["hi-IN", "ur-PK", "en-IN", "en-US"],
-    pitch: 1.25,
-    rate: 0.96,
-    description: "Gentle and expressive tone for conversational feedback.",
+    preferredLangs: ["en-US", "en-GB", "en-CA", "en-AU", "en"],
+    pitch: 1.12,
+    rate: 1.0,
+    sampleText: "Hello! This is a test of the English female voice. How can I assist you today?",
+    description: "Fluent and professional English female voice.",
   },
 
-  // Natural Urdu Accents (2 Male, 2 Female)
+  // 2. Roman Urdu Male & Female
   {
-    id: "accent:natural-urdu-male-1",
-    name: "Natural Urdu - Male Accent 1 (Standard Lahori/Karachi)",
-    category: "natural-urdu",
+    id: "roman-urdu-male",
+    name: "Roman Urdu (Male Voice)",
+    nameUrdu: "رومن اردو (مردانہ آواز)",
+    category: "roman-urdu",
     gender: "male",
-    preferredLangs: ["ur-PK", "ur", "hi-IN", "hi"],
-    pitch: 0.88,
+    preferredLangs: ["hi-IN", "ur-PK", "en-IN", "en-GB", "en-US"],
+    pitch: 0.82,
     rate: 0.96,
-    description: "Authentic Pakistani Urdu pronunciation and cadence.",
+    sampleText:
+      "Assalam o alaikum! Yeh Roman Urdu male voice ka test hai. Main aap ki kya madad kar sakta hoon?",
+    description: "Natural Pakistani accent for Roman Urdu chat (Male).",
   },
   {
-    id: "accent:natural-urdu-male-2",
-    name: "Natural Urdu - Male Accent 2 (Classical Radio)",
+    id: "roman-urdu-female",
+    name: "Roman Urdu (Female Voice)",
+    nameUrdu: "رومن اردو (زنانہ آواز)",
+    category: "roman-urdu",
+    gender: "female",
+    preferredLangs: ["hi-IN", "ur-PK", "en-IN", "en-GB", "en-US"],
+    pitch: 1.15,
+    rate: 1.0,
+    sampleText:
+      "Assalam o alaikum! Yeh Roman Urdu female voice ka test hai. Main aap ki kya madad kar sakti hoon?",
+    description: "Clear and expressive Roman Urdu conversational voice (Female).",
+  },
+
+  // 3. Natural Urdu Male & Female
+  {
+    id: "natural-urdu-male",
+    name: "Natural Urdu (Male Voice) - اردو",
+    nameUrdu: "نیچرل اردو (مردانہ آواز)",
     category: "natural-urdu",
     gender: "male",
     preferredLangs: ["ur-PK", "ur", "hi-IN", "hi"],
     pitch: 0.8,
-    rate: 0.92,
-    description: "Deep classical voice inspired by traditional radio broadcasts.",
-  },
-  {
-    id: "accent:natural-urdu-female-1",
-    name: "Natural Urdu - Female Accent 1 (Standard Clear)",
-    category: "natural-urdu",
-    gender: "female",
-    preferredLangs: ["ur-PK", "ur", "hi-IN", "hi"],
-    pitch: 1.18,
-    rate: 1.0,
-    description: "Polished native female pronunciation for Nastaliq text.",
-  },
-  {
-    id: "accent:natural-urdu-female-2",
-    name: "Natural Urdu - Female Accent 2 (Soft Eloquent)",
-    category: "natural-urdu",
-    gender: "female",
-    preferredLangs: ["ur-PK", "ur", "hi-IN", "hi"],
-    pitch: 1.28,
-    rate: 0.95,
-    description: "Eloquent and relaxed tempo for reading lengthy answers.",
-  },
-
-  // Hindi Accents (2 Male, 2 Female)
-  {
-    id: "accent:hindi-male-1",
-    name: "Hindi - Male Accent 1 (Delhi Standard)",
-    category: "hindi",
-    gender: "male",
-    preferredLangs: ["hi-IN", "hi", "en-IN"],
-    pitch: 0.92,
-    rate: 1.0,
-    description: "Standard North Indian Hindi/Hindustani accent.",
-  },
-  {
-    id: "accent:hindi-male-2",
-    name: "Hindi - Male Accent 2 (Deep Resonance)",
-    category: "hindi",
-    gender: "male",
-    preferredLangs: ["hi-IN", "hi", "en-IN"],
-    pitch: 0.84,
     rate: 0.94,
-    description: "Deep voice with clear Hindi articulation.",
+    sampleText: "السلام علیکم! یہ نیچرل اردو مردانہ آواز کا ٹیسٹ ہے۔ میں آپ کی کیا مدد کر سکتا ہوں؟",
+    description: "Authentic Pakistani Urdu pronunciation in resonant male tone.",
   },
   {
-    id: "accent:hindi-female-1",
-    name: "Hindi - Female Accent 1 (Modern Clear)",
-    category: "hindi",
+    id: "natural-urdu-female",
+    name: "Natural Urdu (Female Voice) - اردو",
+    nameUrdu: "نیچرل اردو (زنانہ آواز)",
+    category: "natural-urdu",
     gender: "female",
-    preferredLangs: ["hi-IN", "hi", "en-IN"],
-    pitch: 1.15,
-    rate: 1.02,
-    description: "Modern, crisp female accent for Hindi & Romanized content.",
-  },
-  {
-    id: "accent:hindi-female-2",
-    name: "Hindi - Female Accent 2 (Melodic Expressive)",
-    category: "hindi",
-    gender: "female",
-    preferredLangs: ["hi-IN", "hi", "en-IN"],
-    pitch: 1.26,
+    preferredLangs: ["ur-PK", "ur", "hi-IN", "hi"],
+    pitch: 1.16,
     rate: 0.98,
-    description: "Warm, melodious Hindi female vocal tone.",
-  },
-
-  // English Accents (2 Male, 2 Female)
-  {
-    id: "accent:english-male-1",
-    name: "English - Male Accent 1 (US Natural)",
-    category: "english",
-    gender: "male",
-    preferredLangs: ["en-US", "en"],
-    pitch: 0.9,
-    rate: 1.0,
-    description: "Standard American English male accent.",
-  },
-  {
-    id: "accent:english-male-2",
-    name: "English - Male Accent 2 (UK Classical)",
-    category: "english",
-    gender: "male",
-    preferredLangs: ["en-GB", "en"],
-    pitch: 0.92,
-    rate: 0.96,
-    description: "Refined British English male articulation.",
-  },
-  {
-    id: "accent:english-female-1",
-    name: "English - Female Accent 1 (US Clear)",
-    category: "english",
-    gender: "female",
-    preferredLangs: ["en-US", "en"],
-    pitch: 1.15,
-    rate: 1.0,
-    description: "Clear and professional American English female voice.",
-  },
-  {
-    id: "accent:english-female-2",
-    name: "English - Female Accent 2 (UK Polished)",
-    category: "english",
-    gender: "female",
-    preferredLangs: ["en-GB", "en"],
-    pitch: 1.2,
-    rate: 0.98,
-    description: "Polished and fluent British English female voice.",
+    sampleText: "السلام علیکم! یہ نیچرل اردو زنانہ آواز کا ٹیسٹ ہے۔ میں آپ کی کیا مدد کر سکتی ہوں؟",
+    description: "Polished and fluent native Urdu pronunciation (Female).",
   },
 ];
 
@@ -204,10 +131,45 @@ const TTS_STORAGE_KEY = "t3code:speech:tts-settings:v1";
 
 export const DEFAULT_TTS_SETTINGS: TtsSettings = {
   language: "roman-urdu",
+  voiceURI: "roman-urdu-male",
   rate: 1.0,
   pitch: 1.0,
   volume: 1.0,
 };
+
+/**
+ * Returns the active TTS voice preset matching settings or fallbacks.
+ */
+export function getActiveTtsPreset(settings?: Partial<TtsSettings>): TtsAccentPreset {
+  const current = settings || loadTtsSettings();
+  const uri = current.voiceURI || "";
+
+  // 1. Direct match with preset id
+  const direct = TTS_ACCENTS.find((a) => a.id === uri);
+  if (direct) return direct;
+
+  // 2. Legacy / fuzzy match by URI
+  const lowerUri = uri.toLowerCase();
+  if (lowerUri.includes("english")) {
+    return lowerUri.includes("female") ? TTS_ACCENTS[1] : TTS_ACCENTS[0];
+  }
+  if (lowerUri.includes("natural")) {
+    return lowerUri.includes("female") ? TTS_ACCENTS[5] : TTS_ACCENTS[4];
+  }
+  if (lowerUri.includes("roman")) {
+    return lowerUri.includes("female") ? TTS_ACCENTS[3] : TTS_ACCENTS[2];
+  }
+
+  // 3. Fallback based on language mode
+  const lang = current.language;
+  if (lang === "english" || lang === "english-male") return TTS_ACCENTS[0];
+  if (lang === "english-female") return TTS_ACCENTS[1];
+  if (lang === "natural-urdu" || lang === "natural-urdu-male") return TTS_ACCENTS[4];
+  if (lang === "natural-urdu-female") return TTS_ACCENTS[5];
+  if (lang === "auto-female" || lang === "roman-urdu-female") return TTS_ACCENTS[3];
+
+  return TTS_ACCENTS[2]; // Default: roman-urdu-male
+}
 
 export function loadTtsSettings(): TtsSettings {
   if (typeof window === "undefined") return DEFAULT_TTS_SETTINGS;
@@ -231,6 +193,22 @@ export function saveTtsSettings(settings: TtsSettings): void {
   } catch (err) {
     console.warn("Failed to persist TTS settings:", err);
   }
+}
+
+export function subscribeTtsSettings(callback: (settings: TtsSettings) => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  const handler = (e: Event) => {
+    const custom = e as CustomEvent<TtsSettings>;
+    if (custom.detail) {
+      callback(custom.detail);
+    } else {
+      callback(loadTtsSettings());
+    }
+  };
+  window.addEventListener("t3-tts-settings-changed", handler);
+  return () => {
+    window.removeEventListener("t3-tts-settings-changed", handler);
+  };
 }
 
 /**
@@ -571,7 +549,13 @@ export function speakText(text: string, options?: Partial<TtsSettings>, onEnd?: 
 
   stopSpeaking();
 
-  const settings = { ...loadTtsSettings(), ...options };
+  const baseSettings = loadTtsSettings();
+  const settings: TtsSettings = {
+    ...baseSettings,
+    ...(options
+      ? Object.fromEntries(Object.entries(options).filter(([_, v]) => v !== undefined))
+      : {}),
+  };
   const clean = sanitizeTextForSpeech(text);
   if (!clean) {
     onEnd?.();
