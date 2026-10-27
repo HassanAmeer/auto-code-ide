@@ -1,0 +1,588 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Voice Waves Demo</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        background: #0b0f17;
+        color: #f3f4f6;
+        font-family:
+          system-ui,
+          -apple-system,
+          sans-serif;
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+      }
+      .card {
+        width: 100%;
+        max-width: 680px;
+        background: #111827;
+        border: 1px solid #1f2937;
+        border-radius: 16px;
+        padding: 20px;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+      }
+      .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid #1f2937;
+      }
+      .badge {
+        font-size: 11px;
+        padding: 4px 10px;
+        border-radius: 9999px;
+        font-family: monospace;
+        font-weight: bold;
+      }
+      .mock-bar {
+        position: relative;
+        width: 100%;
+        height: 72px;
+        background: #080c14;
+        border: 1px solid #1f2937;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        padding: 0 16px;
+        margin-bottom: 20px;
+        overflow: hidden;
+      }
+      .divider-line {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 50%;
+        transform: translateY(-50%);
+        height: 1px;
+        background: #27272a;
+      }
+      .model-badge {
+        position: relative;
+        z-index: 20;
+        height: 24px;
+        padding: 0 10px;
+        border-radius: 9999px;
+        background: #18181b;
+        border: 1px solid #3f3f46;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11px;
+        color: #d4d4d8;
+      }
+      .center-wrapper {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .call-btn {
+        position: relative;
+        z-index: 20;
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background: #09090b;
+        border: 1px solid #27272a;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.7);
+      }
+      .mic-icon {
+        position: relative;
+        z-index: 20;
+        margin-left: auto;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: #18181b;
+        border: 1px solid #27272a;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #a1a1aa;
+      }
+      .wave-canvas-wrap {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 5;
+        pointer-events: none;
+      }
+      .modes-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 10px;
+        margin-bottom: 16px;
+      }
+      @media (max-width: 600px) {
+        .modes-grid {
+          grid-template-columns: repeat(2, 1fr);
+        }
+      }
+      .btn-mode {
+        padding: 10px 8px;
+        border-radius: 10px;
+        background: #1f2937;
+        border: 1px solid #374151;
+        color: #e5e7eb;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        transition: all 0.2s;
+      }
+      .btn-mode:hover {
+        background: #374151;
+      }
+      .btn-mode.active {
+        border-color: #3b82f6;
+        background: rgba(59, 130, 246, 0.2);
+        box-shadow: 0 0 10px rgba(59, 130, 246, 0.4);
+      }
+      .voice-tester {
+        background: #090d14;
+        border: 1px solid #1f2937;
+        border-radius: 10px;
+        padding: 12px 16px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 14px;
+      }
+      .btn-talk {
+        background: #2563eb;
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 8px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        user-select: none;
+      }
+      .btn-talk:active {
+        background: #1d4ed8;
+        transform: scale(0.96);
+      }
+      .slider-row {
+        display: flex;
+        gap: 16px;
+        margin-top: 10px;
+      }
+      .slider-box {
+        flex: 1;
+        background: #090d14;
+        padding: 10px;
+        border-radius: 8px;
+        border: 1px solid #1f2937;
+      }
+      .slider-box label {
+        display: flex;
+        justify-content: space-between;
+        font-size: 11px;
+        color: #9ca3af;
+        margin-bottom: 6px;
+      }
+      .slider-box input {
+        width: 100%;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="header">
+        <div>
+          <h2 style="font-size: 15px; font-weight: bold; color: #fff">
+            Voice Wave Live Demo (Zero Dependencies)
+          </h2>
+          <p style="font-size: 11px; color: #9ca3af; margin-top: 2px">
+            Neeche button dabakar har mode ki animation live check karein.
+          </p>
+        </div>
+        <div id="statusBadge" class="badge" style="background: #27272a; color: #e4e4e7">
+          1. SAKIN (QUIET)
+        </div>
+      </div>
+
+      <!-- UI Mock Bar -->
+      <div class="mock-bar">
+        <!-- Divider Line -->
+        <div class="divider-line"></div>
+
+        <!-- Left Badge -->
+        <div class="model-badge">
+          <span
+            style="
+              background: #27272a;
+              padding: 1px 4px;
+              border-radius: 4px;
+              font-size: 9px;
+              font-weight: bold;
+            "
+            >OP</span
+          >
+          <span>Beam 5...</span>
+        </div>
+
+        <!-- Center Wave & Call Button -->
+        <div class="center-wrapper">
+          <div id="waveWrap" class="wave-canvas-wrap" style="width: 190px; height: 50px">
+            <canvas
+              id="waveCanvas"
+              width="190"
+              height="50"
+              style="width: 100%; height: 100%; display: block"
+            ></canvas>
+          </div>
+          <div class="call-btn">
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#f43f5e"
+              stroke-width="2.2"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M16 8l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M5 3a2 2 0 00-2 2v1c0 8.284 6.716 15 15 15h1a2 2 0 002-2v-3.28a1 1 0 00-.684-.948l-4.493-1.498a1 1 0 00-1.21.502l-1.13 2.257a11.042 11.042 0 01-5.516-5.517l2.257-1.128a1 1 0 00.502-1.21L9.228 3.684A1 1 0 008.279 3H5z"
+              />
+            </svg>
+          </div>
+        </div>
+
+        <!-- Right Mic -->
+        <div class="mic-icon">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
+            />
+          </svg>
+        </div>
+      </div>
+
+      <!-- Mode Buttons -->
+      <div class="modes-grid">
+        <button class="btn-mode active" id="btn1">
+          <span style="font-size: 16px">🤫</span>
+          <span>1. Sakin</span>
+          <span style="font-size: 10px; color: #9ca3af; font-weight: normal">Chup / Silent</span>
+        </button>
+
+        <button class="btn-mode" id="btn2">
+          <span style="font-size: 16px">🗣️</span>
+          <span>2. Speech</span>
+          <span style="font-size: 10px; color: #9ca3af; font-weight: normal">Voice reactive</span>
+        </button>
+
+        <button class="btn-mode" id="btn3">
+          <span style="font-size: 16px">🤖</span>
+          <span>3. AI Speak</span>
+          <span style="font-size: 10px; color: #9ca3af; font-weight: normal">TTS rhythm</span>
+        </button>
+
+        <button class="btn-mode" id="btn4">
+          <span style="font-size: 16px">⚡</span>
+          <span>4. Thinking</span>
+          <span style="font-size: 10px; color: #9ca3af; font-weight: normal">Zigzag L-to-R</span>
+        </button>
+      </div>
+
+      <!-- Voice Push-to-Talk Simulation -->
+      <div class="voice-tester">
+        <div>
+          <div style="font-size: 12px; font-weight: bold; color: #fff">
+            Simulate Speech / Voice:
+          </div>
+          <div style="font-size: 11px; color: #9ca3af">
+            Click & hold karke rakhein to bolne ki waves dikhengi, chhorne par sakin ho jayegi.
+          </div>
+        </div>
+        <button class="btn-talk" id="talkBtn">Hold to Talk 🎙️</button>
+      </div>
+
+      <!-- Sliders -->
+      <div class="slider-row">
+        <div class="slider-box">
+          <label>
+            <span>Wave Width:</span>
+            <span id="widthVal" style="color: #fff; font-family: monospace">180px</span>
+          </label>
+          <input type="range" id="wSlider" min="140" max="280" value="180" />
+        </div>
+        <div class="slider-box">
+          <label>
+            <span>Wave Height:</span>
+            <span id="heightVal" style="color: #fff; font-family: monospace">46px</span>
+          </label>
+          <input type="range" id="hSlider" min="28" max="64" value="46" />
+        </div>
+      </div>
+    </div>
+
+    <script>
+      let currentMode = "sakin"; // 'sakin', 'speech', 'ai', 'thinking'
+      let isHoldingTalk = false;
+      let waveWidth = 180;
+      let waveHeight = 46;
+
+      const canvas = document.getElementById("waveCanvas");
+      const ctx = canvas.getContext("2d");
+      const wrap = document.getElementById("waveWrap");
+      const statusBadge = document.getElementById("statusBadge");
+
+      const btn1 = document.getElementById("btn1");
+      const btn2 = document.getElementById("btn2");
+      const btn3 = document.getElementById("btn3");
+      const btn4 = document.getElementById("btn4");
+      const talkBtn = document.getElementById("talkBtn");
+      const wSlider = document.getElementById("wSlider");
+      const hSlider = document.getElementById("hSlider");
+
+      function setActiveBtn(mode) {
+        currentMode = mode;
+        [btn1, btn2, btn3, btn4].forEach((b) => b.classList.remove("active"));
+        if (mode === "sakin") {
+          btn1.classList.add("active");
+          statusBadge.innerText = "1. SAKIN (QUIET BASELINE)";
+          statusBadge.style.background = "#27272a";
+          statusBadge.style.color = "#e4e4e7";
+        } else if (mode === "speech") {
+          btn2.classList.add("active");
+          statusBadge.innerText = "2. USER SPEAKING (VOICE REACTIVE)";
+          statusBadge.style.background = "#1e3a8a";
+          statusBadge.style.color = "#bfdbfe";
+        } else if (mode === "ai") {
+          btn3.classList.add("active");
+          statusBadge.innerText = "3. AI SPEAKING (TTS CADENCE)";
+          statusBadge.style.background = "#064e3b";
+          statusBadge.style.color = "#a7f3d0";
+        } else if (mode === "thinking") {
+          btn4.classList.add("active");
+          statusBadge.innerText = "4. THINKING (ZIGZAG L-TO-R)";
+          statusBadge.style.background = "#7c2d12";
+          statusBadge.style.color = "#fed7aa";
+        }
+      }
+
+      btn1.addEventListener("click", () => setActiveBtn("sakin"));
+      btn2.addEventListener("click", () => setActiveBtn("speech"));
+      btn3.addEventListener("click", () => setActiveBtn("ai"));
+      btn4.addEventListener("click", () => setActiveBtn("thinking"));
+
+      talkBtn.addEventListener("mousedown", () => {
+        isHoldingTalk = true;
+        setActiveBtn("speech");
+      });
+      window.addEventListener("mouseup", () => {
+        if (isHoldingTalk) {
+          isHoldingTalk = false;
+          setActiveBtn("sakin");
+        }
+      });
+
+      wSlider.addEventListener("input", (e) => {
+        waveWidth = parseInt(e.target.value);
+        document.getElementById("widthVal").innerText = waveWidth + "px";
+        wrap.style.width = waveWidth + "px";
+        canvas.width = waveWidth;
+      });
+
+      hSlider.addEventListener("input", (e) => {
+        waveHeight = parseInt(e.target.value);
+        document.getElementById("heightVal").innerText = waveHeight + "px";
+        wrap.style.height = waveHeight + "px";
+        canvas.height = waveHeight;
+      });
+
+      // Render loop
+      const numStrands = 11;
+      const R_core = 21.0;
+      let animTime = 0;
+
+      function draw() {
+        animTime += 0.02;
+        const width = canvas.width || waveWidth;
+        const height = canvas.height || waveHeight;
+        const cx = width / 2;
+        const cy = height / 2;
+        const W = Math.min(width * 0.47, waveWidth * 0.47);
+
+        ctx.clearRect(0, 0, width, height);
+
+        // Color selection
+        let priRgb = "215, 225, 245";
+        let accRgb = "255, 255, 255";
+        let glow = "rgba(255, 255, 255, 0.3)";
+
+        if (currentMode === "speech") {
+          priRgb = "59, 130, 246";
+          accRgb = "147, 197, 253";
+          glow = "rgba(59, 130, 246, 0.8)";
+        } else if (currentMode === "ai") {
+          priRgb = "34, 197, 94";
+          accRgb = "134, 239, 172";
+          glow = "rgba(34, 197, 94, 0.8)";
+        } else if (currentMode === "thinking") {
+          priRgb = "249, 115, 22";
+          accRgb = "253, 186, 116";
+          glow = "rgba(249, 115, 22, 0.8)";
+        }
+
+        // 1. Center Baseline Line
+        const grad = ctx.createLinearGradient(0, cy, width, cy);
+        grad.addColorStop(0, "transparent");
+        grad.addColorStop(0.15, `rgba(${accRgb}, 0.25)`);
+        grad.addColorStop(0.5, `rgba(${priRgb}, 0.75)`);
+        grad.addColorStop(0.85, `rgba(${accRgb}, 0.25)`);
+        grad.addColorStop(1, "transparent");
+
+        ctx.beginPath();
+        ctx.moveTo(0, cy);
+        ctx.lineTo(width, cy);
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // 2. Rings around hole
+        const ringAlpha = currentMode === "sakin" ? 0.2 : 0.55;
+        [R_core + 1.5, R_core + 4.0, R_core + 7.5].forEach((r, idx) => {
+          ctx.beginPath();
+          ctx.arc(cx, cy, r, 0, Math.PI * 2);
+          ctx.strokeStyle = `rgba(${accRgb}, ${ringAlpha / (idx + 1)})`;
+          ctx.lineWidth = 0.8;
+          ctx.stroke();
+        });
+
+        // 3. Dynamics
+        let amp = 0.5;
+        if (currentMode === "sakin") {
+          amp = 0.35 + Math.sin(animTime * 1.5) * 0.15; // sakin calm
+        } else if (currentMode === "speech") {
+          const burst = Math.sin(animTime * 6.5) * 0.5 + 0.5;
+          amp = 1.0 + Math.pow(burst, 1.4) * 4.6;
+        } else if (currentMode === "ai") {
+          const syllable = Math.sin(animTime * 6.0) * 0.5 + 0.5;
+          const phrase = Math.sin(animTime * 1.4);
+          amp = phrase > -0.4 ? 0.8 + Math.pow(syllable, 1.3) * 4.0 : 0.4;
+        } else if (currentMode === "thinking") {
+          amp = 2.8;
+        }
+
+        ctx.shadowColor = glow;
+        ctx.shadowBlur = currentMode === "sakin" ? 2 : 6;
+
+        // 4. Streamlines
+        for (const side of [-1, 1]) {
+          for (let s = 0; s < numStrands; s++) {
+            const norm_s = s / (numStrands - 1);
+            const C = 0.6 + norm_s * 3.6;
+
+            const distFromCore = Math.abs(norm_s - 0.38);
+            let alpha = Math.max(0.12, 0.95 - Math.pow(distFromCore, 1.2) * 1.1);
+            if (currentMode === "sakin") alpha *= 0.5;
+
+            const isCore = s === 3 || s === 4;
+            const lw = isCore ? 1.6 : 0.75;
+
+            ctx.beginPath();
+            let started = false;
+
+            for (let x = -W; x <= W; x += 2.5) {
+              const u = x / W;
+              const abs_u = Math.abs(u);
+              const env = Math.pow(Math.max(0, 1.0 - abs_u * abs_u), 1.25);
+              const defl = (R_core * R_core * C) / Math.max(R_core * R_core, x * x + C * C);
+              const y_base = C + defl;
+
+              let waveFactor = 0;
+              if (currentMode === "thinking") {
+                // Zigzag wave moving strictly Left to Right:
+                const phase = -u * 7.0 + animTime * 4.0;
+                const zigzag = Math.sin(phase) + 0.25 * Math.sin(phase * 3.0);
+                waveFactor = zigzag * amp * env * 0.75;
+              } else if (currentMode === "speech") {
+                waveFactor =
+                  Math.sin(u * Math.PI * 3.4 + s * 0.25 + animTime * 4.5) *
+                  amp *
+                  Math.exp(-Math.pow(abs_u - 0.42, 2) / 0.08);
+              } else if (currentMode === "ai") {
+                waveFactor =
+                  Math.sin(u * Math.PI * 3.2 - abs_u * 2.6 + animTime * 3.8) *
+                  amp *
+                  Math.exp(-Math.pow(abs_u - 0.42, 2) / 0.08);
+              } else {
+                // Sakin calm
+                waveFactor = Math.sin(u * Math.PI * 2.0 + animTime * 1.2) * amp * env;
+              }
+
+              let y_act = (y_base + waveFactor) * env;
+              if (abs_u * W < R_core + 1.5) {
+                const x_dist = abs_u * W;
+                const void_y =
+                  Math.sqrt(Math.max(0, (R_core + 1.5) * (R_core + 1.5) - x_dist * x_dist)) +
+                  0.6 +
+                  s * 0.45;
+                y_act = Math.max(void_y, y_act);
+              }
+
+              const px = cx + x;
+              const py = cy + side * y_act;
+
+              if (!started) {
+                ctx.moveTo(px, py);
+                started = true;
+              } else {
+                ctx.lineTo(px, py);
+              }
+            }
+
+            ctx.strokeStyle = isCore
+              ? `rgba(255, 255, 255, ${alpha})`
+              : `rgba(${priRgb}, ${alpha})`;
+            ctx.lineWidth = lw;
+            ctx.stroke();
+          }
+        }
+
+        requestAnimationFrame(draw);
+      }
+
+      draw();
+    </script>
+  </body>
+</html>
