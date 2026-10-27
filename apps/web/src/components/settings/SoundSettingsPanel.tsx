@@ -25,6 +25,7 @@ import {
   TTS_ACCENTS,
   loadTtsSettings,
   saveTtsSettings,
+  getActiveTtsPreset,
   getAvailableVoices,
   speakText,
   stopSpeaking,
@@ -92,9 +93,15 @@ export function SoundSettingsPanel() {
   };
 
   const updateTtsVoiceURI = (voiceURI: string) => {
-    const updated = { ...tts, voiceURI };
+    const preset = TTS_ACCENTS.find((a) => a.id === voiceURI) || TTS_ACCENTS[0];
+    const updated: TtsSettings = {
+      ...tts,
+      language: preset.category,
+      voiceURI: preset.id,
+    };
     setTts(updated);
     saveTtsSettings(updated);
+    setTestText(preset.sampleText);
   };
 
   const speedSliderProgress = Math.min(100, Math.max(0, ((tts.rate - 0.5) / (1.75 - 0.5)) * 100));
@@ -112,10 +119,8 @@ export function SoundSettingsPanel() {
     background: `linear-gradient(to right, var(--color-primary, #3b82f6) 0%, var(--color-primary, #3b82f6) ${volumePercent}%, var(--color-muted, #3f3f46) ${volumePercent}%, var(--color-muted, #3f3f46) 100%)`,
   };
 
-  const selectedVoiceName =
-    voices.find((v) => v.voiceURI === tts.voiceURI)?.name ??
-    TTS_ACCENTS.find((a) => a.id === tts.voiceURI)?.name ??
-    "Auto-selected voice";
+  const activePreset = useMemo(() => getActiveTtsPreset(tts), [tts]);
+  const selectedVoiceName = activePreset.name;
 
   return (
     <SettingsPageContainer>
@@ -322,8 +327,10 @@ export function SoundSettingsPanel() {
           description="Select synthetic voice accent or system voice for reading chat responses aloud."
           control={
             <Select
-              value={tts.voiceURI || "auto"}
-              onValueChange={(val) => updateTtsVoiceURI(val === "auto" || !val ? "" : val)}
+              value={activePreset.id}
+              onValueChange={(val) => {
+                if (val) updateTtsVoiceURI(val);
+              }}
             >
               <SelectTrigger size="sm" className="w-full sm:w-64" aria-label="Synthesizer voice">
                 <SelectValue>{selectedVoiceName}</SelectValue>
@@ -333,12 +340,6 @@ export function SoundSettingsPanel() {
                 alignItemWithTrigger={false}
                 className="max-h-80 overflow-y-auto"
               >
-                <SelectItem hideIndicator value="auto">
-                  Auto (Male voice prioritized)
-                </SelectItem>
-                <SelectItem hideIndicator value="auto-female">
-                  Auto (Female voice)
-                </SelectItem>
                 {TTS_ACCENTS.map((a) => (
                   <SelectItem hideIndicator key={a.id} value={a.id}>
                     {a.name}
