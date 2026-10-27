@@ -56,7 +56,8 @@ import { useAtomValue } from "@effect/atom-react";
 import { cn } from "~/lib/utils";
 import { useProjects } from "~/state/entities";
 import { useNotes, openNotesSheet, addNote, type NoteItem } from "~/lib/notesStore";
-import { useChatMemories, openMemorySheet, type MemoryRecord } from "~/lib/memoryStore";
+import { useChatMemories, type MemoryRecord } from "~/lib/memoryStore";
+import { ChatMemorySection } from "~/components/memory/MemorySheet";
 import { useScheduledTasks } from "~/lib/scheduledTasksStore";
 import { useProjectActivities } from "~/lib/projectActivityLedger";
 import {
@@ -991,9 +992,9 @@ export function SuperCallAssistantView() {
               >
                 <Brain className="size-3.5 shrink-0" />
                 <span>Memory</span>
-                {projectRules.length > 0 && (
+                {chatMemories.length > 0 && (
                   <span className="text-[8px] px-1 py-0.5 rounded-full bg-purple-500/20 text-purple-400 font-mono leading-none">
-                    {projectRules.length}
+                    {chatMemories.length}
                   </span>
                 )}
               </button>
@@ -1037,6 +1038,12 @@ export function SuperCallAssistantView() {
               {/* TAB: WORKSPACE MEMORY & PROJECT RULEBOOK */}
               {commandCenterTab === "memory" && (
                 <div className="space-y-4">
+                  {/* Active Chat Memory Vault (Title, Description, CRUD & Choose from Notes) */}
+                  <ChatMemorySection />
+
+                  {/* Section Divider */}
+                  <div className="border-t border-border/50 my-2" />
+
                   {/* Header & Project Selector */}
                   <div className="flex items-center justify-between gap-2">
                     <div>
@@ -1535,20 +1542,6 @@ export function SuperCallAssistantView() {
               </span>
             </button>
 
-            {/* Chat Memory Button */}
-            <button
-              type="button"
-              onClick={() => openMemorySheet()}
-              className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-lg border border-purple-500/30 hover:border-purple-500/50 bg-purple-500/10 hover:bg-purple-500/15 text-xs font-semibold text-purple-300 transition-colors cursor-pointer shadow-xs active:scale-95"
-              title="Chat Memory Vault (Custom records & rules for this specific chat)"
-            >
-              <Brain className="size-3.5 text-purple-400" />
-              <span className="hidden xs:inline">Memory</span>
-              <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-purple-500/25 text-purple-300 font-semibold font-mono">
-                {chatMemories.length}
-              </span>
-            </button>
-
             {/* Command Center Right-Side Sheet Button */}
             <button
               type="button"
@@ -1738,9 +1731,12 @@ export function SuperCallAssistantView() {
                         </span>
                         <button
                           type="button"
-                          onClick={() => openMemorySheet()}
+                          onClick={() => {
+                            setIsCommandCenterOpen(true);
+                            setCommandCenterTab("memory");
+                          }}
                           className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 font-medium text-[11px] border border-purple-500/30 transition-all cursor-pointer active:scale-95 shrink-0 ml-2"
-                          title="Open Memory Drawer to view or edit this file"
+                          title="Open Memory section in Command Center"
                         >
                           <span>Khol kar dekhein</span>
                           <ExternalLink className="size-3" />
