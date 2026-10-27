@@ -6,6 +6,7 @@ export interface GrokGeometricVoiceWavesProps {
   callStatus: VoiceCallStatus;
   analyserNode: AnalyserNode | null;
   className?: string;
+  maxHalfWidth?: number;
 }
 
 // ── Stardust Particle Definition ──
@@ -32,6 +33,7 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
   callStatus,
   analyserNode,
   className,
+  maxHalfWidth,
 }: GrokGeometricVoiceWavesProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -54,8 +56,8 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
       // Handle Resize / DPR
       const rect = canvas.getBoundingClientRect();
       const dpr = Math.min(2, window.devicePixelRatio || 1);
-      const width = rect.width || 284;
-      const height = rect.height || 56;
+      const width = rect.width || (maxHalfWidth ? maxHalfWidth * 2 : 260);
+      const height = rect.height || 50;
 
       if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) {
         canvas.width = Math.round(width * dpr);
@@ -68,10 +70,13 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
 
       const cx = width / 2;
       const cy = height / 2;
-      const W = Math.min(width * 0.46, 138.0); // Exact 2px clearance before model dropdown & mic
-      const R_core = 16.0; // 30% smaller black hole core matching center call button
+      // Exact half-width: if maxHalfWidth is provided, it terminates exactly 2px before dropdown
+      const W = maxHalfWidth
+        ? Math.min(width * 0.495, maxHalfWidth)
+        : Math.min(width * 0.46, 120.0);
+      const R_core = 16.0; // 30% smaller black hole core matching the call button
 
-      // Audio analysis
+      // Audio analysis with responsive speech attack & smooth release
       let rawMicEnergy = 0;
       if (callStatus === "user-speaking" && analyserNode && freqData) {
         analyserNode.getByteFrequencyData(freqData);
@@ -82,7 +87,10 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
         }
         rawMicEnergy = sum / (count - 2);
       }
-      smoothedEnergy += (rawMicEnergy - smoothedEnergy) * 0.22;
+      const attack = 0.35;
+      const release = 0.14;
+      smoothedEnergy +=
+        (rawMicEnergy - smoothedEnergy) * (rawMicEnergy > smoothedEnergy ? attack : release);
 
       // Color Palette Configurations
       type ColorConfig = {
@@ -109,19 +117,19 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
           primaryRgb: "59, 130, 246", // Electric blue
           accentRgb: "147, 197, 253",
           glowColor: "rgba(59, 130, 246, 0.85)",
-          glowBlur: 9,
+          glowBlur: 8,
         },
         thinking: {
           primaryRgb: "249, 115, 22", // Cosmic orange
           accentRgb: "253, 186, 116",
           glowColor: "rgba(249, 115, 22, 0.85)",
-          glowBlur: 9,
+          glowBlur: 8,
         },
         speaking: {
           primaryRgb: "34, 197, 94", // Emerald green
           accentRgb: "134, 239, 172",
           glowColor: "rgba(34, 197, 94, 0.85)",
-          glowBlur: 9,
+          glowBlur: 8,
         },
       };
 
@@ -144,10 +152,10 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
 
       // ── 2. Compact Gravitational Lensing Orbital Rings around the Event Horizon ──
       const rings = [
-        { r: R_core + 1.2, alpha: 0.6, lw: 1.1 },
-        { r: R_core + 4.2, alpha: 0.38, lw: 0.8 },
-        { r: R_core + 8.0, alpha: 0.22, lw: 0.6 },
-        { r: R_core + 12.5, alpha: 0.1, lw: 0.5 },
+        { r: R_core + 1.2, alpha: 0.6, lw: 1.0 },
+        { r: R_core + 3.6, alpha: 0.38, lw: 0.8 },
+        { r: R_core + 6.8, alpha: 0.22, lw: 0.6 },
+        { r: R_core + 10.5, alpha: 0.1, lw: 0.5 },
       ];
 
       for (const ring of rings) {
@@ -158,26 +166,38 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
         ctx.stroke();
       }
 
-      // ── 3. Flowing Silk Ribbon Strands (Exact Original Black Hole Accretion Math) ──
-      const numStrands = 14;
+      // ── 3. Flowing Silk Ribbon Strands (Fluid Accretion Streamlines) ──
+      const numStrands = 13;
+      const tSec = timestamp * 0.001;
 
-      // Dynamics multipliers - smooth, majestic, calm flow (NO fast agitation)
-      let waveSpeed = 0.0022;
-      let waveAmp = 4.5;
+      let baseSpeed = 0.0018;
+      let baseAmp = 2.4;
+
+      // Realistic speech rhythm synthesis (cadence, syllable bursts, stress & breathing pauses)
+      let aiSpeechPulse = 0;
+      if (callStatus === "speaking") {
+        const syllable = Math.sin(tSec * 2 * Math.PI * 3.4) * 0.5 + 0.5;
+        const phrase = Math.sin(tSec * 2 * Math.PI * 0.85);
+        const pauseFactor = phrase < -0.7 ? 0.2 : 1.0;
+        aiSpeechPulse = Math.pow(syllable, 1.4) * (0.35 + 0.65 * Math.max(0, phrase)) * pauseFactor;
+      }
 
       if (callStatus === "user-speaking") {
-        waveSpeed = 0.0026;
-        waveAmp = 3.6 + (smoothedEnergy / 255) * 4.2;
-      } else if (callStatus === "thinking") {
-        waveSpeed = 0.0042;
-        waveAmp = 4.2;
+        const speechNorm = Math.min(1.0, smoothedEnergy / 180);
+        baseSpeed = 0.0035 + speechNorm * 0.0045;
+        baseAmp = 2.0 + speechNorm * 5.2;
       } else if (callStatus === "speaking") {
-        waveSpeed = 0.0026;
-        waveAmp = 4.8;
+        baseSpeed = 0.0028 + aiSpeechPulse * 0.0032;
+        baseAmp = 1.6 + aiSpeechPulse * 4.2;
+      } else if (callStatus === "thinking") {
+        const thinkPulse = Math.sin(timestamp * 0.004) * 0.5 + 0.5;
+        baseSpeed = 0.0042;
+        baseAmp = 2.2 + thinkPulse * 1.5;
       } else {
         // idle / listening
-        waveSpeed = 0.0016;
-        waveAmp = 2.8;
+        const breath = Math.sin(timestamp * 0.0018) * 0.5 + 0.5;
+        baseSpeed = 0.0014;
+        baseAmp = 1.1 + breath * 0.6;
       }
 
       ctx.shadowColor = colors.glowColor;
@@ -187,49 +207,62 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
       for (const side of [-1, 1]) {
         for (let s = 0; s < numStrands; s++) {
           const norm_s = s / (numStrands - 1); // 0 to 1
-          const C = 0.8 + norm_s * 7.5; // Compact vertical dispersion for smaller button
+          const C = 0.6 + norm_s * 4.5; // Compact 30% smaller vertical dispersion
 
           // Alpha distribution: bright primary core ribbons, delicate ethereal outer filaments
           const distFromCore = Math.abs(norm_s - 0.38);
-          const strandAlpha = Math.max(0.12, 0.95 - Math.pow(distFromCore, 1.2) * 1.0);
+          const strandAlpha = Math.max(0.12, 0.95 - Math.pow(distFromCore, 1.2) * 1.05);
           const isCoreStrand = s === 4 || s === 5;
-          const lw = isCoreStrand ? 1.7 : 0.8;
+          const lw = isCoreStrand ? 1.6 : 0.75;
+
+          // Speech frequency reactivity per strand:
+          let strandAmpBonus = 0;
+          if (callStatus === "user-speaking" && freqData) {
+            const binIdx = Math.min(freqData.length - 1, Math.floor(2 + norm_s * 22));
+            const binVal = (freqData[binIdx] || 0) / 255;
+            strandAmpBonus = binVal * 3.0;
+          } else if (callStatus === "speaking") {
+            strandAmpBonus = aiSpeechPulse * (0.6 + Math.sin(s * 1.1 + timestamp * 0.006) * 0.5);
+          }
+
+          const strandEffectiveAmp = baseAmp + strandAmpBonus;
 
           ctx.beginPath();
           let started = false;
 
-          const step = 2.5;
+          const step = 3;
           for (let x = -W; x <= W; x += step) {
             const u = x / W; // -1 to 1
             const abs_u = Math.abs(u);
-            const envelope = Math.pow(Math.max(0, 1.0 - abs_u * abs_u), 1.35);
+            const envelope = Math.pow(Math.max(0, 1.0 - abs_u * abs_u), 1.25);
 
-            // Exact original deflection formula around circular black hole
+            // Deflection formula for fluid streamline around circular black hole
             const deflection = (R_core * R_core * C) / Math.max(R_core * R_core, x * x + C * C);
             const y_base = C + deflection;
 
-            // Pure smooth harmonic fluid undulation (NO electric jitter)
-            let phase: number;
+            // Harmonic fluid undulation across x
+            let phase = timestamp * baseSpeed;
             if (callStatus === "thinking") {
-              // Smooth wave moving from left to right across the accretion disk!
-              phase = u * Math.PI * 3.2 - timestamp * 0.0045 + s * 0.18;
-            } else {
-              phase = timestamp * waveSpeed + s * 0.18;
+              // Shimmer travelling outward from center
+              phase -= abs_u * 4.2;
+            } else if (callStatus === "speaking") {
+              // Outward acoustic wave ripples
+              phase -= abs_u * 2.8;
             }
 
             const waveFactor =
-              Math.sin(u * Math.PI * 3.2 + phase) *
-              (waveAmp + norm_s * 1.8) *
-              Math.exp(-Math.pow(abs_u - 0.42, 2) / 0.09);
+              Math.sin(u * Math.PI * 3.2 + s * 0.22 + phase) *
+              (strandEffectiveAmp + norm_s * 1.4) *
+              Math.exp(-Math.pow(abs_u - 0.42, 2) / 0.08);
 
             let y_actual = (y_base + waveFactor) * envelope;
 
             // Strict circular clearance at center event horizon around 30% smaller button
-            if (abs_u * W < R_core + 1.8) {
+            if (abs_u * W < R_core + 1.4) {
               const x_dist = abs_u * W;
               const void_y =
-                Math.sqrt(Math.max(0, (R_core + 1.8) * (R_core + 1.8) - x_dist * x_dist)) +
-                0.8 +
+                Math.sqrt(Math.max(0, (R_core + 1.4) * (R_core + 1.4) - x_dist * x_dist)) +
+                0.6 +
                 s * 0.45;
               y_actual = Math.max(void_y, y_actual);
             }
@@ -260,14 +293,8 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
         const twinkle = Math.sin(timestamp * p.speed + p.phase) * 0.4 + 0.6;
         const pAlpha = p.baseAlpha * twinkle;
 
-        let px = cx + p.x;
-        if (callStatus === "thinking") {
-          // Subtle left to right drift during thinking
-          px = cx + (((p.x + 120 + timestamp * 0.035) % 240) - 120);
-        }
-
         ctx.beginPath();
-        ctx.arc(px, cy + p.y, p.size, 0, Math.PI * 2);
+        ctx.arc(cx + p.x, cy + p.y, p.size, 0, Math.PI * 2);
         ctx.fillStyle = `rgba(${colors.accentRgb}, ${pAlpha})`;
         ctx.fill();
       }
@@ -281,14 +308,16 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
       running = false;
       cancelAnimationFrame(animId);
     };
-  }, [callStatus, analyserNode]);
+  }, [callStatus, analyserNode, maxHalfWidth]);
 
   return (
     <div
       aria-hidden="true"
+      style={maxHalfWidth ? { width: `${maxHalfWidth * 2}px` } : undefined}
       className={cn(
         "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2",
-        "w-[240px] sm:w-[270px] md:w-[290px] h-[52px] sm:h-[56px] overflow-visible z-0 select-none",
+        "h-[46px] sm:h-[50px] overflow-visible z-0 select-none",
+        !maxHalfWidth && "w-[220px] sm:w-[260px] md:w-[280px]",
         className,
       )}
     >
