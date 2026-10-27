@@ -956,66 +956,8 @@ export function SuperCallAssistantView() {
               </button>
             </div>
 
-            {/* Navigation Tabs (6 Comprehensive Tabs) */}
-            <div className="grid grid-cols-6 border-b border-border/50 px-1 pt-1 bg-muted/30 text-center">
-              <button
-                type="button"
-                onClick={() => setCommandCenterTab("summary")}
-                className={cn(
-                  "pb-2 pt-1 text-[10px] font-semibold border-b-2 transition-colors cursor-pointer flex flex-col items-center justify-center gap-1",
-                  commandCenterTab === "summary"
-                    ? "border-primary text-primary"
-                    : "border-transparent text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <FileText className="size-3" />
-                <span>Summary</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setCommandCenterTab("wishlist");
-                  void fetchDrawerWishlist();
-                }}
-                className={cn(
-                  "pb-2 pt-1 text-[10px] font-semibold border-b-2 transition-colors cursor-pointer flex flex-col items-center justify-center gap-1",
-                  commandCenterTab === "wishlist"
-                    ? "border-primary text-primary"
-                    : "border-transparent text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <ShoppingBag className="size-3" />
-                <span>Sprint</span>
-                {drawerWishlistItems.length > 0 && (
-                  <span className="text-[7.5px] px-1 rounded-full bg-amber-500/20 text-amber-400 font-mono">
-                    {drawerWishlistItems.length}
-                  </span>
-                )}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setCommandCenterTab("health");
-                  void fetchProjectHealth();
-                }}
-                className={cn(
-                  "pb-2 pt-1 text-[10px] font-semibold border-b-2 transition-colors cursor-pointer flex flex-col items-center justify-center gap-1",
-                  commandCenterTab === "health"
-                    ? "border-primary text-primary"
-                    : "border-transparent text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <Activity className="size-3" />
-                <span>Health</span>
-                {healthModifiedFiles.length > 0 && (
-                  <span className="text-[7.5px] px-1 rounded-full bg-amber-500/20 text-amber-400 font-mono">
-                    {healthModifiedFiles.length}
-                  </span>
-                )}
-              </button>
-
+            {/* Navigation Tabs (3 Tabs: Memory, Tasks, Voice) - Single Compact Line */}
+            <div className="grid grid-cols-3 border-b border-border/50 px-1 bg-muted/20 text-center">
               <button
                 type="button"
                 onClick={() => {
@@ -1023,16 +965,16 @@ export function SuperCallAssistantView() {
                   void fetchProjectKnowledge(selectedMemoryProject || activeProjectName);
                 }}
                 className={cn(
-                  "pb-2 pt-1 text-[10px] font-semibold border-b-2 transition-colors cursor-pointer flex flex-col items-center justify-center gap-1",
+                  "py-1.5 px-1 text-[11px] font-medium border-b-2 transition-colors cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap",
                   commandCenterTab === "memory"
                     ? "border-primary text-primary"
                     : "border-transparent text-muted-foreground hover:text-foreground",
                 )}
               >
-                <Brain className="size-3" />
+                <Brain className="size-3.5 shrink-0" />
                 <span>Memory</span>
                 {projectRules.length > 0 && (
-                  <span className="text-[7.5px] px-1 rounded-full bg-purple-500/20 text-purple-400 font-mono">
+                  <span className="text-[8px] px-1 py-0.5 rounded-full bg-purple-500/20 text-purple-400 font-mono leading-none">
                     {projectRules.length}
                   </span>
                 )}
@@ -1042,16 +984,16 @@ export function SuperCallAssistantView() {
                 type="button"
                 onClick={() => setCommandCenterTab("tasks")}
                 className={cn(
-                  "pb-2 pt-1 text-[10px] font-semibold border-b-2 transition-colors cursor-pointer flex flex-col items-center justify-center gap-1",
+                  "py-1.5 px-1 text-[11px] font-medium border-b-2 transition-colors cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap",
                   commandCenterTab === "tasks"
                     ? "border-primary text-primary"
                     : "border-transparent text-muted-foreground hover:text-foreground",
                 )}
               >
-                <ListTodo className="size-3" />
+                <ListTodo className="size-3.5 shrink-0" />
                 <span>Tasks</span>
                 {scheduledTasks.length > 0 && (
-                  <span className="text-[7.5px] px-1 rounded-full bg-primary/20 text-primary font-mono">
+                  <span className="text-[8px] px-1 py-0.5 rounded-full bg-primary/20 text-primary font-mono leading-none">
                     {scheduledTasks.length}
                   </span>
                 )}
@@ -1061,676 +1003,19 @@ export function SuperCallAssistantView() {
                 type="button"
                 onClick={() => setCommandCenterTab("voice")}
                 className={cn(
-                  "pb-2 pt-1 text-[10px] font-semibold border-b-2 transition-colors cursor-pointer flex flex-col items-center justify-center gap-1",
+                  "py-1.5 px-1 text-[11px] font-medium border-b-2 transition-colors cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap",
                   commandCenterTab === "voice"
                     ? "border-primary text-primary"
                     : "border-transparent text-muted-foreground hover:text-foreground",
                 )}
               >
-                <SlidersHorizontal className="size-3" />
+                <SlidersHorizontal className="size-3.5 shrink-0" />
                 <span>Voice</span>
               </button>
             </div>
 
             {/* Tab Contents */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {/* TAB 1: SUMMARY & EXPORT */}
-              {commandCenterTab === "summary" && (
-                <div className="space-y-4">
-                  {/* Session Metrics Card */}
-                  <div className="p-3.5 rounded-xl border border-border/70 bg-card/60 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-foreground">
-                        Session Overview
-                      </span>
-                      <span className="text-[10px] text-muted-foreground">
-                        {activeSession?.messages.length ?? 0} total messages
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2 pt-1">
-                      <div className="p-2 rounded-lg bg-muted/40 text-center">
-                        <span className="block text-xs font-bold text-foreground">
-                          {conversationSummary?.userCount ?? 0}
-                        </span>
-                        <span className="text-[9px] text-muted-foreground uppercase">
-                          User Turns
-                        </span>
-                      </div>
-                      <div className="p-2 rounded-lg bg-muted/40 text-center">
-                        <span className="block text-xs font-bold text-primary">
-                          {conversationSummary?.botCount ?? 0}
-                        </span>
-                        <span className="text-[9px] text-muted-foreground uppercase">
-                          Bot Turns
-                        </span>
-                      </div>
-                      <div className="p-2 rounded-lg bg-muted/40 text-center">
-                        <span className="block text-xs font-bold text-emerald-400">
-                          {callStatus === "idle" ? "Standby" : callStatus}
-                        </span>
-                        <span className="text-[9px] text-muted-foreground uppercase">
-                          Call State
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Key Topics / Queries */}
-                  <div className="p-3.5 rounded-xl border border-border/70 bg-card/60 space-y-2">
-                    <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                      <Sparkles className="size-3 text-amber-400" />
-                      Key Discussion Points
-                    </span>
-                    {conversationSummary && conversationSummary.recentQueries.length > 0 ? (
-                      <ul className="space-y-1.5 pt-1">
-                        {conversationSummary.recentQueries.map((q, idx) => (
-                          <li
-                            key={idx}
-                            className="text-xs text-muted-foreground flex items-start gap-2 bg-muted/20 p-2 rounded-lg border border-border/40"
-                          >
-                            <span className="text-primary font-mono text-[10px] mt-0.5">
-                              #{idx + 1}
-                            </span>
-                            <span className="leading-snug text-foreground/90">{q}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="text-xs text-muted-foreground italic py-2">
-                        Abhi conversation shuru karein, key points yahan auto-extract honge.
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Export & Actions */}
-                  <div className="p-3.5 rounded-xl border border-border/70 bg-card/60 space-y-2.5">
-                    <span className="text-xs font-semibold text-foreground">Export & Sharing</span>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={handleCopyTranscript}
-                        disabled={!activeSession?.messages.length}
-                        className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-border bg-muted/40 hover:bg-muted text-xs font-medium transition-colors disabled:opacity-40 cursor-pointer"
-                      >
-                        {isTranscriptCopied ? (
-                          <>
-                            <Check className="size-3.5 text-emerald-400" />
-                            <span className="text-emerald-400">Copied!</span>
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="size-3.5 text-muted-foreground" />
-                            <span>Copy Transcript</span>
-                          </>
-                        )}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={handleDownloadMarkdown}
-                        disabled={!activeSession?.messages.length}
-                        className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-border bg-muted/40 hover:bg-muted text-xs font-medium transition-colors disabled:opacity-40 cursor-pointer"
-                      >
-                        <Download className="size-3.5 text-muted-foreground" />
-                        <span>Export Markdown</span>
-                      </button>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (
-                          confirm("Kya aap waqai is session ki history clear karna chahte hain?")
-                        ) {
-                          handleClearHistory();
-                        }
-                      }}
-                      disabled={!activeSession?.messages.length}
-                      className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg border border-destructive/30 hover:border-destructive/60 hover:bg-destructive/10 text-destructive text-xs font-medium transition-colors disabled:opacity-40 cursor-pointer"
-                    >
-                      <Trash2 className="size-3.5" />
-                      <span>Clear Session History</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* TAB 2: WISHLIST & SPRINT KANBAN BOARD */}
-              {commandCenterTab === "wishlist" && (
-                <div className="space-y-4">
-                  {/* Header with Kanban / List Toggle & Refresh */}
-                  <div className="flex items-center justify-between gap-2">
-                    <div>
-                      <h3 className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                        <ShoppingBag className="size-3.5 text-primary" />
-                        {activeProjectName} Sprint Board
-                      </h3>
-                      <p className="text-[10px] text-muted-foreground">
-                        {kanbanPending.length} backlog · {kanbanInProgress.length} working ·{" "}
-                        {kanbanCompleted.length} done
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-1.5">
-                      {/* View Mode Toggle: Kanban vs List */}
-                      <div className="flex items-center bg-muted/50 p-0.5 rounded-lg border border-border/60">
-                        <button
-                          type="button"
-                          onClick={() => setDrawerWishlistViewMode("kanban")}
-                          className={cn(
-                            "flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold transition-colors cursor-pointer",
-                            drawerWishlistViewMode === "kanban"
-                              ? "bg-primary text-primary-foreground shadow-xs"
-                              : "text-muted-foreground hover:text-foreground",
-                          )}
-                          title="Kanban Board View (To-Do, Working, Done)"
-                        >
-                          <LayoutGrid className="size-3" />
-                          <span className="hidden xs:inline">Kanban</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setDrawerWishlistViewMode("list")}
-                          className={cn(
-                            "flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold transition-colors cursor-pointer",
-                            drawerWishlistViewMode === "list"
-                              ? "bg-primary text-primary-foreground shadow-xs"
-                              : "text-muted-foreground hover:text-foreground",
-                          )}
-                          title="Compact List View"
-                        >
-                          <List className="size-3" />
-                          <span className="hidden xs:inline">List</span>
-                        </button>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => void fetchDrawerWishlist()}
-                        disabled={isWishlistLoading}
-                        className="p-1.5 rounded-lg border border-border/70 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                        title="Refresh Wishlist"
-                      >
-                        <RefreshCw
-                          className={cn("size-3.5", isWishlistLoading && "animate-spin")}
-                        />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Add New Wishlist Quick Form */}
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      if (!newWishlistTitle.trim()) return;
-                      void handleSuperAgentDispatch(
-                        `Wishlist mein naya item add karo: "${newWishlistTitle}" as ${newWishlistType}`,
-                      );
-                      setNewWishlistTitle("");
-                      setTimeout(() => void fetchDrawerWishlist(), 1500);
-                    }}
-                    className="p-3 rounded-xl border border-border/70 bg-card/60 space-y-2"
-                  >
-                    <span className="text-[11px] font-medium text-foreground flex items-center gap-1">
-                      <Plus className="size-3 text-primary" />
-                      Add to Backlog
-                    </span>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={newWishlistTitle}
-                        onChange={(e) => setNewWishlistTitle(e.target.value)}
-                        placeholder="Feature ya improvement ka naam..."
-                        className="flex-1 bg-background border border-border/80 rounded-lg px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
-                      />
-                      <select
-                        value={newWishlistType}
-                        onChange={(e) => setNewWishlistType(e.target.value as any)}
-                        className="bg-background border border-border/80 rounded-lg px-2 py-1.5 text-[11px] text-foreground focus:outline-none"
-                      >
-                        <option value="feature">✨ Feature</option>
-                        <option value="improvement">⚡ Improve</option>
-                      </select>
-                      <button
-                        type="submit"
-                        disabled={!newWishlistTitle.trim() || isProcessing}
-                        className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground font-semibold text-xs hover:opacity-90 disabled:opacity-40 transition-opacity cursor-pointer"
-                      >
-                        Add
-                      </button>
-                    </div>
-                  </form>
-
-                  {/* Loading State */}
-                  {isWishlistLoading && drawerWishlistItems.length === 0 ? (
-                    <div className="py-8 flex flex-col items-center justify-center text-muted-foreground">
-                      <Loader2 className="size-5 animate-spin mb-2" />
-                      <span className="text-xs">Loading sprint board...</span>
-                    </div>
-                  ) : drawerWishlistItems.length === 0 ? (
-                    <div className="py-8 text-center text-muted-foreground space-y-2">
-                      <ShoppingBag className="size-8 mx-auto opacity-40" />
-                      <p className="text-xs font-medium text-foreground">Sprint Board khali hai</p>
-                      <p className="text-[11px] max-w-xs mx-auto">
-                        Aap assistant se bol sakte hain: &quot;Wishlist mein feature add karo&quot;
-                        ya upar se direct add karein.
-                      </p>
-                    </div>
-                  ) : drawerWishlistViewMode === "kanban" ? (
-                    /* ── VISUAL KANBAN / SPRINT BOARD (3 COLUMNS) ── */
-                    <div className="space-y-4">
-                      {/* 1. BACKLOG / TO-DO COLUMN */}
-                      <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 space-y-2.5">
-                        <div className="flex items-center justify-between pb-1 border-b border-amber-500/20">
-                          <span className="text-xs font-semibold text-amber-300 flex items-center gap-1.5 uppercase tracking-wider">
-                            📌 Backlog / To-Do
-                          </span>
-                          <span className="text-[10px] font-mono font-bold px-2 py-0.2 rounded-full bg-amber-500/20 text-amber-400">
-                            {kanbanPending.length}
-                          </span>
-                        </div>
-
-                        {kanbanPending.length === 0 ? (
-                          <p className="text-[11px] text-muted-foreground/70 italic py-2 text-center">
-                            No pending items in backlog.
-                          </p>
-                        ) : (
-                          <div className="space-y-2">
-                            {kanbanPending.map((item) => (
-                              <div
-                                key={item.id}
-                                className="p-2.5 rounded-lg border border-border/80 bg-background/90 shadow-xs space-y-2 hover:border-amber-500/40 transition-colors"
-                              >
-                                <div className="flex items-start justify-between gap-1.5">
-                                  <div className="min-w-0 flex-1">
-                                    <div className="flex items-center gap-1 flex-wrap">
-                                      <span className="font-semibold text-xs text-foreground truncate">
-                                        {item.title}
-                                      </span>
-                                      <span
-                                        className={cn(
-                                          "text-[8.5px] px-1.5 py-0.2 rounded-full font-mono uppercase",
-                                          item.type === "improvement"
-                                            ? "bg-blue-500/15 text-blue-400"
-                                            : "bg-emerald-500/15 text-emerald-400",
-                                        )}
-                                      >
-                                        {item.type === "improvement" ? "⚡ Improve" : "✨ Feature"}
-                                      </span>
-                                    </div>
-                                    {item.description && (
-                                      <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-2">
-                                        {item.description}
-                                      </p>
-                                    )}
-                                  </div>
-
-                                  {/* Auto-Approve Switch */}
-                                  <button
-                                    type="button"
-                                    onClick={() => void handleToggleAutoApprove(item.id)}
-                                    title={
-                                      item.autoApprove ? "Auto Approve: ON" : "Auto Approve: OFF"
-                                    }
-                                    className={cn(
-                                      "relative w-7 h-4 rounded-full transition-colors duration-200 shrink-0 cursor-pointer",
-                                      item.autoApprove ? "bg-emerald-500" : "bg-zinc-700/60",
-                                    )}
-                                  >
-                                    <span
-                                      className={cn(
-                                        "absolute top-0.5 left-0.5 size-3 rounded-full bg-white shadow transition-transform duration-200",
-                                        item.autoApprove ? "translate-x-3" : "translate-x-0",
-                                      )}
-                                    />
-                                  </button>
-                                </div>
-
-                                {/* Action: Move to In Progress */}
-                                <div className="flex items-center justify-between pt-1 border-t border-border/40">
-                                  <span className="text-[9px] text-muted-foreground font-mono">
-                                    {item.autoApprove ? "Auto-approve: ON" : "Manual review"}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      void handleUpdateItemStatus(item.id, "in_progress")
-                                    }
-                                    className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-500/15 text-blue-400 hover:bg-blue-500/25 text-[10px] font-semibold transition-colors cursor-pointer"
-                                  >
-                                    <span>Start</span>
-                                    <ArrowRight className="size-2.5" />
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* 2. WORKING ON / IN PROGRESS COLUMN */}
-                      <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 p-3 space-y-2.5">
-                        <div className="flex items-center justify-between pb-1 border-b border-blue-500/20">
-                          <span className="text-xs font-semibold text-blue-300 flex items-center gap-1.5 uppercase tracking-wider">
-                            <span className="size-2 rounded-full bg-blue-400 animate-pulse" />🔨
-                            Working On
-                          </span>
-                          <span className="text-[10px] font-mono font-bold px-2 py-0.2 rounded-full bg-blue-500/20 text-blue-400">
-                            {kanbanInProgress.length}
-                          </span>
-                        </div>
-
-                        {kanbanInProgress.length === 0 ? (
-                          <p className="text-[11px] text-muted-foreground/70 italic py-2 text-center">
-                            No active items in progress.
-                          </p>
-                        ) : (
-                          <div className="space-y-2">
-                            {kanbanInProgress.map((item) => (
-                              <div
-                                key={item.id}
-                                className="p-2.5 rounded-lg border border-blue-500/40 bg-background/90 shadow-xs space-y-2"
-                              >
-                                <div className="flex items-start justify-between gap-1.5">
-                                  <div className="min-w-0 flex-1">
-                                    <h4 className="font-semibold text-xs text-foreground truncate">
-                                      {item.title}
-                                    </h4>
-                                    {item.description && (
-                                      <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-2">
-                                        {item.description}
-                                      </p>
-                                    )}
-                                  </div>
-                                  <span className="text-[9px] uppercase font-mono px-1.5 py-0.2 rounded bg-blue-500/20 text-blue-400 shrink-0">
-                                    Active
-                                  </span>
-                                </div>
-
-                                {/* Actions: Move Back or Complete */}
-                                <div className="flex items-center justify-between pt-1 border-t border-border/40 gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => void handleUpdateItemStatus(item.id, "pending")}
-                                    className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                                  >
-                                    <RotateCcw className="size-2.5" />
-                                    <span>Backlog</span>
-                                  </button>
-
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      void handleUpdateItemStatus(item.id, "completed")
-                                    }
-                                    className="flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 text-[10px] font-semibold transition-colors cursor-pointer"
-                                  >
-                                    <Check className="size-3 text-emerald-400" />
-                                    <span>Mark Done</span>
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* 3. COMPLETED COLUMN */}
-                      <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3 space-y-2.5">
-                        <div className="flex items-center justify-between pb-1 border-b border-emerald-500/20">
-                          <span className="text-xs font-semibold text-emerald-300 flex items-center gap-1.5 uppercase tracking-wider">
-                            ✅ Completed / Done
-                          </span>
-                          <span className="text-[10px] font-mono font-bold px-2 py-0.2 rounded-full bg-emerald-500/20 text-emerald-400">
-                            {kanbanCompleted.length}
-                          </span>
-                        </div>
-
-                        {kanbanCompleted.length === 0 ? (
-                          <p className="text-[11px] text-muted-foreground/70 italic py-2 text-center">
-                            Completed features will show here.
-                          </p>
-                        ) : (
-                          <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                            {kanbanCompleted.map((item) => (
-                              <div
-                                key={item.id}
-                                className="p-2 rounded-lg border border-border/60 bg-background/60 shadow-xs flex items-center justify-between gap-2"
-                              >
-                                <div className="min-w-0 flex-1 flex items-center gap-1.5">
-                                  <Check className="size-3 text-emerald-400 shrink-0" />
-                                  <span className="text-xs text-muted-foreground line-through truncate">
-                                    {item.title}
-                                  </span>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => void handleUpdateItemStatus(item.id, "pending")}
-                                  className="text-[9px] text-muted-foreground hover:text-amber-400 transition-colors cursor-pointer shrink-0"
-                                  title="Reopen item"
-                                >
-                                  Reopen
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ) : (
-                    /* ── COMPACT LIST VIEW ── */
-                    <div className="space-y-2">
-                      {drawerWishlistItems.map((item) => (
-                        <div
-                          key={item.id}
-                          className="p-3 rounded-xl border border-border/70 bg-card/60 flex items-start gap-3 hover:bg-card transition-colors"
-                        >
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span
-                                className={cn(
-                                  "font-semibold text-xs text-foreground truncate",
-                                  item.status === "completed" &&
-                                    "line-through text-muted-foreground",
-                                )}
-                              >
-                                {item.title}
-                              </span>
-                              <span
-                                className={cn(
-                                  "text-[9px] px-1.5 py-0.2 rounded-full font-mono uppercase",
-                                  item.type === "improvement"
-                                    ? "bg-blue-500/15 text-blue-400"
-                                    : "bg-emerald-500/15 text-emerald-400",
-                                )}
-                              >
-                                {item.type === "improvement" ? "⚡ Improve" : "✨ Feature"}
-                              </span>
-                              <span
-                                className={cn(
-                                  "text-[9px] px-1.5 py-0.2 rounded-full font-mono uppercase font-semibold",
-                                  item.status === "completed"
-                                    ? "bg-emerald-500/20 text-emerald-400"
-                                    : item.status === "in_progress"
-                                      ? "bg-blue-500/20 text-blue-400"
-                                      : "bg-amber-500/20 text-amber-400",
-                                )}
-                              >
-                                {item.status || "pending"}
-                              </span>
-                            </div>
-                            {item.description && (
-                              <p className="text-[10px] text-muted-foreground mt-1 line-clamp-2">
-                                {item.description}
-                              </p>
-                            )}
-                          </div>
-
-                          {/* Auto-Approve Toggle Switch */}
-                          <div className="flex flex-col items-center gap-1 shrink-0">
-                            <button
-                              type="button"
-                              onClick={() => void handleToggleAutoApprove(item.id)}
-                              title={item.autoApprove ? "Auto Approve: ON" : "Auto Approve: OFF"}
-                              className={cn(
-                                "relative w-9 h-5 rounded-full transition-colors duration-200 focus:outline-none cursor-pointer",
-                                item.autoApprove
-                                  ? "bg-emerald-500 shadow-[0_0_8px_rgba(52,211,153,0.4)]"
-                                  : "bg-zinc-700/60",
-                              )}
-                            >
-                              <span
-                                className={cn(
-                                  "absolute top-0.5 left-0.5 size-4 rounded-full bg-white shadow transition-transform duration-200",
-                                  item.autoApprove ? "translate-x-4" : "translate-x-0",
-                                )}
-                              />
-                            </button>
-                            <span
-                              className={cn(
-                                "text-[8px] font-bold uppercase tracking-wider",
-                                item.autoApprove ? "text-emerald-400" : "text-zinc-500",
-                              )}
-                            >
-                              {item.autoApprove ? "AUTO" : "MANUAL"}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* TAB: HEALTH & DIAGNOSTICS */}
-              {commandCenterTab === "health" && (
-                <div className="space-y-4">
-                  {/* Header & Refresh */}
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-xs font-semibold text-foreground">
-                        Workspace Health & Git
-                      </h3>
-                      <p className="text-[10px] text-muted-foreground">
-                        Git status, active branch & automated commit engine
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => void fetchProjectHealth()}
-                      disabled={isHealthLoading}
-                      className="p-1.5 rounded-lg border border-border/70 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                      title="Refresh Project Health"
-                    >
-                      <RefreshCw className={cn("size-3.5", isHealthLoading && "animate-spin")} />
-                    </button>
-                  </div>
-
-                  {/* Branch & Modified Status Card */}
-                  <div className="p-3.5 rounded-xl border border-border/70 bg-card/60 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        <GitBranch className="size-3.5 text-primary" />
-                        <span className="text-xs font-mono font-semibold text-foreground">
-                          {healthBranch}
-                        </span>
-                      </div>
-                      <span
-                        className={cn(
-                          "text-[10px] px-2 py-0.5 rounded-full font-mono font-semibold",
-                          healthModifiedFiles.length > 0
-                            ? "bg-amber-500/20 text-amber-400"
-                            : "bg-emerald-500/20 text-emerald-400",
-                        )}
-                      >
-                        {healthModifiedFiles.length > 0
-                          ? `${healthModifiedFiles.length} modified`
-                          : "Clean Working Tree"}
-                      </span>
-                    </div>
-
-                    {/* Modified Files List */}
-                    {healthModifiedFiles.length > 0 ? (
-                      <div className="p-2.5 rounded-lg bg-zinc-950/70 border border-border/50 max-h-36 overflow-y-auto space-y-1">
-                        {healthModifiedFiles.map((line, idx) => (
-                          <div
-                            key={idx}
-                            className="text-[10.5px] font-mono text-zinc-300 truncate flex items-center gap-1.5"
-                          >
-                            <span className="text-amber-400 font-bold shrink-0 text-[10px]">
-                              {line.slice(0, 2)}
-                            </span>
-                            <span className="truncate">{line.slice(2).trim()}</span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-2 text-emerald-400 text-xs">
-                        <ShieldCheck className="size-4 shrink-0" />
-                        <span>Working tree bilkul clean hai, koi uncommitted change nahi.</span>
-                      </div>
-                    )}
-
-                    {/* Smart AI Commit Button */}
-                    {healthModifiedFiles.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => void handleSmartCommit()}
-                        disabled={isCommitting || isProcessing}
-                        className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-40 text-xs font-semibold transition-opacity cursor-pointer shadow-xs"
-                      >
-                        <GitCommit className="size-3.5" />
-                        <span>
-                          {isCommitting ? "Generating Commit..." : "Smart AI Commit & Push"}
-                        </span>
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Recent Commits Card */}
-                  <div className="p-3.5 rounded-xl border border-border/70 bg-card/60 space-y-2">
-                    <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                      <Clock className="size-3.5 text-muted-foreground" />
-                      Recent Git Commits
-                    </span>
-                    {healthRecentCommits.length > 0 ? (
-                      <div className="space-y-1.5 pt-1">
-                        {healthRecentCommits.map((c, idx) => (
-                          <div
-                            key={idx}
-                            className="p-2 rounded-lg bg-muted/30 border border-border/40 text-[11px] font-mono text-zinc-300 leading-snug break-words"
-                          >
-                            {c}
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-xs text-muted-foreground italic py-1">
-                        No recent commit logs available.
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Auto-Heal & Diagnose Trigger Button */}
-                  <div className="p-3.5 rounded-xl border border-border/70 bg-card/60 space-y-2">
-                    <span className="text-xs font-semibold text-foreground">Diagnostics Radar</span>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        void handleSuperAgentDispatch(
-                          "Workspace ke tamam errors scan karo aur self-healing diagnostics report do.",
-                        )
-                      }
-                      disabled={isProcessing}
-                      className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-border bg-muted/40 hover:bg-muted text-xs font-medium text-foreground transition-colors cursor-pointer"
-                    >
-                      <Activity className="size-3.5 text-primary" />
-                      <span>Run Self-Healing Error Audit</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-
               {/* TAB: WORKSPACE MEMORY & PROJECT RULEBOOK */}
               {commandCenterTab === "memory" && (
                 <div className="space-y-4">
@@ -2251,12 +1536,12 @@ export function SuperCallAssistantView() {
               type="button"
               onClick={() => setIsCommandCenterOpen(true)}
               className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-lg border border-primary/40 bg-primary/10 hover:bg-primary/20 text-xs font-semibold text-primary transition-all cursor-pointer shadow-xs active:scale-95"
-              title="Open Command Center (Summary, Wishlist, Tasks & Persona)"
+              title="Open Command Center (Memory, Tasks & Persona)"
             >
               <Sparkles className="size-3.5" />
               <span className="hidden xs:inline">Command Center</span>
               <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-primary text-primary-foreground font-mono font-bold">
-                {scheduledTasks.length + drawerWishlistItems.length}
+                {scheduledTasks.length}
               </span>
             </button>
           </div>
@@ -2272,42 +1557,10 @@ export function SuperCallAssistantView() {
               <h3 className="text-base font-semibold text-foreground mb-1">
                 Super Call Assistant Active
               </h3>
-              <p className="text-xs max-w-sm text-muted-foreground mb-6">
+              <p className="text-xs max-w-sm text-muted-foreground">
                 Assalam-o-Alaikum! Main aapka Super Admin Voice Agent hoon. Aap Roman Urdu ya
                 English mein baat kar saktay hain.
               </p>
-              <div className="flex flex-wrap items-center justify-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => void handleSuperAgentDispatch("Tamam projects ka status kya hai?")}
-                  className="px-3 py-1.5 rounded-full border border-border/80 bg-muted/30 hover:bg-muted hover:border-border text-xs transition-colors cursor-pointer"
-                >
-                  📊 Projects Status
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleSuperAgentDispatch("Mere notes parh kar sunao")}
-                  className="px-3 py-1.5 rounded-full border border-border/80 bg-muted/30 hover:bg-muted hover:border-border text-xs transition-colors cursor-pointer"
-                >
-                  📝 Read Notes
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleSuperAgentDispatch("Is chat ki memory mein kya hai?")}
-                  className="px-3 py-1.5 rounded-full border border-purple-500/40 bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 text-xs transition-colors cursor-pointer"
-                >
-                  🧠 Chat Memory
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    void handleSuperAgentDispatch("Kya kisi project mein koi error hai?")
-                  }
-                  className="px-3 py-1.5 rounded-full border border-border/80 bg-muted/30 hover:bg-muted hover:border-border text-xs transition-colors cursor-pointer"
-                >
-                  🔍 Scan Errors
-                </button>
-              </div>
             </div>
           )}
 
@@ -2338,7 +1591,7 @@ export function SuperCallAssistantView() {
                             onClick={() => window.open(msg.meta!.file, "_blank")}
                             className="flex items-center gap-2.5 p-2 bg-zinc-900/80 hover:bg-zinc-800 rounded-lg cursor-pointer transition-colors"
                           >
-                            <div className="p-2 rounded-md bg-purple-500/10 text-purple-400 shrink-0">
+                            <div className="p-2 rounded-md bg-zinc-800 text-zinc-400 shrink-0">
                               <FileText className="size-4" />
                             </div>
                             <div className="min-w-0 flex-1">
@@ -2568,24 +1821,24 @@ export function SuperCallAssistantView() {
 
           {/* Attached File or Screenshot Preview Badge */}
           {attachedFile && (
-            <div className="flex items-center gap-2 mb-1.5 px-3 py-1 rounded-xl bg-muted/60 border border-primary/40 w-fit max-w-full animate-in fade-in duration-150">
+            <div className="flex items-center gap-2 mb-1.5 px-3 py-1 rounded-xl bg-zinc-900/80 border border-zinc-700/60 w-fit max-w-full animate-in fade-in duration-150">
               {attachedFile.isImage ? (
                 <img
                   src={attachedFile.dataUrl}
                   alt="Preview"
-                  className="size-7 object-cover rounded-md border border-border"
+                  className="size-7 object-cover rounded-md border border-zinc-750"
                 />
               ) : (
-                <div className="size-7 rounded-md bg-primary/15 text-primary flex items-center justify-center shrink-0">
+                <div className="size-7 rounded-md bg-zinc-800 text-zinc-400 flex items-center justify-center shrink-0">
                   <FileText className="size-3.5" />
                 </div>
               )}
               <div className="min-w-0">
-                <span className="text-[11px] text-foreground font-medium truncate block max-w-[140px] xs:max-w-[200px]">
+                <span className="text-[11px] text-zinc-200 font-medium truncate block max-w-[140px] xs:max-w-[200px]">
                   {attachedFile.name}
                 </span>
                 {attachedFile.size && (
-                  <span className="text-[9px] text-muted-foreground font-mono block">
+                  <span className="text-[9px] text-zinc-400 font-mono block">
                     {attachedFile.size}
                   </span>
                 )}
@@ -2593,7 +1846,7 @@ export function SuperCallAssistantView() {
               <button
                 type="button"
                 onClick={() => setAttachedFile(null)}
-                className="p-1 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer shrink-0"
+                className="p-1 rounded-full hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 cursor-pointer shrink-0"
                 title="Remove attachment"
               >
                 <X className="size-3" />
@@ -2672,11 +1925,11 @@ export function SuperCallAssistantView() {
                 onClick={() => fileAttachmentInputRef.current?.click()}
                 className={cn(
                   "p-1 rounded transition-colors cursor-pointer",
-                  attachedFile ? "text-primary" : "text-zinc-400 hover:text-white",
+                  attachedFile ? "text-zinc-200" : "text-zinc-400 hover:text-zinc-200",
                 )}
                 title="Attach File, Code or Screenshot (فائل یا اسکرین شاٹ لگائیں)"
               >
-                <Paperclip className="size-3.5" />
+                <Paperclip className="size-3.5 text-zinc-400" />
               </button>
 
               {inputText.trim().length > 0 &&
