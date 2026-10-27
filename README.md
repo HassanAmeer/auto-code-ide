@@ -4,6 +4,26 @@ A high-performance agentic web IDE and workspace orchestrator designed for multi
 
 ---
 
+## ⚡ Automated 1-Command Git Push & VPS Auto-Deployment
+
+To automatically commit local changes, push to GitHub, sync to VPS, and restart the production service with live health checks:
+
+```bash
+# 1. Full Deploy (Commit + Push + Build + Sync to VPS + Restart + Health Check):
+pnpm run deploy "Your commit message"
+# or
+./deploy/deploy-vps.sh "Your commit message"
+
+# 2. Fast Deploy (Skip local rebuild for quick backend/doc changes):
+pnpm run deploy:quick "Quick fix"
+# or
+./deploy/deploy-vps.sh --skip-build "Quick fix"
+```
+
+For full details and server configurations, see [deploy/README.md](file:///home/hasan/Documents/reactjs/t3forweb/deploy/README.md).
+
+---
+
 ## 🚀 Swap Memory & Performance Tuning Guide
 
 T3ForWeb is engineered to handle multiple concurrent workspaces, AI agent runs, terminal instances, and Vite/Rollup builds simultaneously. To maintain stability under heavy multi-task workloads, an automated NVMe Swap configuration script is provided in `./deploy/configure-swap.sh`.

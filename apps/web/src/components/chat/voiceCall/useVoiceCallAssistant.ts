@@ -671,14 +671,7 @@ export function useVoiceCallAssistant({
       };
 
       const currentTts = loadTtsSettings();
-      speakText(
-        farewellMessage,
-        {
-          ...currentTts,
-          ...(callLanguageRef.current === "english" ? { language: "english" } : {}),
-        },
-        safeEnd,
-      );
+      speakText(farewellMessage, currentTts, safeEnd);
       setTimeout(safeEnd, 2000);
     },
     [clearFinalDispatchTimer, clearRestartTimer, endCall, updateCallStatus],
@@ -962,10 +955,7 @@ export function useVoiceCallAssistant({
   useEffect(() => {
     return subscribeTtsSettings((newSettings) => {
       if (streamingPlayerRef.current) {
-        streamingPlayerRef.current.updateTtsOptions({
-          ...newSettings,
-          ...(callLanguageRef.current === "english" ? { language: "english" } : {}),
-        });
+        streamingPlayerRef.current.updateTtsOptions(newSettings);
       }
     });
   }, []);
@@ -1074,10 +1064,7 @@ export function useVoiceCallAssistant({
     const currentTts = loadTtsSettings();
     streamingPlayerRef.current = new StreamingTtsPlayer({
       maxChunks: 4,
-      ttsOptions: {
-        ...currentTts,
-        ...(callLanguageRef.current === "english" ? { language: "english" } : {}),
-      },
+      ttsOptions: currentTts,
       onStartSpeaking: () => {
         thinkingAmbientSound.stop();
         updateCallStatus("speaking");

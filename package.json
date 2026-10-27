@@ -22,6 +22,9 @@
     "test": "vp run -r test",
     "fmt": "vp fmt",
     "fmt:check": "vp fmt --check",
+    "deploy": "./deploy/deploy-vps.sh",
+    "deploy:vps": "./deploy/deploy-vps.sh",
+    "deploy:quick": "./deploy/deploy-vps.sh --skip-build",
     "clean": "rm -rf node_modules apps/*/node_modules packages/*/node_modules apps/*/dist apps/*/dist-electron packages/*/dist .vite-plus apps/*/.vite-plus packages/*/.vite-plus"
   },
   "devDependencies": {

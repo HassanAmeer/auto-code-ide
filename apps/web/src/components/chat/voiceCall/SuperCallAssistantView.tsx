@@ -61,6 +61,7 @@ import {
   stopSpeaking,
   loadTtsSettings,
   subscribeTtsSettings,
+  getActiveTtsPreset,
   TTS_ACCENTS,
   type TtsSettings,
 } from "~/lib/speech/tts";
@@ -104,16 +105,7 @@ export function SuperCallAssistantView() {
   }, []);
 
   const activeVoiceLabel = useMemo(() => {
-    if (ttsSettings.voiceURI?.startsWith("accent:")) {
-      const preset = TTS_ACCENTS.find((a) => a.id === ttsSettings.voiceURI);
-      if (preset) return preset.name.replace(/\s*\([^)]*\)/, "");
-    }
-    if (ttsSettings.language === "auto-female") return "Auto (Female)";
-    if (ttsSettings.language === "auto-male") return "Auto (Male)";
-    if (ttsSettings.language === "natural-urdu") return "Natural Urdu";
-    if (ttsSettings.language === "roman-urdu") return "Roman Urdu";
-    if (ttsSettings.language === "english") return "English";
-    return ttsSettings.language;
+    return getActiveTtsPreset(ttsSettings).name;
   }, [ttsSettings]);
 
   // Providers, models & settings

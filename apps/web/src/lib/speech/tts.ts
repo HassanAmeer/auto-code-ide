@@ -226,6 +226,9 @@ export function getAvailableVoices(): SpeechSynthesisVoice[] {
  */
 export function isMaleVoice(v: SpeechSynthesisVoice): boolean {
   const name = v.name.toLowerCase();
+  const uri = (v.voiceURI || "").toLowerCase();
+  const text = `${name} ${uri}`;
+
   const femaleKeywords = [
     "female",
     "woman",
@@ -249,10 +252,17 @@ export function isMaleVoice(v: SpeechSynthesisVoice): boolean {
     "ava",
     "allison",
     "siri",
+    "google us english",
+    "google uk english female",
+    "google हिन्दी",
+    "aria",
+    "ayumi",
+    "heera",
   ];
-  if (femaleKeywords.some((k) => name.includes(k))) {
+  if (femaleKeywords.some((k) => text.includes(k))) {
     return false;
   }
+
   const maleKeywords = [
     "male",
     "man",
@@ -270,12 +280,19 @@ export function isMaleVoice(v: SpeechSynthesisVoice): boolean {
     "richard",
     "thomas",
     "oliver",
+    "asif",
+    "madhav",
+    "salman",
+    "tariq",
+    "benjamin",
+    "arthur",
+    "ryan",
+    "christopher",
+    "eric",
+    "tom",
+    "uk english male",
   ];
-  if (maleKeywords.some((k) => name.includes(k))) {
-    return true;
-  }
-  // If no gender marker is present, treat non-female voices as compatible
-  return true;
+  return maleKeywords.some((k) => text.includes(k));
 }
 
 /**
@@ -283,6 +300,9 @@ export function isMaleVoice(v: SpeechSynthesisVoice): boolean {
  */
 export function isFemaleVoice(v: SpeechSynthesisVoice): boolean {
   const name = v.name.toLowerCase();
+  const uri = (v.voiceURI || "").toLowerCase();
+  const text = `${name} ${uri}`;
+
   const femaleKeywords = [
     "female",
     "woman",
@@ -305,8 +325,15 @@ export function isFemaleVoice(v: SpeechSynthesisVoice): boolean {
     "eva",
     "ava",
     "allison",
+    "siri",
+    "google us english",
+    "google uk english female",
+    "google हिन्दी",
+    "aria",
+    "ayumi",
+    "heera",
   ];
-  return femaleKeywords.some((k) => name.includes(k));
+  return femaleKeywords.some((k) => text.includes(k));
 }
 
 /**
@@ -413,17 +440,23 @@ export function getVoicesForMode(
   }
 
   switch (mode) {
-    case "natural-urdu": {
+    case "natural-urdu":
+    case "natural-urdu-male":
+    case "natural-urdu-female": {
       const urduHindi = pool.filter((v) => v.lang.startsWith("ur") || v.lang.startsWith("hi"));
       return urduHindi.length > 0 ? urduHindi : pool;
     }
-    case "roman-urdu": {
+    case "roman-urdu":
+    case "roman-urdu-male":
+    case "roman-urdu-female": {
       const urduHindi = pool.filter((v) => v.lang.startsWith("hi") || v.lang.startsWith("ur"));
       const english = pool.filter((v) => v.lang.startsWith("en"));
       const combined = [...urduHindi, ...english];
       return combined.length > 0 ? combined : pool;
     }
-    case "english": {
+    case "english":
+    case "english-male":
+    case "english-female": {
       const enVoices = pool.filter((v) => v.lang.startsWith("en"));
       return enVoices.length > 0 ? enVoices : pool;
     }
@@ -564,87 +597,108 @@ export function speakText(text: string, options?: Partial<TtsSettings>, onEnd?: 
 
   const utterance = new SpeechSynthesisUtterance(clean);
   const voices = getAvailableVoices();
+  const preset = getActiveTtsPreset(settings);
 
-  // 1. Determine effective language & target gender
-  let effectiveLang: "natural-urdu" | "roman-urdu" | "english" = "roman-urdu";
-  let targetGender: "male" | "female" = "male";
+  // Match the best browser voice based on preferred languages and target gender
+  let matchedVoice: SpeechSynthesisVoice | undefined;
+  let isRealMaleVoice = false;
 
-  if (settings.language === "auto-male") {
-    effectiveLang = detectTextLanguage(clean);
-    targetGender = "male";
-  } else if (settings.language === "auto-female") {
-    effectiveLang = detectTextLanguage(clean);
-    targetGender = "female";
+  if (preset.gender === "male") {
+    // 1. First priority: Look for explicit male voice in preferredLangs
+    for (const prefLang of preset.preferredLangs) {
+      const candidates = voices.filter(
+        (v) =>
+          v.lang.toLowerCase().startsWith(prefLang.toLowerCase()) ||
+          prefLang.toLowerCase().startsWith(v.lang.toLowerCase()),
+      );
+      const maleCandidate = candidates.find(isMaleVoice);
+      if (maleCandidate) {
+        matchedVoice = maleCandidate;
+        isRealMaleVoice = true;
+        break;
+      }
+    }
+
+    // 2. Second priority: If English male, look for any explicit male English voice
+    if (!matchedVoice && preset.category === "english") {
+      matchedVoice = voices.find((v) => v.lang.startsWith("en") && isMaleVoice(v));
+      if (matchedVoice) isRealMaleVoice = true;
+    }
+
+    // 3. Fallback: Select best language candidate
+    if (!matchedVoice) {
+      for (const prefLang of preset.preferredLangs) {
+        const candidate = voices.find(
+          (v) =>
+            v.lang.toLowerCase().startsWith(prefLang.toLowerCase()) ||
+            prefLang.toLowerCase().startsWith(v.lang.toLowerCase()),
+        );
+        if (candidate) {
+          matchedVoice = candidate;
+          break;
+        }
+      }
+    }
+
+    // Pitch & rate acoustic engineering for Male:
+    // If it's a real male voice, keep natural acoustic timbre.
+    // If it's a fallback voice (like Chrome's Google US English or Google Hindi which are female),
+    // pitch shift down by 0.74 to transform the formant into an authentic masculine baritone!
+    const userPitch = settings.pitch || 1.0;
+    const userRate = settings.rate || 1.0;
+
+    if (isRealMaleVoice) {
+      utterance.pitch = Math.max(0.5, Math.min(1.5, userPitch * preset.pitch));
+      utterance.rate = Math.max(0.5, Math.min(1.75, userRate * preset.rate));
+    } else {
+      utterance.pitch = Math.max(0.5, Math.min(1.5, userPitch * 0.74));
+      utterance.rate = Math.max(0.5, Math.min(1.75, userRate * 0.94));
+    }
   } else {
-    effectiveLang = settings.language;
-    targetGender = "male";
-  }
-
-  // 2. Check if an accent preset was selected
-  const chosenAccent = settings.voiceURI?.startsWith("accent:")
-    ? TTS_ACCENTS.find((a) => a.id === settings.voiceURI)
-    : null;
-
-  if (chosenAccent) {
-    // Apply tuned accent pitch & rate
-    utterance.pitch = Math.max(0.5, Math.min(1.5, settings.pitch * chosenAccent.pitch));
-    utterance.rate = Math.max(0.5, Math.min(1.75, settings.rate * chosenAccent.rate));
-    targetGender = chosenAccent.gender;
-
-    // Find best voice matching preferred langs and gender
-    let matchedVoice: SpeechSynthesisVoice | undefined;
-    for (const prefLang of chosenAccent.preferredLangs) {
-      const candidates = voices.filter((v) =>
-        v.lang.toLowerCase().startsWith(prefLang.toLowerCase()),
+    // Gender: Female
+    for (const prefLang of preset.preferredLangs) {
+      const candidates = voices.filter(
+        (v) =>
+          v.lang.toLowerCase().startsWith(prefLang.toLowerCase()) ||
+          prefLang.toLowerCase().startsWith(v.lang.toLowerCase()),
       );
-      matchedVoice = candidates.find((v) =>
-        targetGender === "female" ? isFemaleVoice(v) : isMaleVoice(v),
-      );
-      if (!matchedVoice && candidates.length > 0) {
+      const femaleCandidate = candidates.find(isFemaleVoice);
+      if (femaleCandidate) {
+        matchedVoice = femaleCandidate;
+        break;
+      }
+      if (candidates.length > 0 && !matchedVoice) {
         matchedVoice = candidates[0];
       }
-      if (matchedVoice) break;
     }
 
-    if (!matchedVoice && voices.length > 0) {
-      matchedVoice =
-        voices.find((v) => (targetGender === "female" ? isFemaleVoice(v) : isMaleVoice(v))) ||
-        voices[0];
-    }
+    const userPitch = settings.pitch || 1.0;
+    const userRate = settings.rate || 1.0;
 
-    if (matchedVoice) {
-      utterance.voice = matchedVoice;
+    if (matchedVoice && isMaleVoice(matchedVoice)) {
+      utterance.pitch = Math.max(0.5, Math.min(1.5, userPitch * 1.3));
+      utterance.rate = Math.max(0.5, Math.min(1.75, userRate * 1.0));
+    } else {
+      utterance.pitch = Math.max(0.5, Math.min(1.5, userPitch * preset.pitch));
+      utterance.rate = Math.max(0.5, Math.min(1.75, userRate * preset.rate));
     }
-    utterance.lang = chosenAccent.preferredLangs[0] || utterance.voice?.lang || "hi-IN";
+  }
+
+  if (!matchedVoice && voices.length > 0) {
+    matchedVoice = voices[0];
+  }
+
+  if (matchedVoice) {
+    utterance.voice = matchedVoice;
+  }
+
+  // Set appropriate language tag
+  if (preset.category === "natural-urdu") {
+    utterance.lang = matchedVoice?.lang?.startsWith("ur") ? matchedVoice.lang : "ur-PK";
+  } else if (preset.category === "roman-urdu") {
+    utterance.lang = matchedVoice?.lang || "hi-IN";
   } else {
-    // Standard voice or auto voice selection
-    utterance.pitch = settings.pitch;
-    utterance.rate = settings.rate;
-
-    if (settings.voiceURI && settings.voiceURI !== "auto") {
-      const custom = voices.find((v) => v.voiceURI === settings.voiceURI);
-      if (custom) utterance.voice = custom;
-    } else {
-      // Auto voice based on effectiveLang and targetGender
-      const matchedPool = getVoicesForMode(voices, effectiveLang, false);
-      const genderPool = matchedPool.filter((v) =>
-        targetGender === "female" ? isFemaleVoice(v) : isMaleVoice(v),
-      );
-      if (genderPool.length > 0 && genderPool[0]) {
-        utterance.voice = genderPool[0];
-      } else if (matchedPool.length > 0 && matchedPool[0]) {
-        utterance.voice = matchedPool[0];
-      }
-    }
-
-    // Set appropriate language tag
-    if (effectiveLang === "natural-urdu") {
-      utterance.lang = "ur-PK";
-    } else if (effectiveLang === "roman-urdu") {
-      utterance.lang = utterance.voice?.lang || "hi-IN";
-    } else {
-      utterance.lang = utterance.voice?.lang || "en-US";
-    }
+    utterance.lang = matchedVoice?.lang || "en-US";
   }
 
   utterance.volume = settings.volume;
