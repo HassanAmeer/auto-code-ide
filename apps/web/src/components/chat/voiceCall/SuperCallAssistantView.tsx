@@ -787,7 +787,7 @@ export function SuperCallAssistantView() {
         </div>
 
         {/* Unified Bottom Area: Live Transcribed Text directly above Divider Line with Centered Model Badge */}
-        <div className="w-full max-w-3xl sm:max-w-4xl mx-auto px-4 pb-5 pt-1 shrink-0 space-y-2">
+        <div className="w-full max-w-3xl sm:max-w-4xl lg:max-w-5xl mx-auto px-3 sm:px-4 pb-5 pt-1 shrink-0 space-y-2">
           {/* 1. Live Transcribed Text (Gray color, NO box, NO border, NO outline, looks like floating plain text) */}
           <div className="flex items-center justify-between gap-2 py-1 min-h-[34px]">
             {/* Pure text input - borderless, outline-none, transparent */}
@@ -866,12 +866,12 @@ export function SuperCallAssistantView() {
           </div>
 
           {/* 2. Sleek Horizontal Divider with Left-Aligned Model Badge & Centered Wave Call Button */}
-          <div className="relative flex items-center justify-between my-2 min-h-[56px]">
+          <div className="relative flex items-center justify-between my-2 min-h-[56px] w-full -mx-2 sm:-mx-4 px-2 sm:px-4">
             {/* The horizontal line spanning across */}
             <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[1px] bg-zinc-800" />
 
             {/* Left: AI Model Dropdown Badge (Half above, half below line) */}
-            <div className="relative z-10 flex items-center bg-background pr-2">
+            <div className="relative z-10 flex items-center pr-2">
               <ProviderModelPicker
                 activeInstanceId={effectiveInstanceId}
                 model={effectiveModel}
@@ -950,7 +950,7 @@ export function SuperCallAssistantView() {
             </div>
 
             {/* Right: Mic Mute / Unmute Button (Placed neatly on right, leaves center soundwave completely clear) */}
-            <div className="relative z-10 flex items-center justify-end bg-background pl-2 min-w-[28px]">
+            <div className="relative z-10 flex items-center justify-end pl-2 min-w-[28px]">
               {isCallActive ? (
                 <button
                   type="button"
