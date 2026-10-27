@@ -6,7 +6,7 @@ import {
   Sparkles,
   Bot,
   X,
-  RotateCcw,
+  ArrowLeft,
   Loader2,
   ListTodo,
   Clock,
@@ -77,11 +77,14 @@ import { executeSuperAgentInstruction, isUrduLanguage } from "./superAgentEngine
 function PakistanFlagIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 32 24" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
-      <rect width="32" height="24" rx="3" fill="#01411C" />
-      <rect width="7.5" height="24" rx="2" fill="#FFFFFF" />
-      <path d="M21.5 12a4.6 4.6 0 1 0-3.6-4.5 3.9 3.9 0 1 1 3.6 4.5z" fill="#FFFFFF" />
+      <rect width="32" height="24" rx="2.5" fill="#01411C" />
+      <path d="M0 2.5a2.5 2.5 0 0 1 2.5-2.5h5.5v24H2.5a2.5 2.5 0 0 1-2.5-2.5V2.5z" fill="#FFFFFF" />
+      <path
+        d="M 18.47 6.70 A 5.4 5.4 0 1 0 24.42 14.23 A 4.8 4.8 0 0 1 18.47 6.70 Z"
+        fill="#FFFFFF"
+      />
       <polygon
-        points="21.5,8.2 22.1,9.6 23.6,9.6 22.4,10.5 22.8,11.9 21.6,11.1 20.4,11.9 20.8,10.5 19.6,9.6 21.1,9.6"
+        points="22.2,7.2 22.8,8.8 24.5,8.8 23.2,9.8 23.7,11.4 22.3,10.4 20.9,11.4 21.4,9.8 20.1,8.8 21.8,8.8"
         fill="#FFFFFF"
       />
     </svg>
@@ -900,34 +903,33 @@ export function SuperCallAssistantView() {
               />
             </div>
 
-            {/* Gray Action Buttons: Undo, Sparkles (Urdu -> Roman Urdu), and Send */}
+            {/* Gray Action Buttons: Sparkles/ArrowLeft (in-place toggle), and Send */}
             <div className="flex items-center gap-1 shrink-0 pb-0.5">
-              {previousTextForUndo !== null && (
-                <button
-                  type="button"
-                  onClick={handleUndoTransliteration}
-                  className="p-1 rounded text-zinc-400 hover:text-white transition-colors cursor-pointer"
-                  title="Wapas original Urdu par layen (Undo)"
-                >
-                  <RotateCcw className="size-3.5" />
-                </button>
-              )}
-
-              {inputText.trim().length > 0 && (
-                <button
-                  type="button"
-                  onClick={handleTransliterateToRoman}
-                  disabled={isTransliterating}
-                  className="p-1 rounded text-zinc-400 hover:text-amber-400 disabled:opacity-50 transition-colors cursor-pointer"
-                  title="Urdu ko Roman Urdu mein convert karein"
-                >
-                  {isTransliterating ? (
-                    <Loader2 className="size-3.5 animate-spin text-amber-400" />
-                  ) : (
-                    <Sparkles className="size-3.5" />
-                  )}
-                </button>
-              )}
+              {inputText.trim().length > 0 &&
+                (previousTextForUndo !== null ? (
+                  <button
+                    type="button"
+                    onClick={handleUndoTransliteration}
+                    className="p-1 rounded text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                    title="Wapas original Urdu par layen (Undo)"
+                  >
+                    <ArrowLeft className="size-3.5" />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleTransliterateToRoman}
+                    disabled={isTransliterating}
+                    className="p-1 rounded text-zinc-400 hover:text-amber-400 disabled:opacity-50 transition-colors cursor-pointer"
+                    title="Urdu ko Roman Urdu mein convert karein"
+                  >
+                    {isTransliterating ? (
+                      <Loader2 className="size-3.5 animate-spin text-amber-400" />
+                    ) : (
+                      <Sparkles className="size-3.5" />
+                    )}
+                  </button>
+                ))}
 
               <button
                 type="button"
