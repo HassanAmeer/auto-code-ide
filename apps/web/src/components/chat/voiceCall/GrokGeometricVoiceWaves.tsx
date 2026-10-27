@@ -8,7 +8,7 @@ export interface GrokGeometricVoiceWavesProps {
   className?: string;
 }
 
-// ── Stardust Particle Definition (Scaled down by 15%) ──
+// ── Stardust Particle Definition (15% scale reduction) ──
 interface StardustParticle {
   x: number;
   y: number;
@@ -18,7 +18,7 @@ interface StardustParticle {
   phase: number;
 }
 
-// Pre-generate 36 ambient stardust glitter particles (scaled by 0.85)
+// Pre-generate 36 ambient stardust glitter particles (scaled down by 15%: 0.85)
 const PARTICLES: StardustParticle[] = Array.from({ length: 36 }, (_, i) => ({
   x: (((i * 19.3) % 360) - 180) * 0.85,
   y: (((i * 29.7) % 64) - 32) * 0.9 * 0.85,
@@ -51,11 +51,11 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
     const render = (timestamp: number) => {
       if (!running) return;
 
-      // Handle Resize / DPR
+      // Handle Resize / DPR with ample unclipped canvas height
       const rect = canvas.getBoundingClientRect();
       const dpr = Math.min(2, window.devicePixelRatio || 1);
-      const width = rect.width || 440;
-      const height = rect.height || 73;
+      const width = rect.width || 460;
+      const height = rect.height || 110;
 
       if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) {
         canvas.width = Math.round(width * dpr);
@@ -68,7 +68,8 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
 
       const cx = width / 2;
       const cy = height / 2;
-      const W = Math.min(width * 0.48, 187); // half-width of the fluid ribbon (220 * 0.85)
+      const scale = 0.85; // Exact 15% scale reduction requested by user
+      const W = Math.min(width * 0.48, 220 * scale); // 187px half-width (clears model badge & mic)
       const R_core = 24.0; // Black hole core radius around call button
 
       // Audio analysis
@@ -84,7 +85,7 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
       }
       smoothedEnergy += (rawMicEnergy - smoothedEnergy) * 0.25;
 
-      // Color Palette Configurations (exact same as screenshots)
+      // Color Palette Configurations (exact same as screenshot)
       type ColorConfig = {
         primaryRgb: string;
         accentRgb: string;
@@ -109,19 +110,19 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
           primaryRgb: "59, 130, 246", // Electric blue
           accentRgb: "147, 197, 253",
           glowColor: "rgba(59, 130, 246, 0.85)",
-          glowBlur: 9,
+          glowBlur: 10,
         },
         thinking: {
           primaryRgb: "249, 115, 22", // Cosmic orange
           accentRgb: "253, 186, 116",
           glowColor: "rgba(249, 115, 22, 0.85)",
-          glowBlur: 9,
+          glowBlur: 10,
         },
         speaking: {
           primaryRgb: "34, 197, 94", // Emerald green
           accentRgb: "134, 239, 172",
           glowColor: "rgba(34, 197, 94, 0.85)",
-          glowBlur: 9,
+          glowBlur: 10,
         },
       };
 
@@ -144,10 +145,10 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
 
       // ── 2. Gravitational Lensing Orbital Rings around the Event Horizon (Scaled by 0.85) ──
       const rings = [
-        { r: R_core + 2.0, alpha: 0.65, lw: 1.1 },
-        { r: R_core + 6.0, alpha: 0.45, lw: 0.85 },
-        { r: R_core + 12.0, alpha: 0.28, lw: 0.7 },
-        { r: R_core + 18.7, alpha: 0.15, lw: 0.55 },
+        { r: R_core + 2.0, alpha: 0.65, lw: 1.2 },
+        { r: R_core + 7.0 * scale, alpha: 0.45, lw: 0.9 },
+        { r: R_core + 14.0 * scale, alpha: 0.28, lw: 0.75 },
+        { r: R_core + 22.0 * scale, alpha: 0.15, lw: 0.6 },
       ];
 
       for (const ring of rings) {
@@ -158,22 +159,22 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
         ctx.stroke();
       }
 
-      // ── 3. Flowing Silk Ribbon Strands (Exact formula from 87c358ac scaled by 0.85) ──
+      // ── 3. Flowing Silk Ribbon Strands (Exact Formula from 87c358ac scaled by 0.85) ──
       const numStrands = 14;
 
-      // Dynamics multipliers (scaled by 0.85)
+      // Dynamics multipliers (15% scaled)
       let waveSpeed = 0.0022;
-      let waveAmp = 5.5 * 0.85;
+      let waveAmp = 5.5 * scale;
 
       if (callStatus === "user-speaking") {
         waveSpeed = 0.0055;
-        waveAmp = (4.0 + (smoothedEnergy / 255) * 11.0) * 0.85;
+        waveAmp = (4.0 + (smoothedEnergy / 255) * 11.0) * scale;
       } else if (callStatus === "thinking") {
         waveSpeed = 0.006;
-        waveAmp = 7.0 * 0.85;
+        waveAmp = 7.0 * scale;
       } else if (callStatus === "speaking") {
         waveSpeed = 0.0045;
-        waveAmp = 6.5 * 0.85;
+        waveAmp = 6.5 * scale;
       }
 
       ctx.shadowColor = colors.glowColor;
@@ -183,18 +184,18 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
       for (const side of [-1, 1]) {
         for (let s = 0; s < numStrands; s++) {
           const norm_s = s / (numStrands - 1); // 0 to 1
-          const C = (1.0 + norm_s * 28.0) * 0.85; // Exact C scaled by 0.85
+          const C = (1.0 + norm_s * 28.0) * scale; // Vertical dispersion scaled by 0.85
 
           // Alpha distribution: bright primary core ribbons, delicate ethereal outer filaments
           const distFromCore = Math.abs(norm_s - 0.38);
           const strandAlpha = Math.max(0.12, 0.95 - Math.pow(distFromCore, 1.2) * 1.0);
           const isCoreStrand = s === 4 || s === 5;
-          const lw = (isCoreStrand ? 1.9 : 0.85) * 0.9;
+          const lw = isCoreStrand ? 1.85 : 0.82;
 
           ctx.beginPath();
           let started = false;
 
-          const step = 4;
+          const step = 3;
           for (let x = -W; x <= W; x += step) {
             const u = x / W; // -1 to 1
             const abs_u = Math.abs(u);
@@ -213,7 +214,7 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
 
             const waveFactor =
               Math.sin(u * Math.PI * 3.2 + s * 0.18 + phase) *
-              (waveAmp + norm_s * 3.5 * 0.85) *
+              (waveAmp + norm_s * 3.5 * scale) *
               Math.exp(-Math.pow(abs_u - 0.42, 2) / 0.09);
 
             let y_actual = (y_base + waveFactor) * envelope;
@@ -224,7 +225,7 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
               const void_y =
                 Math.sqrt(Math.max(0, (R_core + 2.0) * (R_core + 2.0) - x_dist * x_dist)) +
                 1.0 +
-                s * 1.5 * 0.85;
+                s * 1.5 * scale;
               y_actual = Math.max(void_y, y_actual);
             }
 
@@ -276,7 +277,7 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
       aria-hidden="true"
       className={cn(
         "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2",
-        "w-[290px] sm:w-[375px] md:w-[440px] h-[65px] sm:h-[73px] overflow-visible z-0 select-none",
+        "w-[340px] sm:w-[420px] md:w-[460px] h-[96px] sm:h-[110px] overflow-visible z-0 select-none",
         className,
       )}
     >
