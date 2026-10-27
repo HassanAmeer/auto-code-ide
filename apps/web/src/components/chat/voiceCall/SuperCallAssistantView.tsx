@@ -1758,7 +1758,7 @@ export function SuperCallAssistantView() {
                   )}
 
                   {/* Assistant Actions Toolbar & Timestamp */}
-                  <div className="flex items-center gap-3 mt-2 text-[11px] text-zinc-500 font-sans">
+                  <div className="flex items-center gap-2.5 mt-2 text-[11px] text-zinc-500 font-sans">
                     <span className="font-mono">
                       {new Date(msg.timestamp).toLocaleTimeString([], {
                         hour: "2-digit",
@@ -1769,30 +1769,23 @@ export function SuperCallAssistantView() {
                     <button
                       type="button"
                       onClick={() => handleCopyMessage(msg.text, msg.id)}
-                      className="flex items-center gap-1 hover:text-zinc-300 transition-colors cursor-pointer"
-                      title="Copy response"
+                      className="opacity-60 hover:opacity-100 transition-opacity p-0.5 rounded hover:text-zinc-300 cursor-pointer"
+                      title={copiedMessageId === msg.id ? "Copied" : "Copy response"}
                     >
                       {copiedMessageId === msg.id ? (
-                        <>
-                          <Check className="size-3 text-emerald-400" />
-                          <span className="text-emerald-400">Copied</span>
-                        </>
+                        <Check className="size-3 text-emerald-400" />
                       ) : (
-                        <>
-                          <Copy className="size-3" />
-                          <span>Copy</span>
-                        </>
+                        <Copy className="size-3" />
                       )}
                     </button>
 
                     <button
                       type="button"
                       onClick={() => speakText(msg.text, loadTtsSettings())}
-                      className="flex items-center gap-1 hover:text-purple-300 transition-colors cursor-pointer text-purple-400/90"
-                      title="Allowed to speak (Speak this response aloud)"
+                      className="opacity-60 hover:opacity-100 transition-opacity p-0.5 rounded hover:text-purple-300 cursor-pointer"
+                      title="Allowed to speak (Speak response aloud)"
                     >
-                      <Volume2 className="size-3 text-purple-400" />
-                      <span>Allowed to speak</span>
+                      <Volume2 className="size-3" />
                     </button>
                   </div>
                 </div>
