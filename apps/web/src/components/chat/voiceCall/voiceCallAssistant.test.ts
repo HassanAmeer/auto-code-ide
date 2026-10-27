@@ -94,5 +94,73 @@ describe("VoiceCall Assistant & StreamingTtsPlayer", () => {
     expect(spoken).toContain("Pehla error login");
     expect(spoken).toContain("Doosra error styling");
     expect(spoken).toContain("theek kaam kar rahi hai");
+    expect(spoken.length).toBeGreaterThan(160);
+  });
+
+  it("removes consecutive duplicate words from STT output", async () => {
+    const { removeConsecutiveDuplicateWords } = await import("~/lib/speech/stt");
+    expect(removeConsecutiveDuplicateWords("hello hello how are you")).toBe("hello how are you");
+    expect(removeConsecutiveDuplicateWords("kya kya haal hai")).toBe("kya haal hai");
+    expect(removeConsecutiveDuplicateWords("testing one two three")).toBe("testing one two three");
+  });
+
+  it("simulates WebSpeech continuous resultIndex progression across turns without duplication", () => {
+    // Simulated state for a call session across 2 turns
+    let lastFinalizedIndex = -1;
+    let accumulatedTurnFinal = "";
+
+    function processResults(event: { resultIndex: number; results: any[] }) {
+      let newlyFinalized = "";
+      let currentInterim = "";
+
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        const item = event.results[i];
+        if (!item || !item[0]) continue;
+        const transcript = item[0].transcript || "";
+        if (item.isFinal) {
+          if (i > lastFinalizedIndex) {
+            lastFinalizedIndex = i;
+            newlyFinalized += (newlyFinalized ? " " : "") + transcript.trim();
+          }
+        } else {
+          currentInterim += (currentInterim ? " " : "") + transcript.trim();
+        }
+      }
+
+      if (newlyFinalized) {
+        accumulatedTurnFinal = (
+          accumulatedTurnFinal ? accumulatedTurnFinal + " " + newlyFinalized : newlyFinalized
+        ).trim();
+      }
+
+      return (
+        accumulatedTurnFinal
+          ? accumulatedTurnFinal + (currentInterim ? " " + currentInterim : "")
+          : currentInterim
+      ).trim();
+    }
+
+    // Turn 1: user says "hello"
+    const turn1Result = processResults({
+      resultIndex: 0,
+      results: [{ 0: { transcript: "hello" }, isFinal: true }],
+    });
+    expect(turn1Result).toBe("hello");
+
+    // Turn 1 dispatched -> reset turn buffer
+    accumulatedTurnFinal = "";
+
+    // Turn 2: recognition stays continuous! results array now has 2 items, resultIndex = 1
+    const turn2Result = processResults({
+      resultIndex: 1,
+      results: [
+        { 0: { transcript: "hello" }, isFinal: true },
+        { 0: { transcript: "how are you" }, isFinal: true },
+      ],
+    });
+
+    // Crucial: Turn 2 MUST only be "how are you", NEVER "hello how are you"!
+    expect(turn2Result).toBe("how are you");
+    expect(turn2Result).not.toContain("hello");
   });
 });
