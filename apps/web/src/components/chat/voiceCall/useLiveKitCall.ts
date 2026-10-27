@@ -73,10 +73,10 @@ export function useLiveKitCall(options?: {
         }
 
         // Determine secure wss:// endpoint to avoid Mixed Content error when loaded over HTTPS
+        // Note: LiveKit SDK internally appends /rtc, so pass clean base host without /rtc
         let targetUrl = tokenData.serverUrl || "ws://201.18.218.29:7880";
         if (typeof window !== "undefined" && window.location.protocol === "https:") {
-          // If browser is on https://, use secure WSS through Nginx proxy
-          targetUrl = `wss://${window.location.host}/rtc`;
+          targetUrl = `wss://${window.location.host}`;
         }
 
         // 2. Initialize LiveKit WebRTC Room
@@ -158,8 +158,15 @@ export function useLiveKitCall(options?: {
         });
 
         // 4. Connect to WebRTC Server & Publish Mic
-        await room.connect(targetUrl, jwtString);
-        await room.localParticipant.setMicrophoneEnabled(true);
+        await room.connect(targetUrl, jwtString, {
+          autoSubscribe: true,
+        });
+
+        try {
+          await room.localParticipant.setMicrophoneEnabled(true);
+        } catch (micErr) {
+          console.warn("[LiveKit] Local mic publish notice:", micErr);
+        }
 
         roomRef.current = room;
 
