@@ -149,12 +149,20 @@ echo -e "  ${C_GREEN}✓ VPS repository synchronized with commit ${CURRENT_COMMI
 echo -e "\n${C_BOLD}${C_BLUE}[5/5] Restarting VPS Service & Performing Health Check...${C_RESET}"
 HEALTH_RESULT=$(ssh "${VPS_USER}@${VPS_HOST}" "bash -s" << EOF
   systemctl restart ${SERVICE_NAME}
-  sleep 2
 
-  STATUS=\$(systemctl is-active ${SERVICE_NAME} 2>/dev/null || echo "unknown")
-  HTTP_CODE=\$(curl --noproxy '*' -s -m 5 -o /dev/null -w "%{http_code}" http://127.0.0.1:${VPS_PORT}/ 2>/dev/null || echo "000")
+  STATUS="unknown"
+  HTTP_CODE="000"
+
+  for i in {1..12}; do
+    sleep 1
+    STATUS=\$(systemctl is-active ${SERVICE_NAME} 2>/dev/null || echo "unknown")
+    HTTP_CODE=\$(curl --noproxy '*' -s -m 2 -o /dev/null -w "%{http_code}" http://127.0.0.1:${VPS_PORT}/ 2>/dev/null || echo "000")
+    if [ "\$STATUS" = "active" ] && [ "\$HTTP_CODE" = "200" ]; then
+      break
+    fi
+  done
+
   PID=\$(pgrep -f "apps/server/dist/bin.mjs" | head -n 1 || echo "none")
-
   echo "STATUS=\$STATUS|HTTP_CODE=\$HTTP_CODE|PID=\$PID"
 EOF
 )

@@ -1,15 +1,14 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Volume2, Play, Square } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import {
-  type TtsLanguageMode,
+  type TtsVoiceId,
   type TtsSettings,
   TTS_ACCENTS,
   loadTtsSettings,
   saveTtsSettings,
-  getAvailableVoices,
-  getVoicesForMode,
+  getActiveTtsPreset,
   speakText,
   stopSpeaking,
   subscribeSpeechState,
@@ -17,21 +16,9 @@ import {
 
 export function TtsSettingsPanel() {
   const [settings, setSettings] = useState<TtsSettings>(loadTtsSettings);
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-  const [testText, setTestText] = useState(
-    "Assalam o alaikum! Yeh AutoCode ka text to speech test hai.",
-  );
+  const activePreset = useMemo(() => getActiveTtsPreset(settings), [settings]);
+  const [testText, setTestText] = useState(() => getActiveTtsPreset(loadTtsSettings()).sampleText);
   const [isSpeaking, setIsSpeaking] = useState(false);
-
-  useEffect(() => {
-    const updateVoices = () => {
-      setVoices(getAvailableVoices());
-    };
-    updateVoices();
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      window.speechSynthesis.onvoiceschanged = updateVoices;
-    }
-  }, []);
 
   useEffect(() => {
     return subscribeSpeechState((speaking) => {
@@ -39,23 +26,16 @@ export function TtsSettingsPanel() {
     });
   }, []);
 
-  const updateLanguage = (lang: TtsLanguageMode) => {
+  const updatePreset = (presetId: TtsVoiceId) => {
+    const chosen = TTS_ACCENTS.find((a) => a.id === presetId) || TTS_ACCENTS[0];
     const updated: TtsSettings = {
-      language: lang,
-      rate: settings.rate,
-      pitch: settings.pitch,
-      volume: settings.volume,
+      ...settings,
+      language: chosen.category,
+      voiceURI: chosen.id,
     };
     setSettings(updated);
     saveTtsSettings(updated);
-
-    if (lang === "natural-urdu") {
-      setTestText("السلام علیکم! یہ آٹو کوڈ کا ٹیکسٹ ٹو اسپیچ ٹیسٹ ہے۔");
-    } else if (lang === "english") {
-      setTestText("Hello! This is a text to speech test for AutoCode.");
-    } else {
-      setTestText("Assalam o alaikum! Yeh AutoCode ka text to speech test hai.");
-    }
+    setTestText(chosen.sampleText);
   };
 
   const updateRate = (rate: number) => {
@@ -70,12 +50,6 @@ export function TtsSettingsPanel() {
     saveTtsSettings(updated);
   };
 
-  const updateVoiceURI = (voiceURI: string) => {
-    const updated = { ...settings, voiceURI };
-    setSettings(updated);
-    saveTtsSettings(updated);
-  };
-
   const handleTestSpeak = () => {
     if (isSpeaking) {
       stopSpeaking();
@@ -83,8 +57,6 @@ export function TtsSettingsPanel() {
       speakText(testText, settings);
     }
   };
-
-  const availableFilteredVoices = getVoicesForMode(voices, settings.language);
 
   return (
     <div className="flex flex-col gap-6 max-w-2xl">
@@ -95,132 +67,29 @@ export function TtsSettingsPanel() {
         </p>
       </div>
 
-      {/* Language Selection */}
+      {/* 6 Curated Voice Options */}
       <div className="flex flex-col gap-2 rounded-lg border border-border p-4 bg-card">
-        <label className="text-sm font-medium">Spoken Language / Accent</label>
+        <label className="text-sm font-medium">Voice Model & Accent (6 Curated Options)</label>
         <p className="text-xs text-muted-foreground mb-2">
-          Choose the primary language accent or auto-detect based on assistant responses.
+          Choose from English, Roman Urdu, or Natural Urdu with authentic Male and Female voices.
         </p>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-          <button
-            type="button"
-            onClick={() => updateLanguage("auto-male")}
-            className={`p-3 rounded-md border text-sm font-medium text-left transition-colors ${
-              settings.language === "auto-male"
-                ? "border-primary bg-primary/10 text-primary"
-                : "border-border hover:bg-muted"
-            }`}
-          >
-            <div className="font-semibold">Auto (Male Voice)</div>
-            <div className="text-xs text-muted-foreground mt-1">Auto-detect response language</div>
-          </button>
-          <button
-            type="button"
-            onClick={() => updateLanguage("auto-female")}
-            className={`p-3 rounded-md border text-sm font-medium text-left transition-colors ${
-              settings.language === "auto-female"
-                ? "border-primary bg-primary/10 text-primary"
-                : "border-border hover:bg-muted"
-            }`}
-          >
-            <div className="font-semibold">Auto (Female Voice)</div>
-            <div className="text-xs text-muted-foreground mt-1">Auto-detect response language</div>
-          </button>
-          <button
-            type="button"
-            onClick={() => updateLanguage("roman-urdu")}
-            className={`p-3 rounded-md border text-sm font-medium text-left transition-colors ${
-              settings.language === "roman-urdu"
-                ? "border-primary bg-primary/10 text-primary"
-                : "border-border hover:bg-muted"
-            }`}
-          >
-            <div className="font-semibold">Roman Urdu</div>
-            <div className="text-xs text-muted-foreground mt-1">Urdu in Latin script</div>
-          </button>
-          <button
-            type="button"
-            onClick={() => updateLanguage("natural-urdu")}
-            className={`p-3 rounded-md border text-sm font-medium text-left transition-colors ${
-              settings.language === "natural-urdu"
-                ? "border-primary bg-primary/10 text-primary"
-                : "border-border hover:bg-muted"
-            }`}
-          >
-            <div className="font-semibold">Natural Urdu</div>
-            <div className="text-xs text-muted-foreground mt-1">اردو الفاظ و رسم الخط</div>
-          </button>
-          <button
-            type="button"
-            onClick={() => updateLanguage("english")}
-            className={`p-3 rounded-md border text-sm font-medium text-left transition-colors ${
-              settings.language === "english"
-                ? "border-primary bg-primary/10 text-primary"
-                : "border-border hover:bg-muted"
-            }`}
-          >
-            <div className="font-semibold">English</div>
-            <div className="text-xs text-muted-foreground mt-1">Standard English</div>
-          </button>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {TTS_ACCENTS.map((preset) => (
+            <button
+              key={preset.id}
+              type="button"
+              onClick={() => updatePreset(preset.id)}
+              className={`p-3 rounded-md border text-sm font-medium text-left transition-colors cursor-pointer ${
+                activePreset.id === preset.id
+                  ? "border-primary bg-primary/10 text-primary ring-1 ring-primary"
+                  : "border-border hover:bg-muted"
+              }`}
+            >
+              <div className="font-semibold">{preset.name}</div>
+              <div className="text-xs text-muted-foreground mt-0.5">{preset.description}</div>
+            </button>
+          ))}
         </div>
-      </div>
-
-      {/* Voice Selection */}
-      <div className="flex flex-col gap-2 rounded-lg border border-border p-4 bg-card">
-        <label className="text-sm font-medium">Synthesizer Voice & Curated Accents</label>
-        <p className="text-xs text-muted-foreground mb-1">
-          Select curated male/female accents or browser synthesizer voices.
-        </p>
-        <select
-          value={settings.voiceURI ?? ""}
-          onChange={(e) => updateVoiceURI(e.target.value)}
-          className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-        >
-          <option value="">Auto (Male voice prioritized)</option>
-          <option value="auto-female">Auto (Female voice)</option>
-
-          <optgroup label="── Roman Urdu Accents ──">
-            {TTS_ACCENTS.filter((a) => a.category === "roman-urdu").map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </optgroup>
-
-          <optgroup label="── Natural Urdu Accents ──">
-            {TTS_ACCENTS.filter((a) => a.category === "natural-urdu").map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </optgroup>
-
-          <optgroup label="── Hindi Accents ──">
-            {TTS_ACCENTS.filter((a) => a.category === "hindi").map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </optgroup>
-
-          <optgroup label="── English Accents ──">
-            {TTS_ACCENTS.filter((a) => a.category === "english").map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </optgroup>
-
-          {availableFilteredVoices.length > 0 && (
-            <optgroup label="── Browser Synthesizer Voices (Male) ──">
-              {availableFilteredVoices.map((v) => (
-                <option key={v.voiceURI} value={v.voiceURI}>
-                  {v.name} ({v.lang})
-                </option>
-              ))}
-            </optgroup>
-          )}
-        </select>
       </div>
 
       {/* Speed & Pitch Controls */}
@@ -228,7 +97,7 @@ export function TtsSettingsPanel() {
         <div className="flex flex-col gap-2">
           <div className="flex justify-between items-center text-sm font-medium">
             <span>Speech Speed</span>
-            <span className="text-xs text-muted-foreground">{settings.rate}x</span>
+            <span className="text-xs text-muted-foreground">{settings.rate.toFixed(2)}x</span>
           </div>
           <input
             type="range"
@@ -242,8 +111,8 @@ export function TtsSettingsPanel() {
         </div>
         <div className="flex flex-col gap-2">
           <div className="flex justify-between items-center text-sm font-medium">
-            <span>Pitch</span>
-            <span className="text-xs text-muted-foreground">{settings.pitch}x</span>
+            <span>Voice Pitch</span>
+            <span className="text-xs text-muted-foreground">{settings.pitch.toFixed(2)}x</span>
           </div>
           <input
             type="range"
@@ -257,31 +126,33 @@ export function TtsSettingsPanel() {
         </div>
       </div>
 
-      {/* Test Playground */}
-      <div className="flex flex-col gap-3 rounded-lg border border-border p-4 bg-card">
-        <label className="text-sm font-medium flex items-center gap-2">
-          <Volume2 className="size-4 text-primary" /> Test Speech Output
-        </label>
+      {/* Test Preview Section */}
+      <div className="flex flex-col gap-2 rounded-lg border border-border p-4 bg-card">
+        <label className="text-sm font-medium">Preview Voice Output</label>
+        <p className="text-xs text-muted-foreground mb-2">
+          Type or edit the test phrase below and click Speak to test voice tone and speed.
+        </p>
         <div className="flex gap-2">
           <Input
             value={testText}
             onChange={(e) => setTestText(e.target.value)}
-            placeholder="Type text to speak..."
+            placeholder="Type text to preview voice..."
             className="flex-1"
+            dir={activePreset.category === "natural-urdu" ? "rtl" : "ltr"}
           />
           <Button
             type="button"
-            onClick={handleTestSpeak}
             variant={isSpeaking ? "destructive" : "default"}
-            className="shrink-0 flex items-center gap-1.5"
+            onClick={handleTestSpeak}
+            className="shrink-0 flex items-center gap-1.5 cursor-pointer"
           >
             {isSpeaking ? (
               <>
-                <Square className="size-3.5 fill-current" /> Stop
+                <Square className="size-4 fill-current" /> Stop
               </>
             ) : (
               <>
-                <Play className="size-3.5 fill-current" /> Speak Test
+                <Play className="size-4 fill-current" /> Speak
               </>
             )}
           </Button>
