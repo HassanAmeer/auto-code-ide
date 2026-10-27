@@ -96,6 +96,10 @@ export class StreamingTtsPlayer {
     this.ttsOptions = { ...this.ttsOptions, ...options };
   }
 
+  isActive(): boolean {
+    return !this.stopped && (this.isPlaying || this.queue.length > 0 || !this.isStreamFinished);
+  }
+
   private normalizeChunkSignature(text: string): string {
     return text
       .toLowerCase()

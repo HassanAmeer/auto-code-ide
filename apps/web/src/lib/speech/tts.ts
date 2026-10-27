@@ -801,21 +801,19 @@ export function speakText(text: string, options?: Partial<TtsSettings>, onEnd?: 
   utterance.onstart = () => {
     activeUtterance = utterance;
     clearKeepAliveTimer();
-    // Safety interval: keeps Chrome alive and detects early finishes if onend is dropped
+    // Safety interval for Desktop Chromium bug (long speech > 15s pausing unexpectedly).
+    // Uses gentle 10s resume tick. Crucially, NEVER call pause()/resume() at 500ms intervals,
+    // and NEVER prematurely finishSpeech() here, because Android Chrome TTS engines choke
+    // and cancel the utterance after 1-2 words.
     keepAliveTimer = setInterval(() => {
       if (typeof window !== "undefined" && "speechSynthesis" in window) {
-        if (!window.speechSynthesis.speaking && !window.speechSynthesis.pending) {
-          finishSpeech();
-        } else {
+        if (window.speechSynthesis.speaking) {
           try {
-            window.speechSynthesis.pause();
             window.speechSynthesis.resume();
           } catch {}
         }
-      } else {
-        finishSpeech();
       }
-    }, 500);
+    }, 10000);
     notifySpeechState(true, clean);
   };
 

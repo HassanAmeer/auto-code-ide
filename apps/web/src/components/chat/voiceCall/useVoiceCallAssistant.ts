@@ -419,6 +419,14 @@ export function useVoiceCallAssistant({
   // Turn tracking: snapshot message IDs present before turn was dispatched
   const preTurnMessageIdsRef = useRef<Set<string>>(new Set());
   const waitingForAssistantResponseRef = useRef(false);
+  const turnTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearTurnTimeout = useCallback(() => {
+    if (turnTimeoutRef.current) {
+      clearTimeout(turnTimeoutRef.current);
+      turnTimeoutRef.current = null;
+    }
+  }, []);
 
   const updateCallStatus = useCallback((next: VoiceCallStatus) => {
     callStatusRef.current = next;
@@ -516,6 +524,7 @@ export function useVoiceCallAssistant({
     clearFinalDispatchTimer();
     clearRestartTimer();
     clearTtsCooldownTimer();
+    clearTurnTimeout();
     cleanupRecognition();
 
     if (levelCheckIntervalRef.current) {
@@ -544,7 +553,13 @@ export function useVoiceCallAssistant({
 
     updateCallStatus("idle");
     setIsCallActive(false);
-  }, [clearRestartTimer, clearTtsCooldownTimer, cleanupRecognition, updateCallStatus]);
+  }, [
+    clearRestartTimer,
+    clearTtsCooldownTimer,
+    clearTurnTimeout,
+    cleanupRecognition,
+    updateCallStatus,
+  ]);
 
   const addAiSpokenPhrase = useCallback((phrase: string) => {
     if (!phrase) return;
@@ -709,8 +724,9 @@ export function useVoiceCallAssistant({
       recognition.lang =
         languageCodes[Math.min(recognitionLanguageIndexRef.current, languageCodes.length - 1)] ??
         (callLanguageRef.current === "english" ? "en-US" : "ur-PK");
-      // On mobile devices (Android/iOS), continuous=true frequently fails or drops audio.
-      recognition.continuous = !isMobileDevice;
+      // continuous=true keeps the speech recognition session open continuously across pauses
+      // so user speech is not abruptly terminated between short pauses.
+      recognition.continuous = true;
       recognition.interimResults = true;
 
       recognition.onstart = () => {
@@ -759,18 +775,21 @@ export function useVoiceCallAssistant({
           callStatusRef.current === "speaking" ||
           callStatusRef.current === "thinking" ||
           isCurrentlySpeaking() ||
+          Boolean(streamingPlayerRef.current?.isActive?.()) ||
           Date.now() - lastTtsEndedTimestampRef.current < ACOUSTIC_ECHO_COOLDOWN_MS;
-
-        // 1. Interrupt command ("stop", "ruko", "suno", "wait", etc.):
-        // Triggers instantly at any moment, halting speech & model execution!
-        if (containsInterruptCommand(processedSpeech) || containsInterruptCommand(rawSpeech)) {
-          interruptSpeaking();
-          return;
-        }
 
         // CRITICAL: If AI is actively speaking, thinking, or in post-TTS acoustic cooldown,
         // NEVER allow speaker audio or acoustic echo into the composer input field!
         if (isAiSpeakingOrBusy) {
+          // If user explicitly spoke an interrupt command ("stop", "ruko", "suno", "wait"),
+          // only trigger if it is genuinely distinct from the AI's current/recent spoken words
+          if (
+            (containsInterruptCommand(processedSpeech) || containsInterruptCommand(rawSpeech)) &&
+            !isAcousticEchoOfAi(processedSpeech) &&
+            !isAcousticEchoOfAi(rawSpeech)
+          ) {
+            interruptSpeaking();
+          }
           return;
         }
 
@@ -985,17 +1004,29 @@ export function useVoiceCallAssistant({
         isTtsActiveRef.current = true;
         updateCallStatus("speaking");
         thinkingAmbientSound.stop();
+        cleanupRecognition(); // Ensure mic is completely stopped while audio is playing
         if (speakingText) {
           setAssistantSpokenText(speakingText);
           addAiSpokenPhrase(speakingText);
         }
       } else {
+        // If a streaming player is currently active playing sentence chunks or awaiting stream completion,
+        // do not switch status or re-arm microphone yet!
+        if (streamingPlayerRef.current?.isActive?.()) {
+          return;
+        }
+
         lastTtsEndedTimestampRef.current = Date.now();
         setAssistantSpokenText("");
         waitingForAssistantResponseRef.current = false;
+        clearTurnTimeout();
 
         setTimeout(() => {
-          if (!isCurrentlySpeaking() && isCallActiveRef.current) {
+          if (
+            !isCurrentlySpeaking() &&
+            !streamingPlayerRef.current?.isActive?.() &&
+            isCallActiveRef.current
+          ) {
             isTtsActiveRef.current = false;
             waitingForAssistantResponseRef.current = false;
             promptRef.current = "";
@@ -1006,12 +1037,18 @@ export function useVoiceCallAssistant({
 
             // Cleanly re-arm speech recognition so user speech is immediately captured
             cleanupRecognition();
-            scheduleRestartRecognition(60);
+            scheduleRestartRecognition(100);
           }
         }, ACOUSTIC_ECHO_COOLDOWN_MS);
       }
     });
-  }, [cleanupRecognition, scheduleRestartRecognition, updateCallStatus, addAiSpokenPhrase]);
+  }, [
+    cleanupRecognition,
+    clearTurnTimeout,
+    scheduleRestartRecognition,
+    updateCallStatus,
+    addAiSpokenPhrase,
+  ]);
 
   const dispatchAutoSend = useCallback(() => {
     clearRestartTimer();
@@ -1066,9 +1103,11 @@ export function useVoiceCallAssistant({
       maxChunks: 4,
       ttsOptions: currentTts,
       onStartSpeaking: () => {
+        clearTurnTimeout();
         thinkingAmbientSound.stop();
         updateCallStatus("speaking");
         isTtsActiveRef.current = true;
+        cleanupRecognition(); // Ensure mic is STOPPED during speech playback
         setMicrophoneMuted(false);
       },
       onChunkStarted: (chunk: string) => {
@@ -1077,9 +1116,10 @@ export function useVoiceCallAssistant({
         addAiSpokenPhrase(chunk);
       },
       onFinished: () => {
-        isTtsActiveRef.current = false;
         currentPlayingTtsChunkRef.current = "";
         setAssistantSpokenText("");
+        waitingForAssistantResponseRef.current = false;
+        clearTurnTimeout();
         lastTtsEndedTimestampRef.current = Date.now();
         thinkingAmbientSound.stop();
 
@@ -1089,7 +1129,15 @@ export function useVoiceCallAssistant({
         manualBaselineRef.current = "";
         hasPendingSpeechRef.current = false;
         onTranscriptChangeRef.current("");
-        updateCallStatus("listening");
+
+        setTimeout(() => {
+          if (!isCurrentlySpeaking() && isCallActiveRef.current) {
+            isTtsActiveRef.current = false;
+            updateCallStatus("listening");
+            cleanupRecognition();
+            scheduleRestartRecognition(100);
+          }
+        }, ACOUSTIC_ECHO_COOLDOWN_MS);
       },
     });
 
@@ -1105,6 +1153,24 @@ export function useVoiceCallAssistant({
     // Cleanly abort previous recognition instance so it does not capture AI audio during thinking/speaking
     cleanupRecognition();
 
+    // Safety turn timeout: If assistant fails to stream or backend errors out, return to listening after 15s
+    clearTurnTimeout();
+    turnTimeoutRef.current = setTimeout(() => {
+      if (
+        waitingForAssistantResponseRef.current &&
+        !isCurrentlySpeaking() &&
+        !isTtsActiveRef.current &&
+        !streamingPlayerRef.current?.isActive?.()
+      ) {
+        console.warn("[VoiceCall] Assistant turn response timeout, returning to listening");
+        waitingForAssistantResponseRef.current = false;
+        thinkingAmbientSound.stop();
+        updateCallStatus("listening");
+        cleanupRecognition();
+        scheduleRestartRecognition(100);
+      }
+    }, 15000);
+
     // Clear transcript baselines for the next turn
     manualBaselineRef.current = "";
     lastTranscribedTextRef.current = "";
@@ -1114,7 +1180,9 @@ export function useVoiceCallAssistant({
   }, [
     clearRestartTimer,
     clearTtsCooldownTimer,
+    clearTurnTimeout,
     cleanupRecognition,
+    scheduleRestartRecognition,
     setMicrophoneMuted,
     startFreshRecognition,
     updateCallStatus,
@@ -1194,6 +1262,7 @@ export function useVoiceCallAssistant({
   const interruptSpeaking = useCallback(() => {
     clearFinalDispatchTimer();
     clearRestartTimer();
+    clearTurnTimeout();
 
     // 1. Instantly halt audio synthesis playback
     if (streamingPlayerRef.current) {
@@ -1235,6 +1304,7 @@ export function useVoiceCallAssistant({
   }, [
     clearFinalDispatchTimer,
     clearRestartTimer,
+    clearTurnTimeout,
     startFreshRecognition,
     updateCallStatus,
     setMicrophoneMuted,
@@ -1404,19 +1474,27 @@ export function useVoiceCallAssistant({
       if (callStatusRef.current !== "thinking" && callStatusRef.current !== "speaking") {
         updateCallStatus("thinking");
         thinkingAmbientSound.start();
+        cleanupRecognition();
       }
     } else {
-      // Phase is idle/ready: if not actively speaking, stop ambient sound and return to listening
-      if (!isCurrentlySpeaking() && !isTtsActiveRef.current) {
+      // Phase is idle/ready:
+      // Only transition to listening if we are NOT waiting for an assistant response,
+      // and NOT actively speaking or playing TTS chunks!
+      const isPlayerActive = Boolean(streamingPlayerRef.current?.isActive?.());
+      if (
+        !waitingForAssistantResponseRef.current &&
+        !isCurrentlySpeaking() &&
+        !isTtsActiveRef.current &&
+        !isPlayerActive
+      ) {
         thinkingAmbientSound.stop();
-        waitingForAssistantResponseRef.current = false;
         if (callStatusRef.current === "thinking") {
           updateCallStatus("listening");
-          scheduleRestartRecognition(60);
+          scheduleRestartRecognition(100);
         }
       }
     }
-  }, [isCallActive, phase, updateCallStatus, scheduleRestartRecognition]);
+  }, [isCallActive, phase, updateCallStatus, scheduleRestartRecognition, cleanupRecognition]);
 
   // Monitor streaming assistant tokens in real time & feed into streaming sentence TTS player
   useEffect(() => {
