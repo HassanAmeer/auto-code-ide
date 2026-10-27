@@ -88,7 +88,7 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
       smoothedEnergy +=
         (rawMicEnergy - smoothedEnergy) * (rawMicEnergy > smoothedEnergy ? attack : release);
 
-      // Color Palette Configurations
+      // Color Palette Configurations - stylish GREY for idle/listening instead of bright white
       type ColorConfig = {
         primaryRgb: string;
         accentRgb: string;
@@ -98,15 +98,15 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
 
       const colorMap: Record<VoiceCallStatus, ColorConfig> = {
         idle: {
-          primaryRgb: "235, 242, 255",
-          accentRgb: "215, 225, 245",
-          glowColor: "rgba(255, 255, 255, 0.45)",
+          primaryRgb: "161, 161, 170", // Zinc-400 stylish gray
+          accentRgb: "113, 113, 122", // Zinc-500
+          glowColor: "rgba(161, 161, 170, 0.4)",
           glowBlur: 6,
         },
         listening: {
-          primaryRgb: "235, 242, 255",
-          accentRgb: "215, 225, 245",
-          glowColor: "rgba(255, 255, 255, 0.45)",
+          primaryRgb: "161, 161, 170", // Zinc-400 stylish gray
+          accentRgb: "113, 113, 122", // Zinc-500
+          glowColor: "rgba(161, 161, 170, 0.4)",
           glowBlur: 6,
         },
         "user-speaking": {
@@ -130,6 +130,7 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
       };
 
       const colors = colorMap[callStatus];
+      const isGreyMode = callStatus === "idle" || callStatus === "listening";
 
       // ── 1. Razor-Thin Horizontal Baseline Line with Gradient Fade ──
       const lineGrad = ctx.createLinearGradient(0, cy, width, cy);
@@ -162,39 +163,39 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
         ctx.stroke();
       }
 
-      // ── 3. Flowing Silk Ribbon Strands (Speech & Thinking Dynamics) ──
+      // ── 3. Flowing Silk Ribbon Strands (Speech Crossing & Undulation Dynamics) ──
       const numStrands = 14;
       const tSec = timestamp * 0.001;
 
-      // Dynamics multipliers according to user speech and AI speaking cadence
-      let waveSpeed = 0.0022;
-      let waveAmp = 5.0 * scale;
+      // Dynamics multipliers - calm, normal, realistic speed (NOT hyperactive)
+      let waveSpeed = 0.0015;
+      let waveAmp = 4.5 * scale;
 
-      // AI speech rhythm synthesis (syllable bursts & natural pauses)
+      // AI speech rhythm synthesis (cadence with natural pauses)
       let aiSpeechCadence = 0;
       if (callStatus === "speaking") {
-        const syllable = Math.sin(tSec * 2 * Math.PI * 3.6) * 0.5 + 0.5;
-        const phrase = Math.sin(tSec * 2 * Math.PI * 0.85);
-        const pauseFactor = phrase < -0.7 ? 0.25 : 1.0;
+        const syllable = Math.sin(tSec * 2 * Math.PI * 3.4) * 0.5 + 0.5;
+        const phrase = Math.sin(tSec * 2 * Math.PI * 0.8);
+        const pauseFactor = phrase < -0.65 ? 0.2 : 1.0;
         aiSpeechCadence =
-          Math.pow(syllable, 1.4) * (0.35 + 0.65 * Math.max(0, phrase)) * pauseFactor;
+          Math.pow(syllable, 1.3) * (0.35 + 0.65 * Math.max(0, phrase)) * pauseFactor;
       }
 
       if (callStatus === "user-speaking") {
-        const speechNorm = Math.min(1.0, smoothedEnergy / 160);
-        waveSpeed = 0.0035 + speechNorm * 0.005;
-        waveAmp = (3.5 + speechNorm * 8.5) * scale;
+        const speechNorm = Math.min(1.0, smoothedEnergy / 150);
+        waveSpeed = 0.0018 + speechNorm * 0.001; // Calm, normal speed
+        waveAmp = (3.5 + speechNorm * 6.5) * scale;
       } else if (callStatus === "speaking") {
-        waveSpeed = 0.003 + aiSpeechCadence * 0.0035;
-        waveAmp = (4.0 + aiSpeechCadence * 5.0) * scale;
+        waveSpeed = 0.0018 + aiSpeechCadence * 0.0008; // Normal speech speed
+        waveAmp = (3.8 + aiSpeechCadence * 4.5) * scale;
       } else if (callStatus === "thinking") {
-        waveSpeed = 0.0055;
-        waveAmp = 5.8 * scale;
+        waveSpeed = 0.0035; // Gentle left-to-right drift
+        waveAmp = 5.2 * scale;
       } else {
-        // idle / listening: tranquil breathing
-        const breath = Math.sin(timestamp * 0.0016) * 0.5 + 0.5;
-        waveSpeed = 0.0018;
-        waveAmp = (3.5 + breath * 1.5) * scale;
+        // idle / listening: tranquil slow breathing
+        const breath = Math.sin(timestamp * 0.0012) * 0.5 + 0.5;
+        waveSpeed = 0.0012;
+        waveAmp = (3.2 + breath * 1.2) * scale;
       }
 
       ctx.shadowColor = colors.glowColor;
@@ -216,10 +217,10 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
           let strandEnergyBonus = 0;
           if (callStatus === "user-speaking" && freqData) {
             const binIdx = Math.min(freqData.length - 1, Math.floor(2 + norm_s * 24));
-            strandEnergyBonus = ((freqData[binIdx] || 0) / 255) * 3.2 * scale;
+            strandEnergyBonus = ((freqData[binIdx] || 0) / 255) * 2.8 * scale;
           } else if (callStatus === "speaking") {
             strandEnergyBonus =
-              aiSpeechCadence * (0.8 + Math.sin(s * 1.2 + timestamp * 0.006) * 0.6) * scale;
+              aiSpeechCadence * (0.6 + Math.sin(s * 1.2 + timestamp * 0.004) * 0.5) * scale;
           }
 
           const effectiveStrandAmp = waveAmp + strandEnergyBonus;
@@ -237,23 +238,42 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
             const deflection = (R_core * R_core * C) / Math.max(R_core * R_core, x * x + C * C);
             const y_base = C + deflection;
 
-            // Phase undulation:
-            // Thinking: smooth wave visibly propagating from LEFT to RIGHT across the black hole!
-            // Speaking: outward acoustic resonance pulses
+            // Phase and Undulation Math:
+            // Thinking: waves smoothly travel from LEFT to RIGHT
+            // Speech: alternating strands drift in counter-directions creating realistic crossing / weaving motions
             let phase: number;
+            let waveFactor: number;
+
             if (callStatus === "thinking") {
               // Left-to-right traveling wave: sin(k*u - omega*t)
-              phase = u * Math.PI * 3.2 - timestamp * 0.006 + s * 0.18;
-            } else if (callStatus === "speaking") {
-              phase = timestamp * waveSpeed - abs_u * 2.5 + s * 0.18;
-            } else {
-              phase = timestamp * waveSpeed + s * 0.18;
-            }
+              phase = u * Math.PI * 3.2 - timestamp * 0.0045 + s * 0.18;
+              waveFactor =
+                Math.sin(u * Math.PI * 3.2 + phase) *
+                (effectiveStrandAmp + norm_s * 3.5 * scale) *
+                Math.exp(-Math.pow(abs_u - 0.42, 2) / 0.09);
+            } else if (callStatus === "user-speaking" || callStatus === "speaking") {
+              // Organic crossing wave motion:
+              // Alternating strands have opposite direction drift so they gently cross over each other vertically
+              const strandDir = s % 2 === 0 ? 1 : -1;
+              phase = timestamp * (waveSpeed * 0.9) * strandDir + (s * Math.PI) / 4.5;
 
-            const waveFactor =
-              Math.sin(u * Math.PI * 3.2 + phase) *
-              (effectiveStrandAmp + norm_s * 3.5 * scale) *
-              Math.exp(-Math.pow(abs_u - 0.42, 2) / 0.09);
+              // Dual-harmonic crossing wave
+              const w1 = Math.sin(u * Math.PI * 2.8 + phase);
+              const w2 = Math.cos(u * Math.PI * 4.2 - phase * 0.75 + s * 0.35);
+              const crossHarmonic = w1 * 0.75 + w2 * 0.35;
+
+              waveFactor =
+                crossHarmonic *
+                (effectiveStrandAmp + norm_s * 2.6 * scale) *
+                Math.exp(-Math.pow(abs_u - 0.42, 2) / 0.09);
+            } else {
+              // Idle / listening: calm breathing
+              phase = timestamp * waveSpeed + s * 0.18;
+              waveFactor =
+                Math.sin(u * Math.PI * 3.2 + phase) *
+                (effectiveStrandAmp + norm_s * 3.5 * scale) *
+                Math.exp(-Math.pow(abs_u - 0.42, 2) / 0.09);
+            }
 
             let y_actual = (y_base + waveFactor) * envelope;
 
@@ -278,9 +298,12 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
             }
           }
 
-          ctx.strokeStyle = isCoreStrand
-            ? `rgba(255, 255, 255, ${strandAlpha})`
-            : `rgba(${colors.primaryRgb}, ${strandAlpha})`;
+          // Core strand color: Zinc-300 light grey for idle/listening, white for colored voice states
+          const coreColor = isGreyMode
+            ? `rgba(212, 212, 216, ${strandAlpha})`
+            : `rgba(255, 255, 255, ${strandAlpha})`;
+
+          ctx.strokeStyle = isCoreStrand ? coreColor : `rgba(${colors.primaryRgb}, ${strandAlpha})`;
           ctx.lineWidth = lw;
           ctx.stroke();
         }
@@ -296,7 +319,7 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
         let px = cx + p.x;
         if (callStatus === "thinking") {
           // Left-to-right particle drift
-          px = cx + (((p.x + 180 + timestamp * 0.05) % 360) - 180);
+          px = cx + (((p.x + 180 + timestamp * 0.04) % 360) - 180);
         }
 
         ctx.beginPath();
