@@ -56,7 +56,7 @@ export function SidebarBotSection() {
       e?.stopPropagation();
       const newSession = createNewCallSession();
       setActiveSessionId(newSession.id);
-      void navigate({ to: "/call-assistant" });
+      void navigate({ to: "/bot" });
     },
     [navigate, setActiveSessionId],
   );
@@ -64,7 +64,7 @@ export function SidebarBotSection() {
   const handleOpenSession = useCallback(
     (sessionId: string) => {
       setActiveSessionId(sessionId);
-      void navigate({ to: "/call-assistant" });
+      void navigate({ to: "/bot" });
     },
     [navigate, setActiveSessionId],
   );
@@ -80,7 +80,8 @@ export function SidebarBotSection() {
     }
   }, []);
 
-  const isCallAssistantRoute = location.pathname.startsWith("/call-assistant");
+  const isCallAssistantRoute =
+    location.pathname.startsWith("/bot") || location.pathname.startsWith("/call-assistant");
 
   return (
     <div className="border-b border-sidebar-border/30 dark:border-zinc-700/30">
@@ -129,7 +130,7 @@ export function SidebarBotSection() {
                 <span>New Bot Chat</span>
               </MenuItem>
               <MenuItem
-                onClick={() => void navigate({ to: "/call-assistant" })}
+                onClick={() => void navigate({ to: "/bot" })}
                 className="flex items-center gap-2 cursor-pointer"
               >
                 <Sparkles className="size-3.5 text-amber-400" />

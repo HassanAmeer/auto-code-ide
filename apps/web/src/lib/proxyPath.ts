@@ -22,7 +22,7 @@ export function getProxyPathPrefix(): string {
 
   // 2. Generic subpath detection: if path ends with or contains a known app route
   const routeMatch = pathname.match(
-    /^(.*?)(?:\/(?:login|pair|welcome|settings|usage|connect|ai-terminal|call-assistant|projects))(?:\/|$)/i,
+    /^(.*?)(?:\/(?:login|pair|welcome|settings|usage|connect|ai-terminal|call-assistant|bot|projects))(?:\/|$)/i,
   );
   if (routeMatch && routeMatch[1]) {
     return routeMatch[1].replace(/\/$/, "");

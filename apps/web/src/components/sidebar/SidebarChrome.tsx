@@ -389,12 +389,12 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
               type="button"
               onClick={() => {
                 closeMobileSidebar();
-                void navigate({ to: "/call-assistant" });
+                void navigate({ to: "/bot" });
                 setIsExpanded(false);
               }}
               className={cn(
                 "flex items-center gap-2 rounded-lg p-1.5 text-xs font-medium transition-all text-left cursor-pointer",
-                location.pathname === "/call-assistant"
+                location.pathname === "/bot" || location.pathname === "/call-assistant"
                   ? "bg-indigo-500/15 text-indigo-300 border border-indigo-500/30"
                   : "hover:bg-sidebar-row-hover text-sidebar-foreground border border-transparent",
               )}

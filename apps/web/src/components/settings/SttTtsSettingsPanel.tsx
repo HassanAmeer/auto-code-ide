@@ -10,6 +10,7 @@ import {
   type TtsSettings,
   type TtsVoiceId,
   TTS_ACCENTS,
+  TTS_LANG_LABELS,
   loadTtsSettings,
   saveTtsSettings,
   getActiveTtsPreset,
@@ -78,14 +79,53 @@ export function SttTtsSettingsPanel() {
   }, []);
 
   // --- TTS Handlers ---
+  const updateTtsLanguage = (lang: TtsLanguageMode) => {
+    let newVoiceURI = tts.voiceURI;
+    if (lang === "auto-male") {
+      newVoiceURI = "roman-urdu-male";
+      setTestText(
+        "Assalam o alaikum! Yeh auto-detected text to speech test hai (Male). AutoCode will read response automatically in Male voice.",
+      );
+    } else if (lang === "auto-female") {
+      newVoiceURI = "roman-urdu-female";
+      setTestText(
+        "Assalam o alaikum! Yeh auto-detected text to speech test hai (Female). AutoCode will read response automatically in Female voice.",
+      );
+    } else if (lang === "natural-urdu") {
+      newVoiceURI = tts.voiceURI?.includes("female") ? "natural-urdu-female" : "natural-urdu-male";
+      setTestText("السلام علیکم! یہ نیچرل اردو کا ٹیسٹ ہے۔ میں آپ کی کیا مدد کر سکتا ہوں؟");
+    } else if (lang === "english") {
+      newVoiceURI = tts.voiceURI?.includes("female") ? "english-female" : "english-male";
+      setTestText("Hello! This is an English text-to-speech test. How can I assist you today?");
+    } else if (lang === "roman-urdu") {
+      newVoiceURI = tts.voiceURI?.includes("female") ? "roman-urdu-female" : "roman-urdu-male";
+      setTestText(
+        "Assalam o alaikum! Yeh Roman Urdu text to speech ka test hai. Main aap ki kya madad kar sakta hoon?",
+      );
+    }
+
+    const updated: TtsSettings = {
+      ...tts,
+      language: lang,
+      voiceURI: newVoiceURI,
+    };
+    setTts(updated);
+    saveTtsSettings(updated);
+  };
+
   const updateTtsPreset = (presetId: TtsVoiceId) => {
     const chosen = TTS_ACCENTS.find((a) => a.id === presetId) || TTS_ACCENTS[0];
+    let newLanguage: TtsLanguageMode = chosen.category;
+    if (tts.language === "auto-male" && chosen.gender === "male") {
+      newLanguage = "auto-male";
+    } else if (tts.language === "auto-female" && chosen.gender === "female") {
+      newLanguage = "auto-female";
+    }
+
     const updated: TtsSettings = {
-      language: chosen.category,
+      ...tts,
+      language: newLanguage,
       voiceURI: chosen.id,
-      rate: tts.rate,
-      pitch: tts.pitch,
-      volume: tts.volume,
     };
     setTts(updated);
     saveTtsSettings(updated);
@@ -372,7 +412,48 @@ export function SttTtsSettingsPanel() {
         >
           <SettingsRow
             title="Voice accent & dialect"
-            description="Select from 6 curated voices across English, Roman Urdu, and Natural Urdu."
+            description="Select which language accent is used, or let auto-detect choose the language based on response text."
+            control={
+              <Select
+                value={tts.language}
+                onValueChange={(val) => {
+                  if (val) updateTtsLanguage(val as TtsLanguageMode);
+                }}
+              >
+                <SelectTrigger size="sm" className="w-full sm:w-64" aria-label="Voice accent">
+                  <SelectValue>
+                    {TTS_LANG_LABELS[tts.language] || "Auto Detect (Male Voice)"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectPopup
+                  align="end"
+                  alignItemWithTrigger={false}
+                  className="max-h-72 overflow-y-auto"
+                >
+                  <SelectItem hideIndicator value="auto-male">
+                    Auto Detect (Male Voice)
+                  </SelectItem>
+                  <SelectItem hideIndicator value="auto-female">
+                    Auto Detect (Female Voice)
+                  </SelectItem>
+                  <div className="my-1 border-t border-border/40" />
+                  <SelectItem hideIndicator value="roman-urdu">
+                    Roman Urdu
+                  </SelectItem>
+                  <SelectItem hideIndicator value="natural-urdu">
+                    Natural Urdu (اردو)
+                  </SelectItem>
+                  <SelectItem hideIndicator value="english">
+                    English
+                  </SelectItem>
+                </SelectPopup>
+              </Select>
+            }
+          />
+
+          <SettingsRow
+            title="Synthesizer voice"
+            description="Choose from 6 curated voices across English, Roman Urdu, and Natural Urdu (Male & Female)."
             control={
               <Select
                 value={activePreset.id}
@@ -380,7 +461,7 @@ export function SttTtsSettingsPanel() {
                   if (val) updateTtsPreset(val as TtsVoiceId);
                 }}
               >
-                <SelectTrigger size="sm" className="w-full sm:w-64" aria-label="Voice accent">
+                <SelectTrigger size="sm" className="w-full sm:w-64" aria-label="Synthesizer voice">
                   <SelectValue>{activePreset.name}</SelectValue>
                 </SelectTrigger>
                 <SelectPopup
@@ -484,7 +565,11 @@ export function SttTtsSettingsPanel() {
                   onChange={(e: ChangeEvent<HTMLInputElement>) => setTestText(e.target.value)}
                   placeholder="Type text to speak..."
                   className="h-8 text-xs flex-1"
-                  dir={activePreset.category === "natural-urdu" ? "rtl" : "ltr"}
+                  dir={
+                    activePreset.category === "natural-urdu" || tts.language === "natural-urdu"
+                      ? "rtl"
+                      : "ltr"
+                  }
                 />
                 <Button
                   type="button"

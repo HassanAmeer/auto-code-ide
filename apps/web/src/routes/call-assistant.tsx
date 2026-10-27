@@ -1,6 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { SuperCallAssistantView } from "../components/chat/voiceCall/SuperCallAssistantView";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/call-assistant")({
-  component: SuperCallAssistantView,
+  beforeLoad: () => {
+    throw redirect({ to: "/bot" });
+  },
 });

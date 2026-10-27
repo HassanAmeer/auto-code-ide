@@ -4,6 +4,7 @@ import {
   sanitizeTextForSpeech,
   TTS_ACCENTS,
   getActiveTtsPreset,
+  detectTextLanguage,
   isMaleVoice,
   isFemaleVoice,
 } from "./tts";

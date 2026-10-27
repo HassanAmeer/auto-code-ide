@@ -41,6 +41,14 @@ export interface TtsAccentPreset {
   description: string;
 }
 
+export const TTS_LANG_LABELS: Record<string, string> = {
+  "auto-male": "Auto Detect (Male Voice)",
+  "auto-female": "Auto Detect (Female Voice)",
+  "roman-urdu": "Roman Urdu",
+  "natural-urdu": "Natural Urdu (اردو)",
+  english: "English",
+};
+
 /**
  * Exactly 6 curated voice presets across 3 languages (English, Roman Urdu, Natural Urdu)
  * with dedicated Male and Female options for each.
@@ -54,7 +62,7 @@ export const TTS_ACCENTS: TtsAccentPreset[] = [
     category: "english",
     gender: "male",
     preferredLangs: ["en-US", "en-GB", "en-CA", "en-AU", "en"],
-    pitch: 0.88,
+    pitch: 0.9,
     rate: 1.0,
     sampleText: "Hello! This is a test of the English male voice. How can I assist you today?",
     description: "Clear and natural English male voice.",
@@ -66,7 +74,7 @@ export const TTS_ACCENTS: TtsAccentPreset[] = [
     category: "english",
     gender: "female",
     preferredLangs: ["en-US", "en-GB", "en-CA", "en-AU", "en"],
-    pitch: 1.12,
+    pitch: 1.1,
     rate: 1.0,
     sampleText: "Hello! This is a test of the English female voice. How can I assist you today?",
     description: "Fluent and professional English female voice.",
@@ -79,12 +87,12 @@ export const TTS_ACCENTS: TtsAccentPreset[] = [
     nameUrdu: "رومن اردو (مردانہ آواز)",
     category: "roman-urdu",
     gender: "male",
-    preferredLangs: ["hi-IN", "ur-PK", "en-IN", "en-GB", "en-US"],
-    pitch: 0.82,
-    rate: 0.96,
+    preferredLangs: ["en-IN", "ur-PK", "ur", "hi-IN", "en-GB", "en-US"],
+    pitch: 0.88,
+    rate: 0.98,
     sampleText:
       "Assalam o alaikum! Yeh Roman Urdu male voice ka test hai. Main aap ki kya madad kar sakta hoon?",
-    description: "Natural Pakistani accent for Roman Urdu chat (Male).",
+    description: "Natural Pakistani / Subcontinental accent for Roman Urdu (Male).",
   },
   {
     id: "roman-urdu-female",
@@ -92,9 +100,9 @@ export const TTS_ACCENTS: TtsAccentPreset[] = [
     nameUrdu: "رومن اردو (زنانہ آواز)",
     category: "roman-urdu",
     gender: "female",
-    preferredLangs: ["hi-IN", "ur-PK", "en-IN", "en-GB", "en-US"],
-    pitch: 1.15,
-    rate: 1.0,
+    preferredLangs: ["en-IN", "ur-PK", "ur", "hi-IN", "en-GB", "en-US"],
+    pitch: 1.05,
+    rate: 0.98,
     sampleText:
       "Assalam o alaikum! Yeh Roman Urdu female voice ka test hai. Main aap ki kya madad kar sakti hoon?",
     description: "Clear and expressive Roman Urdu conversational voice (Female).",
@@ -108,7 +116,7 @@ export const TTS_ACCENTS: TtsAccentPreset[] = [
     category: "natural-urdu",
     gender: "male",
     preferredLangs: ["ur-PK", "ur", "hi-IN", "hi"],
-    pitch: 0.8,
+    pitch: 0.82,
     rate: 0.94,
     sampleText: "السلام علیکم! یہ نیچرل اردو مردانہ آواز کا ٹیسٹ ہے۔ میں آپ کی کیا مدد کر سکتا ہوں؟",
     description: "Authentic Pakistani Urdu pronunciation in resonant male tone.",
@@ -120,7 +128,7 @@ export const TTS_ACCENTS: TtsAccentPreset[] = [
     category: "natural-urdu",
     gender: "female",
     preferredLangs: ["ur-PK", "ur", "hi-IN", "hi"],
-    pitch: 1.16,
+    pitch: 1.12,
     rate: 0.98,
     sampleText: "السلام علیکم! یہ نیچرل اردو زنانہ آواز کا ٹیسٹ ہے۔ میں آپ کی کیا مدد کر سکتی ہوں؟",
     description: "Polished and fluent native Urdu pronunciation (Female).",
@@ -258,6 +266,8 @@ export function isMaleVoice(v: SpeechSynthesisVoice): boolean {
     "aria",
     "ayumi",
     "heera",
+    "uzma",
+    "neerja",
   ];
   if (femaleKeywords.some((k) => text.includes(k))) {
     return false;
@@ -281,6 +291,9 @@ export function isMaleVoice(v: SpeechSynthesisVoice): boolean {
     "thomas",
     "oliver",
     "asif",
+    "asad",
+    "madhur",
+    "prabhat",
     "madhav",
     "salman",
     "tariq",
@@ -332,6 +345,8 @@ export function isFemaleVoice(v: SpeechSynthesisVoice): boolean {
     "aria",
     "ayumi",
     "heera",
+    "uzma",
+    "neerja",
   ];
   return femaleKeywords.some((k) => text.includes(k));
 }
@@ -597,7 +612,30 @@ export function speakText(text: string, options?: Partial<TtsSettings>, onEnd?: 
 
   const utterance = new SpeechSynthesisUtterance(clean);
   const voices = getAvailableVoices();
-  const preset = getActiveTtsPreset(settings);
+
+  // Determine active preset (with dynamic auto-detect if in auto-male or auto-female mode)
+  let preset: TtsAccentPreset;
+  if (settings.language === "auto-male") {
+    const detected = detectTextLanguage(clean);
+    if (detected === "natural-urdu") {
+      preset = TTS_ACCENTS.find((a) => a.id === "natural-urdu-male") || TTS_ACCENTS[4];
+    } else if (detected === "roman-urdu") {
+      preset = TTS_ACCENTS.find((a) => a.id === "roman-urdu-male") || TTS_ACCENTS[2];
+    } else {
+      preset = TTS_ACCENTS.find((a) => a.id === "english-male") || TTS_ACCENTS[0];
+    }
+  } else if (settings.language === "auto-female") {
+    const detected = detectTextLanguage(clean);
+    if (detected === "natural-urdu") {
+      preset = TTS_ACCENTS.find((a) => a.id === "natural-urdu-female") || TTS_ACCENTS[5];
+    } else if (detected === "roman-urdu") {
+      preset = TTS_ACCENTS.find((a) => a.id === "roman-urdu-female") || TTS_ACCENTS[3];
+    } else {
+      preset = TTS_ACCENTS.find((a) => a.id === "english-female") || TTS_ACCENTS[1];
+    }
+  } else {
+    preset = getActiveTtsPreset(settings);
+  }
 
   // Match the best browser voice based on preferred languages and target gender
   let matchedVoice: SpeechSynthesisVoice | undefined;
@@ -696,7 +734,11 @@ export function speakText(text: string, options?: Partial<TtsSettings>, onEnd?: 
   if (preset.category === "natural-urdu") {
     utterance.lang = matchedVoice?.lang?.startsWith("ur") ? matchedVoice.lang : "ur-PK";
   } else if (preset.category === "roman-urdu") {
-    utterance.lang = matchedVoice?.lang || "hi-IN";
+    utterance.lang = matchedVoice?.lang?.startsWith("en")
+      ? matchedVoice.lang
+      : matchedVoice?.lang?.startsWith("ur")
+        ? matchedVoice.lang
+        : "en-IN";
   } else {
     utterance.lang = matchedVoice?.lang || "en-US";
   }

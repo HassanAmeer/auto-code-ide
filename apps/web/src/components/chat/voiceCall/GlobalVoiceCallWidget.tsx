@@ -18,7 +18,8 @@ export const GlobalVoiceCallWidget = memo(function GlobalVoiceCallWidget() {
   const [isProcessing, setIsProcessing] = useState(false);
   const spokenTextRef = useRef("");
 
-  const isCallAssistantPage = location.pathname.startsWith("/call-assistant");
+  const isCallAssistantPage =
+    location.pathname.startsWith("/bot") || location.pathname.startsWith("/call-assistant");
 
   const handleTranscriptChange = useCallback((text: string) => {
     spokenTextRef.current = text;
