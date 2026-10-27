@@ -207,46 +207,6 @@ export function SuperCallAssistantView() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Divider & Wave measurement refs for exact 2px clearance before model dropdown
-  const dividerRowRef = useRef<HTMLDivElement>(null);
-  const modelPickerBadgeRef = useRef<HTMLDivElement>(null);
-  const rightControlsBadgeRef = useRef<HTMLDivElement>(null);
-  const [waveAvailableHalfWidth, setWaveAvailableHalfWidth] = useState<number | undefined>(
-    undefined,
-  );
-
-  useEffect(() => {
-    const updateWaveBounds = () => {
-      if (!dividerRowRef.current || !modelPickerBadgeRef.current) return;
-      const rowRect = dividerRowRef.current.getBoundingClientRect();
-      const modelRect = modelPickerBadgeRef.current.getBoundingClientRect();
-      const centerX = rowRect.left + rowRect.width / 2;
-
-      // Distance from center to right edge of model dropdown badge
-      // Subtract 2px for the exact 2px gap requested by the user:
-      const distToModel = centerX - modelRect.right - 2;
-
-      let distToRight = distToModel;
-      if (rightControlsBadgeRef.current) {
-        const rightRect = rightControlsBadgeRef.current.getBoundingClientRect();
-        distToRight = rightRect.left - centerX - 2;
-      }
-
-      const halfW = Math.max(30, Math.floor(Math.min(distToModel, distToRight)));
-      setWaveAvailableHalfWidth(halfW);
-    };
-
-    updateWaveBounds();
-    window.addEventListener("resize", updateWaveBounds);
-    const observer = new ResizeObserver(updateWaveBounds);
-    if (dividerRowRef.current) observer.observe(dividerRowRef.current);
-    if (modelPickerBadgeRef.current) observer.observe(modelPickerBadgeRef.current);
-    return () => {
-      window.removeEventListener("resize", updateWaveBounds);
-      observer.disconnect();
-    };
-  }, [effectiveModel]);
-
   // Auto scroll to latest message
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -906,18 +866,12 @@ export function SuperCallAssistantView() {
           </div>
 
           {/* 2. Sleek Horizontal Divider with Left-Aligned Model Badge & Centered Wave Call Button */}
-          <div
-            ref={dividerRowRef}
-            className="relative flex items-center justify-between my-2 min-h-[50px]"
-          >
+          <div className="relative flex items-center justify-between my-2 min-h-[56px]">
             {/* The horizontal line spanning across */}
             <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[1px] bg-zinc-800" />
 
             {/* Left: AI Model Dropdown Badge (Half above, half below line) */}
-            <div
-              ref={modelPickerBadgeRef}
-              className="relative z-10 flex items-center bg-background pr-2"
-            >
+            <div className="relative z-10 flex items-center bg-background pr-2">
               <ProviderModelPicker
                 activeInstanceId={effectiveInstanceId}
                 model={effectiveModel}
@@ -947,22 +901,19 @@ export function SuperCallAssistantView() {
                   }
                 }}
                 className={cn(
-                  "relative z-10 flex items-center justify-center size-8 sm:size-9 rounded-full transition-all duration-300 cursor-pointer select-none",
+                  "relative z-10 flex items-center justify-center size-[38px] sm:size-[40px] rounded-full transition-all duration-300 cursor-pointer select-none",
                   "bg-transparent border-0 shadow-none outline-none",
                 )}
               >
-                {/* When Call Active: Grok Geometric Soundwave with exact 2px clearance before model dropdown */}
+                {/* When Call Active: Grok Geometric Soundwave
+                    When Call Inactive/Ended: Original circular wave in grey color */}
                 {isCallActive ? (
-                  <GrokGeometricVoiceWaves
-                    callStatus={callStatus}
-                    analyserNode={analyserNode}
-                    maxHalfWidth={waveAvailableHalfWidth}
-                  />
+                  <GrokGeometricVoiceWaves callStatus={callStatus} analyserNode={analyserNode} />
                 ) : (
                   <CircularVoiceWaves callStatus="idle" analyserNode={null} />
                 )}
 
-                {/* Centered Phone Icon: 30% smaller, transparent background */}
+                {/* Centered Phone Icon: 20% smaller, transparent background */}
                 <button
                   type="button"
                   onClick={(e) => {
@@ -978,7 +929,7 @@ export function SuperCallAssistantView() {
                     }
                   }}
                   className={cn(
-                    "relative z-20 flex size-5 items-center justify-center rounded-full transition-all duration-200 cursor-pointer active:scale-90 bg-transparent border-0 shadow-none outline-none focus:outline-none",
+                    "relative z-20 flex size-5 sm:size-6 items-center justify-center rounded-full transition-all duration-200 cursor-pointer active:scale-90 bg-transparent border-0 shadow-none outline-none focus:outline-none",
                     isCallActive
                       ? "text-rose-400/90 hover:text-rose-300"
                       : "text-zinc-300 hover:text-white",
@@ -990,19 +941,16 @@ export function SuperCallAssistantView() {
                   }
                 >
                   {isCallActive ? (
-                    <PhoneOff className="size-3.5" strokeWidth={2.4} />
+                    <PhoneOff className="size-3.5 sm:size-4" strokeWidth={2.4} />
                   ) : (
-                    <PhoneCall className="size-3.5" strokeWidth={2.2} />
+                    <PhoneCall className="size-3.5 sm:size-4" strokeWidth={2.2} />
                   )}
                 </button>
               </div>
             </div>
 
             {/* Right: Mic Mute / Unmute Button (Placed neatly on right, leaves center soundwave completely clear) */}
-            <div
-              ref={rightControlsBadgeRef}
-              className="relative z-10 flex items-center justify-end bg-background pl-2 min-w-[28px]"
-            >
+            <div className="relative z-10 flex items-center justify-end bg-background pl-2 min-w-[28px]">
               {isCallActive ? (
                 <button
                   type="button"

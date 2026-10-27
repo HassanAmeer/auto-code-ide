@@ -6,7 +6,6 @@ export interface GrokGeometricVoiceWavesProps {
   callStatus: VoiceCallStatus;
   analyserNode: AnalyserNode | null;
   className?: string;
-  maxHalfWidth?: number;
 }
 
 // ── Stardust Particle Definition ──
@@ -19,11 +18,11 @@ interface StardustParticle {
   phase: number;
 }
 
-// Pre-generate 24 ambient stardust glitter particles within compact bounds
-const PARTICLES: StardustParticle[] = Array.from({ length: 24 }, (_, i) => ({
-  x: ((i * 19.3) % 240) - 120,
-  y: (((i * 29.7) % 40) - 20) * 0.8,
-  size: (i % 3 === 0 ? 1.2 : 0.7) + (i % 2) * 0.3,
+// Pre-generate 22 ambient stardust glitter particles within 20% scaled-down bounds
+const PARTICLES: StardustParticle[] = Array.from({ length: 22 }, (_, i) => ({
+  x: ((i * 19.3) % 190) - 95,
+  y: (((i * 29.7) % 32) - 16) * 0.8,
+  size: (i % 3 === 0 ? 1.1 : 0.6) + (i % 2) * 0.3,
   baseAlpha: 0.2 + ((i * 7) % 10) * 0.04,
   speed: 0.0015 + (i % 5) * 0.0006,
   phase: (i * Math.PI) / 6,
@@ -33,7 +32,6 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
   callStatus,
   analyserNode,
   className,
-  maxHalfWidth,
 }: GrokGeometricVoiceWavesProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -56,7 +54,7 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
       // Handle Resize / DPR
       const rect = canvas.getBoundingClientRect();
       const dpr = Math.min(2, window.devicePixelRatio || 1);
-      const width = rect.width || (maxHalfWidth ? maxHalfWidth * 2 : 260);
+      const width = rect.width || 250;
       const height = rect.height || 50;
 
       if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) {
@@ -70,11 +68,8 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
 
       const cx = width / 2;
       const cy = height / 2;
-      // Exact half-width: if maxHalfWidth is provided, it terminates exactly 2px before dropdown
-      const W = maxHalfWidth
-        ? Math.min(width * 0.495, maxHalfWidth)
-        : Math.min(width * 0.46, 120.0);
-      const R_core = 16.0; // 30% smaller black hole core matching the call button
+      const W = Math.min(width * 0.46, 114.0); // 20% smaller half-width: leaves 60-80px clearance before model badge & mic button
+      const R_core = 18.0; // 20% smaller core radius matching 38px call button
 
       // Audio analysis with responsive speech attack & smooth release
       let rawMicEnergy = 0;
@@ -207,20 +202,20 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
       for (const side of [-1, 1]) {
         for (let s = 0; s < numStrands; s++) {
           const norm_s = s / (numStrands - 1); // 0 to 1
-          const C = 0.6 + norm_s * 4.5; // Compact 30% smaller vertical dispersion
+          const C = 0.6 + norm_s * 5.8; // 20% smaller ribbon vertical dispersion
 
           // Alpha distribution: bright primary core ribbons, delicate ethereal outer filaments
           const distFromCore = Math.abs(norm_s - 0.38);
           const strandAlpha = Math.max(0.12, 0.95 - Math.pow(distFromCore, 1.2) * 1.05);
           const isCoreStrand = s === 4 || s === 5;
-          const lw = isCoreStrand ? 1.6 : 0.75;
+          const lw = isCoreStrand ? 1.5 : 0.75;
 
           // Speech frequency reactivity per strand:
           let strandAmpBonus = 0;
           if (callStatus === "user-speaking" && freqData) {
             const binIdx = Math.min(freqData.length - 1, Math.floor(2 + norm_s * 22));
             const binVal = (freqData[binIdx] || 0) / 255;
-            strandAmpBonus = binVal * 3.0;
+            strandAmpBonus = binVal * 3.2;
           } else if (callStatus === "speaking") {
             strandAmpBonus = aiSpeechPulse * (0.6 + Math.sin(s * 1.1 + timestamp * 0.006) * 0.5);
           }
@@ -252,16 +247,16 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
 
             const waveFactor =
               Math.sin(u * Math.PI * 3.2 + s * 0.22 + phase) *
-              (strandEffectiveAmp + norm_s * 1.4) *
+              (strandEffectiveAmp + norm_s * 1.3) *
               Math.exp(-Math.pow(abs_u - 0.42, 2) / 0.08);
 
             let y_actual = (y_base + waveFactor) * envelope;
 
-            // Strict circular clearance at center event horizon around 30% smaller button
-            if (abs_u * W < R_core + 1.4) {
+            // Strict circular clearance at center event horizon
+            if (abs_u * W < R_core + 2.0) {
               const x_dist = abs_u * W;
               const void_y =
-                Math.sqrt(Math.max(0, (R_core + 1.4) * (R_core + 1.4) - x_dist * x_dist)) +
+                Math.sqrt(Math.max(0, (R_core + 2.0) * (R_core + 2.0) - x_dist * x_dist)) +
                 0.6 +
                 s * 0.45;
               y_actual = Math.max(void_y, y_actual);
@@ -308,16 +303,14 @@ export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
       running = false;
       cancelAnimationFrame(animId);
     };
-  }, [callStatus, analyserNode, maxHalfWidth]);
+  }, [callStatus, analyserNode]);
 
   return (
     <div
       aria-hidden="true"
-      style={maxHalfWidth ? { width: `${maxHalfWidth * 2}px` } : undefined}
       className={cn(
         "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2",
-        "h-[46px] sm:h-[50px] overflow-visible z-0 select-none",
-        !maxHalfWidth && "w-[220px] sm:w-[260px] md:w-[280px]",
+        "w-[190px] sm:w-[220px] md:w-[250px] h-[44px] sm:h-[50px] overflow-visible z-0 select-none",
         className,
       )}
     >
