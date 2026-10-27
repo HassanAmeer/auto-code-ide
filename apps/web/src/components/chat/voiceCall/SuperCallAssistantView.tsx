@@ -2398,20 +2398,8 @@ export function SuperCallAssistantView() {
       <div className="flex-1 flex flex-col h-full min-w-0 relative">
         {/* Top Header */}
         <header className="h-14 border-b border-border/50 px-3 sm:px-6 flex items-center justify-between shrink-0 bg-background/80 backdrop-blur-md gap-2">
-          {/* Left: Assistant Title & Active Project */}
-          <div className="flex items-center gap-2 min-w-0 flex-1">
-            <div className="size-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
-              <Bot className="size-4" />
-            </div>
-            <div className="min-w-0">
-              <h1 className="text-xs font-semibold text-foreground truncate">
-                Super Call Assistant
-              </h1>
-              <span className="text-[10px] text-muted-foreground truncate block">
-                {activeProjectName}
-              </span>
-            </div>
-          </div>
+          {/* Left: Empty (Nothing shown on left) */}
+          <div className="flex-1" />
 
           {/* Right: Copy Transcript, Notes & Command Center Sheet Button */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
