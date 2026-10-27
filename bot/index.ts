@@ -77,6 +77,27 @@ export async function processSuperBotTurn(options: BotTurnOptions): Promise<BotT
     };
   }
 
+  // 2.1 Capabilities Inquiry (e.g. "aap kya kar sakte hain", "اپ کیا کر سکتے ہیں")
+  if (analysis.intent === "CAPABILITIES_INQUIRY") {
+    const text =
+      lang === "urdu"
+        ? "Main aapka Voice Call Assistant aur Workspace Lead hoon! Main aawaz ke zariye yeh sab kar sakta hoon:\n\n• **Git & Workspace Audit:** Status check karna, modified files aur recent commits dekhna.\n• **Auto-Healer:** Code syntax, missing imports aur build errors ko khud theek karna.\n• **Wishlist & Tasks:** Feature ideas aur improvement notes save karna.\n• **Autonomous Supervision:** Background watchdog chala kar project monitor karna.\n\nBatayein, abhi kis project ya kaam par madad chahiye?"
+        : "I am your Voice Call Assistant and Workspace Lead! Here is what I can do via voice:\n\n• **Git & Workspace Audit:** Check status, inspect modified files and commits.\n• **Auto-Healer:** Diagnose and repair code errors and failing builds.\n• **Wishlist & Tasks:** Save feature requests and track improvements.\n• **Autonomous Supervision:** Monitor your project in the background.\n\nWhat would you like to work on right now?";
+
+    const spoken =
+      lang === "urdu"
+        ? "Main aapka voice call assistant hoon! Main aapke projects inspect kar sakta hoon, git status aur commits check kar sakta hoon, auto-healer se errors theek kar sakta hoon, aur wishlist manage kar sakta hoon. Batayein abhi kya karna hai?"
+        : "I am your voice assistant! I can inspect projects, check git status, auto-heal build errors, and manage your wishlist. What would you like to work on?";
+
+    return {
+      reply: text,
+      spokenReply: spoken,
+      intent: analysis.intent,
+      actionTaken: "capabilities_ack",
+      systemPrompt: buildSmartBotSystemPrompt({ intentAnalysis: analysis, language: lang }),
+    };
+  }
+
   // 3. Wishlist / Feature Backlog Addition
   if (analysis.intent === "WISHLIST_ADD") {
     // Extract clean feature title from user sentence

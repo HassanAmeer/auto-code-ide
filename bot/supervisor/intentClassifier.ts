@@ -1,6 +1,7 @@
 export type UserIntent =
   | "GREETING_OR_CHITCHAT"
   | "FAREWELL_OR_EXIT"
+  | "CAPABILITIES_INQUIRY"
   | "STATUS_INQUIRY"
   | "BRAINSTORM_OR_CONSULT"
   | "CONFIRM_AND_BUILD"
@@ -48,9 +49,21 @@ export function classifyIntent(userText: string): IntentAnalysis {
       t,
     ) ||
       /(السلام\s*علیکم|سلام|کیا\s*حال\s*ہے|کیسے\s*ہو|صبح\s*بخیر|شام\s*بخیر)/.test(t)) &&
-    !/(project|status|code|error|feature|banao|fix|kaam)/i.test(t)
+    !/(project|status|code|error|feature|banao|fix|kaam|kar sakte)/i.test(t)
   ) {
     return { intent: "GREETING_OR_CHITCHAT", confidence: 0.9, isUrdu };
+  }
+
+  // 2.1 Capabilities / What Can You Do (e.g. "aap kya kar sakte hain", "اپ کیا کر سکتے ہیں", "what can you do")
+  if (
+    /(کیا\s*(?:کچھ\s*)?کر\s*سکتے\s*(?:ہو|ہیں)|کیا\s*کام\s*کرتے\s*(?:ہو|ہیں)|کون\s*ہو|کیا\s*صلاحیتیں\s*ہیں|کیا\s*مدد\s*کر\s*سکتے)/.test(
+      t,
+    ) ||
+    /\b(kya\s*(?:kuch\s*)?kar\s*sakt(?:ey|e|i)\s*(?:ho|hain|hai)|kaam\s*kya\s*hai|tum\s*kya\s*ho|tum\s*kaun\s*ho|aap\s*kaun\s*hain|kya\s*features?\s*hain|kya\s*madad\s*kar\s*sakt(?:ey|e)|kya\s*help\s*kar\s*sakt(?:ey|e)|kya\s*kar\s*leta\s*hai|what\s+can\s+you\s+do|what\s+are\s+your\s+capabilities|how\s+can\s+you\s+help|who\s+are\s+you|what\s+do\s+you\s+do)\b/i.test(
+      t,
+    )
+  ) {
+    return { intent: "CAPABILITIES_INQUIRY", confidence: 0.95, isUrdu };
   }
 
   // 3. Away / Autonomous Supervision (e.g. "main bahar ja raha hoon", "khud dekhte rehna", "piche se check karo")

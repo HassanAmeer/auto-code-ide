@@ -1798,10 +1798,21 @@ export function SuperCallAssistantView() {
             <div className="flex flex-col items-start gap-1.5 py-2.5 w-full animate-in fade-in duration-150">
               <div className="flex items-center gap-2 text-xs text-zinc-300 font-mono bg-zinc-900/60 px-3 py-1.5 rounded-lg border border-purple-500/30">
                 <Loader2 className="size-3.5 text-purple-400 animate-spin shrink-0" />
-                <span className="text-zinc-500">Tool Calling:</span>
-                <span className="text-purple-300 font-medium">
-                  {agentStatus || "Analyzing workspace & executing tools..."}
-                </span>
+                {agentStatus?.startsWith("Tool Calling:") ? (
+                  <>
+                    <span className="text-zinc-500">Tool Calling:</span>
+                    <span className="text-purple-300 font-medium">
+                      {agentStatus.replace(/^Tool Calling:\s*/, "")}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-zinc-500">Thinking:</span>
+                    <span className="text-purple-300 font-medium">
+                      {agentStatus || "Processing response..."}
+                    </span>
+                  </>
+                )}
               </div>
             </div>
           )}
