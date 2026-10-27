@@ -96,8 +96,29 @@ export class StreamingTtsPlayer {
     this.ttsOptions = { ...this.ttsOptions, ...options };
   }
 
+  getIsPlaying(): boolean {
+    return !this.stopped && this.isPlaying;
+  }
+
+  getQueueLength(): number {
+    return this.queue.length;
+  }
+
+  hasEnqueuedChunks(): boolean {
+    return this.enqueuedChunksCount > 0;
+  }
+
+  isStopped(): boolean {
+    return this.stopped;
+  }
+
   isActive(): boolean {
-    return !this.stopped && (this.isPlaying || this.queue.length > 0 || !this.isStreamFinished);
+    return (
+      !this.stopped &&
+      (this.isPlaying ||
+        this.queue.length > 0 ||
+        (!this.isStreamFinished && this.enqueuedChunksCount > 0))
+    );
   }
 
   private normalizeChunkSignature(text: string): string {

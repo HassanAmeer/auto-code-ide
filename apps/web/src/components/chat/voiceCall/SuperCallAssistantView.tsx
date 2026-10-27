@@ -47,6 +47,7 @@ import {
   Bookmark,
   ExternalLink,
   Globe,
+  Terminal,
 } from "lucide-react";
 import { executeTerminalCommand } from "~/components/chat/terminal/terminalClient";
 import { Link } from "@tanstack/react-router";
@@ -372,19 +373,17 @@ export function SuperCallAssistantView() {
   const [inputText, setInputText] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [agentStatus, setAgentStatus] = useState<string | null>(null);
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+
+  const handleCopyMessage = useCallback((text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedMessageId(id);
+    setTimeout(() => setCopiedMessageId(null), 2000);
+  }, []);
 
   // Command Center / Right Sidebar Drawer
   const [isCommandCenterOpen, setIsCommandCenterOpen] = useState(false);
-  const [commandCenterTab, setCommandCenterTab] = useState<
-    "summary" | "wishlist" | "health" | "memory" | "tasks" | "voice"
-  >("summary");
-
-  // Health & Diagnostics State in Command Center
-  const [healthBranch, setHealthBranch] = useState("main");
-  const [healthModifiedFiles, setHealthModifiedFiles] = useState<string[]>([]);
-  const [healthRecentCommits, setHealthRecentCommits] = useState<string[]>([]);
-  const [isHealthLoading, setIsHealthLoading] = useState(false);
-  const [isCommitting, setIsCommitting] = useState(false);
+  const [commandCenterTab, setCommandCenterTab] = useState<"memory" | "tasks" | "voice">("memory");
 
   // Universal Attachment State (Images, Code files, Logs, PDFs, etc.)
   const [attachedFile, setAttachedFile] = useState<{
@@ -420,54 +419,9 @@ export function SuperCallAssistantView() {
     e.target.value = "";
   };
 
-  // Transcript Copy & Export State
-  const [isTranscriptCopied, setIsTranscriptCopied] = useState(false);
-
-  // Wishlist & Kanban State in Command Center
   const activeProjectName = useMemo(() => {
     return projects[0]?.title || (projects[0]?.id ? String(projects[0].id) : "Workspace");
   }, [projects]);
-  const [drawerWishlistItems, setDrawerWishlistItems] = useState<
-    import("~/lib/callAssistantStore").WishlistItem[]
-  >([]);
-  const [isWishlistLoading, setIsWishlistLoading] = useState(false);
-  const [drawerWishlistViewMode, setDrawerWishlistViewMode] = useState<"kanban" | "list">("kanban");
-  const [newWishlistTitle, setNewWishlistTitle] = useState("");
-  const [newWishlistType, setNewWishlistType] = useState<"feature" | "improvement">("feature");
-
-  // Kanban Column Lists
-  const kanbanPending = useMemo(
-    () => drawerWishlistItems.filter((i) => i.status === "pending" || !i.status),
-    [drawerWishlistItems],
-  );
-  const kanbanInProgress = useMemo(
-    () => drawerWishlistItems.filter((i) => i.status === "in_progress"),
-    [drawerWishlistItems],
-  );
-  const kanbanCompleted = useMemo(
-    () => drawerWishlistItems.filter((i) => i.status === "completed"),
-    [drawerWishlistItems],
-  );
-
-  // Update Item Status in Kanban Board
-  const handleUpdateItemStatus = useCallback(
-    async (itemId: string, newStatus: "pending" | "in_progress" | "completed") => {
-      setDrawerWishlistItems((prev) =>
-        prev.map((it) => (it.id === itemId ? { ...it, status: newStatus } : it)),
-      );
-
-      try {
-        await fetch("/api/bot/wishlist/update-status", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ projectName: activeProjectName, itemId, status: newStatus }),
-        });
-      } catch (err) {
-        console.error("Status update error:", err);
-      }
-    },
-    [activeProjectName],
-  );
 
   // Knowledge & Memory Rulebook State in Command Center
   const [selectedMemoryProject, setSelectedMemoryProject] = useState<string>(activeProjectName);
@@ -583,111 +537,6 @@ export function SuperCallAssistantView() {
       });
     } catch {}
   };
-
-  // Fetch Wishlist Items
-  const fetchDrawerWishlist = useCallback(async () => {
-    setIsWishlistLoading(true);
-    try {
-      const res = await fetch(`/api/bot/wishlist?project=${encodeURIComponent(activeProjectName)}`);
-      const data = (await res.json()) as {
-        ok: boolean;
-        items: import("~/lib/callAssistantStore").WishlistItem[];
-      };
-      if (data.ok && Array.isArray(data.items)) {
-        setDrawerWishlistItems(data.items);
-      }
-    } catch (err) {
-      console.warn("Failed to fetch drawer wishlist:", err);
-    } finally {
-      setIsWishlistLoading(false);
-    }
-  }, [activeProjectName]);
-
-  useEffect(() => {
-    if (isCommandCenterOpen && commandCenterTab === "wishlist") {
-      void fetchDrawerWishlist();
-    }
-  }, [isCommandCenterOpen, commandCenterTab, fetchDrawerWishlist]);
-
-  // Toggle Auto-Approve on Wishlist item
-  const handleToggleAutoApprove = useCallback(
-    async (itemId: string) => {
-      try {
-        const res = await fetch("/api/bot/wishlist/toggle-approve", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ projectName: activeProjectName, itemId }),
-        });
-        const data = (await res.json()) as {
-          ok: boolean;
-          item?: import("~/lib/callAssistantStore").WishlistItem;
-        };
-        if (data.ok && data.item) {
-          setDrawerWishlistItems((prev) =>
-            prev.map((it) =>
-              it.id === itemId ? { ...it, autoApprove: data.item!.autoApprove } : it,
-            ),
-          );
-        }
-      } catch (err) {
-        console.error("Auto approve toggle error:", err);
-      }
-    },
-    [activeProjectName],
-  );
-
-  // Fetch Project Health & Git Info
-  const fetchProjectHealth = useCallback(async () => {
-    setIsHealthLoading(true);
-    try {
-      const activeProj = projects[0];
-      const projectCwd = activeProj?.path ? String(activeProj.path) : undefined;
-      const branchRes = await executeTerminalCommand(
-        "git branch --show-current",
-        projectCwd,
-        10_000,
-      );
-      if (branchRes?.stdout) setHealthBranch(branchRes.stdout.trim());
-
-      const statusRes = await executeTerminalCommand("git status --short", projectCwd, 10_000);
-      if (statusRes?.stdout) {
-        setHealthModifiedFiles(statusRes.stdout.split("\n").filter(Boolean));
-      } else {
-        setHealthModifiedFiles([]);
-      }
-
-      const logRes = await executeTerminalCommand(
-        'git log -n 4 --pretty=format:"%h | %s (%cr)"',
-        projectCwd,
-        10_000,
-      );
-      if (logRes?.stdout) {
-        setHealthRecentCommits(logRes.stdout.split("\n").filter(Boolean));
-      }
-    } catch (e) {
-      console.warn("Failed to fetch project health:", e);
-    } finally {
-      setIsHealthLoading(false);
-    }
-  }, [projects]);
-
-  useEffect(() => {
-    if (isCommandCenterOpen && commandCenterTab === "health") {
-      void fetchProjectHealth();
-    }
-  }, [isCommandCenterOpen, commandCenterTab, fetchProjectHealth]);
-
-  // Smart AI Commit & Push
-  const handleSmartCommit = useCallback(async () => {
-    setIsCommitting(true);
-    try {
-      void handleSuperAgentDispatch(
-        "Tamam modified files check karo, aik clean descriptive git commit message bana kar commit aur push kardo.",
-      );
-    } finally {
-      setIsCommitting(false);
-    }
-  }, []);
 
   // Voice Persona Settings
   const [persona, setPersona] = useState<"bilingual" | "professional" | "friendly">(() => {
@@ -944,6 +793,9 @@ export function SuperCallAssistantView() {
         const enrichedMeta = {
           ...meta,
           ...(res.referencedMemory ? { referencedMemory: res.referencedMemory } : {}),
+          ...(res.toolsCalled && res.toolsCalled.length > 0
+            ? { toolsCalled: res.toolsCalled }
+            : {}),
           ...(codeDiff ? { diff: codeDiff } : {}),
         };
 
@@ -1061,68 +913,11 @@ export function SuperCallAssistantView() {
     }
   }, [handleSuperAgentDispatch, inputText]);
 
-  // Copy Full Conversation Transcript
-  const handleCopyTranscript = useCallback(() => {
-    if (!activeSession?.messages.length) return;
-    const text = activeSession.messages
-      .map(
-        (m) =>
-          `[${new Date(m.timestamp).toLocaleTimeString()}] ${m.role === "user" ? "User" : "Super Bot"}:\n${m.text}`,
-      )
-      .join("\n\n");
-    void navigator.clipboard.writeText(text).then(() => {
-      setIsTranscriptCopied(true);
-      setTimeout(() => setIsTranscriptCopied(false), 2000);
-    });
-  }, [activeSession?.messages]);
-
-  // Download Conversation as Markdown File
-  const handleDownloadMarkdown = useCallback(() => {
-    if (!activeSession?.messages.length) return;
-    const md =
-      `# Super Call Assistant Conversation Transcript\n` +
-      `**Session:** ${activeSession.title || "Untitled Session"}\n` +
-      `**Date:** ${new Date().toLocaleString()}\n` +
-      `**Total Messages:** ${activeSession.messages.length}\n\n---\n\n` +
-      activeSession.messages
-        .map(
-          (m) =>
-            `### ${m.role === "user" ? "👤 You (User)" : "🤖 Super Bot Assistant"} *(${new Date(m.timestamp).toLocaleTimeString()})*\n\n${m.text}\n`,
-        )
-        .join("\n---\n\n");
-
-    const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `voice-session-${new Date().toISOString().slice(0, 10)}.md`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }, [activeSession]);
-
   // Barge-in / Stop Speaking Helper
   const handleStopSpeaking = useCallback(() => {
     stopSpeaking();
     interruptSpeaking();
   }, [interruptSpeaking]);
-
-  // Conversation Key Points & Summary Extractor
-  const conversationSummary = useMemo(() => {
-    if (!activeSession || activeSession.messages.length === 0) return null;
-    const userMsgs = activeSession.messages.filter((m) => m.role === "user");
-    const botMsgs = activeSession.messages.filter((m) => m.role === "assistant");
-    const recentQueries = userMsgs.slice(-4).map((m) => {
-      const single = m.text.replace(/\s+/g, " ").trim();
-      return single.length > 55 ? single.slice(0, 52) + "..." : single;
-    });
-
-    return {
-      total: activeSession.messages.length,
-      userCount: userMsgs.length,
-      botCount: botMsgs.length,
-      recentQueries,
-    };
-  }, [activeSession]);
 
   return (
     <div className="flex h-full w-full bg-background text-foreground overflow-hidden relative">
@@ -2518,38 +2313,111 @@ export function SuperCallAssistantView() {
 
           {activeSession?.messages.map((msg) => {
             const isUser = msg.role === "user";
-            return (
-              <div
-                key={msg.id}
-                className={cn(
-                  "flex items-start gap-3 text-sm",
-                  isUser ? "flex-row-reverse" : "flex-row",
-                )}
-              >
-                <div
-                  className={cn(
-                    "size-7 rounded-full flex items-center justify-center shrink-0 text-xs font-semibold shadow-xs",
-                    isUser
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted border border-border text-foreground",
-                  )}
-                >
-                  {isUser ? "You" : <Bot className="size-3.5" />}
-                </div>
 
-                <div
-                  className={cn(
-                    "rounded-2xl px-4 py-2.5 max-w-[85%] sm:max-w-[75%] shadow-xs",
-                    isUser
-                      ? "bg-primary text-primary-foreground rounded-tr-xs"
-                      : "bg-muted/70 border border-border/60 text-foreground rounded-tl-xs",
+            if (isUser) {
+              return (
+                <div key={msg.id} className="flex flex-col items-end w-full py-2 group">
+                  {/* User message: Right aligned, NO box, NO background, NO border, NO avatar */}
+                  <div className="text-right max-w-[88%] sm:max-w-[78%]">
+                    <p className="text-sm sm:text-base font-normal text-zinc-100 whitespace-pre-wrap leading-relaxed select-text">
+                      {msg.text}
+                    </p>
+
+                    {/* Attached File or Screenshot */}
+                    {(msg.meta?.file || msg.meta?.image) && (
+                      <div className="mt-2 inline-block rounded-xl overflow-hidden border border-zinc-800 max-w-xs shadow-xs text-left">
+                        {msg.meta?.isImage || (!msg.meta?.file && msg.meta?.image) ? (
+                          <img
+                            src={msg.meta.file || msg.meta.image}
+                            alt={msg.meta?.fileName || msg.meta?.imageName || "Attached file"}
+                            className="w-full h-auto object-cover max-h-48 rounded-lg cursor-pointer hover:opacity-95 transition-opacity"
+                            onClick={() => window.open(msg.meta!.file || msg.meta!.image, "_blank")}
+                          />
+                        ) : (
+                          <div
+                            onClick={() => window.open(msg.meta!.file, "_blank")}
+                            className="flex items-center gap-2.5 p-2 bg-zinc-900/80 hover:bg-zinc-800 rounded-lg cursor-pointer transition-colors"
+                          >
+                            <div className="p-2 rounded-md bg-purple-500/10 text-purple-400 shrink-0">
+                              <FileText className="size-4" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <span className="text-xs font-semibold text-zinc-200 truncate block">
+                                {msg.meta.fileName}
+                              </span>
+                              {msg.meta.fileSize && (
+                                <span className="text-[10px] text-zinc-500 font-mono">
+                                  {msg.meta.fileSize}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* User Metadata & Copy */}
+                    <div className="flex items-center justify-end gap-2.5 mt-1.5 text-[11px] text-zinc-500 font-mono">
+                      <span>
+                        {new Date(msg.timestamp).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyMessage(msg.text, msg.id)}
+                        className="opacity-60 hover:opacity-100 transition-opacity p-0.5 rounded hover:text-zinc-300 cursor-pointer"
+                        title="Copy message"
+                      >
+                        {copiedMessageId === msg.id ? (
+                          <Check className="size-3 text-emerald-400" />
+                        ) : (
+                          <Copy className="size-3" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+
+            // Assistant response: Left aligned, NO box, NO background, NO border, NO avatar
+            return (
+              <div key={msg.id} className="flex flex-col items-start w-full py-2.5 group">
+                <div className="text-left w-full max-w-[95%]">
+                  <p className="text-sm sm:text-base font-normal text-zinc-200 whitespace-pre-wrap leading-relaxed select-text">
+                    {msg.text}
+                  </p>
+
+                  {/* Tool Calling Badges (like in projects view) */}
+                  {msg.meta?.toolsCalled && msg.meta.toolsCalled.length > 0 && (
+                    <div className="flex flex-col gap-1.5 my-2.5 w-full max-w-xl">
+                      {msg.meta.toolsCalled.map((tool: any, idx: number) => (
+                        <div
+                          key={idx}
+                          className="flex items-center gap-2 py-1 px-2.5 rounded-md bg-zinc-900/60 border border-zinc-800/80 text-xs text-zinc-300 font-mono"
+                        >
+                          <Terminal className="size-3.5 text-purple-400 shrink-0" />
+                          <span className="text-zinc-500 font-medium">Tool Calling:</span>
+                          <span className="text-purple-300 font-semibold">{tool.name}</span>
+                          {tool.summary && (
+                            <span className="text-zinc-400 truncate text-[11px]">
+                              — {tool.summary}
+                            </span>
+                          )}
+                          <span className="ml-auto text-[10px] text-emerald-400 flex items-center gap-1 shrink-0 font-sans">
+                            <CheckCircle2 className="size-3 text-emerald-400" />
+                            <span>Executed</span>
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   )}
-                >
-                  <p className="whitespace-pre-wrap">{msg.text}</p>
 
                   {/* Delegated Task Execution Card */}
                   {msg.meta?.delegatedTask && (
-                    <div className="mt-2.5 rounded-xl border border-primary/30 bg-primary/10 p-3 text-xs space-y-2">
+                    <div className="mt-2.5 rounded-xl border border-primary/30 bg-primary/10 p-3 text-xs space-y-2 max-w-xl">
                       <div className="flex items-center justify-between font-medium">
                         <span className="flex items-center gap-1.5 text-foreground">
                           <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
@@ -2576,15 +2444,17 @@ export function SuperCallAssistantView() {
 
                   {/* Wishlist / Feature Backlog Card with Auto-Approve Toggles */}
                   {msg.meta?.wishlistItems && msg.meta.wishlistItems.length > 0 && (
-                    <WishlistCard
-                      items={msg.meta.wishlistItems}
-                      projectName={msg.meta.wishlistProject ?? "Workspace"}
-                    />
+                    <div className="mt-2.5 max-w-xl">
+                      <WishlistCard
+                        items={msg.meta.wishlistItems}
+                        projectName={msg.meta.wishlistProject ?? "Workspace"}
+                      />
+                    </div>
                   )}
 
                   {/* Referenced Memory Card for this Chat */}
                   {msg.meta?.referencedMemory && (
-                    <div className="mt-2.5 rounded-xl border border-purple-500/30 bg-purple-500/10 p-3 text-xs space-y-2">
+                    <div className="mt-2.5 rounded-lg border border-purple-500/30 bg-purple-500/10 p-2.5 text-xs space-y-1.5 max-w-xl">
                       <div className="flex items-center justify-between font-medium">
                         <span className="flex items-center gap-1.5 text-foreground min-w-0 flex-1">
                           <Brain className="size-3.5 text-purple-400 shrink-0" />
@@ -2598,7 +2468,7 @@ export function SuperCallAssistantView() {
                         <button
                           type="button"
                           onClick={() => openMemorySheet()}
-                          className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 font-medium text-[11px] border border-purple-500/30 transition-all cursor-pointer active:scale-95 shrink-0 ml-2"
+                          className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 font-medium text-[11px] border border-purple-500/30 transition-all cursor-pointer active:scale-95 shrink-0 ml-2"
                           title="Open Memory Drawer to view or edit this file"
                         >
                           <span>Khol kar dekhein</span>
@@ -2606,74 +2476,71 @@ export function SuperCallAssistantView() {
                         </button>
                       </div>
                       {msg.meta.referencedMemory.description && (
-                        <p className="text-[11px] text-muted-foreground whitespace-pre-wrap line-clamp-4 bg-background/60 p-2.5 rounded-lg border border-border/40 font-mono select-all">
+                        <p className="text-[11px] text-muted-foreground whitespace-pre-wrap line-clamp-3 bg-zinc-950/60 p-2 rounded border border-border/40 font-mono select-all">
                           {msg.meta.referencedMemory.description}
                         </p>
                       )}
                     </div>
                   )}
 
-                  {/* Attached File or Screenshot */}
-                  {(msg.meta?.file || msg.meta?.image) && (
-                    <div className="mt-2 rounded-xl overflow-hidden border border-border/60 max-w-xs shadow-xs">
-                      {msg.meta?.isImage || (!msg.meta?.file && msg.meta?.image) ? (
-                        <img
-                          src={msg.meta.file || msg.meta.image}
-                          alt={msg.meta?.fileName || msg.meta?.imageName || "Attached screenshot"}
-                          className="w-full h-auto object-cover max-h-48 rounded-lg cursor-pointer hover:opacity-95 transition-opacity"
-                          onClick={() => window.open(msg.meta!.file || msg.meta!.image, "_blank")}
-                        />
-                      ) : (
-                        <div
-                          onClick={() => window.open(msg.meta!.file, "_blank")}
-                          className="flex items-center gap-2.5 p-2.5 bg-muted/50 hover:bg-muted/80 rounded-lg cursor-pointer transition-colors"
-                        >
-                          <div className="p-2 rounded-md bg-primary/10 text-primary shrink-0">
-                            <FileText className="size-4" />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <span className="text-xs font-semibold text-foreground truncate block">
-                              {msg.meta.fileName}
-                            </span>
-                            {msg.meta.fileSize && (
-                              <span className="text-[10px] text-muted-foreground font-mono">
-                                {msg.meta.fileSize}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                      {(msg.meta?.fileName || msg.meta?.imageName) && msg.meta?.isImage && (
-                        <span className="block text-[9px] text-muted-foreground px-2 py-0.5 bg-black/40 truncate">
-                          📎 {msg.meta.fileName || msg.meta.imageName}
-                        </span>
-                      )}
+                  {/* Interactive Code Diff Viewer */}
+                  {msg.meta?.diff && (
+                    <div className="mt-2.5 max-w-xl">
+                      <CodeDiffCard diffText={msg.meta.diff} />
                     </div>
                   )}
 
-                  {/* Interactive Code Diff Viewer */}
-                  {msg.meta?.diff && <CodeDiffCard diffText={msg.meta.diff} />}
+                  {/* Assistant Actions Toolbar & Timestamp */}
+                  <div className="flex items-center gap-3 mt-2 text-[11px] text-zinc-500 font-sans">
+                    <span className="font-mono">
+                      {new Date(msg.timestamp).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
 
-                  <span className="block text-[9px] opacity-60 mt-1 text-right">
-                    {new Date(msg.timestamp).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </span>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyMessage(msg.text, msg.id)}
+                      className="flex items-center gap-1 hover:text-zinc-300 transition-colors cursor-pointer"
+                      title="Copy response"
+                    >
+                      {copiedMessageId === msg.id ? (
+                        <>
+                          <Check className="size-3 text-emerald-400" />
+                          <span className="text-emerald-400">Copied</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="size-3" />
+                          <span>Copy</span>
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => speakText(msg.text, loadTtsSettings())}
+                      className="flex items-center gap-1 hover:text-purple-300 transition-colors cursor-pointer text-purple-400/90"
+                      title="Allowed to speak (Speak this response aloud)"
+                    >
+                      <Volume2 className="size-3 text-purple-400" />
+                      <span>Allowed to speak</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             );
           })}
 
+          {/* Live Processing & Tool Calling Indicator (Boxless, Avatarless) */}
           {isProcessing && (
-            <div className="flex items-start gap-3 text-sm">
-              <div className="size-7 rounded-full bg-muted border border-border text-foreground flex items-center justify-center shrink-0">
-                <Bot className="size-3.5" />
-              </div>
-              <div className="rounded-2xl px-4 py-2.5 bg-muted/70 border border-border/60 text-muted-foreground rounded-tl-xs flex items-center gap-2">
-                <span className="size-1.5 rounded-full bg-primary animate-ping" />
-                <span className="text-xs">
-                  {agentStatus || "Super Assistant is thinking... / سوچ رہا ہوں"}
+            <div className="flex flex-col items-start gap-1.5 py-2.5 w-full animate-in fade-in duration-150">
+              <div className="flex items-center gap-2 text-xs text-zinc-300 font-mono bg-zinc-900/60 px-3 py-1.5 rounded-lg border border-purple-500/30">
+                <Loader2 className="size-3.5 text-purple-400 animate-spin shrink-0" />
+                <span className="text-zinc-500">Tool Calling:</span>
+                <span className="text-purple-300 font-medium">
+                  {agentStatus || "Analyzing workspace & executing tools..."}
                 </span>
               </div>
             </div>

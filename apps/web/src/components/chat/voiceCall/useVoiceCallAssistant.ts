@@ -774,12 +774,19 @@ export function useVoiceCallAssistant({
           return;
         }
 
+        const isStreamingPlayerBusy = Boolean(
+          streamingPlayerRef.current &&
+          !streamingPlayerRef.current.isStopped() &&
+          (streamingPlayerRef.current.getIsPlaying() ||
+            streamingPlayerRef.current.getQueueLength() > 0),
+        );
+
         const isAiSpeakingOrBusy =
           isTtsActiveRef.current ||
           callStatusRef.current === "speaking" ||
           callStatusRef.current === "thinking" ||
           isCurrentlySpeaking() ||
-          Boolean(streamingPlayerRef.current?.isActive?.()) ||
+          isStreamingPlayerBusy ||
           Date.now() - lastTtsEndedTimestampRef.current < ACOUSTIC_ECHO_COOLDOWN_MS;
 
         let newlyFinalized = "";
@@ -1054,9 +1061,15 @@ export function useVoiceCallAssistant({
           addAiSpokenPhrase(speakingText);
         }
       } else {
-        // If a streaming player is currently active playing sentence chunks or awaiting stream completion,
-        // do not switch status or reset state yet!
-        if (streamingPlayerRef.current?.isActive?.()) {
+        // If a streaming player is currently actively playing sentence chunks or has queued chunks waiting,
+        // do not switch status or reset state yet (the player's onFinished handler will transition when all chunks conclude).
+        const isStreamingPlayerBusy = Boolean(
+          streamingPlayerRef.current &&
+          !streamingPlayerRef.current.isStopped() &&
+          (streamingPlayerRef.current.getIsPlaying() ||
+            streamingPlayerRef.current.getQueueLength() > 0),
+        );
+        if (isStreamingPlayerBusy) {
           return;
         }
 
@@ -1067,11 +1080,13 @@ export function useVoiceCallAssistant({
 
         clearTtsCooldownTimer();
         ttsCooldownTimerRef.current = setTimeout(() => {
-          if (
-            !isCurrentlySpeaking() &&
-            !streamingPlayerRef.current?.isActive?.() &&
-            isCallActiveRef.current
-          ) {
+          const isPlayerStillBusy = Boolean(
+            streamingPlayerRef.current &&
+            !streamingPlayerRef.current.isStopped() &&
+            (streamingPlayerRef.current.getIsPlaying() ||
+              streamingPlayerRef.current.getQueueLength() > 0),
+          );
+          if (!isCurrentlySpeaking() && !isPlayerStillBusy && isCallActiveRef.current) {
             isTtsActiveRef.current = false;
             waitingForAssistantResponseRef.current = false;
             promptRef.current = "";
@@ -1210,11 +1225,17 @@ export function useVoiceCallAssistant({
     // Safety turn timeout: If assistant fails to stream or backend errors out, return to listening after 15s
     clearTurnTimeout();
     turnTimeoutRef.current = setTimeout(() => {
+      const isPlayerBusy = Boolean(
+        streamingPlayerRef.current &&
+        !streamingPlayerRef.current.isStopped() &&
+        (streamingPlayerRef.current.getIsPlaying() ||
+          streamingPlayerRef.current.getQueueLength() > 0),
+      );
       if (
         waitingForAssistantResponseRef.current &&
         !isCurrentlySpeaking() &&
         !isTtsActiveRef.current &&
-        !streamingPlayerRef.current?.isActive?.()
+        !isPlayerBusy
       ) {
         console.warn("[VoiceCall] Assistant turn response timeout, returning to listening");
         waitingForAssistantResponseRef.current = false;
@@ -1243,11 +1264,44 @@ export function useVoiceCallAssistant({
     updateCallStatus,
   ]);
 
-  // Dedicated periodic silence heartbeat: automatically dispatches message after exactly 2000ms of silence
+  // Dedicated periodic silence heartbeat and speaking state watchdog
   useEffect(() => {
     if (!isCallActive) return;
 
     const interval = setInterval(() => {
+      // 1. Speaking watchdog: If call status is "speaking", but audio speech has concluded
+      // and acoustic cooldown has elapsed, restore status to "listening" (grey wave) immediately.
+      // This prevents the visualizer or mic from ever remaining hung in "speaking" (green).
+      if (callStatusRef.current === "speaking") {
+        const isActuallySpeaking =
+          isCurrentlySpeaking() ||
+          Boolean(
+            streamingPlayerRef.current &&
+            !streamingPlayerRef.current.isStopped() &&
+            (streamingPlayerRef.current.getIsPlaying() ||
+              streamingPlayerRef.current.getQueueLength() > 0),
+          );
+
+        if (!isActuallySpeaking) {
+          const cooldownElapsed = Date.now() - lastTtsEndedTimestampRef.current;
+          if (cooldownElapsed >= ACOUSTIC_ECHO_COOLDOWN_MS) {
+            isTtsActiveRef.current = false;
+            waitingForAssistantResponseRef.current = false;
+            setAssistantSpokenText("");
+            updateCallStatus("listening");
+            if (
+              isCallActiveRef.current &&
+              recognitionRef.current &&
+              !isRecognitionRunningRef.current
+            ) {
+              try {
+                recognitionRef.current.start();
+              } catch {}
+            }
+          }
+        }
+      }
+
       if (
         !isCallActiveRef.current ||
         isUserEditingRef.current ||
@@ -1275,7 +1329,7 @@ export function useVoiceCallAssistant({
     }, 100);
 
     return () => clearInterval(interval);
-  }, [isCallActive, dispatchAutoSend]);
+  }, [isCallActive, dispatchAutoSend, updateCallStatus]);
 
   // Handle external/manual edits in the input box:
   useEffect(() => {
@@ -1566,7 +1620,12 @@ export function useVoiceCallAssistant({
       // Phase is idle/ready:
       // Only transition to listening if we are NOT waiting for an assistant response,
       // and NOT actively speaking or playing TTS chunks!
-      const isPlayerActive = Boolean(streamingPlayerRef.current?.isActive?.());
+      const isPlayerActive = Boolean(
+        streamingPlayerRef.current &&
+        !streamingPlayerRef.current.isStopped() &&
+        (streamingPlayerRef.current.getIsPlaying() ||
+          streamingPlayerRef.current.getQueueLength() > 0),
+      );
       if (
         !waitingForAssistantResponseRef.current &&
         !isCurrentlySpeaking() &&
@@ -1574,7 +1633,7 @@ export function useVoiceCallAssistant({
         !isPlayerActive
       ) {
         thinkingAmbientSound.stop();
-        if (callStatusRef.current === "thinking") {
+        if (callStatusRef.current === "thinking" || callStatusRef.current === "speaking") {
           updateCallStatus("listening");
         }
       }

@@ -163,4 +163,24 @@ describe("VoiceCall Assistant & StreamingTtsPlayer", () => {
     expect(turn2Result).toBe("how are you");
     expect(turn2Result).not.toContain("hello");
   });
+
+  it("ensures StreamingTtsPlayer is inactive when empty and does not block non-streaming completion", () => {
+    const player = new StreamingTtsPlayer();
+    // Initially with 0 chunks, it must NOT claim to be active
+    expect(player.isActive()).toBe(false);
+    expect(player.hasEnqueuedChunks()).toBe(false);
+    expect(player.getIsPlaying()).toBe(false);
+    expect(player.getQueueLength()).toBe(0);
+
+    // Enqueue a chunk
+    player.enqueue("Salam, main aap ki kya madad kar sakta hoon?");
+    expect(player.hasEnqueuedChunks()).toBe(true);
+    expect(player.isActive()).toBe(true);
+
+    // Mark stream finished and stop
+    player.markStreamFinished();
+    player.stop();
+    expect(player.isActive()).toBe(false);
+    expect(player.isStopped()).toBe(true);
+  });
 });

@@ -43,6 +43,12 @@ export interface DelegatedTaskInfo {
   progress: number;
 }
 
+export interface ToolCallRecord {
+  name: string;
+  summary?: string;
+  status: "calling" | "completed" | "error";
+}
+
 export interface SuperAgentResult {
   reply: string;
   spokenReply: string;
@@ -55,6 +61,7 @@ export interface SuperAgentResult {
     updatedAt: number;
     source: "manual" | "imported_from_notes";
   };
+  toolsCalled?: ToolCallRecord[];
   details?: unknown;
 }
 
@@ -390,6 +397,7 @@ export async function executeSuperAgentInstruction(
   let runtimeFacts = "";
   let actionTag = "llm_completion";
   let delegatedTaskInfo: DelegatedTaskInfo | undefined;
+  const toolsExecuted: ToolCallRecord[] = [];
 
   // Fast conversational recognition for Greetings and Farewells (Roman Urdu, Arabic Script & English)
   const isFarewell =
@@ -477,6 +485,12 @@ export async function executeSuperAgentInstruction(
     const noteTitle = noteContent.slice(0, 24).trim() || "Voice Note";
     const note = addNote(noteTitle, noteContent);
     actionTag = "add_note";
+    onStatusUpdate?.("Tool Calling: add_workspace_note...");
+    toolsExecuted.push({
+      name: "add_workspace_note",
+      summary: `Note created: "${note.title}"`,
+      status: "completed",
+    });
     runtimeFacts += `\n[ACTION EXECUTED - NOTE CREATED IN WORKSPACE NOTES]:\n• Note Title: "${note.title}"\n• Note Content: "${note.content}"\n`;
   }
 
@@ -511,6 +525,12 @@ export async function executeSuperAgentInstruction(
     }
     const newRecord = addChatMemory(title, desc, { chatId, source: "manual" });
     actionTag = "add_chat_memory";
+    onStatusUpdate?.("Tool Calling: add_chat_memory...");
+    toolsExecuted.push({
+      name: "add_chat_memory",
+      summary: `Saved memory: "${newRecord.title}" in this chat`,
+      status: "completed",
+    });
     referencedMemoryInfo = {
       id: newRecord.id,
       title: newRecord.title,
@@ -548,6 +568,12 @@ export async function executeSuperAgentInstruction(
 
   if (matchedMemory) {
     actionTag = "lookup_chat_memory";
+    onStatusUpdate?.(`Tool Calling: lookup_chat_memory ("${matchedMemory.title}")...`);
+    toolsExecuted.push({
+      name: "lookup_chat_memory",
+      summary: `Accessed memory record: "${matchedMemory.title}"`,
+      status: "completed",
+    });
     referencedMemoryInfo = {
       id: matchedMemory.id,
       title: matchedMemory.title,
@@ -575,6 +601,12 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
     /\b(read|sunao|parh|list|dikhao|batao|kya\s*hai|all|check)\b/i.test(userText)
   ) {
     actionTag = "read_chat_memories";
+    onStatusUpdate?.("Tool Calling: read_chat_memories...");
+    toolsExecuted.push({
+      name: "read_chat_memories",
+      summary: `Read ${chatMemories.length} memory records for this chat`,
+      status: "completed",
+    });
     if (chatMemories.length > 0) {
       runtimeFacts +=
         `\n[ACTIVE CHAT MEMORY - ALL SAVED RECORDS (${chatMemories.length} ITEMS)]:\n` +
@@ -616,6 +648,12 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
       resultSummary: `Scheduled shift configured for ${timeOfDay}`,
     });
     actionTag = "add_scheduled_task";
+    onStatusUpdate?.("Tool Calling: schedule_task...");
+    toolsExecuted.push({
+      name: "schedule_task",
+      summary: `Shift scheduled for ${timeOfDay} (${newTask.title})`,
+      status: "completed",
+    });
     runtimeFacts += `\n[ACTION EXECUTED - SCHEDULED TASK CONFIGURED]:\n• Shift: "${newTask.title}"\n• Fixed Time: ${timeOfDay}\n• Target Project: ${targetName}\n`;
   }
 
@@ -625,12 +663,18 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
     /\b(search|dekh|check|batao|list|last|kya|add)\b/i.test(userText);
   if (isGitFeaturesReq) {
     try {
+      onStatusUpdate?.("Tool Calling: git log -n 5...");
       const gitRes = await executeTerminalCommand(
         'git log -n 5 --pretty=format:"%h | %s (%cr)"',
         projectCwd,
         15_000,
       );
       if (gitRes && gitRes.ok && gitRes.stdout) {
+        toolsExecuted.push({
+          name: "git_log",
+          summary: "Audited recent git commits & feature history",
+          status: "completed",
+        });
         runtimeFacts += `\n[LIVE GIT LOG & RECENT COMMITS FOR ${targetName}]:\n${gitRes.stdout}\n`;
         actionTag = "inspect_recent_features";
       }
@@ -644,10 +688,16 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
     ) && !/\b(fix|theek\s*karo|solve|sort)\b/i.test(userText);
   if (isHealthRadarReq) {
     try {
+      onStatusUpdate?.("Tool Calling: git status --short...");
       const gitStatus = await executeTerminalCommand("git status --short", projectCwd, 15_000);
       const modifiedCount = (gitStatus && gitStatus.stdout ? gitStatus.stdout : "")
         .split("\n")
         .filter(Boolean).length;
+      toolsExecuted.push({
+        name: "health_radar",
+        summary: `Scanned repository status (${modifiedCount} files active)`,
+        status: "completed",
+      });
       runtimeFacts += `\n[WORKSPACE HEALTH RADAR]:\n• Active modified files: ${modifiedCount}\n• Build status: Operational\n• Git short status:\n${gitStatus?.stdout || "Clean"}\n`;
       actionTag = "analyze_project_errors";
     } catch {}
@@ -662,7 +712,7 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
 
     let workerRes: WorkerDispatchResult | null = null;
     if (wantsWorkerExecution) {
-      onStatusUpdate?.(`Worker agent executing in ${targetName}...`);
+      onStatusUpdate?.(`Tool Calling: worker_agent_dispatch (${targetName})...`);
       workerRes = await callWorkerAgentDispatcher(
         targetName,
         userText.slice(0, 50),
@@ -670,6 +720,11 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
         selectedModel,
       );
       if (workerRes.ok) {
+        toolsExecuted.push({
+          name: "worker_agent_dispatch",
+          summary: `Worker executed in ${targetName} (${workerRes.filesInspected?.length || 0} files inspected)`,
+          status: "completed",
+        });
         recordProjectActivity({
           projectId:
             workerRes.projectId || (targetProject?.id ? String(targetProject.id) : undefined),
@@ -693,8 +748,14 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
     }
 
     // Always fetch live disk inspection so AI knows exact files & lines
+    onStatusUpdate?.(`Tool Calling: inspect_project_files (${targetName})...`);
     const inspectData = await fetchProjectInspection(targetName);
     if (inspectData && inspectData.ok) {
+      toolsExecuted.push({
+        name: "inspect_project_files",
+        summary: `Inspected ${inspectData.totalFiles || 0} disk files in ${targetName}`,
+        status: "completed",
+      });
       const previewsList = (inspectData.previews || [])
         .map((p: any) => `  • ${p.name} -> Preview URL: ${p.url}`)
         .join("\n");
@@ -788,6 +849,7 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
       actionTaken: actionTag,
       delegatedTask: delegatedTaskInfo,
       referencedMemory: referencedMemoryInfo,
+      toolsCalled: toolsExecuted,
     };
   }
 
@@ -830,6 +892,7 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
     spokenReply: friendlyError,
     actionTaken: "provider_error",
     referencedMemory: referencedMemoryInfo,
+    toolsCalled: toolsExecuted,
     details: { error: errText, code: errCode },
   };
 }
