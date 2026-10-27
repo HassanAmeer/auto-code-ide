@@ -8,316 +8,279 @@ export interface GrokGeometricVoiceWavesProps {
   className?: string;
 }
 
-// ── Low-Profile Black Hole Accretion Disk Specification ──
-// Fits proportionally around the 48-52px center call button.
-const HALF_WIDTH = 120.0;
-const BAR_SPACING = 3.6;
-const CENTER_VOID_RADIUS = 25.5; // Radius around the center button
-const MAX_BAR_HEIGHT = 36.0; // Peak reach of the accretion arch
-
-interface BarDef {
-  index: number;
+// ── Stardust Particle Definition ──
+interface StardustParticle {
   x: number;
-  normDist: number; // 0 at center, 1 at tips
-  baseH: number; // Low-profile curved envelope height
-  isSplit: boolean; // Over/under center button
-  innerVoidY: number; // Inner circular rim cutoff
-  strokeWidth: number;
-  opacity: number;
+  y: number;
+  size: number;
+  baseAlpha: number;
+  speed: number;
+  phase: number;
 }
 
-const BARS: BarDef[] = [];
-for (let x = -112; x <= 112; x += BAR_SPACING) {
-  const normDist = Math.abs(x) / HALF_WIDTH;
-  const isSplit = Math.abs(x) < CENTER_VOID_RADIUS;
-  const innerVoidY = isSplit
-    ? Math.sqrt(Math.max(0, CENTER_VOID_RADIUS * CENTER_VOID_RADIUS - x * x)) + 1.2
-    : 0;
-
-  // Compact Black Hole Accretion Curve: H(x) = H_peak * (1 - u^2)^1.5
-  const u = Math.min(1.0, Math.abs(x) / HALF_WIDTH);
-  const rawH = MAX_BAR_HEIGHT * Math.pow(1.0 - u * u, 1.5);
-  const baseH = isSplit ? Math.max(innerVoidY + 3.5, rawH) : Math.max(0.6, rawH);
-
-  // Subtle stroke tapering at outer tips
-  const strokeWidth = u > 0.72 ? Math.max(0.9, 2.0 - (u - 0.72) * 3.5) : 2.0;
-  const opacity = u > 0.82 ? Math.max(0.2, 1.0 - (u - 0.82) * 4.4) : 1.0;
-
-  BARS.push({
-    index: BARS.length,
-    x,
-    normDist,
-    baseH,
-    isSplit,
-    innerVoidY,
-    strokeWidth,
-    opacity,
-  });
-}
+// Pre-generate 36 ambient stardust glitter particles
+const PARTICLES: StardustParticle[] = Array.from({ length: 36 }, (_, i) => ({
+  x: ((i * 19.3) % 360) - 180,
+  y: (((i * 29.7) % 64) - 32) * 0.9,
+  size: (i % 3 === 0 ? 1.4 : 0.8) + (i % 2) * 0.3,
+  baseAlpha: 0.25 + ((i * 7) % 10) * 0.05,
+  speed: 0.0015 + (i % 5) * 0.0006,
+  phase: (i * Math.PI) / 6,
+}));
 
 export const GrokGeometricVoiceWaves = memo(function GrokGeometricVoiceWaves({
   callStatus,
   analyserNode,
   className,
 }: GrokGeometricVoiceWavesProps) {
-  const solidLinesTopRef = useRef<(SVGLineElement | null)[]>([]);
-  const solidLinesBottomRef = useRef<(SVGLineElement | null)[]>([]);
-
-  // Current heights
-  const heightsRef = useRef<number[]>(BARS.map((b) => b.baseH * 0.9));
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
     let animId: number;
     let running = true;
     const freqData = analyserNode ? new Uint8Array(analyserNode.frequencyBinCount) : null;
 
-    const tick = (timestamp: number) => {
+    // Smoothed audio energy tracker
+    let smoothedEnergy = 0;
+
+    const render = (timestamp: number) => {
       if (!running) return;
 
-      const isAnalysing = callStatus === "user-speaking" && analyserNode && freqData;
-      if (isAnalysing) {
-        analyserNode.getByteFrequencyData(freqData);
+      // Handle Resize / DPR
+      const rect = canvas.getBoundingClientRect();
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      const width = rect.width || 480;
+      const height = rect.height || 84;
+
+      if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) {
+        canvas.width = Math.round(width * dpr);
+        canvas.height = Math.round(height * dpr);
       }
 
-      let micEnergy = 0;
-      if (isAnalysing && freqData) {
+      ctx.save();
+      ctx.scale(dpr, dpr);
+      ctx.clearRect(0, 0, width, height);
+
+      const cx = width / 2;
+      const cy = height / 2;
+      const W = Math.min(width * 0.48, 220); // half-width of the fluid ribbon
+      const R_core = 24.0; // Black hole core radius around call button
+
+      // Audio analysis
+      let rawMicEnergy = 0;
+      if (callStatus === "user-speaking" && analyserNode && freqData) {
+        analyserNode.getByteFrequencyData(freqData);
         let sum = 0;
         const count = Math.min(32, freqData.length);
         for (let k = 2; k < count; k++) {
           sum += freqData[k] || 0;
         }
-        micEnergy = sum / (count - 2);
+        rawMicEnergy = sum / (count - 2);
+      }
+      smoothedEnergy += (rawMicEnergy - smoothedEnergy) * 0.25;
+
+      // Color Palette Configurations
+      type ColorConfig = {
+        primaryRgb: string;
+        accentRgb: string;
+        glowColor: string;
+        glowBlur: number;
+      };
+
+      const colorMap: Record<VoiceCallStatus, ColorConfig> = {
+        idle: {
+          primaryRgb: "235, 242, 255",
+          accentRgb: "215, 225, 245",
+          glowColor: "rgba(255, 255, 255, 0.45)",
+          glowBlur: 6,
+        },
+        listening: {
+          primaryRgb: "235, 242, 255",
+          accentRgb: "215, 225, 245",
+          glowColor: "rgba(255, 255, 255, 0.45)",
+          glowBlur: 6,
+        },
+        "user-speaking": {
+          primaryRgb: "59, 130, 246", // Electric blue
+          accentRgb: "147, 197, 253",
+          glowColor: "rgba(59, 130, 246, 0.85)",
+          glowBlur: 10,
+        },
+        thinking: {
+          primaryRgb: "249, 115, 22", // Cosmic orange
+          accentRgb: "253, 186, 116",
+          glowColor: "rgba(249, 115, 22, 0.85)",
+          glowBlur: 10,
+        },
+        speaking: {
+          primaryRgb: "34, 197, 94", // Emerald green
+          accentRgb: "134, 239, 172",
+          glowColor: "rgba(34, 197, 94, 0.85)",
+          glowBlur: 10,
+        },
+      };
+
+      const colors = colorMap[callStatus];
+
+      // ── 1. Razor-Thin Horizontal Baseline Line with Gradient Fade ──
+      const lineGrad = ctx.createLinearGradient(0, cy, width, cy);
+      lineGrad.addColorStop(0, "transparent");
+      lineGrad.addColorStop(0.12, `rgba(${colors.accentRgb}, 0.2)`);
+      lineGrad.addColorStop(0.5, `rgba(${colors.primaryRgb}, 0.75)`);
+      lineGrad.addColorStop(0.88, `rgba(${colors.accentRgb}, 0.2)`);
+      lineGrad.addColorStop(1, "transparent");
+
+      ctx.beginPath();
+      ctx.moveTo(0, cy);
+      ctx.lineTo(width, cy);
+      ctx.strokeStyle = lineGrad;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // ── 2. Gravitational Lensing Orbital Rings around the Event Horizon ──
+      const rings = [
+        { r: R_core + 2.0, alpha: 0.65, lw: 1.2 },
+        { r: R_core + 7.0, alpha: 0.45, lw: 0.9 },
+        { r: R_core + 14.0, alpha: 0.28, lw: 0.75 },
+        { r: R_core + 22.0, alpha: 0.15, lw: 0.6 },
+      ];
+
+      for (const ring of rings) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, ring.r, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(${colors.accentRgb}, ${ring.alpha})`;
+        ctx.lineWidth = ring.lw;
+        ctx.stroke();
       }
 
-      const hArray = heightsRef.current;
+      // ── 3. Flowing Silk Ribbon Strands (Fluid Accretion Streamlines) ──
+      const numStrands = 14;
 
-      // Calculate smooth energy scaling for each bar
-      for (let i = 0; i < BARS.length; i++) {
-        const bar = BARS[i]!;
-        let energyFactor = 0.92;
+      // Dynamics multipliers
+      let waveSpeed = 0.0022;
+      let waveAmp = 5.5;
 
-        switch (callStatus) {
-          case "idle":
-          case "listening": {
-            energyFactor = 0.9 + 0.08 * Math.sin(timestamp * 0.0022 + bar.normDist * 2.4);
-            break;
-          }
+      if (callStatus === "user-speaking") {
+        waveSpeed = 0.0055;
+        waveAmp = 4.0 + (smoothedEnergy / 255) * 11.0;
+      } else if (callStatus === "thinking") {
+        waveSpeed = 0.006;
+        waveAmp = 7.0;
+      } else if (callStatus === "speaking") {
+        waveSpeed = 0.0045;
+        waveAmp = 6.5;
+      }
 
-          case "user-speaking": {
-            if (isAnalysing && freqData) {
-              if (micEnergy < 8) {
-                energyFactor = 0.72;
-              } else {
-                const bin = Math.min(freqData.length - 1, 2 + Math.floor((1 - bar.normDist) * 20));
-                const val = (freqData[bin] || 0) / 255;
-                energyFactor = 0.65 + 0.4 * val;
-              }
-            } else {
-              const energy = Math.sin(timestamp * 0.008 + bar.normDist * 4.0) * 0.5 + 0.5;
-              energyFactor = 0.75 + 0.3 * energy;
+      ctx.shadowColor = colors.glowColor;
+      ctx.shadowBlur = colors.glowBlur;
+
+      // Draw Top and Bottom Silk Streamlines
+      for (const side of [-1, 1]) {
+        for (let s = 0; s < numStrands; s++) {
+          const norm_s = s / (numStrands - 1); // 0 to 1
+          const C = 1.0 + norm_s * 28.0;
+
+          // Alpha distribution: bright primary core ribbons, delicate ethereal outer filaments
+          const distFromCore = Math.abs(norm_s - 0.38);
+          const strandAlpha = Math.max(0.12, 0.95 - Math.pow(distFromCore, 1.2) * 1.0);
+          const isCoreStrand = s === 4 || s === 5;
+          const lw = isCoreStrand ? 1.9 : 0.85;
+
+          ctx.beginPath();
+          let started = false;
+
+          const step = 4;
+          for (let x = -W; x <= W; x += step) {
+            const u = x / W; // -1 to 1
+            const abs_u = Math.abs(u);
+            const envelope = Math.pow(Math.max(0, 1.0 - abs_u * abs_u), 1.35);
+
+            // Deflection formula for fluid streamline around circular black hole
+            const deflection = (R_core * R_core * C) / Math.max(R_core * R_core, x * x + C * C);
+            const y_base = C + deflection;
+
+            // Harmonic fluid undulation across x
+            let phase = timestamp * waveSpeed;
+            if (callStatus === "thinking") {
+              // Shimmer travelling outward from center
+              phase -= abs_u * 4.5;
             }
-            break;
+
+            const waveFactor =
+              Math.sin(u * Math.PI * 3.2 + s * 0.18 + phase) *
+              (waveAmp + norm_s * 3.5) *
+              Math.exp(-Math.pow(abs_u - 0.42, 2) / 0.09);
+
+            let y_actual = (y_base + waveFactor) * envelope;
+
+            // Strict circular clearance at center event horizon
+            if (abs_u * W < R_core + 2.0) {
+              const x_dist = abs_u * W;
+              const void_y =
+                Math.sqrt(Math.max(0, (R_core + 2.0) * (R_core + 2.0) - x_dist * x_dist)) +
+                1.0 +
+                s * 1.5;
+              y_actual = Math.max(void_y, y_actual);
+            }
+
+            const px = cx + x;
+            const py = cy + side * y_actual;
+
+            if (!started) {
+              ctx.moveTo(px, py);
+              started = true;
+            } else {
+              ctx.lineTo(px, py);
+            }
           }
 
-          case "thinking": {
-            const phase = timestamp * 0.005 - bar.normDist * 3.8;
-            const shimmer = Math.pow(Math.max(0, Math.sin(phase)), 2.0);
-            energyFactor = 0.78 + 0.28 * shimmer;
-            break;
-          }
-
-          case "speaking": {
-            const cadence = Math.abs(
-              Math.sin(timestamp * 0.0065) * Math.cos(timestamp * 0.003 + bar.normDist * 2.6),
-            );
-            energyFactor = 0.75 + 0.3 * cadence;
-            break;
-          }
-        }
-
-        let targetH = bar.baseH * energyFactor;
-        if (bar.isSplit) {
-          targetH = Math.max(bar.innerVoidY + 2.5, targetH);
-        }
-
-        hArray[i] = hArray[i]! + (targetH - hArray[i]!) * 0.32;
-        const currentH = hArray[i]!;
-
-        const lineTop = solidLinesTopRef.current[i];
-        const lineBottom = solidLinesBottomRef.current[i];
-
-        if (bar.isSplit) {
-          const topStart = -bar.innerVoidY;
-          const topEnd = -currentH;
-          if (lineTop) {
-            lineTop.setAttribute("y1", topStart.toFixed(1));
-            lineTop.setAttribute("y2", topEnd.toFixed(1));
-          }
-
-          const botStart = bar.innerVoidY;
-          const botEnd = currentH;
-          if (lineBottom) {
-            lineBottom.setAttribute("y1", botStart.toFixed(1));
-            lineBottom.setAttribute("y2", botEnd.toFixed(1));
-          }
-        } else {
-          const topY = -currentH;
-          const botY = currentH;
-
-          if (lineTop) {
-            lineTop.setAttribute("y1", topY.toFixed(1));
-            lineTop.setAttribute("y2", botY.toFixed(1));
-          }
+          ctx.strokeStyle = isCoreStrand
+            ? `rgba(255, 255, 255, ${strandAlpha})`
+            : `rgba(${colors.primaryRgb}, ${strandAlpha})`;
+          ctx.lineWidth = lw;
+          ctx.stroke();
         }
       }
 
-      animId = requestAnimationFrame(tick);
+      ctx.shadowBlur = 0; // Reset shadow for fine particles
+
+      // ── 4. Twinkling Stardust Glitter Particles ──
+      for (const p of PARTICLES) {
+        const twinkle = Math.sin(timestamp * p.speed + p.phase) * 0.4 + 0.6;
+        const pAlpha = p.baseAlpha * twinkle;
+
+        ctx.beginPath();
+        ctx.arc(cx + p.x, cy + p.y, p.size, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${colors.accentRgb}, ${pAlpha})`;
+        ctx.fill();
+      }
+
+      ctx.restore();
+      animId = requestAnimationFrame(render);
     };
 
-    animId = requestAnimationFrame(tick);
+    animId = requestAnimationFrame(render);
     return () => {
       running = false;
       cancelAnimationFrame(animId);
     };
   }, [callStatus, analyserNode]);
 
-  // Color Palettes based on state
-  const palette = (() => {
-    switch (callStatus) {
-      case "idle":
-      case "listening":
-        return {
-          barStroke: "rgba(228, 228, 231, 0.92)", // Metallic zinc-200
-          ringStroke: "rgba(212, 212, 216, 0.4)",
-          lineColor: "rgba(212, 212, 216, 0.4)",
-          glow: "drop-shadow(0 0 3px rgba(255, 255, 255, 0.15))",
-        };
-      case "user-speaking":
-        return {
-          barStroke: "rgba(59, 130, 246, 0.98)", // Electric blue
-          ringStroke: "rgba(59, 130, 246, 0.6)",
-          lineColor: "rgba(59, 130, 246, 0.5)",
-          glow: "drop-shadow(0 0 6px rgba(59, 130, 246, 0.65))",
-        };
-      case "thinking":
-        return {
-          barStroke: "rgba(249, 115, 22, 0.98)", // Luminous orange
-          ringStroke: "rgba(249, 115, 22, 0.6)",
-          lineColor: "rgba(249, 115, 22, 0.5)",
-          glow: "drop-shadow(0 0 6px rgba(249, 115, 22, 0.65))",
-        };
-      case "speaking":
-        return {
-          barStroke: "rgba(34, 197, 94, 0.98)", // Emerald green
-          ringStroke: "rgba(34, 197, 94, 0.6)",
-          lineColor: "rgba(34, 197, 94, 0.5)",
-          glow: "drop-shadow(0 0 6px rgba(34, 197, 94, 0.65))",
-        };
-    }
-  })();
-
   return (
-    <svg
+    <div
       aria-hidden="true"
-      viewBox="-130 -40 260 80"
       className={cn(
         "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2",
-        "w-[240px] sm:w-[260px] h-[64px] sm:h-[72px] overflow-visible z-0 transition-all duration-300 select-none",
+        "w-[340px] sm:w-[440px] md:w-[520px] h-[76px] sm:h-[86px] overflow-visible z-0 select-none",
         className,
       )}
-      style={{ filter: palette.glow }}
     >
-      <defs>
-        {/* Seamless linear gradient for the baseline connector */}
-        <linearGradient id="blackHoleLineFade" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="transparent" />
-          <stop offset="12%" stopColor={palette.lineColor} stopOpacity="0.2" />
-          <stop offset="35%" stopColor={palette.lineColor} stopOpacity="0.5" />
-          <stop offset="50%" stopColor={palette.lineColor} stopOpacity="0.8" />
-          <stop offset="65%" stopColor={palette.lineColor} stopOpacity="0.5" />
-          <stop offset="88%" stopColor={palette.lineColor} stopOpacity="0.2" />
-          <stop offset="100%" stopColor="transparent" />
-        </linearGradient>
-
-        {/* Soft Radial Glow around the Event Horizon */}
-        <radialGradient id="blackHoleCoreGlow" cx="50%" cy="50%" r="50%">
-          <stop offset="50%" stopColor="transparent" />
-          <stop offset="80%" stopColor={palette.barStroke} stopOpacity="0.1" />
-          <stop offset="100%" stopColor={palette.barStroke} stopOpacity="0.25" />
-        </radialGradient>
-      </defs>
-
-      {/* 1. Baseline Connector Line */}
-      <line x1="-128" y1="0" x2="128" y2="0" stroke="url(#blackHoleLineFade)" strokeWidth="1" />
-
-      {/* 2. Compact Soundwave Bars */}
-      {BARS.map((bar, i) => {
-        if (bar.isSplit) {
-          return (
-            <g key={`bar-split-${bar.index}`} opacity={bar.opacity}>
-              {/* Upper Arch */}
-              <line
-                ref={(el) => {
-                  solidLinesTopRef.current[i] = el;
-                }}
-                x1={bar.x}
-                y1={-bar.innerVoidY}
-                x2={bar.x}
-                y2={-bar.baseH}
-                stroke={palette.barStroke}
-                strokeWidth={bar.strokeWidth}
-                strokeLinecap="round"
-                className="transition-colors duration-200"
-              />
-              {/* Lower Arch */}
-              <line
-                ref={(el) => {
-                  solidLinesBottomRef.current[i] = el;
-                }}
-                x1={bar.x}
-                y1={bar.innerVoidY}
-                x2={bar.x}
-                y2={bar.baseH}
-                stroke={palette.barStroke}
-                strokeWidth={bar.strokeWidth}
-                strokeLinecap="round"
-                className="transition-colors duration-200"
-              />
-            </g>
-          );
-        }
-
-        return (
-          <line
-            key={`bar-solid-${bar.index}`}
-            ref={(el) => {
-              solidLinesTopRef.current[i] = el;
-            }}
-            x1={bar.x}
-            y1={-bar.baseH}
-            x2={bar.x}
-            y2={bar.baseH}
-            stroke={palette.barStroke}
-            strokeWidth={bar.strokeWidth}
-            strokeLinecap="round"
-            opacity={bar.opacity}
-            className="transition-colors duration-200"
-          />
-        );
-      })}
-
-      {/* 3. Event Horizon Soft Radial Glow */}
-      <circle cx="0" cy="0" r={CENTER_VOID_RADIUS + 2.0} fill="url(#blackHoleCoreGlow)" />
-
-      {/* 4. Event Horizon Clean Circular Rim */}
-      <circle
-        cx="0"
-        cy="0"
-        r={CENTER_VOID_RADIUS - 0.2}
-        fill="none"
-        stroke={palette.ringStroke}
-        strokeWidth="0.9"
-      />
-    </svg>
+      <canvas ref={canvasRef} className="w-full h-full block" />
+    </div>
   );
 });
