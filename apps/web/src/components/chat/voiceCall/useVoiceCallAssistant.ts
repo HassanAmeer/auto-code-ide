@@ -388,6 +388,8 @@ export function useVoiceCallAssistant({
   const accumulatedTurnFinalRef = useRef<string>("");
   const lastFinalizedIndexRef = useRef<number>(-1);
   const recentEmittedTranscriptsRef = useRef<Set<string>>(new Set());
+  const interruptSpeakingRef = useRef<() => void>(() => {});
+  const startFreshRecognitionRef = useRef<() => void>(() => {});
 
   // Store latest state in refs for stable timer/recognition callbacks
   const isCallActiveRef = useRef(false);
@@ -811,7 +813,7 @@ export function useVoiceCallAssistant({
               !isAcousticEchoOfAi(formatted) &&
               !isAcousticEchoOfAi(rawInterim)
             ) {
-              interruptSpeaking();
+              interruptSpeakingRef.current();
             }
           }
           return;
@@ -952,11 +954,11 @@ export function useVoiceCallAssistant({
     disabled,
     endCall,
     handleFarewellAndEndCall,
-    interruptSpeaking,
     isAcousticEchoOfAi,
     setMicrophoneMuted,
     updateCallStatus,
   ]);
+  startFreshRecognitionRef.current = startFreshRecognition;
 
   const scheduleRestartRecognition = useCallback(
     (delay = 150) => {
@@ -1361,7 +1363,7 @@ export function useVoiceCallAssistant({
     updateCallStatus("listening");
     setMicrophoneMuted(false);
     if (!recognitionRef.current && isCallActiveRef.current) {
-      startFreshRecognition();
+      startFreshRecognitionRef.current();
     } else if (
       isCallActiveRef.current &&
       recognitionRef.current &&
@@ -1375,10 +1377,10 @@ export function useVoiceCallAssistant({
     clearFinalDispatchTimer,
     clearRestartTimer,
     clearTurnTimeout,
-    startFreshRecognition,
     updateCallStatus,
     setMicrophoneMuted,
   ]);
+  interruptSpeakingRef.current = interruptSpeaking;
 
   // Global keydown handler to allow pressing Escape to interrupt speaking/thinking
   useEffect(() => {

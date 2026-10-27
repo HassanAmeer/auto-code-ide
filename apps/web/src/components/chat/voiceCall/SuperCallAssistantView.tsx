@@ -31,7 +31,15 @@ import {
   UserCheck,
   CheckCircle2,
   Zap,
+  Image as ImageIcon,
+  Activity,
+  GitCommit,
+  GitBranch,
+  ShieldCheck,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
+import { executeTerminalCommand } from "~/components/chat/terminal/terminalClient";
 import { Link } from "@tanstack/react-router";
 import { type ProviderInstanceId } from "@t3tools/contracts";
 import { useAtomValue } from "@effect/atom-react";
@@ -269,6 +277,70 @@ function WishlistCard({
 }
 // ── End WishlistCard ────────────────────────────────────────────────────────
 
+// ── Interactive Code Diff Viewer Card ───────────────────────────────────────
+function CodeDiffCard({ diffText }: { diffText: string }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const lines = useMemo(() => diffText.split("\n"), [diffText]);
+
+  const handleCopy = () => {
+    void navigator.clipboard.writeText(diffText).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  return (
+    <div className="mt-2.5 rounded-xl border border-border/80 bg-zinc-950/80 overflow-hidden text-xs font-mono shadow-xs">
+      <div className="flex items-center justify-between px-3 py-2 bg-zinc-900/90 border-b border-border/60">
+        <button
+          type="button"
+          onClick={() => setIsExpanded((prev) => !prev)}
+          className="flex items-center gap-1.5 text-zinc-300 hover:text-white font-semibold text-[11px] cursor-pointer"
+        >
+          {isExpanded ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
+          <span>Code Changes / Diff ({lines.length} lines)</span>
+        </button>
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-300 cursor-pointer transition-colors"
+        >
+          {copied ? <Check className="size-3 text-emerald-400" /> : <Copy className="size-3" />}
+          <span>{copied ? "Copied" : "Copy Diff"}</span>
+        </button>
+      </div>
+
+      {isExpanded && (
+        <div className="p-2.5 max-h-60 overflow-y-auto space-y-0.5 text-[11px] leading-relaxed">
+          {lines.map((line, idx) => {
+            const isAdd = line.startsWith("+") && !line.startsWith("+++");
+            const isDel = line.startsWith("-") && !line.startsWith("---");
+            const isHunk = line.startsWith("@@");
+
+            return (
+              <div
+                key={idx}
+                className={cn(
+                  "px-1 py-0.2 rounded-xs whitespace-pre-wrap break-all",
+                  isAdd && "bg-emerald-950/50 text-emerald-300 font-medium",
+                  isDel && "bg-rose-950/50 text-rose-300 line-through opacity-80",
+                  isHunk && "text-blue-400 font-bold opacity-75 bg-blue-950/30",
+                  !isAdd && !isDel && !isHunk && "text-zinc-400",
+                )}
+              >
+                {line}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+// ── End CodeDiffCard ────────────────────────────────────────────────────────
+
 export function SuperCallAssistantView() {
   const projects = useProjects();
   const { notes } = useNotes();
@@ -293,8 +365,34 @@ export function SuperCallAssistantView() {
   // Command Center / Right Sidebar Drawer
   const [isCommandCenterOpen, setIsCommandCenterOpen] = useState(false);
   const [commandCenterTab, setCommandCenterTab] = useState<
-    "summary" | "wishlist" | "tasks" | "voice"
+    "summary" | "wishlist" | "health" | "tasks" | "voice"
   >("summary");
+
+  // Health & Diagnostics State in Command Center
+  const [healthBranch, setHealthBranch] = useState("main");
+  const [healthModifiedFiles, setHealthModifiedFiles] = useState<string[]>([]);
+  const [healthRecentCommits, setHealthRecentCommits] = useState<string[]>([]);
+  const [isHealthLoading, setIsHealthLoading] = useState(false);
+  const [isCommitting, setIsCommitting] = useState(false);
+
+  // Screenshot / Image Attachment State
+  const [attachedImage, setAttachedImage] = useState<{ dataUrl: string; name: string } | null>(
+    null,
+  );
+  const imageInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        setAttachedImage({ dataUrl: reader.result, name: file.name });
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
 
   // Transcript Copy & Export State
   const [isTranscriptCopied, setIsTranscriptCopied] = useState(false);
@@ -361,6 +459,59 @@ export function SuperCallAssistantView() {
     },
     [activeProjectName],
   );
+
+  // Fetch Project Health & Git Info
+  const fetchProjectHealth = useCallback(async () => {
+    setIsHealthLoading(true);
+    try {
+      const activeProj = projects[0];
+      const projectCwd = activeProj?.path ? String(activeProj.path) : undefined;
+      const branchRes = await executeTerminalCommand(
+        "git branch --show-current",
+        projectCwd,
+        10_000,
+      );
+      if (branchRes?.stdout) setHealthBranch(branchRes.stdout.trim());
+
+      const statusRes = await executeTerminalCommand("git status --short", projectCwd, 10_000);
+      if (statusRes?.stdout) {
+        setHealthModifiedFiles(statusRes.stdout.split("\n").filter(Boolean));
+      } else {
+        setHealthModifiedFiles([]);
+      }
+
+      const logRes = await executeTerminalCommand(
+        'git log -n 4 --pretty=format:"%h | %s (%cr)"',
+        projectCwd,
+        10_000,
+      );
+      if (logRes?.stdout) {
+        setHealthRecentCommits(logRes.stdout.split("\n").filter(Boolean));
+      }
+    } catch (e) {
+      console.warn("Failed to fetch project health:", e);
+    } finally {
+      setIsHealthLoading(false);
+    }
+  }, [projects]);
+
+  useEffect(() => {
+    if (isCommandCenterOpen && commandCenterTab === "health") {
+      void fetchProjectHealth();
+    }
+  }, [isCommandCenterOpen, commandCenterTab, fetchProjectHealth]);
+
+  // Smart AI Commit & Push
+  const handleSmartCommit = useCallback(async () => {
+    setIsCommitting(true);
+    try {
+      void handleSuperAgentDispatch(
+        "Tamam modified files check karo, aik clean descriptive git commit message bana kar commit aur push kardo.",
+      );
+    } finally {
+      setIsCommitting(false);
+    }
+  }, []);
 
   // Voice Persona Settings
   const [persona, setPersona] = useState<"bilingual" | "professional" | "friendly">(() => {
@@ -513,12 +664,25 @@ export function SuperCallAssistantView() {
       const userText = rawUserText.trim();
       if (!userText || isProcessing) return;
 
+      const currentImage = attachedImage;
+      setAttachedImage(null);
+
       setInputText("");
       setPreviousTextForUndo(null);
       isUserEditingRef.current = false;
       setIsUserEditing(false);
 
-      handleAddMessage("user", userText);
+      const effectiveUserPrompt = currentImage
+        ? `${userText}\n[Screenshot/Image: ${currentImage.name}]`
+        : userText;
+
+      handleAddMessage(
+        "user",
+        userText,
+        currentImage
+          ? ({ image: currentImage.dataUrl, imageName: currentImage.name } as any)
+          : undefined,
+      );
       setIsProcessing(true);
       setAgentStatus("Analyzing request...");
 
@@ -532,7 +696,7 @@ export function SuperCallAssistantView() {
         );
 
         const res = await executeSuperAgentInstruction({
-          userText,
+          userText: effectiveUserPrompt,
           projects,
           activeProjectId: activeProjId,
           selectedModel: effectiveModel,
@@ -592,7 +756,15 @@ export function SuperCallAssistantView() {
               ? { actionType: res.actionTaken }
               : undefined;
 
-        handleAddMessage("assistant", res.reply, meta);
+        // Auto-detect code diffs in assistant reply
+        const diffMatch = res.reply.match(/```(?:diff)?\n([\s\S]*?(?:---|\+\+\+|@@)[\s\S]*?)```/);
+        const codeDiff = diffMatch ? diffMatch[1] : undefined;
+        const enrichedMeta = {
+          ...meta,
+          ...(codeDiff ? { diff: codeDiff } : {}),
+        };
+
+        handleAddMessage("assistant", res.reply, enrichedMeta);
         speakText(res.spokenReply, loadTtsSettings(), () => {
           if (inputRef.current !== document.activeElement) {
             isUserEditingRef.current = false;
@@ -821,13 +993,13 @@ export function SuperCallAssistantView() {
               </button>
             </div>
 
-            {/* Navigation Tabs (4 Comprehensive Tabs) */}
-            <div className="grid grid-cols-4 border-b border-border/50 px-2 pt-1 bg-muted/30 text-center">
+            {/* Navigation Tabs (5 Comprehensive Tabs) */}
+            <div className="grid grid-cols-5 border-b border-border/50 px-1 pt-1 bg-muted/30 text-center">
               <button
                 type="button"
                 onClick={() => setCommandCenterTab("summary")}
                 className={cn(
-                  "pb-2 pt-1 text-[11px] font-semibold border-b-2 transition-colors cursor-pointer flex flex-col sm:flex-row items-center justify-center gap-1",
+                  "pb-2 pt-1 text-[10.5px] font-semibold border-b-2 transition-colors cursor-pointer flex flex-col items-center justify-center gap-1",
                   commandCenterTab === "summary"
                     ? "border-primary text-primary"
                     : "border-transparent text-muted-foreground hover:text-foreground",
@@ -844,7 +1016,7 @@ export function SuperCallAssistantView() {
                   void fetchDrawerWishlist();
                 }}
                 className={cn(
-                  "pb-2 pt-1 text-[11px] font-semibold border-b-2 transition-colors cursor-pointer flex flex-col sm:flex-row items-center justify-center gap-1",
+                  "pb-2 pt-1 text-[10.5px] font-semibold border-b-2 transition-colors cursor-pointer flex flex-col items-center justify-center gap-1",
                   commandCenterTab === "wishlist"
                     ? "border-primary text-primary"
                     : "border-transparent text-muted-foreground hover:text-foreground",
@@ -853,8 +1025,30 @@ export function SuperCallAssistantView() {
                 <ShoppingBag className="size-3" />
                 <span>Wishlist</span>
                 {drawerWishlistItems.length > 0 && (
-                  <span className="text-[9px] px-1 rounded-full bg-amber-500/20 text-amber-400 font-mono">
+                  <span className="text-[8px] px-1 rounded-full bg-amber-500/20 text-amber-400 font-mono">
                     {drawerWishlistItems.length}
+                  </span>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setCommandCenterTab("health");
+                  void fetchProjectHealth();
+                }}
+                className={cn(
+                  "pb-2 pt-1 text-[10.5px] font-semibold border-b-2 transition-colors cursor-pointer flex flex-col items-center justify-center gap-1",
+                  commandCenterTab === "health"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <Activity className="size-3" />
+                <span>Health</span>
+                {healthModifiedFiles.length > 0 && (
+                  <span className="text-[8px] px-1 rounded-full bg-amber-500/20 text-amber-400 font-mono">
+                    {healthModifiedFiles.length}
                   </span>
                 )}
               </button>
@@ -863,7 +1057,7 @@ export function SuperCallAssistantView() {
                 type="button"
                 onClick={() => setCommandCenterTab("tasks")}
                 className={cn(
-                  "pb-2 pt-1 text-[11px] font-semibold border-b-2 transition-colors cursor-pointer flex flex-col sm:flex-row items-center justify-center gap-1",
+                  "pb-2 pt-1 text-[10.5px] font-semibold border-b-2 transition-colors cursor-pointer flex flex-col items-center justify-center gap-1",
                   commandCenterTab === "tasks"
                     ? "border-primary text-primary"
                     : "border-transparent text-muted-foreground hover:text-foreground",
@@ -872,7 +1066,7 @@ export function SuperCallAssistantView() {
                 <ListTodo className="size-3" />
                 <span>Tasks</span>
                 {scheduledTasks.length > 0 && (
-                  <span className="text-[9px] px-1 rounded-full bg-primary/20 text-primary font-mono">
+                  <span className="text-[8px] px-1 rounded-full bg-primary/20 text-primary font-mono">
                     {scheduledTasks.length}
                   </span>
                 )}
@@ -882,14 +1076,14 @@ export function SuperCallAssistantView() {
                 type="button"
                 onClick={() => setCommandCenterTab("voice")}
                 className={cn(
-                  "pb-2 pt-1 text-[11px] font-semibold border-b-2 transition-colors cursor-pointer flex flex-col sm:flex-row items-center justify-center gap-1",
+                  "pb-2 pt-1 text-[10.5px] font-semibold border-b-2 transition-colors cursor-pointer flex flex-col items-center justify-center gap-1",
                   commandCenterTab === "voice"
                     ? "border-primary text-primary"
                     : "border-transparent text-muted-foreground hover:text-foreground",
                 )}
               >
                 <SlidersHorizontal className="size-3" />
-                <span>Persona</span>
+                <span>Voice</span>
               </button>
             </div>
 
@@ -1167,7 +1361,136 @@ export function SuperCallAssistantView() {
                 </div>
               )}
 
-              {/* TAB 3: TASKS & LEDGER */}
+              {/* TAB: HEALTH & DIAGNOSTICS */}
+              {commandCenterTab === "health" && (
+                <div className="space-y-4">
+                  {/* Header & Refresh */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-xs font-semibold text-foreground">
+                        Workspace Health & Git
+                      </h3>
+                      <p className="text-[10px] text-muted-foreground">
+                        Git status, active branch & automated commit engine
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void fetchProjectHealth()}
+                      disabled={isHealthLoading}
+                      className="p-1.5 rounded-lg border border-border/70 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                      title="Refresh Project Health"
+                    >
+                      <RefreshCw className={cn("size-3.5", isHealthLoading && "animate-spin")} />
+                    </button>
+                  </div>
+
+                  {/* Branch & Modified Status Card */}
+                  <div className="p-3.5 rounded-xl border border-border/70 bg-card/60 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <GitBranch className="size-3.5 text-primary" />
+                        <span className="text-xs font-mono font-semibold text-foreground">
+                          {healthBranch}
+                        </span>
+                      </div>
+                      <span
+                        className={cn(
+                          "text-[10px] px-2 py-0.5 rounded-full font-mono font-semibold",
+                          healthModifiedFiles.length > 0
+                            ? "bg-amber-500/20 text-amber-400"
+                            : "bg-emerald-500/20 text-emerald-400",
+                        )}
+                      >
+                        {healthModifiedFiles.length > 0
+                          ? `${healthModifiedFiles.length} modified`
+                          : "Clean Working Tree"}
+                      </span>
+                    </div>
+
+                    {/* Modified Files List */}
+                    {healthModifiedFiles.length > 0 ? (
+                      <div className="p-2.5 rounded-lg bg-zinc-950/70 border border-border/50 max-h-36 overflow-y-auto space-y-1">
+                        {healthModifiedFiles.map((line, idx) => (
+                          <div
+                            key={idx}
+                            className="text-[10.5px] font-mono text-zinc-300 truncate flex items-center gap-1.5"
+                          >
+                            <span className="text-amber-400 font-bold shrink-0 text-[10px]">
+                              {line.slice(0, 2)}
+                            </span>
+                            <span className="truncate">{line.slice(2).trim()}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-2 text-emerald-400 text-xs">
+                        <ShieldCheck className="size-4 shrink-0" />
+                        <span>Working tree bilkul clean hai, koi uncommitted change nahi.</span>
+                      </div>
+                    )}
+
+                    {/* Smart AI Commit Button */}
+                    {healthModifiedFiles.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => void handleSmartCommit()}
+                        disabled={isCommitting || isProcessing}
+                        className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-40 text-xs font-semibold transition-opacity cursor-pointer shadow-xs"
+                      >
+                        <GitCommit className="size-3.5" />
+                        <span>
+                          {isCommitting ? "Generating Commit..." : "Smart AI Commit & Push"}
+                        </span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Recent Commits Card */}
+                  <div className="p-3.5 rounded-xl border border-border/70 bg-card/60 space-y-2">
+                    <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                      <Clock className="size-3.5 text-muted-foreground" />
+                      Recent Git Commits
+                    </span>
+                    {healthRecentCommits.length > 0 ? (
+                      <div className="space-y-1.5 pt-1">
+                        {healthRecentCommits.map((c, idx) => (
+                          <div
+                            key={idx}
+                            className="p-2 rounded-lg bg-muted/30 border border-border/40 text-[11px] font-mono text-zinc-300 leading-snug break-words"
+                          >
+                            {c}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground italic py-1">
+                        No recent commit logs available.
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Auto-Heal & Diagnose Trigger Button */}
+                  <div className="p-3.5 rounded-xl border border-border/70 bg-card/60 space-y-2">
+                    <span className="text-xs font-semibold text-foreground">Diagnostics Radar</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void handleSuperAgentDispatch(
+                          "Workspace ke tamam errors scan karo aur self-healing diagnostics report do.",
+                        )
+                      }
+                      disabled={isProcessing}
+                      className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-border bg-muted/40 hover:bg-muted text-xs font-medium text-foreground transition-colors cursor-pointer"
+                    >
+                      <Activity className="size-3.5 text-primary" />
+                      <span>Run Self-Healing Error Audit</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 4: TASKS & LEDGER */}
               {commandCenterTab === "tasks" && (
                 <div className="space-y-4">
                   {/* Sub-tab switcher */}

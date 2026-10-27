@@ -831,7 +831,7 @@ export function speakText(text: string, options?: Partial<TtsSettings>, onEnd?: 
   const wordsCount = Math.max(clean.split(/\s+/).filter(Boolean).length, Math.ceil(charCount / 5));
   const isNonEnglishOrUrdu =
     /[\u0600-\u06FF]/.test(clean) ||
-    Boolean(options?.lang && !options.lang.toLowerCase().startsWith("en"));
+    Boolean(options?.language && !options.language.toLowerCase().startsWith("en"));
   const wps = isNonEnglishOrUrdu ? 0.6 : 1.0;
   const effectiveRate = Math.max(0.25, Math.min(2.0, options?.rate ?? 1.0));
   const adjustedWps = Math.max(0.3, wps * effectiveRate);

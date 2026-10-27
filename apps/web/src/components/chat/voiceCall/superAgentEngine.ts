@@ -18,18 +18,20 @@ import { buildSuperAgentSystemPrompt } from "./superAgentPrompt";
 export interface SuperAgentRunOptions {
   userText: string;
   projects: ReadonlyArray<EnvironmentProject>;
-  activeProjectId?: string;
+  activeProjectId?: string | undefined;
   selectedModel: string;
-  selectedInstanceId?: string;
-  conversationHistory?: Array<{ role: "user" | "assistant"; text: string }>;
-  providerConfig?: {
-    baseUrl?: string;
-    apiKey?: string;
-    headers?: Array<{ key: string; value: string }>;
-    format?: string;
-  };
-  onFillerSpoken?: (filler: string) => void;
-  onStatusUpdate?: (status: string) => void;
+  selectedInstanceId?: string | undefined;
+  conversationHistory?: Array<{ role: "user" | "assistant"; text: string }> | undefined;
+  providerConfig?:
+    | {
+        baseUrl?: string | undefined;
+        apiKey?: string | undefined;
+        headers?: Array<{ key: string; value: string }> | undefined;
+        format?: string | undefined;
+      }
+    | undefined;
+  onFillerSpoken?: ((filler: string) => void) | undefined;
+  onStatusUpdate?: ((status: string) => void) | undefined;
 }
 
 export interface DelegatedTaskInfo {
