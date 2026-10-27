@@ -18,6 +18,19 @@ import {
   AudioLines,
   Volume2,
   Settings2,
+  Copy,
+  Check,
+  Download,
+  ShoppingBag,
+  SlidersHorizontal,
+  Square,
+  Play,
+  Plus,
+  RefreshCw,
+  FileText,
+  UserCheck,
+  CheckCircle2,
+  Zap,
 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { type ProviderInstanceId } from "@t3tools/contracts";
@@ -276,7 +289,92 @@ export function SuperCallAssistantView() {
   const [inputText, setInputText] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [agentStatus, setAgentStatus] = useState<string | null>(null);
-  const [isTasksSheetOpen, setIsTasksSheetOpen] = useState(false);
+
+  // Command Center / Right Sidebar Drawer
+  const [isCommandCenterOpen, setIsCommandCenterOpen] = useState(false);
+  const [commandCenterTab, setCommandCenterTab] = useState<
+    "summary" | "wishlist" | "tasks" | "voice"
+  >("summary");
+
+  // Transcript Copy & Export State
+  const [isTranscriptCopied, setIsTranscriptCopied] = useState(false);
+
+  // Wishlist State in Command Center
+  const activeProjectName = useMemo(() => {
+    return projects[0]?.title || (projects[0]?.id ? String(projects[0].id) : "Workspace");
+  }, [projects]);
+  const [drawerWishlistItems, setDrawerWishlistItems] = useState<
+    import("~/lib/callAssistantStore").WishlistItem[]
+  >([]);
+  const [isWishlistLoading, setIsWishlistLoading] = useState(false);
+  const [newWishlistTitle, setNewWishlistTitle] = useState("");
+  const [newWishlistType, setNewWishlistType] = useState<"feature" | "improvement">("feature");
+
+  // Fetch Wishlist Items
+  const fetchDrawerWishlist = useCallback(async () => {
+    setIsWishlistLoading(true);
+    try {
+      const res = await fetch(`/api/bot/wishlist?project=${encodeURIComponent(activeProjectName)}`);
+      const data = (await res.json()) as {
+        ok: boolean;
+        items: import("~/lib/callAssistantStore").WishlistItem[];
+      };
+      if (data.ok && Array.isArray(data.items)) {
+        setDrawerWishlistItems(data.items);
+      }
+    } catch (err) {
+      console.warn("Failed to fetch drawer wishlist:", err);
+    } finally {
+      setIsWishlistLoading(false);
+    }
+  }, [activeProjectName]);
+
+  useEffect(() => {
+    if (isCommandCenterOpen && commandCenterTab === "wishlist") {
+      void fetchDrawerWishlist();
+    }
+  }, [isCommandCenterOpen, commandCenterTab, fetchDrawerWishlist]);
+
+  // Toggle Auto-Approve on Wishlist item
+  const handleToggleAutoApprove = useCallback(
+    async (itemId: string) => {
+      try {
+        const res = await fetch("/api/bot/wishlist/toggle-approve", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ projectName: activeProjectName, itemId }),
+        });
+        const data = (await res.json()) as {
+          ok: boolean;
+          item?: import("~/lib/callAssistantStore").WishlistItem;
+        };
+        if (data.ok && data.item) {
+          setDrawerWishlistItems((prev) =>
+            prev.map((it) =>
+              it.id === itemId ? { ...it, autoApprove: data.item!.autoApprove } : it,
+            ),
+          );
+        }
+      } catch (err) {
+        console.error("Auto approve toggle error:", err);
+      }
+    },
+    [activeProjectName],
+  );
+
+  // Voice Persona Settings
+  const [persona, setPersona] = useState<"bilingual" | "professional" | "friendly">(() => {
+    if (typeof window === "undefined") return "bilingual";
+    return (localStorage.getItem("super_bot_persona") as any) || "bilingual";
+  });
+
+  const handlePersonaChange = useCallback(
+    (newPersona: "bilingual" | "professional" | "friendly") => {
+      setPersona(newPersona);
+      localStorage.setItem("super_bot_persona", newPersona);
+    },
+    [],
+  );
 
   // Synchronized STT & TTS Settings from /settings/stt-tts
   const [ttsSettings, setTtsSettings] = useState<TtsSettings>(loadTtsSettings);
@@ -608,233 +706,722 @@ export function SuperCallAssistantView() {
     }
   }, [handleSuperAgentDispatch, inputText]);
 
+  // Copy Full Conversation Transcript
+  const handleCopyTranscript = useCallback(() => {
+    if (!activeSession?.messages.length) return;
+    const text = activeSession.messages
+      .map(
+        (m) =>
+          `[${new Date(m.timestamp).toLocaleTimeString()}] ${m.role === "user" ? "User" : "Super Bot"}:\n${m.text}`,
+      )
+      .join("\n\n");
+    void navigator.clipboard.writeText(text).then(() => {
+      setIsTranscriptCopied(true);
+      setTimeout(() => setIsTranscriptCopied(false), 2000);
+    });
+  }, [activeSession?.messages]);
+
+  // Download Conversation as Markdown File
+  const handleDownloadMarkdown = useCallback(() => {
+    if (!activeSession?.messages.length) return;
+    const md =
+      `# Super Call Assistant Conversation Transcript\n` +
+      `**Session:** ${activeSession.title || "Untitled Session"}\n` +
+      `**Date:** ${new Date().toLocaleString()}\n` +
+      `**Total Messages:** ${activeSession.messages.length}\n\n---\n\n` +
+      activeSession.messages
+        .map(
+          (m) =>
+            `### ${m.role === "user" ? "👤 You (User)" : "🤖 Super Bot Assistant"} *(${new Date(m.timestamp).toLocaleTimeString()})*\n\n${m.text}\n`,
+        )
+        .join("\n---\n\n");
+
+    const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `voice-session-${new Date().toISOString().slice(0, 10)}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [activeSession]);
+
+  // Barge-in / Stop Speaking Helper
+  const handleStopSpeaking = useCallback(() => {
+    stopSpeaking();
+    interruptSpeaking();
+  }, [interruptSpeaking]);
+
+  // Conversation Key Points & Summary Extractor
+  const conversationSummary = useMemo(() => {
+    if (!activeSession || activeSession.messages.length === 0) return null;
+    const userMsgs = activeSession.messages.filter((m) => m.role === "user");
+    const botMsgs = activeSession.messages.filter((m) => m.role === "assistant");
+    const recentQueries = userMsgs.slice(-4).map((m) => {
+      const single = m.text.replace(/\s+/g, " ").trim();
+      return single.length > 55 ? single.slice(0, 52) + "..." : single;
+    });
+
+    return {
+      total: activeSession.messages.length,
+      userCount: userMsgs.length,
+      botCount: botMsgs.length,
+      recentQueries,
+    };
+  }, [activeSession]);
+
+  // Smart Suggested Quick-Action Chips
+  const quickSuggestions = useMemo(
+    () => [
+      { label: "📊 Project Status", prompt: "Tamam projects ka status report do" },
+      { label: "📋 Wishlist Check", prompt: "Active project ki Wishlist check karo" },
+      { label: "🔍 Scan Bugs & Errors", prompt: "Kya kisi project mein koi bug ya error hai?" },
+      {
+        label: "📝 Summarize Call",
+        prompt: "Ab tak ki conversation ko 3 bullet points mein summarize karo",
+      },
+      { label: "⚡ Next Priority?", prompt: "Is waqt meri sab se bari priority kya honi chahiye?" },
+    ],
+    [],
+  );
+
   return (
     <div className="flex h-full w-full bg-background text-foreground overflow-hidden relative">
-      {/* Right-Side Scheduled Tasks Sheet / Drawer */}
-      {isTasksSheetOpen && (
+      {/* Right-Side Command Center / Smart Drawer */}
+      {isCommandCenterOpen && (
         <div
           role="dialog"
           aria-modal="true"
           className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-xs animate-in fade-in duration-150"
-          onClick={() => setIsTasksSheetOpen(false)}
+          onClick={() => setIsCommandCenterOpen(false)}
         >
           <aside
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md h-full bg-background border-l border-border shadow-2xl flex flex-col animate-in slide-in-from-right duration-200"
+            className="w-full max-w-md sm:max-w-lg h-full bg-background border-l border-border shadow-2xl flex flex-col animate-in slide-in-from-right duration-200"
           >
-            {/* Sheet Header */}
-            <div className="h-14 px-5 border-b border-border/60 flex items-center justify-between shrink-0">
+            {/* Sheet Top Header */}
+            <div className="h-14 px-4 sm:px-5 border-b border-border/60 flex items-center justify-between shrink-0 bg-muted/20">
               <div className="flex items-center gap-2">
                 <div className="size-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
-                  <ListTodo className="size-4" />
+                  <Sparkles className="size-4 text-primary" />
                 </div>
                 <div>
-                  <h2 className="text-sm font-semibold">Super Bot Tasks & Ledger</h2>
-                  <p className="text-[11px] text-muted-foreground">
-                    {scheduledTasks.length} scheduled · {activities.length} history records
+                  <h2 className="text-sm font-semibold">Assistant Command Center</h2>
+                  <p className="text-[10px] text-muted-foreground">
+                    Insights, Wishlist, Automated Tasks & Voice Persona
                   </p>
                 </div>
               </div>
               <button
                 type="button"
-                onClick={() => setIsTasksSheetOpen(false)}
+                onClick={() => setIsCommandCenterOpen(false)}
                 className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
-                title="Close Sheet"
+                title="Close Command Center"
               >
                 <X className="size-4" />
               </button>
             </div>
 
-            {/* Sheet Navigation Tabs */}
-            <div className="flex border-b border-border/50 px-4 pt-1 gap-2 bg-muted/20">
+            {/* Navigation Tabs (4 Comprehensive Tabs) */}
+            <div className="grid grid-cols-4 border-b border-border/50 px-2 pt-1 bg-muted/30 text-center">
               <button
                 type="button"
-                onClick={() => setTasksSheetTab("scheduled")}
+                onClick={() => setCommandCenterTab("summary")}
                 className={cn(
-                  "pb-2 text-xs font-semibold border-b-2 transition-colors cursor-pointer",
-                  tasksSheetTab === "scheduled"
+                  "pb-2 pt-1 text-[11px] font-semibold border-b-2 transition-colors cursor-pointer flex flex-col sm:flex-row items-center justify-center gap-1",
+                  commandCenterTab === "summary"
                     ? "border-primary text-primary"
                     : "border-transparent text-muted-foreground hover:text-foreground",
                 )}
               >
-                Scheduled Shifts ({scheduledTasks.length})
+                <FileText className="size-3" />
+                <span>Summary</span>
               </button>
+
               <button
                 type="button"
-                onClick={() => setTasksSheetTab("history")}
+                onClick={() => {
+                  setCommandCenterTab("wishlist");
+                  void fetchDrawerWishlist();
+                }}
                 className={cn(
-                  "pb-2 text-xs font-semibold border-b-2 transition-colors cursor-pointer",
-                  tasksSheetTab === "history"
+                  "pb-2 pt-1 text-[11px] font-semibold border-b-2 transition-colors cursor-pointer flex flex-col sm:flex-row items-center justify-center gap-1",
+                  commandCenterTab === "wishlist"
                     ? "border-primary text-primary"
                     : "border-transparent text-muted-foreground hover:text-foreground",
                 )}
               >
-                Execution Log ({activities.length})
+                <ShoppingBag className="size-3" />
+                <span>Wishlist</span>
+                {drawerWishlistItems.length > 0 && (
+                  <span className="text-[9px] px-1 rounded-full bg-amber-500/20 text-amber-400 font-mono">
+                    {drawerWishlistItems.length}
+                  </span>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCommandCenterTab("tasks")}
+                className={cn(
+                  "pb-2 pt-1 text-[11px] font-semibold border-b-2 transition-colors cursor-pointer flex flex-col sm:flex-row items-center justify-center gap-1",
+                  commandCenterTab === "tasks"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <ListTodo className="size-3" />
+                <span>Tasks</span>
+                {scheduledTasks.length > 0 && (
+                  <span className="text-[9px] px-1 rounded-full bg-primary/20 text-primary font-mono">
+                    {scheduledTasks.length}
+                  </span>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCommandCenterTab("voice")}
+                className={cn(
+                  "pb-2 pt-1 text-[11px] font-semibold border-b-2 transition-colors cursor-pointer flex flex-col sm:flex-row items-center justify-center gap-1",
+                  commandCenterTab === "voice"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <SlidersHorizontal className="size-3" />
+                <span>Persona</span>
               </button>
             </div>
 
-            {/* Tasks / History List */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {tasksSheetTab === "scheduled" ? (
-                scheduledTasks.length === 0 ? (
-                  <div className="h-64 flex flex-col items-center justify-center text-center p-6 text-muted-foreground">
-                    <div className="size-12 rounded-xl bg-muted/60 flex items-center justify-center mb-3">
-                      <ListTodo className="size-6 text-muted-foreground/60" />
+            {/* Tab Contents */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {/* TAB 1: SUMMARY & EXPORT */}
+              {commandCenterTab === "summary" && (
+                <div className="space-y-4">
+                  {/* Session Metrics Card */}
+                  <div className="p-3.5 rounded-xl border border-border/70 bg-card/60 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-foreground">
+                        Session Overview
+                      </span>
+                      <span className="text-[10px] text-muted-foreground">
+                        {activeSession?.messages.length ?? 0} total messages
+                      </span>
                     </div>
-                    <h3 className="text-sm font-medium text-foreground mb-1">
-                      No tasks scheduled yet
-                    </h3>
-                    <p className="text-xs text-muted-foreground max-w-xs leading-relaxed">
-                      Aap Super Assistant se bol saktay hain: &quot;Raat 2:00 baje chalne lag
-                      jaye&quot;. Woh khud schedule karega aur waqt par execute karega.
-                    </p>
+                    <div className="grid grid-cols-3 gap-2 pt-1">
+                      <div className="p-2 rounded-lg bg-muted/40 text-center">
+                        <span className="block text-xs font-bold text-foreground">
+                          {conversationSummary?.userCount ?? 0}
+                        </span>
+                        <span className="text-[9px] text-muted-foreground uppercase">
+                          User Turns
+                        </span>
+                      </div>
+                      <div className="p-2 rounded-lg bg-muted/40 text-center">
+                        <span className="block text-xs font-bold text-primary">
+                          {conversationSummary?.botCount ?? 0}
+                        </span>
+                        <span className="text-[9px] text-muted-foreground uppercase">
+                          Bot Turns
+                        </span>
+                      </div>
+                      <div className="p-2 rounded-lg bg-muted/40 text-center">
+                        <span className="block text-xs font-bold text-emerald-400">
+                          {callStatus === "idle" ? "Standby" : callStatus}
+                        </span>
+                        <span className="text-[9px] text-muted-foreground uppercase">
+                          Call State
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                ) : (
-                  scheduledTasks.map((t) => (
-                    <div
-                      key={t.id}
-                      className="p-4 rounded-xl border border-border/70 bg-card/60 hover:bg-card transition-colors space-y-2.5"
+
+                  {/* Key Topics / Queries */}
+                  <div className="p-3.5 rounded-xl border border-border/70 bg-card/60 space-y-2">
+                    <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                      <Sparkles className="size-3 text-amber-400" />
+                      Key Discussion Points
+                    </span>
+                    {conversationSummary && conversationSummary.recentQueries.length > 0 ? (
+                      <ul className="space-y-1.5 pt-1">
+                        {conversationSummary.recentQueries.map((q, idx) => (
+                          <li
+                            key={idx}
+                            className="text-xs text-muted-foreground flex items-start gap-2 bg-muted/20 p-2 rounded-lg border border-border/40"
+                          >
+                            <span className="text-primary font-mono text-[10px] mt-0.5">
+                              #{idx + 1}
+                            </span>
+                            <span className="leading-snug text-foreground/90">{q}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-xs text-muted-foreground italic py-2">
+                        Abhi conversation shuru karein, key points yahan auto-extract honge.
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Export & Actions */}
+                  <div className="p-3.5 rounded-xl border border-border/70 bg-card/60 space-y-2.5">
+                    <span className="text-xs font-semibold text-foreground">Export & Sharing</span>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={handleCopyTranscript}
+                        disabled={!activeSession?.messages.length}
+                        className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-border bg-muted/40 hover:bg-muted text-xs font-medium transition-colors disabled:opacity-40 cursor-pointer"
+                      >
+                        {isTranscriptCopied ? (
+                          <>
+                            <Check className="size-3.5 text-emerald-400" />
+                            <span className="text-emerald-400">Copied!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="size-3.5 text-muted-foreground" />
+                            <span>Copy Transcript</span>
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleDownloadMarkdown}
+                        disabled={!activeSession?.messages.length}
+                        className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-border bg-muted/40 hover:bg-muted text-xs font-medium transition-colors disabled:opacity-40 cursor-pointer"
+                      >
+                        <Download className="size-3.5 text-muted-foreground" />
+                        <span>Export Markdown</span>
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (
+                          confirm("Kya aap waqai is session ki history clear karna chahte hain?")
+                        ) {
+                          handleClearHistory();
+                        }
+                      }}
+                      disabled={!activeSession?.messages.length}
+                      className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg border border-destructive/30 hover:border-destructive/60 hover:bg-destructive/10 text-destructive text-xs font-medium transition-colors disabled:opacity-40 cursor-pointer"
                     >
-                      {/* Top Row: Title & Actions */}
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0 flex-1">
-                          <h4 className="text-xs font-semibold text-foreground truncate">
-                            {t.title}
-                          </h4>
-                          <div className="flex items-center gap-1.5 mt-1 text-[11px] text-muted-foreground">
-                            <FolderGit2 className="size-3 text-primary shrink-0" />
-                            <span className="font-medium text-primary truncate">
-                              {t.projectName || "General Workspace"}
+                      <Trash2 className="size-3.5" />
+                      <span>Clear Session History</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 2: WISHLIST & AUTO-APPROVE */}
+              {commandCenterTab === "wishlist" && (
+                <div className="space-y-4">
+                  {/* Header & Refresh */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-xs font-semibold text-foreground">
+                        {activeProjectName} Wishlist
+                      </h3>
+                      <p className="text-[10px] text-muted-foreground">
+                        Review pending improvements & toggle Auto-Approve
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void fetchDrawerWishlist()}
+                      disabled={isWishlistLoading}
+                      className="p-1.5 rounded-lg border border-border/70 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                      title="Refresh Wishlist"
+                    >
+                      <RefreshCw className={cn("size-3.5", isWishlistLoading && "animate-spin")} />
+                    </button>
+                  </div>
+
+                  {/* Add New Wishlist Quick Form */}
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (!newWishlistTitle.trim()) return;
+                      void handleSuperAgentDispatch(
+                        `Wishlist mein naya item add karo: "${newWishlistTitle}" as ${newWishlistType}`,
+                      );
+                      setNewWishlistTitle("");
+                      setTimeout(() => void fetchDrawerWishlist(), 1500);
+                    }}
+                    className="p-3 rounded-xl border border-border/70 bg-card/60 space-y-2"
+                  >
+                    <span className="text-[11px] font-medium text-foreground flex items-center gap-1">
+                      <Plus className="size-3 text-primary" />
+                      Add Quick Wishlist Item
+                    </span>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newWishlistTitle}
+                        onChange={(e) => setNewWishlistTitle(e.target.value)}
+                        placeholder="Feature ya improvement ka naam..."
+                        className="flex-1 bg-background border border-border/80 rounded-lg px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
+                      />
+                      <select
+                        value={newWishlistType}
+                        onChange={(e) => setNewWishlistType(e.target.value as any)}
+                        className="bg-background border border-border/80 rounded-lg px-2 py-1.5 text-[11px] text-foreground focus:outline-none"
+                      >
+                        <option value="feature">✨ Feature</option>
+                        <option value="improvement">⚡ Improve</option>
+                      </select>
+                      <button
+                        type="submit"
+                        disabled={!newWishlistTitle.trim() || isProcessing}
+                        className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground font-semibold text-xs hover:opacity-90 disabled:opacity-40 transition-opacity cursor-pointer"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  </form>
+
+                  {/* Wishlist Items List */}
+                  {isWishlistLoading && drawerWishlistItems.length === 0 ? (
+                    <div className="py-8 flex flex-col items-center justify-center text-muted-foreground">
+                      <Loader2 className="size-5 animate-spin mb-2" />
+                      <span className="text-xs">Loading wishlist...</span>
+                    </div>
+                  ) : drawerWishlistItems.length === 0 ? (
+                    <div className="py-8 text-center text-muted-foreground space-y-2">
+                      <ShoppingBag className="size-8 mx-auto opacity-40" />
+                      <p className="text-xs font-medium text-foreground">Wishlist khali hai</p>
+                      <p className="text-[11px] max-w-xs mx-auto">
+                        Aap assistant se bol sakte hain: &quot;Wishlist mein feature add karo&quot;
+                        ya upar se direct add karein.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {drawerWishlistItems.map((item) => (
+                        <div
+                          key={item.id}
+                          className="p-3 rounded-xl border border-border/70 bg-card/60 flex items-start gap-3 hover:bg-card transition-colors"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-semibold text-xs text-foreground truncate">
+                                {item.title}
+                              </span>
+                              <span
+                                className={cn(
+                                  "text-[9px] px-1.5 py-0.2 rounded-full font-mono uppercase",
+                                  item.type === "improvement"
+                                    ? "bg-blue-500/15 text-blue-400"
+                                    : "bg-emerald-500/15 text-emerald-400",
+                                )}
+                              >
+                                {item.type === "improvement" ? "⚡ Improve" : "✨ Feature"}
+                              </span>
+                              <span className="text-[9px] text-muted-foreground">
+                                • {item.status}
+                              </span>
+                            </div>
+                            {item.description && (
+                              <p className="text-[10px] text-muted-foreground mt-1 line-clamp-2">
+                                {item.description}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Auto-Approve Toggle Switch */}
+                          <div className="flex flex-col items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => void handleToggleAutoApprove(item.id)}
+                              title={item.autoApprove ? "Auto Approve: ON" : "Auto Approve: OFF"}
+                              className={cn(
+                                "relative w-9 h-5 rounded-full transition-colors duration-200 focus:outline-none cursor-pointer",
+                                item.autoApprove
+                                  ? "bg-emerald-500 shadow-[0_0_8px_rgba(52,211,153,0.4)]"
+                                  : "bg-zinc-700/60",
+                              )}
+                            >
+                              <span
+                                className={cn(
+                                  "absolute top-0.5 left-0.5 size-4 rounded-full bg-white shadow transition-transform duration-200",
+                                  item.autoApprove ? "translate-x-4" : "translate-x-0",
+                                )}
+                              />
+                            </button>
+                            <span
+                              className={cn(
+                                "text-[8px] font-bold uppercase tracking-wider",
+                                item.autoApprove ? "text-emerald-400" : "text-zinc-500",
+                              )}
+                            >
+                              {item.autoApprove ? "AUTO" : "MANUAL"}
                             </span>
                           </div>
                         </div>
-                        <div className="flex items-center gap-1 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => toggleTask(t.id)}
-                            className={cn(
-                              "px-2 py-0.5 rounded text-[10px] font-medium transition-colors cursor-pointer",
-                              t.enabled
-                                ? "bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25"
-                                : "bg-muted text-muted-foreground hover:bg-muted/80",
-                            )}
-                            title={t.enabled ? "Click to Pause" : "Click to Enable"}
-                          >
-                            {t.enabled ? "Active" : "Paused"}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => removeTask(t.id)}
-                            className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
-                            title="Delete Task"
-                          >
-                            <Trash2 className="size-3.5" />
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Instruction / Prompt */}
-                      <div className="p-2.5 rounded-lg bg-muted/40 text-[11px] text-zinc-300 leading-relaxed font-mono whitespace-pre-wrap break-words">
-                        {t.prompt}
-                      </div>
-
-                      {/* Timing & Next Run */}
-                      <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-1 border-t border-border/40">
-                        <span className="flex items-center gap-1">
-                          <Clock className="size-3" />
-                          <span>
-                            {t.scheduleType === "fixed_time" && t.timeOfDay
-                              ? `Daily at ${t.timeOfDay}`
-                              : t.intervalMinutes
-                                ? `Every ${t.intervalMinutes}m`
-                                : "Scheduled"}
-                          </span>
-                        </span>
-                        {t.nextRunAt && (
-                          <span>
-                            Next:{" "}
-                            {new Date(t.nextRunAt).toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </span>
-                        )}
-                      </div>
+                      ))}
                     </div>
-                  ))
-                )
-              ) : /* History / Activity Ledger Tab */
-              activities.length === 0 ? (
-                <div className="h-64 flex flex-col items-center justify-center text-center p-6 text-muted-foreground">
-                  <div className="size-12 rounded-xl bg-muted/60 flex items-center justify-center mb-3">
-                    <ListTodo className="size-6 text-muted-foreground/60" />
-                  </div>
-                  <h3 className="text-sm font-medium text-foreground mb-1">
-                    No project execution history yet
-                  </h3>
-                  <p className="text-xs text-muted-foreground max-w-xs leading-relaxed">
-                    Jab Super Bot kisi project mein task dispatch karega ya error fix karega, yahan
-                    date, time aur task description ke sath full ledger record hoga.
-                  </p>
+                  )}
                 </div>
-              ) : (
-                activities.map((act) => (
-                  <div
-                    key={act.id}
-                    className="p-4 rounded-xl border border-border/70 bg-card/60 hover:bg-card transition-colors space-y-2.5"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5">
-                          <span
-                            className={cn(
-                              "size-2 rounded-full shrink-0",
-                              act.status === "completed"
-                                ? "bg-emerald-400"
-                                : act.status === "running"
-                                  ? "bg-amber-400 animate-pulse"
-                                  : "bg-blue-400",
-                            )}
-                          />
-                          <h4 className="text-xs font-semibold text-foreground truncate">
-                            {act.taskTitle}
-                          </h4>
+              )}
+
+              {/* TAB 3: TASKS & LEDGER */}
+              {commandCenterTab === "tasks" && (
+                <div className="space-y-4">
+                  {/* Sub-tab switcher */}
+                  <div className="flex border-b border-border/50 pb-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setTasksSheetTab("scheduled")}
+                      className={cn(
+                        "text-xs font-semibold px-2 py-1 rounded-md transition-colors cursor-pointer",
+                        tasksSheetTab === "scheduled"
+                          ? "bg-primary/20 text-primary"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      Scheduled Shifts ({scheduledTasks.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTasksSheetTab("history")}
+                      className={cn(
+                        "text-xs font-semibold px-2 py-1 rounded-md transition-colors cursor-pointer",
+                        tasksSheetTab === "history"
+                          ? "bg-primary/20 text-primary"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      Execution Log ({activities.length})
+                    </button>
+                  </div>
+
+                  {tasksSheetTab === "scheduled" ? (
+                    scheduledTasks.length === 0 ? (
+                      <div className="py-12 flex flex-col items-center justify-center text-center text-muted-foreground">
+                        <ListTodo className="size-8 mb-2 opacity-50" />
+                        <h4 className="text-xs font-semibold text-foreground">
+                          No Tasks Scheduled
+                        </h4>
+                        <p className="text-[11px] text-muted-foreground max-w-xs mt-1">
+                          Aap Super Assistant se bol saktay hain: &quot;Raat 2:00 baje status check
+                          karo&quot;.
+                        </p>
+                      </div>
+                    ) : (
+                      scheduledTasks.map((t) => (
+                        <div
+                          key={t.id}
+                          className="p-3 rounded-xl border border-border/70 bg-card/60 space-y-2"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <h4 className="text-xs font-semibold text-foreground truncate">
+                                {t.title}
+                              </h4>
+                              <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-muted-foreground">
+                                <FolderGit2 className="size-3 text-primary shrink-0" />
+                                <span className="font-medium text-primary truncate">
+                                  {t.projectName || "General Workspace"}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => toggleTask(t.id)}
+                                className={cn(
+                                  "px-2 py-0.5 rounded text-[10px] font-medium transition-colors cursor-pointer",
+                                  t.enabled
+                                    ? "bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25"
+                                    : "bg-muted text-muted-foreground hover:bg-muted/80",
+                                )}
+                              >
+                                {t.enabled ? "Active" : "Paused"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => removeTask(t.id)}
+                                className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+                              >
+                                <Trash2 className="size-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                          <div className="p-2 rounded-lg bg-muted/40 text-[10px] font-mono text-zinc-300 break-words">
+                            {t.prompt}
+                          </div>
                         </div>
-                        <div className="flex items-center gap-1.5 mt-1 text-[11px] text-muted-foreground">
-                          <FolderGit2 className="size-3 text-primary shrink-0" />
-                          <span className="font-medium text-primary truncate">
-                            {act.projectName}
+                      ))
+                    )
+                  ) : activities.length === 0 ? (
+                    <div className="py-12 flex flex-col items-center justify-center text-center text-muted-foreground">
+                      <ListTodo className="size-8 mb-2 opacity-50" />
+                      <h4 className="text-xs font-semibold text-foreground">
+                        No Execution History
+                      </h4>
+                      <p className="text-[11px] text-muted-foreground max-w-xs mt-1">
+                        Jab Super Bot background tasks run karega to record yahan maintain hoga.
+                      </p>
+                    </div>
+                  ) : (
+                    activities.map((act) => (
+                      <div
+                        key={act.id}
+                        className="p-3 rounded-xl border border-border/70 bg-card/60 space-y-1.5"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold text-foreground truncate">
+                            {act.taskTitle}
+                          </span>
+                          <span className="text-[9px] uppercase font-mono px-1.5 py-0.5 rounded bg-primary/10 text-primary">
+                            {act.status}
                           </span>
                         </div>
+                        <p className="text-[10px] text-muted-foreground">{act.description}</p>
                       </div>
-                      <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-primary/10 text-primary font-semibold shrink-0">
-                        {act.status}
-                      </span>
-                    </div>
+                    ))
+                  )}
+                </div>
+              )}
 
-                    {/* Full Task Description */}
-                    <div className="p-2.5 rounded-lg bg-muted/30 text-[11px] text-zinc-300 leading-relaxed font-mono whitespace-pre-wrap break-words">
-                      {act.description}
-                    </div>
+              {/* TAB 4: PERSONA & VOICE SETTINGS */}
+              {commandCenterTab === "voice" && (
+                <div className="space-y-4">
+                  {/* Persona Selector Card */}
+                  <div className="p-3.5 rounded-xl border border-border/70 bg-card/60 space-y-3">
+                    <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                      <UserCheck className="size-3.5 text-primary" />
+                      AI Personality Tone
+                    </span>
 
-                    {/* Timestamp & Result Summary */}
-                    <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-1 border-t border-border/40">
-                      <span>
-                        {new Date(act.createdAt).toLocaleString([], {
-                          month: "short",
-                          day: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </span>
-                      {act.resultSummary && (
-                        <span className="text-emerald-400 truncate max-w-[200px]">
-                          ✓ {act.resultSummary}
-                        </span>
-                      )}
+                    <div className="grid grid-cols-1 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handlePersonaChange("bilingual")}
+                        className={cn(
+                          "p-2.5 rounded-lg border text-left transition-all cursor-pointer",
+                          persona === "bilingual"
+                            ? "border-emerald-500/60 bg-emerald-500/10 text-foreground"
+                            : "border-border/60 bg-muted/20 text-muted-foreground hover:bg-muted/40",
+                        )}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold text-foreground">
+                            🇵🇰 Bilingual Assistant (Recommended)
+                          </span>
+                          {persona === "bilingual" && (
+                            <CheckCircle2 className="size-3.5 text-emerald-400" />
+                          )}
+                        </div>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          Roman Urdu aur English naturally mix karke friendly aur helpful tone.
+                        </p>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handlePersonaChange("professional")}
+                        className={cn(
+                          "p-2.5 rounded-lg border text-left transition-all cursor-pointer",
+                          persona === "professional"
+                            ? "border-blue-500/60 bg-blue-500/10 text-foreground"
+                            : "border-border/60 bg-muted/20 text-muted-foreground hover:bg-muted/40",
+                        )}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold text-foreground">
+                            💼 Corporate & Professional
+                          </span>
+                          {persona === "professional" && (
+                            <CheckCircle2 className="size-3.5 text-blue-400" />
+                          )}
+                        </div>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          Strictly business-oriented, concise, bullet-points aur formal.
+                        </p>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handlePersonaChange("friendly")}
+                        className={cn(
+                          "p-2.5 rounded-lg border text-left transition-all cursor-pointer",
+                          persona === "friendly"
+                            ? "border-amber-500/60 bg-amber-500/10 text-foreground"
+                            : "border-border/60 bg-muted/20 text-muted-foreground hover:bg-muted/40",
+                        )}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold text-foreground">
+                            🤝 Casual & Empathetic Buddy
+                          </span>
+                          {persona === "friendly" && (
+                            <CheckCircle2 className="size-3.5 text-amber-400" />
+                          )}
+                        </div>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          Warm, conversational, motivating aur light-hearted conversation.
+                        </p>
+                      </button>
                     </div>
                   </div>
-                ))
+
+                  {/* Speech Rate & Speed Control */}
+                  <div className="p-3.5 rounded-xl border border-border/70 bg-card/60 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-foreground">
+                        Speaking Rate / Speed
+                      </span>
+                      <span className="text-xs font-mono text-primary font-bold">
+                        {ttsSettings.rate.toFixed(1)}x
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.7"
+                      max="1.5"
+                      step="0.1"
+                      value={ttsSettings.rate}
+                      onChange={(e) => {
+                        const newRate = parseFloat(e.target.value);
+                        const updated = { ...ttsSettings, rate: newRate };
+                        setTtsSettings(updated);
+                        localStorage.setItem("t3code:tts-settings:v1", JSON.stringify(updated));
+                      }}
+                      className="w-full accent-primary cursor-pointer"
+                    />
+                    <div className="flex justify-between text-[9px] text-muted-foreground font-mono">
+                      <span>0.7x (Slow)</span>
+                      <span>1.0x (Normal)</span>
+                      <span>1.5x (Fast)</span>
+                    </div>
+
+                    {/* Test Voice Button */}
+                    <div className="pt-2 border-t border-border/40 flex items-center justify-between">
+                      <span className="text-[10px] text-muted-foreground truncate max-w-[150px]">
+                        Voice: {activeVoiceLabel}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          speakText(
+                            persona === "professional"
+                              ? "Hello! I am ready to handle your workspace instructions."
+                              : "Assalam-o-Alaikum! Main aapki madad ke liye tayyar hoon.",
+                            ttsSettings,
+                          );
+                        }}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-primary/15 text-primary hover:bg-primary/25 text-xs font-medium transition-colors cursor-pointer"
+                      >
+                        <Play className="size-3" />
+                        <span>Test Voice</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
           </aside>
@@ -866,8 +1453,25 @@ export function SuperCallAssistantView() {
             </Link>
           </div>
 
-          {/* Right: Notes & Tasks */}
+          {/* Right: Copy Transcript, Notes & Command Center Sheet Button */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {/* Quick Copy Transcript Button */}
+            <button
+              type="button"
+              onClick={handleCopyTranscript}
+              disabled={!activeSession?.messages.length}
+              className="flex items-center gap-1 px-2 py-1.5 rounded-lg border border-border/60 hover:border-border hover:bg-muted/50 text-xs font-medium transition-colors disabled:opacity-30 cursor-pointer"
+              title="Copy entire conversation to clipboard"
+            >
+              {isTranscriptCopied ? (
+                <Check className="size-3.5 text-emerald-400" />
+              ) : (
+                <Copy className="size-3.5 text-muted-foreground" />
+              )}
+              <span className="hidden md:inline text-[11px]">Copy</span>
+            </button>
+
+            {/* Notes Button */}
             <button
               type="button"
               onClick={() => openNotesSheet()}
@@ -881,16 +1485,17 @@ export function SuperCallAssistantView() {
               </span>
             </button>
 
+            {/* Command Center Right-Side Sheet Button */}
             <button
               type="button"
-              onClick={() => setIsTasksSheetOpen(true)}
-              className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 rounded-lg border border-border/70 hover:border-border hover:bg-muted/50 text-xs font-medium transition-colors cursor-pointer"
-              title="Click to view scheduled tasks"
+              onClick={() => setIsCommandCenterOpen(true)}
+              className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-lg border border-primary/40 bg-primary/10 hover:bg-primary/20 text-xs font-semibold text-primary transition-all cursor-pointer shadow-xs active:scale-95"
+              title="Open Command Center (Summary, Wishlist, Tasks & Persona)"
             >
-              <ListTodo className="size-3.5 text-primary" />
-              <span className="hidden xs:inline">Tasks</span>
-              <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-primary/15 text-primary font-semibold">
-                {scheduledTasks.length}
+              <Sparkles className="size-3.5" />
+              <span className="hidden xs:inline">Command Center</span>
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-primary text-primary-foreground font-mono font-bold">
+                {scheduledTasks.length + drawerWishlistItems.length}
               </span>
             </button>
           </div>
@@ -1034,6 +1639,39 @@ export function SuperCallAssistantView() {
 
         {/* Unified Bottom Area: Input Field on Top, with Attached Floating Waves Divider directly below */}
         <div className="w-full max-w-2xl sm:max-w-3xl mx-auto px-2 sm:px-4 pb-[max(env(safe-area-inset-bottom),0.95rem)] pt-1 shrink-0 bg-background/95 backdrop-blur-xs">
+          {/* Barge-in / Stop Speaking Button (Displays when assistant is speaking) */}
+          {callStatus === "speaking" && (
+            <div className="flex justify-center mb-2 animate-in fade-in zoom-in-95 duration-200">
+              <button
+                type="button"
+                onClick={handleStopSpeaking}
+                className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-rose-500/25 border border-rose-500/60 text-rose-300 hover:bg-rose-500/35 hover:text-white text-xs font-semibold shadow-lg shadow-rose-950/40 backdrop-blur-md cursor-pointer transition-all active:scale-95 animate-pulse"
+                title="Interrupt AI speaking immediately (AI کی بات فورا روکیں)"
+              >
+                <Square className="size-3 fill-rose-400 text-rose-400" />
+                <span>Stop Speaking / روکیں</span>
+              </button>
+            </div>
+          )}
+
+          {/* Quick-Reply Suggested Action Chips */}
+          <div className="flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden py-1 mb-1.5 px-0.5">
+            <span className="text-[10px] uppercase font-bold text-muted-foreground/70 shrink-0 select-none pl-1">
+              Suggestions:
+            </span>
+            {quickSuggestions.map((item, idx) => (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => void handleSuperAgentDispatch(item.prompt)}
+                disabled={isProcessing}
+                className="shrink-0 px-2.5 py-1 rounded-full border border-border/70 bg-muted/40 hover:bg-muted text-[11px] font-medium text-muted-foreground hover:text-foreground transition-all cursor-pointer disabled:opacity-40 shadow-2xs active:scale-95"
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+
           {/* 1. Attached Input Field on Top (Subtle rounded card, completely isolated and clean on mobile) */}
           <div className="flex items-end justify-between gap-2 px-3 py-1.5 sm:px-3 sm:py-1 rounded-2xl bg-muted/25 border border-border/40 focus-within:border-zinc-700 focus-within:bg-muted/35 transition-all mb-1 sm:mb-0.5">
             <div className="flex-1 min-w-0">
