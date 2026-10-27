@@ -1012,9 +1012,10 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
           );
           if (NodeFS.existsSync(serversDir)) {
             const files = NodeFS.readdirSync(serversDir).filter((f) => f.endsWith(".json"));
-            if (files.length > 0) {
+            const firstFile = files[0];
+            if (firstFile) {
               const sInfo = JSON.parse(
-                NodeFS.readFileSync(NodePath.join(serversDir, files[0]), "utf8"),
+                NodeFS.readFileSync(NodePath.join(serversDir, firstFile), "utf8"),
               );
               if (sInfo.port) port = Number(sInfo.port);
               if (sInfo.pid) pid = Number(sInfo.pid);
@@ -1065,20 +1066,28 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
 
         const systemMsg = messages.find((m) => m.role === "system")?.content;
         const userMsgs = messages.filter((m) => m.role !== "system");
-        let promptText =
-          "[You are the Super Bot (Executive Commander). Do not run external tools or shell commands. Directly answer the user in natural Roman Urdu using pretty Markdown with headings, bullet points, and preview links based on the live facts provided below.]\n\n";
+        const lastUserMsg = [...userMsgs].reverse().find((m) => m.role === "user")?.content || "";
+        const isProjectRelated =
+          /\b(project|files?|status|preview|error|build|fix|run|inspect|code|task|worker|audit|summary)\b/i.test(
+            lastUserMsg,
+          );
+
+        let promptText = "";
         if (systemMsg) {
           promptText += `${systemMsg}\n\n`;
+        } else {
+          promptText +=
+            "[You are the Super Bot (Senior Tech Lead & Autonomous Supervisor). Answer the user naturally in conversational Roman Urdu. Adapt to their intent: reply casually to greetings/farewells, brainstorm when asked for advice, and only provide project breakdowns when specifically requested.]\n\n";
         }
-        if (liveProjectContext) {
+        if (isProjectRelated && liveProjectContext) {
           promptText += `${liveProjectContext}\n\n`;
         }
-        for (const m of userMsgs.slice(-4)) {
+        for (const m of userMsgs.slice(-6)) {
           promptText += `${m.role === "user" ? "User" : "Assistant"}: ${m.content}\n`;
         }
         promptText = promptText.trim() || "Hello";
-        if (promptText.length > 3800) {
-          promptText = promptText.slice(0, 3800);
+        if (promptText.length > 18000) {
+          promptText = promptText.slice(0, 18000);
         }
 
         const maxAttempts = 2;
@@ -1605,15 +1614,18 @@ export const layerSuperAgentDispatchWorkerRoute = HttpRouter.add(
           fixedIssues.push(`Appended missing </body> in ${htmlFile}`);
         }
 
-        // Special check for room3.html or importmap modules
-        if (htmlFile === "room3.html") {
-          if (content.includes("import * as THREE") && !content.includes('<script type="module"')) {
-            content = content.replace(
-              /<script(?![^>]*type=)([^>]*)>([\s\S]*?import \* as THREE)/i,
-              '<script type="module"$1>$2',
-            );
+        // Check for ES module imports without type="module" across any HTML file
+        if (content.includes("import ") && !content.includes('type="module"')) {
+          const updated = content.replace(
+            /<script(?![^>]*type=)([^>]*)>([\s\S]*?import\s+[\s\S]*?from)/i,
+            '<script type="module"$1>$2',
+          );
+          if (updated !== content) {
+            content = updated;
             modified = true;
-            fixedIssues.push(`Updated script tag to type="module" for ES imports in room3.html`);
+            fixedIssues.push(
+              `Updated script tag to type="module" for ES module imports in ${htmlFile}`,
+            );
           }
         }
 
@@ -1622,7 +1634,7 @@ export const layerSuperAgentDispatchWorkerRoute = HttpRouter.add(
         }
         verifiedFiles.push(htmlFile);
       } catch (err: any) {
-        console.warn(`Worker inspection warning for ${htmlFile}:`, err);
+        void err;
       }
     }
 

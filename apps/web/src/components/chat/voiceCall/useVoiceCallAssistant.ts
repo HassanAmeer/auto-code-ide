@@ -924,7 +924,7 @@ export function useVoiceCallAssistant({
       let targetMode: SttLanguageMode = currentSettings.language;
       if (lang === "urdu") {
         if (targetMode === "english") {
-          targetMode = "roman-urdu";
+          targetMode = "natural-urdu";
         }
       } else {
         targetMode = "english";

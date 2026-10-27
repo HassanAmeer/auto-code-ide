@@ -134,6 +134,11 @@ if [ -d "apps/server/dist" ]; then
   rsync -az --delete apps/server/dist/ "${VPS_USER}@${VPS_HOST}:${VPS_DIR}/apps/server/dist/"
 fi
 
+if [ -d "bot" ]; then
+  echo -e "  ${C_DIM}Syncing bot directory...${C_RESET}"
+  rsync -az bot/ "${VPS_USER}@${VPS_HOST}:${VPS_DIR}/bot/"
+fi
+
 # Sync git state on VPS
 echo -e "  ${C_DIM}Updating Git repo on VPS...${C_RESET}"
 ssh "${VPS_USER}@${VPS_HOST}" "bash -s" << EOF

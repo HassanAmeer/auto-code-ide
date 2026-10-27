@@ -55,6 +55,13 @@ let pendingApprovalPlan: {
   suggestedPrompt: string;
 } | null = null;
 
+function resolveApiUrl(pathUri: string): string {
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return `${window.location.origin}${pathUri.startsWith("/") ? pathUri : `/${pathUri}`}`;
+  }
+  return `http://127.0.0.1:3000${pathUri.startsWith("/") ? pathUri : `/${pathUri}`}`;
+}
+
 export function isUrduLanguage(text: string): boolean {
   return (
     /[\u0600-\u06FF]/.test(text) ||
@@ -99,7 +106,7 @@ export async function querySuperAgentLLM(
 
   // 1. Try server-side proxy endpoint first (handles CORS, OpenCode daemon, TLS, and stored provider secrets)
   try {
-    const proxyResp = await fetch("/api/super-agent/chat", {
+    const proxyResp = await fetch(resolveApiUrl("/api/super-agent/chat"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -292,7 +299,7 @@ async function callWorkerAgentDispatcher(
   model?: string,
 ): Promise<WorkerDispatchResult> {
   try {
-    const res = await fetch("/api/super-agent/dispatch-worker", {
+    const res = await fetch(resolveApiUrl("/api/super-agent/dispatch-worker"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -314,9 +321,12 @@ async function callWorkerAgentDispatcher(
 
 async function fetchProjectInspection(projectName: string): Promise<any> {
   try {
-    const res = await fetch(`/api/projects/inspect/${encodeURIComponent(projectName)}`, {
-      signal: AbortSignal.timeout(10000),
-    });
+    const res = await fetch(
+      resolveApiUrl(`/api/projects/inspect/${encodeURIComponent(projectName)}`),
+      {
+        signal: AbortSignal.timeout(10000),
+      },
+    );
     if (res.ok) {
       return await res.json();
     }
@@ -370,9 +380,48 @@ export async function executeSuperAgentInstruction(
   let actionTag = "llm_completion";
   let delegatedTaskInfo: DelegatedTaskInfo | undefined;
 
-  // 2. Latency masking verbal filler
+  // Fast conversational recognition for Greetings and Farewells
+  const isFarewell =
+    /\b(baad\s+(?:me|mein|mai|main)\s+baat\s+kar(?:e|en|eng[ey]|enge|ungi|o)|phir\s+baat\s+kar|phir\s+milte\s+hain|allah\s*hafiz|alvida|khuda\s*hafiz|bye|goodbye|talk\s+later|see\s+you\s+later|catch\s+you\s+later)\b/i.test(
+      userText.trim(),
+    ) ||
+    /^(chalo\s+)?theek\s+hai\s*$/i.test(userText.trim()) ||
+    /^(ok\s+)?(bye|chalo\s+bye|take\s+care)\s*$/i.test(userText.trim());
+
+  const isGreeting =
+    /^(as*alam\s*o\s*alaikum|salam|hello|hi|hey|kya\s+haal\s+hai|kaise\s+ho|kaisay\s+ho|good\s+morning|good\s+evening)\b/i.test(
+      userText.trim(),
+    ) && !/(project|status|code|error|feature|banao|fix|inspect)/i.test(userText);
+
+  if (isFarewell) {
+    const text =
+      lang === "urdu"
+        ? "Ji theek hai bilkul! Jab bhi aap farigh hon ya koi zaroorat ho, bataiye ga. Khuda hafiz aur apna khayal rakhein!"
+        : "Sure, no problem at all! Whenever you're back or need anything, just ping me. Take care!";
+    return {
+      reply: text,
+      spokenReply: text,
+      actionTaken: "farewell_ack",
+    };
+  }
+
+  if (isGreeting) {
+    const text =
+      lang === "urdu"
+        ? "Walaikum Assalam! Kaisay hain aap? Main bilkul ready hoon, batayein aaj kis cheez par mashwara karein ya kaam shuru karna hai?"
+        : "Hello! How are you doing? I'm ready — let me know what we are planning today or what you'd like to work on!";
+    return {
+      reply: text,
+      spokenReply: text,
+      actionTaken: "greeting_ack",
+    };
+  }
+
+  // 2. Latency masking verbal filler (ONLY for real project work/inspection)
   const isInspectionOrWork =
-    /\b(op|project|files?|preview|html|adhuri|error|worker|prompt\s*de|kaam|complete|bhejo)\b/i.test(
+    !isFarewell &&
+    !isGreeting &&
+    /\b(project\s+files?|preview\s+check|syntax\s+error|worker\s*agent|prompt\s*de|inspect\s+files?|kaam\s*karwa)\b/i.test(
       userText,
     );
   if (isInspectionOrWork) {

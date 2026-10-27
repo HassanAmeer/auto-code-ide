@@ -65,9 +65,56 @@ import {
   TTS_ACCENTS,
   type TtsSettings,
 } from "~/lib/speech/tts";
-import { loadSttSettings, subscribeSttSettings, type SttSettings } from "~/lib/speech/stt";
+import {
+  loadSttSettings,
+  saveSttSettings,
+  subscribeSttSettings,
+  type SttSettings,
+} from "~/lib/speech/stt";
 import { transliterateUrduToRoman } from "~/lib/speech/romanUrduTransliterate";
 import { executeSuperAgentInstruction, isUrduLanguage } from "./superAgentEngine";
+
+function PakistanFlagIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 32 24" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+      <rect width="32" height="24" rx="3" fill="#01411C" />
+      <rect width="7.5" height="24" rx="2" fill="#FFFFFF" />
+      <path d="M21.5 12a4.6 4.6 0 1 0-3.6-4.5 3.9 3.9 0 1 1 3.6 4.5z" fill="#FFFFFF" />
+      <polygon
+        points="21.5,8.2 22.1,9.6 23.6,9.6 22.4,10.5 22.8,11.9 21.6,11.1 20.4,11.9 20.8,10.5 19.6,9.6 21.1,9.6"
+        fill="#FFFFFF"
+      />
+    </svg>
+  );
+}
+
+function UsaFlagIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 32 24" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+      <rect width="32" height="24" rx="3" fill="#B22234" />
+      <rect y="1.85" width="32" height="1.85" fill="#FFFFFF" />
+      <rect y="5.54" width="32" height="1.85" fill="#FFFFFF" />
+      <rect y="9.23" width="32" height="1.85" fill="#FFFFFF" />
+      <rect y="12.92" width="32" height="1.85" fill="#FFFFFF" />
+      <rect y="16.62" width="32" height="1.85" fill="#FFFFFF" />
+      <rect y="20.31" width="32" height="1.85" fill="#FFFFFF" />
+      <rect width="13.5" height="12.92" rx="1.5" fill="#3C3B6E" />
+      <circle cx="3" cy="2.5" r="0.75" fill="#FFFFFF" />
+      <circle cx="6.7" cy="2.5" r="0.75" fill="#FFFFFF" />
+      <circle cx="10.5" cy="2.5" r="0.75" fill="#FFFFFF" />
+      <circle cx="4.8" cy="4.5" r="0.75" fill="#FFFFFF" />
+      <circle cx="8.6" cy="4.5" r="0.75" fill="#FFFFFF" />
+      <circle cx="3" cy="6.5" r="0.75" fill="#FFFFFF" />
+      <circle cx="6.7" cy="6.5" r="0.75" fill="#FFFFFF" />
+      <circle cx="10.5" cy="6.5" r="0.75" fill="#FFFFFF" />
+      <circle cx="4.8" cy="8.5" r="0.75" fill="#FFFFFF" />
+      <circle cx="8.6" cy="8.5" r="0.75" fill="#FFFFFF" />
+      <circle cx="3" cy="10.5" r="0.75" fill="#FFFFFF" />
+      <circle cx="6.7" cy="10.5" r="0.75" fill="#FFFFFF" />
+      <circle cx="10.5" cy="10.5" r="0.75" fill="#FFFFFF" />
+    </svg>
+  );
+}
 
 export function SuperCallAssistantView() {
   const projects = useProjects();
@@ -205,12 +252,23 @@ export function SuperCallAssistantView() {
   const [previousTextForUndo, setPreviousTextForUndo] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  const adjustTextareaHeight = useCallback((el: HTMLTextAreaElement | null) => {
+    if (!el) return;
+    el.style.height = "auto";
+    // Maximum 2 lines height (~48-50px)
+    el.style.height = `${Math.min(el.scrollHeight, 50)}px`;
+  }, []);
 
   // Auto scroll to latest message
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [activeSession?.messages, isProcessing]);
+
+  useEffect(() => {
+    adjustTextareaHeight(inputRef.current);
+  }, [inputText, adjustTextareaHeight]);
 
   const handleSuperAgentDispatch = useCallback(
     async (rawUserText: string) => {
@@ -337,6 +395,9 @@ export function SuperCallAssistantView() {
     phase: isProcessing ? "running" : "ready",
     isUserEditing,
   });
+
+  const isUsaSelected = sttSettings.language === "english" || callLanguage === "english";
+  const isPakSelected = !isUsaSelected;
 
   // User clicked on the input text: pause auto-send immediately
   const handleInputFocusOrClick = useCallback(() => {
@@ -786,15 +847,14 @@ export function SuperCallAssistantView() {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Unified Bottom Area: Live Transcribed Text directly above Divider Line with Centered Model Badge */}
-        <div className="w-full max-w-3xl sm:max-w-4xl lg:max-w-5xl mx-auto px-3 sm:px-4 pb-5 pt-1 shrink-0 space-y-2">
-          {/* 1. Live Transcribed Text (Gray color, NO box, NO border, NO outline, looks like floating plain text) */}
-          <div className="flex items-center justify-between gap-2 py-1 min-h-[34px]">
-            {/* Pure text input - borderless, outline-none, transparent */}
+        {/* Unified Bottom Area: Input Field on Top, with Attached Floating Waves Divider directly below */}
+        <div className="w-full max-w-2xl sm:max-w-3xl mx-auto px-3 sm:px-4 pb-1 pt-0 shrink-0">
+          {/* 1. Attached Input Field on Top (Max 2 lines, borderless floating text, attached with no gap) */}
+          <div className="flex items-end justify-between gap-2 pt-0 pb-1">
             <div className="flex-1 min-w-0">
-              <input
+              <textarea
                 ref={inputRef}
-                type="text"
+                rows={1}
                 value={inputText}
                 onClick={handleInputFocusOrClick}
                 onFocus={handleInputFocusOrClick}
@@ -808,22 +868,40 @@ export function SuperCallAssistantView() {
                   isUserEditingRef.current = true;
                   setIsUserEditing(true);
                   setInputText(e.target.value);
+                  adjustTextareaHeight(e.target);
                 }}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
+                  // Ctrl+Shift or Shift+Enter or Ctrl+Enter: Create a new line (max 2 lines)
+                  if (e.key === "Enter" && (e.shiftKey || e.ctrlKey)) {
+                    if (e.ctrlKey && !e.shiftKey) {
+                      e.preventDefault();
+                      const target = e.currentTarget;
+                      const start = target.selectionStart;
+                      const end = target.selectionEnd;
+                      const val = target.value;
+                      const nextVal = val.substring(0, start) + "\n" + val.substring(end);
+                      setInputText(nextVal);
+                      setTimeout(() => {
+                        target.selectionStart = target.selectionEnd = start + 1;
+                        adjustTextareaHeight(target);
+                      }, 0);
+                    }
+                    return;
+                  }
+                  // Plain Enter: Send message immediately
+                  if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey) {
                     e.preventDefault();
                     handleSendNow();
                   }
                 }}
-                placeholder=""
-                className="w-full bg-transparent border-0 outline-hidden focus:outline-hidden focus:ring-0 p-0 text-sm text-zinc-400 placeholder:text-transparent tracking-wide font-normal leading-relaxed"
-                aria-label="Live Transcribed Text"
+                placeholder="Type a message or speak..."
+                className="w-full bg-transparent border-0 outline-hidden focus:outline-hidden focus:ring-0 p-0 text-sm text-zinc-300 placeholder:text-zinc-600 resize-none max-h-[50px] min-h-[26px] leading-snug overflow-y-auto tracking-normal font-normal"
+                aria-label="Message Input"
               />
             </div>
 
             {/* Gray Action Buttons: Undo, Sparkles (Urdu -> Roman Urdu), and Send */}
-            <div className="flex items-center gap-1 shrink-0">
-              {/* Back / Undo Arrow: Appears ONLY after clicking Spark to restore original Urdu words */}
+            <div className="flex items-center gap-1 shrink-0 pb-0.5">
               {previousTextForUndo !== null && (
                 <button
                   type="button"
@@ -831,11 +909,10 @@ export function SuperCallAssistantView() {
                   className="p-1 rounded text-zinc-400 hover:text-white transition-colors cursor-pointer"
                   title="Wapas original Urdu par layen (Undo)"
                 >
-                  <RotateCcw className="size-4" />
+                  <RotateCcw className="size-3.5" />
                 </button>
               )}
 
-              {/* Spark Icon Button: Urdu -> Roman Urdu with Loader */}
               {inputText.trim().length > 0 && (
                 <button
                   type="button"
@@ -845,14 +922,13 @@ export function SuperCallAssistantView() {
                   title="Urdu ko Roman Urdu mein convert karein"
                 >
                   {isTransliterating ? (
-                    <Loader2 className="size-4 animate-spin text-amber-400" />
+                    <Loader2 className="size-3.5 animate-spin text-amber-400" />
                   ) : (
-                    <Sparkles className="size-4" />
+                    <Sparkles className="size-3.5" />
                   )}
                 </button>
               )}
 
-              {/* Send Button in gray color */}
               <button
                 type="button"
                 onClick={handleSendNow}
@@ -860,18 +936,15 @@ export function SuperCallAssistantView() {
                 className="p-1 rounded text-zinc-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
                 title="Send Message"
               >
-                <Send className="size-4" />
+                <Send className="size-3.5" />
               </button>
             </div>
           </div>
 
-          {/* 2. Sleek Horizontal Divider with Left-Aligned Model Badge & Centered Wave Call Button */}
-          <div className="relative flex items-center justify-between my-2 min-h-[56px] w-full -mx-2 sm:-mx-4 px-2 sm:px-4">
-            {/* The horizontal line spanning across */}
-            <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[1px] bg-zinc-800" />
-
-            {/* Left: AI Model Dropdown Badge (Half above, half below line) */}
-            <div className="relative z-10 flex items-center pr-2">
+          {/* 2. Sleek Horizontal Divider Directly Below with End-to-End Controls & Floating Waves */}
+          <div className="relative flex items-center w-full min-h-[46px] sm:min-h-[50px]">
+            {/* Left End: AI Model Dropdown (At the very left end; NO line sticks out past it) */}
+            <div className="relative z-10 shrink-0 pr-1">
               <ProviderModelPicker
                 activeInstanceId={effectiveInstanceId}
                 model={effectiveModel}
@@ -885,8 +958,11 @@ export function SuperCallAssistantView() {
               />
             </div>
 
-            {/* Middle / Center: Call Button with Grok Geometric Soundwaves / Circular Wave (Centered on divider) */}
-            <div className="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center">
+            {/* Left Line Segment (starts at model picker right edge, stops at center wave) */}
+            <div className="flex-1 h-[1px] bg-zinc-800 self-center" />
+
+            {/* Middle / Center: Call Button with Grok Geometric Soundwaves / Circular Wave (Floating in center) */}
+            <div className="relative z-10 flex items-center justify-center shrink-0 mx-2">
               <div
                 onClick={(e) => {
                   e.preventDefault();
@@ -949,8 +1025,11 @@ export function SuperCallAssistantView() {
               </div>
             </div>
 
-            {/* Right: Mic Mute / Unmute Button (Placed neatly on right, leaves center soundwave completely clear) */}
-            <div className="relative z-10 flex items-center justify-end pl-2 min-w-[28px]">
+            {/* Right Line Segment (starts at center wave, stops at mic button left edge) */}
+            <div className="flex-1 h-[1px] bg-zinc-800 self-center" />
+
+            {/* Right End: When Call Active -> Mic Mute/Unmute; When Idle -> Pakistan & USA Language Flags */}
+            <div className="relative z-10 shrink-0 pl-1 flex items-center">
               {isCallActive ? (
                 <button
                   type="button"
@@ -966,7 +1045,43 @@ export function SuperCallAssistantView() {
                   {isMicMuted ? <MicOff className="size-3.5" /> : <Mic className="size-3.5" />}
                 </button>
               ) : (
-                <div className="size-7 opacity-0 pointer-events-none" />
+                <div className="flex items-center gap-1.5 select-none bg-zinc-900/60 border border-zinc-800/80 rounded-full px-1.5 py-0.5 shadow-2xs">
+                  {/* Pakistan Flag (Urdu Transcription) */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCallLanguage("urdu");
+                      saveSttSettings({ ...sttSettings, language: "natural-urdu" });
+                    }}
+                    className={cn(
+                      "p-0.5 rounded transition-all cursor-pointer flex items-center justify-center active:scale-90",
+                      isPakSelected
+                        ? "opacity-100 filter-none ring-1.5 ring-emerald-500/70 shadow-xs scale-105"
+                        : "opacity-35 grayscale hover:opacity-75 hover:grayscale-50",
+                    )}
+                    title="Urdu Transcription (اردو / Pakistan)"
+                  >
+                    <PakistanFlagIcon className="w-4.5 h-3.5 rounded-xs" />
+                  </button>
+
+                  {/* USA Flag (English Transcription) */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCallLanguage("english");
+                      saveSttSettings({ ...sttSettings, language: "english" });
+                    }}
+                    className={cn(
+                      "p-0.5 rounded transition-all cursor-pointer flex items-center justify-center active:scale-90",
+                      isUsaSelected
+                        ? "opacity-100 filter-none ring-1.5 ring-blue-500/70 shadow-xs scale-105"
+                        : "opacity-35 grayscale hover:opacity-75 hover:grayscale-50",
+                    )}
+                    title="English Transcription (English / USA)"
+                  >
+                    <UsaFlagIcon className="w-4.5 h-3.5 rounded-xs" />
+                  </button>
+                </div>
               )}
             </div>
           </div>
