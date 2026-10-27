@@ -901,8 +901,8 @@ export function SuperCallAssistantView() {
                   }
                 }}
                 className={cn(
-                  "relative z-10 flex items-center justify-center size-12 sm:size-13 rounded-full transition-all duration-300 cursor-pointer select-none",
-                  "bg-zinc-950/95 border border-zinc-800/90 backdrop-blur-xl shadow-xl",
+                  "relative z-10 flex items-center justify-center size-8 sm:size-9 rounded-full transition-all duration-300 cursor-pointer select-none",
+                  "bg-transparent border-0 shadow-none",
                 )}
               >
                 {/* When Call Active: Grok Geometric Soundwave
