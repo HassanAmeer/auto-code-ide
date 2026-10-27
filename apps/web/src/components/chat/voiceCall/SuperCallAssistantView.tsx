@@ -919,6 +919,22 @@ export function SuperCallAssistantView() {
     interruptSpeaking();
   }, [interruptSpeaking]);
 
+  const [isTranscriptCopied, setIsTranscriptCopied] = useState(false);
+
+  const handleCopyTranscript = useCallback(() => {
+    if (!activeSession?.messages.length) return;
+    const text = activeSession.messages
+      .map(
+        (m) =>
+          `[${new Date(m.timestamp).toLocaleTimeString()}] ${m.role === "user" ? "User" : "Super Bot"}:\n${m.text}`,
+      )
+      .join("\n\n");
+    void navigator.clipboard.writeText(text).then(() => {
+      setIsTranscriptCopied(true);
+      setTimeout(() => setIsTranscriptCopied(false), 2000);
+    });
+  }, [activeSession?.messages]);
+
   return (
     <div className="flex h-full w-full bg-background text-foreground overflow-hidden relative">
       {/* Right-Side Command Center / Smart Drawer */}
