@@ -971,6 +971,102 @@ export const layerLiveKitStatusRoute = HttpRouter.add(
   }),
 );
 
+export const layerGroqModelsRoute = HttpRouter.add(
+  "POST",
+  "/api/groq/models",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      apiKey?: string;
+    };
+
+    const apiKey = bodyJson?.apiKey?.trim();
+    if (!apiKey) {
+      return HttpServerResponse.jsonUnsafe({
+        ok: false,
+        error: "Groq API key is required to fetch models.",
+      });
+    }
+
+    const res = yield* Effect.promise(async () => {
+      try {
+        const resp = await fetch("https://api.groq.com/openai/v1/models", {
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            Accept: "application/json",
+            "User-Agent": "AutoCode-Voice/1.0",
+          },
+          signal: AbortSignal.timeout(10000),
+        });
+
+        const data = (await resp.json()) as any;
+        if (!resp.ok) {
+          return {
+            ok: false,
+            error: data?.error?.message || `Groq API returned HTTP ${resp.status}`,
+          };
+        }
+
+        const rawList = Array.isArray(data?.data) ? data.data : [];
+        const chatModels = rawList
+          .filter((m: any) => {
+            const id = String(m?.id || "").toLowerCase();
+            if (m?.active === false) return false;
+            if (
+              id.includes("whisper") ||
+              id.includes("distil") ||
+              id.includes("embed") ||
+              id.includes("tts")
+            ) {
+              return false;
+            }
+            return true;
+          })
+          .map((m: any) => {
+            const id = String(m.id);
+            let name = id;
+            let description = "Groq High-Speed LLM";
+            if (id.includes("llama-3.3-70b")) {
+              name = "Llama 3.3 70B (Recommended)";
+              description = "128k context, versatile flagship reasoning";
+            } else if (id.includes("llama-3.1-8b")) {
+              name = "Llama 3.1 8B Instant";
+              description = "128k context, ultra-low latency";
+            } else if (id.includes("deepseek-r1")) {
+              name = "DeepSeek R1 Distill Llama 70B";
+              description = "128k context, deep chain-of-thought reasoning";
+            } else if (id.includes("qwen-qwq")) {
+              name = "Qwen QwQ 32B";
+              description = "128k context, math and code specialist";
+            } else if (id.includes("llama-guard")) {
+              name = id;
+              description = "Safety moderation model";
+            }
+            return {
+              id,
+              name,
+              description,
+              contextWindow: m.context_window,
+              ownedBy: m.owned_by,
+            };
+          });
+
+        return {
+          ok: true,
+          models: chatModels,
+        };
+      } catch (err: any) {
+        return {
+          ok: false,
+          error: err?.message || String(err),
+        };
+      }
+    });
+
+    return HttpServerResponse.jsonUnsafe(res);
+  }),
+);
+
 export const layerSuperAgentChatRoute = HttpRouter.add(
   "POST",
   "/api/super-agent/chat",
@@ -996,21 +1092,35 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
       });
     }
 
-    // ── Super Bot: Intent classification & short-circuit ──────────────────────
+    // ── Super Bot: System prompt builder & non-conversational tool executions ─
     const lastUserMsg = [...messages].reverse().find((m) => m.role === "user")?.content || "";
-    const botResult = yield* Effect.promise(() =>
-      runSuperBotTurn({
-        userText: lastUserMsg,
-        projectName: bodyJson?.instanceId || "Workspace",
-        projectRoot: "/root/autojobs",
-        selectedModel: bodyJson?.model || "gemini-2.5-flash",
-        language: "urdu",
-      }),
-    );
+    let botResult: any = null;
+    try {
+      botResult = yield* Effect.promise(() =>
+        runSuperBotTurn({
+          userText: lastUserMsg,
+          projectName: bodyJson?.instanceId || "Workspace",
+          projectRoot: "/root/autojobs",
+          selectedModel: bodyJson?.model || "gemini-2.5-flash",
+          language: "urdu",
+        }),
+      );
+    } catch {}
 
-    // If bot handled it fully (greeting / farewell / wishlist / heal / watchdog),
-    // return immediately — no need to call OpenCode or custom provider.
-    if (botResult && botResult.reply) {
+    // Only return directly if a physical tool executed (e.g. wishlist add/list, auto-heal trigger, watchdog)
+    // NEVER short-circuit conversational turns, greetings, questions, or general discussion with static strings!
+    const isSpecialAction =
+      botResult &&
+      botResult.actionTaken &&
+      [
+        "wishlist_item_added",
+        "wishlist_listed",
+        "auto_heal_triggered",
+        "watchdog_started",
+        "watchdog_status",
+      ].includes(botResult.actionTaken);
+
+    if (isSpecialAction && botResult.reply) {
       return HttpServerResponse.jsonUnsafe({
         ok: true,
         reply: botResult.reply,
@@ -1020,7 +1130,7 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
         model: "super-bot",
       });
     }
-    // ── End Super Bot short-circuit ────────────────────────────────────────────
+    // ── End Super Bot check ────────────────────────────────────────────────────
 
     const config = yield* ServerConfig.ServerConfig;
     const customProviders = listCustomProviders(config.dbPath);

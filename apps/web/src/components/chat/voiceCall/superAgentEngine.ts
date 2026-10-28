@@ -399,73 +399,6 @@ export async function executeSuperAgentInstruction(
   let delegatedTaskInfo: DelegatedTaskInfo | undefined;
   const toolsExecuted: ToolCallRecord[] = [];
 
-  // Fast conversational recognition for Greetings and Farewells (Roman Urdu, Arabic Script & English)
-  const isFarewell =
-    /\b(baad\s+(?:me|mein|mai|main)\s+baat\s+kar(?:e|en|eng[ey]|enge|ungi|o)|phir\s+baat\s+kar|phir\s+milte\s+hain|allah\s*hafiz|alvida|khuda\s*hafiz|bye|goodbye|talk\s+later|see\s+you\s+later|catch\s+you\s+later)\b/i.test(
-      userText.trim(),
-    ) ||
-    /^(chalo\s+)?theek\s+hai\s*$/i.test(userText.trim()) ||
-    /^(ok\s+)?(bye|chalo\s+bye|take\s+care)\s*$/i.test(userText.trim()) ||
-    /(اللہ\s*حافظ|خدا\s*حافظ|الوداع|بعد\s*میں\s*بات|پھر\s*ملتے)/.test(userText.trim());
-
-  const isGreeting =
-    (/^(as*alam\s*o\s*alaikum|salam|hello|hi|hey|kya\s+haal\s+hai|kaise\s+ho|kaisay\s+ho|good\s+morning|good\s+evening)\b/i.test(
-      userText.trim(),
-    ) ||
-      /(السلام\s*علیکم|سلام|کیا\s*حال\s*ہے|کیسے\s*ہو|صبح\s*بخیر|شام\s*بخیر)/.test(userText.trim())) &&
-    !/(project|status|code|error|feature|banao|fix|inspect)/i.test(userText);
-
-  if (isFarewell) {
-    const text =
-      lang === "urdu"
-        ? "Ji theek hai bilkul! Jab bhi aap farigh hon ya koi zaroorat ho, bataiye ga. Khuda hafiz aur apna khayal rakhein!"
-        : "Sure, no problem at all! Whenever you're back or need anything, just ping me. Take care!";
-    return {
-      reply: text,
-      spokenReply: text,
-      actionTaken: "farewell_ack",
-    };
-  }
-
-  if (isGreeting) {
-    const text =
-      lang === "urdu"
-        ? "Walaikum Assalam! Kaisay hain aap? Main bilkul ready hoon, batayein aaj kis cheez par mashwara karein ya kaam shuru karna hai?"
-        : "Hello! How are you doing? I'm ready — let me know what we are planning today or what you'd like to work on!";
-    return {
-      reply: text,
-      spokenReply: text,
-      actionTaken: "greeting_ack",
-    };
-  }
-
-  // Fast capabilities recognition (e.g. "aap kya kar sakte hain", "اپ کیا کر سکتے ہیں")
-  const isCapabilities =
-    /(کیا\s*(?:کچھ\s*)?کر\s*سکتے\s*(?:ہو|ہیں)|کیا\s*کام\s*کرتے\s*(?:ہو|ہیں)|کون\s*ہو|کیا\s*صلاحیتیں\s*ہیں|کیا\s*مدد\s*کر\s*سکتے)/.test(
-      userText.trim(),
-    ) ||
-    /\b(kya\s*(?:kuch\s*)?kar\s*sakt(?:ey|e|i)\s*(?:ho|hain|hai)|kaam\s*kya\s*hai|tum\s*kya\s*ho|tum\s*kaun\s*ho|aap\s*kaun\s*hain|kya\s*features?\s*hain|kya\s*madad\s*kar\s*sakt(?:ey|e)|kya\s*help\s*kar\s*sakt(?:ey|e)|kya\s*kar\s*leta\s*hai|what\s+can\s+you\s+do|what\s+are\s+your\s+capabilities|how\s+can\s+you\s+help|who\s+are\s+you|what\s+do\s+you\s+do)\b/i.test(
-      userText.trim(),
-    );
-
-  if (isCapabilities) {
-    const text =
-      lang === "urdu"
-        ? "Main aapka Voice Call Assistant aur Workspace Lead hoon! Main aawaz ke zariye yeh sab kar sakta hoon:\n\n• **Git & Workspace Audit:** Status check karna, modified files aur recent commits dekhna.\n• **Auto-Healer:** Code syntax, missing imports aur build errors theek karna.\n• **Wishlist & Tasks:** Feature ideas aur notes save karna.\n• **Autonomous Supervision:** Background watchdog chala kar project monitor karna.\n\nBatayein, abhi kis project ya kaam par madad chahiye?"
-        : "I am your Voice Call Assistant and Workspace Lead! Here is what I can do via voice:\n\n• **Git & Workspace Audit:** Check status, inspect modified files and commits.\n• **Auto-Healer:** Diagnose and repair code errors and failing builds.\n• **Wishlist & Tasks:** Save feature requests and track improvements.\n• **Autonomous Supervision:** Monitor your project in the background.\n\nWhat would you like to work on right now?";
-
-    const spoken =
-      lang === "urdu"
-        ? "Main aapka voice call assistant hoon! Main aapke projects inspect kar sakta hoon, git status aur commits check kar sakta hoon, auto-healer se errors theek kar sakta hoon, aur wishlist manage kar sakta hoon. Batayein abhi kya karna hai?"
-        : "I am your voice assistant! I can inspect projects, check git status, auto-heal build errors, and manage your wishlist. What would you like to work on?";
-
-    return {
-      reply: text,
-      spokenReply: spoken,
-      actionTaken: "capabilities_ack",
-    };
-  }
-
   // 2. Intelligent Latency-Masking Conversational Spoken Fillers (Live phone call experience)
   const isGitFeaturesReq =
     /\b(feature|features|commits?|git\s*history|recent\s*changes)\b/i.test(userText) &&
@@ -477,9 +410,6 @@ export async function executeSuperAgentInstruction(
     ) && !/\b(fix|theek\s*karo|solve|sort)\b/i.test(userText);
 
   const isInspectionOrWork =
-    !isFarewell &&
-    !isGreeting &&
-    !isCapabilities &&
     /\b(project\s+files?|preview\s+check|syntax\s+error|worker\s*agent|prompt\s*de|inspect\s+files?|kaam\s*karwa)\b/i.test(
       userText,
     );

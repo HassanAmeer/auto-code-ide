@@ -53,7 +53,7 @@ import {
   Save,
   Key,
 } from "lucide-react";
-import { useGroqSettings, GROQ_MODEL_OPTIONS } from "~/lib/groqVoiceSettings";
+import { useGroqSettings, GROQ_MODEL_OPTIONS, fetchGroqLiveModels } from "~/lib/groqVoiceSettings";
 import { executeTerminalCommand } from "~/components/chat/terminal/terminalClient";
 import { Link } from "@tanstack/react-router";
 import { type ProviderInstanceId } from "@t3tools/contracts";
@@ -400,16 +400,52 @@ export function SuperCallAssistantView() {
   const [groqApiKeyInput, setGroqApiKeyInput] = useState(groqSettings.apiKey);
   const [isGroqKeyVisible, setIsGroqKeyVisible] = useState(false);
   const [isGroqKeySaved, setIsGroqKeySaved] = useState(false);
+  const [isFetchingGroqModels, setIsFetchingGroqModels] = useState(false);
+  const [groqModelsFetchStatus, setGroqModelsFetchStatus] = useState<string | null>(null);
 
   useEffect(() => {
     setGroqApiKeyInput(groqSettings.apiKey);
   }, [groqSettings.apiKey]);
 
+  const handleFetchLiveGroqModels = useCallback(
+    async (keyToUse?: string) => {
+      const key = (keyToUse || groqApiKeyInput || groqSettings.apiKey || "").trim();
+      if (!key) {
+        setGroqModelsFetchStatus("Enter Groq API Key first");
+        setTimeout(() => setGroqModelsFetchStatus(null), 3000);
+        return;
+      }
+      setIsFetchingGroqModels(true);
+      setGroqModelsFetchStatus(null);
+      try {
+        const res = await fetchGroqLiveModels(key);
+        if (res.ok && res.models && res.models.length > 0) {
+          setGroqModelsFetchStatus(`✓ ${res.models.length} Live Models Loaded`);
+          if (!res.models.some((m) => m.id === groqSettings.model)) {
+            updateGroqSettings({ model: res.models[0].id });
+          }
+        } else {
+          setGroqModelsFetchStatus(`⚠️ ${res.error || "Failed to load models"}`);
+        }
+      } catch (e: any) {
+        setGroqModelsFetchStatus(`⚠️ ${e?.message || "Failed"}`);
+      } finally {
+        setIsFetchingGroqModels(false);
+        setTimeout(() => setGroqModelsFetchStatus(null), 4000);
+      }
+    },
+    [groqApiKeyInput, groqSettings.apiKey, groqSettings.model, updateGroqSettings],
+  );
+
   const handleSaveGroqApiKey = useCallback(() => {
-    updateGroqSettings({ apiKey: groqApiKeyInput.trim() });
+    const clean = groqApiKeyInput.trim();
+    updateGroqSettings({ apiKey: clean });
     setIsGroqKeySaved(true);
     setTimeout(() => setIsGroqKeySaved(false), 2000);
-  }, [groqApiKeyInput, updateGroqSettings]);
+    if (clean) {
+      void handleFetchLiveGroqModels(clean);
+    }
+  }, [groqApiKeyInput, updateGroqSettings, handleFetchLiveGroqModels]);
 
   // Universal Attachment State (Images, Code files, Logs, PDFs, etc.)
   const [attachedFile, setAttachedFile] = useState<{
@@ -884,9 +920,15 @@ export function SuperCallAssistantView() {
     ],
   );
 
+  const isCallActiveRef = useRef(false);
+
   // Live Speech transcript update
   const handleTranscriptChange = useCallback((text: string) => {
-    // If user is not actively focused on the text input with cursor, ensure isUserEditing is false
+    // During an active voice call, spoken words appear directly on the live visualizer waves,
+    // and must NOT spill into or overwrite the manual message input box.
+    if (isCallActiveRef.current) {
+      return;
+    }
     if (document.activeElement !== inputRef.current) {
       isUserEditingRef.current = false;
       setIsUserEditing(false);
@@ -923,6 +965,10 @@ export function SuperCallAssistantView() {
     phase: isProcessing ? "running" : "ready",
     isUserEditing,
   });
+
+  useEffect(() => {
+    isCallActiveRef.current = isCallActive;
+  }, [isCallActive]);
 
   const livekit = useLiveKitCall({
     onDataReceived: (data) => {
@@ -1769,13 +1815,35 @@ export function SuperCallAssistantView() {
                         <Bot className="size-3.5 text-primary" />
                         Groq Model Selection
                       </label>
-                      <span className="text-[10px] text-muted-foreground font-mono">
-                        {groqSettings.model || "llama-3.3-70b-versatile"}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        {groqModelsFetchStatus && (
+                          <span className="text-[10px] text-muted-foreground animate-fade-in font-medium">
+                            {groqModelsFetchStatus}
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleFetchLiveGroqModels()}
+                          disabled={isFetchingGroqModels}
+                          className="flex items-center gap-1 text-[10px] text-orange-400 hover:text-orange-300 transition-colors p-1 rounded-md hover:bg-orange-500/10 cursor-pointer disabled:opacity-50"
+                          title="Call Groq Models API & Refresh List"
+                        >
+                          <RefreshCw
+                            className={cn(
+                              "size-3",
+                              isFetchingGroqModels && "animate-spin text-orange-400",
+                            )}
+                          />
+                          <span>{isFetchingGroqModels ? "Loading..." : "Fetch Models"}</span>
+                        </button>
+                      </div>
                     </div>
 
-                    <div className="space-y-1.5">
-                      {GROQ_MODEL_OPTIONS.map((opt) => {
+                    <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+                      {(groqSettings.availableModels && groqSettings.availableModels.length > 0
+                        ? groqSettings.availableModels
+                        : GROQ_MODEL_OPTIONS
+                      ).map((opt) => {
                         const isSelected =
                           (groqSettings.model || "llama-3.3-70b-versatile") === opt.id;
                         return (
@@ -1786,20 +1854,20 @@ export function SuperCallAssistantView() {
                             className={cn(
                               "w-full p-2.5 rounded-lg border text-left transition-all cursor-pointer flex items-center justify-between",
                               isSelected
-                                ? "border-orange-500/60 bg-orange-500/10 text-foreground"
+                                ? "border-orange-500/60 bg-orange-500/10 text-foreground ring-1 ring-orange-500/30"
                                 : "border-border/60 bg-muted/20 text-muted-foreground hover:bg-muted/40",
                             )}
                           >
-                            <div>
-                              <div className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                                <span>{opt.name}</span>
+                            <div className="min-w-0 pr-2">
+                              <div className="text-xs font-semibold text-foreground flex items-center gap-1.5 truncate">
+                                <span className="truncate">{opt.name}</span>
                               </div>
-                              <p className="text-[10px] text-muted-foreground mt-0.5">
+                              <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
                                 {opt.description}
                               </p>
                             </div>
                             {isSelected && (
-                              <CheckCircle2 className="size-4 text-orange-400 shrink-0 ml-2" />
+                              <CheckCircle2 className="size-4 text-orange-400 shrink-0 ml-1" />
                             )}
                           </button>
                         );
