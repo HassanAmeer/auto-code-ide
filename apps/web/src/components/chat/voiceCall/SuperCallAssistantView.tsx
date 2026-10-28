@@ -60,6 +60,7 @@ import {
   Wrench,
 } from "lucide-react";
 import ChatMarkdown from "~/components/ChatMarkdown";
+import { ReadAloudButton } from "~/components/chat/ReadAloudButton";
 import type { ToolCallRecord } from "./superAgentEngine";
 import {
   loadSessionLedger,
@@ -2800,14 +2801,12 @@ export function SuperCallAssistantView() {
                       )}
                     </button>
 
-                    <button
-                      type="button"
-                      onClick={() => speakText(msg.text, loadTtsSettings())}
-                      className="opacity-60 hover:opacity-100 transition-opacity p-0.5 rounded hover:text-purple-300 cursor-pointer"
-                      title="Allowed to speak (Speak response aloud)"
-                    >
-                      <Volume2 className="size-3" />
-                    </button>
+                    <ReadAloudButton
+                      text={msg.text}
+                      colorScheme="purple"
+                      size="icon-xs"
+                      className="opacity-70 hover:opacity-100 p-0.5 rounded cursor-pointer"
+                    />
                   </div>
                 </div>
               </div>
