@@ -234,5 +234,22 @@ describe("superAgentEngine", () => {
       expect(res.toolsCalled).toBeDefined();
       expect(res.toolsCalled?.some((t) => t.name === "recall_session_ledger")).toBe(true);
     });
+
+    it("triggers research_media_link tool when user provides a YouTube link", async () => {
+      let spokenFiller = "";
+      const res = await executeSuperAgentInstruction({
+        userText: "Is YouTube video ko research karo https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        projects: [],
+        selectedModel: "Gemini 2.5 Flash",
+        onFillerSpoken: (f) => {
+          spokenFiller = f;
+        },
+      });
+
+      expect(spokenFiller).toContain("transcript");
+      expect(res.actionTaken).toBe("research_media_link");
+      expect(res.toolsCalled).toBeDefined();
+      expect(res.toolsCalled?.some((t) => t.name === "research_media_link")).toBe(true);
+    });
   });
 });

@@ -423,9 +423,20 @@ export async function executeSuperAgentInstruction(
     );
 
   const isLedgerReq = isLedgerRecallQuery(userText);
+  const mediaUrlMatch = userText.match(/https?:\/\/[^\s<>"'{}|\\^`]+[^\s<>"'{}|\\^`.,;:?!)]/i);
+  const isYouTubeUrl =
+    Boolean(mediaUrlMatch) && /youtube\.com|youtu\.be/i.test(mediaUrlMatch ? mediaUrlMatch[0] : "");
 
   let filler = "";
-  if (isLedgerReq) {
+  if (mediaUrlMatch) {
+    filler = isYouTubeUrl
+      ? lang === "urdu"
+        ? "Ji bilkul, main is video ka transcript fetch kar ke research kar raha hoon, ek second dein..."
+        : "Sure thing! Fetching the YouTube video transcript and researching it for you, give me one second..."
+      : lang === "urdu"
+        ? "Ji bilkul, main is article ka content fetch kar ke research kar raha hoon, ek second dein..."
+        : "Fetching the web article and researching it for you, give me one second...";
+  } else if (isLedgerReq) {
     filler =
       lang === "urdu"
         ? "Ji boss, main session ledger aur hamare pehle ke ahem faislay check kar raha hoon..."
@@ -463,6 +474,70 @@ export async function executeSuperAgentInstruction(
   }
 
   // 3. Action execution (if commanded)
+  // 3-media. Zero-Cost YouTube & Web Link Research Tool (Inspired by DIGI LABS)
+  if (mediaUrlMatch) {
+    const extractedUrl = mediaUrlMatch[0];
+    actionTag = "research_media_link";
+    onStatusUpdate?.(
+      isYouTubeUrl
+        ? "Tool Calling: research_media_link (Fetching YouTube transcript)..."
+        : "Tool Calling: research_media_link (Fetching web content)...",
+    );
+
+    try {
+      const res = await fetch(resolveApiUrl("/api/research/media-link"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: extractedUrl }),
+        signal: AbortSignal.timeout(16000),
+      });
+      const data = (await res.json()) as {
+        ok: boolean;
+        title?: string;
+        transcript: string;
+        isYouTube?: boolean;
+        error?: string;
+      };
+
+      if (data.ok && data.transcript) {
+        toolsExecuted.push({
+          name: "research_media_link",
+          summary: `Extracted ${data.isYouTube ? "YouTube transcript" : "article text"}: "${data.title || extractedUrl}" (${data.transcript.length} chars)`,
+          status: "completed",
+        });
+
+        runtimeFacts += `\n[RESEARCH TOOL: MEDIA CONTENT EXTRACTED SUCCESSFULLY]:
+• Source Type: ${data.isYouTube ? "YouTube Video" : "Web Article"}
+• Title: "${data.title || "Untitled"}"
+• Source URL: ${extractedUrl}
+• Extracted Content / Transcript:
+"""
+${data.transcript.slice(0, 9000)}
+"""
+
+CRITICAL INSTRUCTION FOR MEDIA RESEARCH:
+1. Summarize this content into exactly 3 to 4 key practical, actionable bullet points (Point 1, Point 2, Point 3, Point 4).
+2. Deliver the response in clear, friendly Roman Urdu (or English if user speaks English).
+3. Conclude with a natural spoken audio line [SPOKEN]: that warmly explains the 3-4 key takeaways in 1-2 conversational sentences without technical jargon.
+`;
+      } else {
+        toolsExecuted.push({
+          name: "research_media_link",
+          summary: `Failed to extract content: ${data.error || "No captions/content found"}`,
+          status: "error",
+        });
+        runtimeFacts += `\n[RESEARCH TOOL ERROR]: Is link se content extract nahi ho saka (${data.error || "Transcript unavailable"}). Explain politely to the user.\n`;
+      }
+    } catch (err: any) {
+      toolsExecuted.push({
+        name: "research_media_link",
+        summary: `Network error fetching media: ${err?.message || String(err)}`,
+        status: "error",
+      });
+      runtimeFacts += `\n[RESEARCH TOOL ERROR]: Request timeout ya network error: ${err?.message || String(err)}.\n`;
+    }
+  }
+
   // 3a. Direct Task Creation in Ledger
   const createTaskMatch = userText.match(
     /(?:task\s*(?:bana(?:o|en)?|add\s*karo?|create|likh(?:o|en)?)|add\s*task|create\s*task)\s*[:\-]?\s*(.+)/i,

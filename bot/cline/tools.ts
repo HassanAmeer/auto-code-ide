@@ -75,3 +75,46 @@ export async function inspectPreviewEndpoint(
     return { ok: false, error: err?.message || "Preview endpoint unreachable" };
   }
 }
+
+export interface ResearchMediaLinkArgs {
+  url: string;
+  query?: string;
+}
+
+export interface ResearchMediaLinkResult {
+  ok: boolean;
+  title?: string;
+  transcript: string;
+  isYouTube?: boolean;
+  summary?: string;
+  error?: string;
+}
+
+/**
+ * Voice Agent Tool: research_media_link
+ * Extracts transcripts from YouTube videos or text from web articles without API keys.
+ */
+export async function researchMediaLink(
+  args: ResearchMediaLinkArgs,
+): Promise<ResearchMediaLinkResult> {
+  const { url, query } = args;
+  try {
+    const { researchMediaLink: executeResearch } = await import(
+      "../../apps/server/src/youtubeTranscript.ts" as string
+    );
+    const res = await executeResearch(url, query);
+    return {
+      ok: res.ok,
+      title: res.title,
+      transcript: res.transcript,
+      isYouTube: res.isYouTube,
+      error: res.error,
+    };
+  } catch (err: any) {
+    return {
+      ok: false,
+      transcript: "",
+      error: err?.message || "Failed to research media link",
+    };
+  }
+}

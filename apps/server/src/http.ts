@@ -1709,6 +1709,56 @@ export const layerSessionLedgerClearRoute = HttpRouter.add(
   }),
 );
 
+// ── Zero-Cost YouTube & Web Link Research API (Inspired by DIGI LABS) ────────
+
+export const layerResearchMediaLinkRoute = HttpRouter.add(
+  "POST",
+  "/api/research/media-link",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const body = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      url?: string;
+      query?: string;
+    };
+
+    const url = body?.url?.trim() ?? "";
+    if (!url) {
+      return HttpServerResponse.jsonUnsafe({ ok: false, error: "url required" });
+    }
+
+    const result = yield* Effect.promise(async () => {
+      const { researchMediaLink } = await import("./youtubeTranscript.ts");
+      return researchMediaLink(url, body?.query);
+    });
+
+    return HttpServerResponse.jsonUnsafe(result);
+  }),
+);
+
+export const layerResearchMediaLinkGetRoute = HttpRouter.add(
+  "GET",
+  "/api/research/media-link",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const urlObj = HttpServerRequest.toURL(request);
+    const mediaUrl = Option.isSome(urlObj) ? (urlObj.value.searchParams.get("url") ?? "") : "";
+    const query = Option.isSome(urlObj)
+      ? (urlObj.value.searchParams.get("query") ?? undefined)
+      : undefined;
+
+    if (!mediaUrl) {
+      return HttpServerResponse.jsonUnsafe({ ok: false, error: "url query parameter required" });
+    }
+
+    const result = yield* Effect.promise(async () => {
+      const { researchMediaLink } = await import("./youtubeTranscript.ts");
+      return researchMediaLink(mediaUrl, query);
+    });
+
+    return HttpServerResponse.jsonUnsafe(result);
+  }),
+);
+
 // ── Bot Wishlist API ────────────────────────────────────────────────────────
 
 export const layerBotWishlistGetRoute = HttpRouter.add(
