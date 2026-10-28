@@ -112,6 +112,11 @@ import {
 } from "~/lib/speech/stt";
 import { transliterateUrduToRoman } from "~/lib/speech/romanUrduTransliterate";
 import { executeSuperAgentInstruction, isUrduLanguage } from "./superAgentEngine";
+import {
+  subscribeVoiceCallLogs,
+  clearVoiceCallLogs,
+  type VoiceCallLogEntry,
+} from "~/lib/speech/voiceCallLogger";
 
 function PakistanFlagIcon({ className }: { className?: string }) {
   return (
@@ -391,9 +396,17 @@ export function SuperCallAssistantView() {
   // Command Center / Right Sidebar Drawer
   const [isCommandCenterOpen, setIsCommandCenterOpen] = useState(false);
   const [commandCenterTab, setCommandCenterTab] = useState<
-    "memory" | "tasks" | "voice" | "settings"
+    "memory" | "tasks" | "voice" | "settings" | "logs"
   >("memory");
   const [isInputFocused, setIsInputFocused] = useState(false);
+
+  // Live Voice Call Trace & Diagnostics Logs
+  const [voiceLogs, setVoiceLogs] = useState<VoiceCallLogEntry[]>([]);
+  const [logFilterCategory, setLogFilterCategory] = useState<string>("ALL");
+
+  useEffect(() => {
+    return subscribeVoiceCallLogs(setVoiceLogs);
+  }, []);
 
   // Groq AI Integration State
   const [groqSettings, updateGroqSettings] = useGroqSettings();
@@ -1103,8 +1116,8 @@ export function SuperCallAssistantView() {
               </button>
             </div>
 
-            {/* Navigation Tabs (4 Tabs: Memory, Tasks, Voice, Settings) - Single Compact Line */}
-            <div className="grid grid-cols-4 border-b border-border/50 px-1 bg-muted/20 text-center">
+            {/* Navigation Tabs (5 Tabs: Memory, Tasks, Voice, Settings, Logs) - Single Compact Line */}
+            <div className="grid grid-cols-5 border-b border-border/50 px-1 bg-muted/20 text-center">
               <button
                 type="button"
                 onClick={() => {
@@ -1112,14 +1125,14 @@ export function SuperCallAssistantView() {
                   void fetchProjectKnowledge(selectedMemoryProject || activeProjectName);
                 }}
                 className={cn(
-                  "py-1.5 px-1 text-[11px] font-medium border-b-2 transition-colors cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap",
+                  "py-1.5 px-0.5 text-[11px] font-medium border-b-2 transition-colors cursor-pointer flex items-center justify-center gap-1 whitespace-nowrap",
                   commandCenterTab === "memory"
                     ? "border-primary text-primary"
                     : "border-transparent text-muted-foreground hover:text-foreground",
                 )}
               >
                 <Brain className="size-3.5 shrink-0" />
-                <span>Memory</span>
+                <span className="hidden sm:inline">Memory</span>
                 {chatMemories.length > 0 && (
                   <span className="text-[8px] px-1 py-0.5 rounded-full bg-purple-500/20 text-purple-400 font-mono leading-none">
                     {chatMemories.length}
@@ -1131,14 +1144,14 @@ export function SuperCallAssistantView() {
                 type="button"
                 onClick={() => setCommandCenterTab("tasks")}
                 className={cn(
-                  "py-1.5 px-1 text-[11px] font-medium border-b-2 transition-colors cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap",
+                  "py-1.5 px-0.5 text-[11px] font-medium border-b-2 transition-colors cursor-pointer flex items-center justify-center gap-1 whitespace-nowrap",
                   commandCenterTab === "tasks"
                     ? "border-primary text-primary"
                     : "border-transparent text-muted-foreground hover:text-foreground",
                 )}
               >
                 <ListTodo className="size-3.5 shrink-0" />
-                <span>Tasks</span>
+                <span className="hidden sm:inline">Tasks</span>
                 {scheduledTasks.length > 0 && (
                   <span className="text-[8px] px-1 py-0.5 rounded-full bg-primary/20 text-primary font-mono leading-none">
                     {scheduledTasks.length}
@@ -1150,30 +1163,49 @@ export function SuperCallAssistantView() {
                 type="button"
                 onClick={() => setCommandCenterTab("voice")}
                 className={cn(
-                  "py-1.5 px-1 text-[11px] font-medium border-b-2 transition-colors cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap",
+                  "py-1.5 px-0.5 text-[11px] font-medium border-b-2 transition-colors cursor-pointer flex items-center justify-center gap-1 whitespace-nowrap",
                   commandCenterTab === "voice"
                     ? "border-primary text-primary"
                     : "border-transparent text-muted-foreground hover:text-foreground",
                 )}
               >
                 <SlidersHorizontal className="size-3.5 shrink-0" />
-                <span>Voice</span>
+                <span className="hidden sm:inline">Voice</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setCommandCenterTab("settings")}
                 className={cn(
-                  "py-1.5 px-1 text-[11px] font-medium border-b-2 transition-colors cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap",
+                  "py-1.5 px-0.5 text-[11px] font-medium border-b-2 transition-colors cursor-pointer flex items-center justify-center gap-1 whitespace-nowrap",
                   commandCenterTab === "settings"
                     ? "border-primary text-primary"
                     : "border-transparent text-muted-foreground hover:text-foreground",
                 )}
               >
                 <Settings2 className="size-3.5 shrink-0" />
-                <span>Settings</span>
+                <span className="hidden sm:inline">Settings</span>
                 {groqSettings.enabled && (
                   <span className="size-1.5 rounded-full bg-orange-400 animate-pulse" />
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCommandCenterTab("logs")}
+                className={cn(
+                  "py-1.5 px-0.5 text-[11px] font-medium border-b-2 transition-colors cursor-pointer flex items-center justify-center gap-1 whitespace-nowrap",
+                  commandCenterTab === "logs"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <Activity className="size-3.5 shrink-0 text-cyan-400" />
+                <span className="hidden sm:inline">Logs</span>
+                {voiceLogs.length > 0 && (
+                  <span className="text-[8px] px-1 py-0.5 rounded-full bg-cyan-500/20 text-cyan-400 font-mono leading-none">
+                    {voiceLogs.length}
+                  </span>
                 )}
               </button>
             </div>
@@ -1866,6 +1898,158 @@ export function SuperCallAssistantView() {
                         );
                       })}
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 5: VOICE CALL DIAGNOSTICS & TRACE LOGS */}
+              {commandCenterTab === "logs" && (
+                <div className="space-y-3">
+                  {/* Top Control Bar */}
+                  <div className="p-3 rounded-xl border border-border/70 bg-card/60 flex items-center justify-between gap-2 shadow-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500"></span>
+                      </span>
+                      <div className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                        <Activity className="size-3.5 text-cyan-400" />
+                        <span>Call Traces</span>
+                      </div>
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                        {voiceLogs.length} events
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={clearVoiceCallLogs}
+                      disabled={voiceLogs.length === 0}
+                      className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium border border-border/60 hover:border-destructive/40 hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-30 cursor-pointer"
+                      title="Clear all logs"
+                    >
+                      <Trash2 className="size-3" />
+                      <span>Clear</span>
+                    </button>
+                  </div>
+
+                  {/* Filter Pills */}
+                  <div className="flex flex-wrap items-center gap-1 px-0.5">
+                    {(
+                      ["ALL", "STT", "NOISE_GATE", "INTERRUPT", "AI", "TTS", "SYSTEM"] as const
+                    ).map((cat) => {
+                      const count =
+                        cat === "ALL"
+                          ? voiceLogs.length
+                          : voiceLogs.filter((l) => l.category === cat).length;
+                      const isSelected = logFilterCategory === cat;
+                      return (
+                        <button
+                          key={cat}
+                          type="button"
+                          onClick={() => setLogFilterCategory(cat)}
+                          className={cn(
+                            "px-2 py-0.5 rounded-full text-[10px] font-mono transition-all cursor-pointer flex items-center gap-1",
+                            isSelected
+                              ? "bg-primary text-primary-foreground font-semibold shadow-xs"
+                              : "bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground border border-border/40",
+                          )}
+                        >
+                          <span>{cat}</span>
+                          {count > 0 && <span className="opacity-75">({count})</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Log List Stream */}
+                  <div className="space-y-2">
+                    {voiceLogs
+                      .filter(
+                        (l) => logFilterCategory === "ALL" || l.category === logFilterCategory,
+                      )
+                      .map((log) => {
+                        const getCategoryStyle = (cat: string) => {
+                          switch (cat) {
+                            case "STT":
+                              return "bg-blue-500/10 text-blue-400 border-blue-500/30";
+                            case "NOISE_GATE":
+                              return "bg-amber-500/10 text-amber-400 border-amber-500/30";
+                            case "INTERRUPT":
+                              return "bg-rose-500/10 text-rose-400 border-rose-500/30 font-bold";
+                            case "AI":
+                              return "bg-purple-500/10 text-purple-400 border-purple-500/30";
+                            case "TTS":
+                              return "bg-emerald-500/10 text-emerald-400 border-emerald-500/30";
+                            case "SYSTEM":
+                            default:
+                              return "bg-zinc-500/10 text-zinc-400 border-zinc-500/30";
+                          }
+                        };
+
+                        const formattedTime = new Date(log.timestamp).toLocaleTimeString([], {
+                          hour12: false,
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          second: "2-digit",
+                        });
+
+                        return (
+                          <div
+                            key={log.id}
+                            className="p-2.5 rounded-lg border border-border/60 bg-muted/20 hover:bg-muted/30 transition-colors font-mono text-[11px] space-y-1.5"
+                          >
+                            <div className="flex items-center justify-between gap-1 text-[10px]">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span
+                                  className={cn(
+                                    "px-1.5 py-0.5 rounded border text-[9px] font-semibold tracking-wider shrink-0",
+                                    getCategoryStyle(log.category),
+                                  )}
+                                >
+                                  {log.category}
+                                </span>
+                                <span className="font-semibold text-foreground truncate">
+                                  {log.title}
+                                </span>
+                              </div>
+                              <span className="text-muted-foreground/70 shrink-0 text-[9px]">
+                                {formattedTime}
+                              </span>
+                            </div>
+
+                            {log.detail && (
+                              <p className="text-muted-foreground text-[10px] whitespace-pre-wrap break-words leading-relaxed pl-1 border-l-2 border-border/50">
+                                {log.detail}
+                              </p>
+                            )}
+
+                            {log.metadata && Object.keys(log.metadata).length > 0 && (
+                              <div className="text-[9px] text-muted-foreground/60 flex flex-wrap gap-1.5 pt-0.5">
+                                {Object.entries(log.metadata).map(([k, v]) => (
+                                  <span
+                                    key={k}
+                                    className="bg-background/60 px-1 py-0.5 rounded border border-border/40"
+                                  >
+                                    {k}: <span className="text-foreground/80">{String(v)}</span>
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+
+                    {voiceLogs.length === 0 && (
+                      <div className="p-8 text-center text-xs text-muted-foreground border border-dashed border-border/60 rounded-xl space-y-2">
+                        <Activity className="size-6 mx-auto text-muted-foreground/40 animate-pulse" />
+                        <p className="font-medium text-foreground">No Voice Call Events Yet</p>
+                        <p className="text-[10px] leading-relaxed">
+                          Mic par bolne se live STT recognition, noise gating, AI model calls aur
+                          TTS output events yahan live trace honge.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

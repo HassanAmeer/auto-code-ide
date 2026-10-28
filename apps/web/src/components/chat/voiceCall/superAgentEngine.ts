@@ -14,6 +14,7 @@ import {
 } from "~/lib/projectActivityLedger";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import { speakText, sanitizeTextForSpeech } from "~/lib/speech/tts";
+import { addVoiceCallLog } from "~/lib/speech/voiceCallLogger";
 import { buildSuperAgentSystemPrompt } from "./superAgentPrompt";
 
 export interface SuperAgentRunOptions {
@@ -799,6 +800,13 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
   onStatusUpdate?.(`Thinking with ${selectedModel}...`);
 
   // 6. QUERY REAL AI MODEL (No hardcoded responses)
+  const startTime = Date.now();
+  addVoiceCallLog({
+    category: "AI",
+    title: `Prompt Sent to ${selectedModel}`,
+    detail: userText,
+  });
+
   const llmRes = await querySuperAgentLLM(userText, {
     model: selectedModel,
     instanceId: options.selectedInstanceId,
@@ -810,6 +818,12 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
   if (llmRes.ok && llmRes.reply && llmRes.reply.trim()) {
     let fullReply = llmRes.reply.trim();
     let spokenReply = "";
+
+    addVoiceCallLog({
+      category: "AI",
+      title: `AI Response Received (${Date.now() - startTime}ms)`,
+      detail: fullReply,
+    });
 
     // Extract [SPOKEN] section if model included it (supports [SPOKEN]:, [SPOKEN], **[SPOKEN]**, etc.)
     const spokenMatch = fullReply.match(/(?:\*{0,2}\[?\s*SPOKEN\s*\]?:?\*{0,2})\s*([\s\S]+)$/i);

@@ -25,6 +25,7 @@ import { thinkingAmbientSound } from "./thinkingAmbientSound";
 import { setVoiceCallActiveState } from "./voiceCallState";
 import { startMobileVoiceKeepAlive, stopMobileVoiceKeepAlive } from "./mobileVoiceKeepAlive";
 import { StreamingTtsPlayer, extractSpeechChunks } from "./streamingTtsPlayer";
+import { addVoiceCallLog } from "~/lib/speech/voiceCallLogger";
 import type { VoiceCallStatus } from "./VoiceVisualizerWaves";
 import type { ChatMessage, SessionPhase } from "~/types";
 
@@ -389,6 +390,7 @@ export function useVoiceCallAssistant({
   // Dedicated silence engine refs: tracks real timestamp of last spoken words
   const lastSpeechTimestampRef = useRef<number>(0);
   const hasPendingSpeechRef = useRef<boolean>(false);
+  const peakEnergyInTurnRef = useRef<number>(0);
 
   // Streaming sentence TTS player refs
   const streamingPlayerRef = useRef<StreamingTtsPlayer | null>(null);
@@ -853,6 +855,11 @@ export function useVoiceCallAssistant({
             containsInterruptCommand(formatted) || containsInterruptCommand(rawSpeech);
 
           if (isInterrupt) {
+            addVoiceCallLog({
+              category: "INTERRUPT",
+              title: "Call Interrupted (Chup/Stop)",
+              detail: `Command: "${formatted}"`,
+            });
             // User explicitly commanded stop/chup/ruko/bas: immediately halt playback!
             interruptSpeakingRef.current();
             try {
@@ -861,6 +868,28 @@ export function useVoiceCallAssistant({
           }
           // Discard turn buffers during AI speech so speaker audio NEVER leaks into input field!
           accumulatedTurnFinalRef.current = "";
+          return;
+        }
+
+        // NOISE GATING & AMBIENT NOISE FILTER:
+        // Filter out ambient mic hiss, fan rumble, breath noise, and low-energy noise syllables
+        const trimmedRaw = rawSpeech.trim();
+        const noiseSyllableRegex = /^(?:[اہاوہمہمامآہاوع]|ah|uh|um|hmm|shh|psst|oh)+$/i;
+        const isNoiseSyllable = noiseSyllableRegex.test(trimmedRaw);
+        const wordsList = trimmedRaw.split(/\s+/).filter(Boolean);
+
+        // If audio energy never exceeded speech threshold (12) during this utterance,
+        // OR if it's an isolated low-confidence noise syllable:
+        const isAmbientNoise =
+          (peakEnergyInTurnRef.current < 12 && wordsList.length <= 2) ||
+          (isNoiseSyllable && wordsList.length <= 2);
+
+        if (isAmbientNoise) {
+          addVoiceCallLog({
+            category: "NOISE_GATE",
+            title: "Ambient Noise Filtered",
+            detail: `Dropped background sound: "${trimmedRaw}" (Peak Energy: ${peakEnergyInTurnRef.current.toFixed(1)})`,
+          });
           return;
         }
 
@@ -909,6 +938,12 @@ export function useVoiceCallAssistant({
         hasPendingSpeechRef.current = true;
         setLiveTranscript(speechToUse);
         onTranscriptChangeRef.current(combinedText);
+
+        addVoiceCallLog({
+          category: "STT",
+          title: "Speech Transcribed",
+          detail: `"${combinedText}" (Energy: ${peakEnergyInTurnRef.current.toFixed(1)})`,
+        });
 
         // Normal listening state:
         updateCallStatus("user-speaking");
@@ -1266,6 +1301,13 @@ export function useVoiceCallAssistant({
       recognitionRef.current?.abort();
     } catch {}
 
+    addVoiceCallLog({
+      category: "SYSTEM",
+      title: "Voice Turn Auto-Dispatched",
+      detail: currentText,
+    });
+    peakEnergyInTurnRef.current = 0;
+
     // Auto-send prompt turn
     onAutoSendRef.current(currentText);
   }, [
@@ -1549,6 +1591,9 @@ export function useVoiceCallAssistant({
               sum += freqData[i] ?? 0;
             }
             const avg = sum / (freqData.length || 1);
+            if (avg > peakEnergyInTurnRef.current) {
+              peakEnergyInTurnRef.current = avg;
+            }
 
             if (callStatusRef.current === "listening" && avg > 18) {
               updateCallStatus("user-speaking");
