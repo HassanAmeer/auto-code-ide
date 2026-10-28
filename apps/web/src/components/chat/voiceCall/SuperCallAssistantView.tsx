@@ -922,17 +922,10 @@ export function SuperCallAssistantView() {
 
   const isCallActiveRef = useRef(false);
 
-  // Live Speech transcript update
+  // Live Speech transcript update: spoken words appear directly inside the input field
   const handleTranscriptChange = useCallback((text: string) => {
-    // During an active voice call, spoken words appear directly on the live visualizer waves,
-    // and must NOT spill into or overwrite the manual message input box.
-    if (isCallActiveRef.current) {
-      return;
-    }
-    if (document.activeElement !== inputRef.current) {
-      isUserEditingRef.current = false;
-      setIsUserEditing(false);
-    } else if (isUserEditingRef.current) {
+    // If the user has explicitly focused and is editing with keyboard cursor, do not stomp on cursor
+    if (document.activeElement === inputRef.current && isUserEditingRef.current) {
       return;
     }
     setInputText(text);
@@ -2282,10 +2275,12 @@ export function SuperCallAssistantView() {
                 onFocus={handleInputFocusOrClick}
                 onBlur={() => {
                   setIsInputFocused(false);
-                  if (!inputText.trim()) {
-                    isUserEditingRef.current = false;
-                    setIsUserEditing(false);
-                  }
+                  setTimeout(() => {
+                    if (document.activeElement !== inputRef.current) {
+                      isUserEditingRef.current = false;
+                      setIsUserEditing(false);
+                    }
+                  }, 800);
                 }}
                 onChange={(e) => {
                   isUserEditingRef.current = true;

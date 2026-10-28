@@ -818,19 +818,22 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
       fullReply = fullReply.replace(/\[SPOKEN\]:\s*([\s\S]+)$/i, "").trim();
     }
 
-    // Natural full spoken text (code blocks and markdown stripped cleanly for TTS)
-    const sanitizedFull = sanitizeTextForSpeech(fullReply);
-    const userWantsBrief =
-      /\b(brief|short|summary|mukhtasir|ek line|one sentence|1 sentence)\b/i.test(userText);
+    // Clean up any stray markdown syntax (headers, table pipes, bold asterisks) for voice call clarity
+    fullReply = fullReply
+      .replace(/^#{1,6}\s+/gm, "")
+      .replace(/\*{1,3}([^*]+)\*{1,3}/g, "$1")
+      .replace(/\|/g, " ")
+      .trim();
 
-    // If spokenReply is missing or artificially truncated compared to fullReply, use sanitized full reply
-    if (!spokenReply || (!userWantsBrief && sanitizedFull.length > spokenReply.length * 1.5)) {
-      spokenReply = sanitizedFull || fullReply;
-    }
+    // Natural spoken text: strictly prefer concise spokenReply if available
+    const sanitizedSpoken = spokenReply ? sanitizeTextForSpeech(spokenReply) : "";
+    const sanitizedFull = sanitizeTextForSpeech(fullReply);
+
+    const finalSpoken = sanitizedSpoken || sanitizedFull || fullReply;
 
     return {
       reply: fullReply,
-      spokenReply: spokenReply || fullReply,
+      spokenReply: finalSpoken,
       actionTaken: actionTag,
       delegatedTask: delegatedTaskInfo,
       referencedMemory: referencedMemoryInfo,

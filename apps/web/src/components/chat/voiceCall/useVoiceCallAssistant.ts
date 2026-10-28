@@ -118,6 +118,7 @@ const INTERRUPT_COMMAND_TRIGGERS = [
   "ruko",
   "ruk jao",
   "ruk jao please",
+  "ruk",
   "thamb jao",
   "ek second",
   "ek sec",
@@ -137,15 +138,38 @@ const INTERRUPT_COMMAND_TRIGGERS = [
   "suno please",
   "please suno",
   "ek minute suno",
+  // Urdu / Roman Urdu speech interruption & silence commands:
+  "chup",
+  "chup karo",
+  "chup kar",
+  "chup ho jao",
+  "chup raho",
+  "khamosh",
+  "khamosh raho",
+  "bas",
+  "bas karo",
+  "bas kar do",
+  "thehro",
+  "thahro",
+  "aray ruko",
+  "arey ruko",
+  "nahi ruko",
   // Urdu script:
   "سٹاپ",
   "روکو",
   "رک جاؤ",
+  "رک",
   "سنو",
   "سنیں",
   "ایک سیکنڈ",
   "ایک منٹ",
   "ٹھہرو",
+  "چپ",
+  "چپ کرو",
+  "چپ ہو جاؤ",
+  "خاموش",
+  "بس",
+  "بس کرو",
 ];
 
 const FILLERS = [
@@ -270,13 +294,13 @@ export function containsInterruptCommand(text: string): boolean {
     }
   }
 
-  // Exact word boundary for stop or listen or suno or ruko or wait
-  if (/\b(?:stop|listen|suno|ruko|wait|pause|ruk|bas)\b/i.test(clean)) {
+  // Exact word boundary for stop or listen or suno or ruko or wait or chup or bas
+  if (/\b(?:stop|listen|suno|ruko|wait|pause|ruk|bas|chup|khamosh)\b/i.test(clean)) {
     return true;
   }
 
   // Urdu script
-  if (/(?:سٹاپ|سنو|سنیں|روکو|رک|ٹھہرو|بس)/.test(clean)) {
+  if (/(?:سٹاپ|سنو|سنیں|روکو|رک|ٹھہرو|بس|چپ|خاموش)/.test(clean)) {
     return true;
   }
 
@@ -812,23 +836,34 @@ export function useVoiceCallAssistant({
           }
         }
 
-        // SOFT MUTE during AI speech or post-TTS acoustic cooldown:
-        // Keep recognition running in the background, but drop incoming speech
-        // so the device speaker is NEVER transcribed.
+        // BARGE-IN & ACOUSTIC ISOLATION:
+        // If AI is currently speaking, playing audio, or in post-TTS echo window:
+        // Detect genuine user interruption (command like stop/chup/ruko OR new non-echo words).
         if (isAiSpeakingOrBusy) {
           const rawInterim = (newlyFinalized + " " + currentInterim).trim();
           if (rawInterim) {
             const formatted = formatSttTranscript(rawInterim, effectiveMode);
-            // Allow user to interrupt speaking if they explicitly command "stop", "ruko", etc.
-            if (
-              (containsInterruptCommand(formatted) || containsInterruptCommand(rawInterim)) &&
-              !isAcousticEchoOfAi(formatted) &&
-              !isAcousticEchoOfAi(rawInterim)
-            ) {
+            const isEcho = isAcousticEchoOfAi(formatted) || isAcousticEchoOfAi(rawInterim);
+            const isInterrupt =
+              containsInterruptCommand(formatted) || containsInterruptCommand(rawInterim);
+
+            const cleanRaw = cleanForComparison(rawInterim);
+            const words = cleanRaw.split(/\s+/).filter((w) => w.length > 1);
+            // Real barge-in speech: user commanded stop/ruko/chup OR user uttered new non-echo words
+            const isBargeInSpeech =
+              !isEcho && (isInterrupt || words.length >= 2 || cleanRaw.length >= 5);
+
+            if (isBargeInSpeech) {
+              // Immediately silence the bot and stop all audio synthesis playback!
               interruptSpeakingRef.current();
+              // Do NOT return here! Fall through so the words the user just spoke are queued into input field!
+            } else {
+              // Audio is just the speaker echoing back AI phrases, drop it
+              return;
             }
+          } else {
+            return;
           }
-          return;
         }
 
         if (newlyFinalized) {
@@ -885,7 +920,7 @@ export function useVoiceCallAssistant({
           recentEmittedTranscriptsRef.current.add(combinedText);
         }
 
-        // Store transcribed user text in composer input field
+        // Store transcribed user text in composer input field & reset silence timer
         promptRef.current = combinedText;
         lastTranscribedTextRef.current = combinedText;
         lastSpeechTimestampRef.current = Date.now();
@@ -896,24 +931,8 @@ export function useVoiceCallAssistant({
         // Normal listening state:
         updateCallStatus("user-speaking");
 
-        // When speech recognition delivers a final sentence, dispatch rapidly
-        if (newlyFinalized.length > 0) {
-          clearFinalDispatchTimer();
-          finalDispatchTimerRef.current = setTimeout(() => {
-            if (
-              isCallActiveRef.current &&
-              !isTtsActiveRef.current &&
-              callStatusRef.current !== "thinking" &&
-              callStatusRef.current !== "speaking"
-            ) {
-              const text = (promptRef.current || lastTranscribedTextRef.current || "").trim();
-              if (text.length > 0) {
-                hasPendingSpeechRef.current = false;
-                dispatchAutoSend();
-              }
-            }
-          }, FAST_FINAL_DISPATCH_MS);
-        }
+        // Clear any previous dispatch timer: auto-send ONLY happens after 1.5s of TRUE SILENCE via heartbeat
+        clearFinalDispatchTimer();
       };
 
       recognition.onerror = (event: any) => {
