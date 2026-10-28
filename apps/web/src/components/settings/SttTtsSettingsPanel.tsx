@@ -39,6 +39,12 @@ import {
   isSpeechRecognitionSupported,
   type SttController,
 } from "~/lib/speech/stt";
+import {
+  loadNoiseShieldSettings,
+  saveNoiseShieldSettings,
+  subscribeNoiseShieldSettings,
+  type AcousticNoiseShieldSettings,
+} from "~/lib/speech/acousticNoiseShield";
 import { useVoiceCallSettings } from "../chat/voiceCall/voiceCallSettings";
 import { cn } from "~/lib/utils";
 
@@ -65,6 +71,8 @@ export function SttTtsSettingsPanel() {
 
   // --- STT State ---
   const [stt, setStt] = useState<SttSettings>(loadSttSettings);
+  const [noiseShield, setNoiseShield] =
+    useState<AcousticNoiseShieldSettings>(loadNoiseShieldSettings);
   const [isListening, setIsListening] = useState(false);
   const [liveTranscript, setLiveTranscript] = useState("");
   const [sttError, setSttError] = useState<string | null>(null);
@@ -88,6 +96,12 @@ export function SttTtsSettingsPanel() {
   useEffect(() => {
     return subscribeSpeechState((speaking) => {
       setIsSpeaking(speaking);
+    });
+  }, []);
+
+  useEffect(() => {
+    return subscribeNoiseShieldSettings((settings) => {
+      setNoiseShield(settings);
     });
   }, []);
 
@@ -368,6 +382,27 @@ export function SttTtsSettingsPanel() {
                   </SelectItem>
                 </SelectPopup>
               </Select>
+            }
+          />
+
+          <SettingsRow
+            title="Acoustic Noise Shield 🛡️ (Fan & Echo Cancellation)"
+            description="Eliminates ceiling fan hum, AC drone, and room echo using Digi-Labs afftdn & agate filter algorithms."
+            control={
+              <div className="flex items-center gap-2.5">
+                <Switch
+                  checked={noiseShield.enabled}
+                  onCheckedChange={(checked) => {
+                    const updated = { ...noiseShield, enabled: checked };
+                    setNoiseShield(updated);
+                    saveNoiseShieldSettings(updated);
+                  }}
+                  aria-label="Toggle Acoustic Noise Shield"
+                />
+                <span className="text-xs font-mono text-muted-foreground">
+                  {noiseShield.enabled ? "Shield Active" : "Bypassed"}
+                </span>
+              </div>
             }
           />
 

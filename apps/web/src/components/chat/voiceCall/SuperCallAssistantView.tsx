@@ -113,6 +113,12 @@ import {
   subscribeSttSettings,
   type SttSettings,
 } from "~/lib/speech/stt";
+import {
+  loadNoiseShieldSettings,
+  saveNoiseShieldSettings,
+  subscribeNoiseShieldSettings,
+  type AcousticNoiseShieldSettings,
+} from "~/lib/speech/acousticNoiseShield";
 import { transliterateUrduToRoman } from "~/lib/speech/romanUrduTransliterate";
 import { executeSuperAgentInstruction, isUrduLanguage } from "./superAgentEngine";
 import {
@@ -633,13 +639,17 @@ export function SuperCallAssistantView() {
   // Synchronized STT & TTS Settings from /settings/stt-tts
   const [ttsSettings, setTtsSettings] = useState<TtsSettings>(loadTtsSettings);
   const [sttSettings, setSttSettings] = useState<SttSettings>(loadSttSettings);
+  const [noiseShieldSettings, setNoiseShieldSettings] =
+    useState<AcousticNoiseShieldSettings>(loadNoiseShieldSettings);
 
   useEffect(() => {
     const unsubTts = subscribeTtsSettings(setTtsSettings);
     const unsubStt = subscribeSttSettings(setSttSettings);
+    const unsubNoise = subscribeNoiseShieldSettings(setNoiseShieldSettings);
     return () => {
       unsubTts();
       unsubStt();
+      unsubNoise();
     };
   }, []);
 
@@ -1748,6 +1758,41 @@ export function SuperCallAssistantView() {
                         );
                       })}
                     </div>
+                  </div>
+
+                  {/* Acoustic Noise Shield (Fan & Room Echo Cancellation) */}
+                  <div className="p-3.5 rounded-xl border border-border/70 bg-card/60 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sm">🛡️</span>
+                        <span className="text-xs font-semibold text-foreground">
+                          Acoustic Noise Shield (Fan & Echo Gate)
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = {
+                            ...noiseShieldSettings,
+                            enabled: !noiseShieldSettings.enabled,
+                          };
+                          setNoiseShieldSettings(updated);
+                          saveNoiseShieldSettings(updated);
+                        }}
+                        className={cn(
+                          "px-2.5 py-1 rounded-full text-[10px] font-mono font-semibold transition-all cursor-pointer",
+                          noiseShieldSettings.enabled
+                            ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                            : "bg-muted/40 text-muted-foreground border border-border/40",
+                        )}
+                      >
+                        {noiseShieldSettings.enabled ? "Active (Shield ON)" : "Bypassed"}
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground leading-relaxed">
+                      Ceiling fan, AC hum, aur room echo ko afftdn & agate algorithms se block karta
+                      hai taake STT 100% accurate sunay.
+                    </p>
                   </div>
 
                   {/* Speech Rate & Speed Control */}

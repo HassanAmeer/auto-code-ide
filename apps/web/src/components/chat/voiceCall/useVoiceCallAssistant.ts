@@ -26,6 +26,10 @@ import { setVoiceCallActiveState } from "./voiceCallState";
 import { startMobileVoiceKeepAlive, stopMobileVoiceKeepAlive } from "./mobileVoiceKeepAlive";
 import { StreamingTtsPlayer, extractSpeechChunks } from "./streamingTtsPlayer";
 import { addVoiceCallLog } from "~/lib/speech/voiceCallLogger";
+import {
+  createAcousticNoiseShield,
+  type AcousticNoiseShieldController,
+} from "~/lib/speech/acousticNoiseShield";
 import type { VoiceCallStatus } from "./VoiceVisualizerWaves";
 import type { ChatMessage, SessionPhase } from "~/types";
 
@@ -381,6 +385,7 @@ export function useVoiceCallAssistant({
   const micStreamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
+  const noiseShieldRef = useRef<AcousticNoiseShieldController | null>(null);
   const recognitionRef = useRef<any>(null);
   const recognitionLanguageIndexRef = useRef(0);
   const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -583,7 +588,11 @@ export function useVoiceCallAssistant({
       micStreamRef.current = null;
     }
 
-    // Close AudioContext
+    // Close AudioContext & Noise Shield
+    if (noiseShieldRef.current) {
+      noiseShieldRef.current.dispose();
+      noiseShieldRef.current = null;
+    }
     if (audioContextRef.current && audioContextRef.current.state !== "closed") {
       void audioContextRef.current.close().catch(() => {});
       audioContextRef.current = null;
@@ -888,23 +897,31 @@ export function useVoiceCallAssistant({
 
         if (!rawSpeech) return;
 
-        // NOISE GATING & AMBIENT NOISE FILTER:
+        // NOISE GATING & AMBIENT NOISE FILTER (Acoustic Noise Shield):
         // Filter out ambient mic hiss, fan rumble, breath noise, and low-energy noise syllables
         const trimmedRaw = rawSpeech.trim();
         const noiseSyllableRegex = /^(?:[اہاوہمہمامآہاوع]|ah|uh|um|hmm|shh|psst|oh)+$/i;
         const isNoiseSyllable = noiseSyllableRegex.test(trimmedRaw);
         const wordsList = trimmedRaw.split(/\s+/).filter(Boolean);
 
+        // Check Acoustic Noise Shield gate state:
+        const isShieldGated = Boolean(
+          noiseShieldRef.current && !noiseShieldRef.current.isGateOpen() && wordsList.length <= 3,
+        );
+
         // If audio energy never exceeded speech threshold (12) during this utterance,
-        // OR if it's an isolated low-confidence noise syllable:
+        // OR if noise shield gate was closed, OR if it's an isolated low-confidence noise syllable:
         const isAmbientNoise =
+          isShieldGated ||
           (peakEnergyInTurnRef.current < 12 && wordsList.length <= 2) ||
           (isNoiseSyllable && wordsList.length <= 2);
 
         if (isAmbientNoise) {
           addVoiceCallLog({
             category: "NOISE_GATE",
-            title: "Ambient Noise Filtered",
+            title: isShieldGated
+              ? "Acoustic Noise Shield (Fan/Echo Dropped)"
+              : "Ambient Noise Filtered",
             detail: `Dropped background sound: "${trimmedRaw}" (Peak Energy: ${peakEnergyInTurnRef.current.toFixed(1)})`,
           });
           return;
@@ -1113,6 +1130,7 @@ export function useVoiceCallAssistant({
       // During active voice call:
       if (isSpeaking) {
         isTtsActiveRef.current = true;
+        noiseShieldRef.current?.setBotSpeaking(true);
         updateCallStatus("speaking");
         thinkingAmbientSound.stop();
         if (speakingText) {
@@ -1147,6 +1165,7 @@ export function useVoiceCallAssistant({
           );
           if (!isCurrentlySpeaking() && !isPlayerStillBusy && isCallActiveRef.current) {
             isTtsActiveRef.current = false;
+            noiseShieldRef.current?.setBotSpeaking(false);
             waitingForAssistantResponseRef.current = false;
             promptRef.current = "";
             lastTranscribedTextRef.current = "";
@@ -1592,7 +1611,11 @@ export function useVoiceCallAssistant({
           }
           audioContextRef.current = audioCtx;
 
-          const source = audioCtx.createMediaStreamSource(stream);
+          // Wire Acoustic Noise Shield (Fan Denoise + Audio Gate + Speaker Bleed Blocker)
+          const shield = createAcousticNoiseShield(audioCtx, stream);
+          noiseShieldRef.current = shield;
+
+          const source = audioCtx.createMediaStreamSource(shield.outputStream);
           const analyser = audioCtx.createAnalyser();
           analyser.fftSize = 128;
           analyser.smoothingTimeConstant = 0.8;
