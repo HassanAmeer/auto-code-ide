@@ -811,11 +811,16 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
     let fullReply = llmRes.reply.trim();
     let spokenReply = "";
 
-    // Extract [SPOKEN]: section if model included it
-    const spokenMatch = fullReply.match(/\[SPOKEN\]:\s*([\s\S]+)$/i);
+    // Extract [SPOKEN] section if model included it (supports [SPOKEN]:, [SPOKEN], **[SPOKEN]**, etc.)
+    const spokenMatch = fullReply.match(/(?:\*{0,2}\[?\s*SPOKEN\s*\]?:?\*{0,2})\s*([\s\S]+)$/i);
     if (spokenMatch && spokenMatch[1]) {
       spokenReply = spokenMatch[1].trim();
-      fullReply = fullReply.replace(/\[SPOKEN\]:\s*([\s\S]+)$/i, "").trim();
+      fullReply = fullReply.replace(/(?:\*{0,2}\[?\s*SPOKEN\s*\]?:?\*{0,2})[\s\S]*$/i, "").trim();
+    }
+    // Clean any stray [SPOKEN] tags or markers anywhere in the text
+    fullReply = fullReply.replace(/(?:\*{0,2}\[?\s*SPOKEN\s*\]?:?\*{0,2})/gi, "").trim();
+    if (spokenReply) {
+      spokenReply = spokenReply.replace(/(?:\*{0,2}\[?\s*SPOKEN\s*\]?:?\*{0,2})/gi, "").trim();
     }
 
     // Clean up any stray markdown syntax (headers, table pipes, bold asterisks) for voice call clarity

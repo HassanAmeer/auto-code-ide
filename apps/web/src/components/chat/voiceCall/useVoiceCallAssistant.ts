@@ -836,34 +836,26 @@ export function useVoiceCallAssistant({
           }
         }
 
-        // BARGE-IN & ACOUSTIC ISOLATION:
-        // If AI is currently speaking, playing audio, or in post-TTS echo window:
-        // Detect genuine user interruption (command like stop/chup/ruko OR new non-echo words).
+        // ACOUSTIC ECHO SHIELD & INTERRUPT DETECTOR:
+        // While AI is speaking, playing TTS audio, or during post-TTS acoustic cooldown:
+        // The laptop speaker is blaring audio directly into the laptop microphone!
+        // We MUST DROP ALL incoming speech so the speaker sound is NEVER transcribed.
+        // The ONLY exception is an explicit user interruption command ("stop", "ruko", "chup", "bas", "wait").
         if (isAiSpeakingOrBusy) {
           const rawInterim = (newlyFinalized + " " + currentInterim).trim();
           if (rawInterim) {
             const formatted = formatSttTranscript(rawInterim, effectiveMode);
-            const isEcho = isAcousticEchoOfAi(formatted) || isAcousticEchoOfAi(rawInterim);
             const isInterrupt =
               containsInterruptCommand(formatted) || containsInterruptCommand(rawInterim);
 
-            const cleanRaw = cleanForComparison(rawInterim);
-            const words = cleanRaw.split(/\s+/).filter((w) => w.length > 1);
-            // Real barge-in speech: user commanded stop/ruko/chup OR user uttered new non-echo words
-            const isBargeInSpeech =
-              !isEcho && (isInterrupt || words.length >= 2 || cleanRaw.length >= 5);
-
-            if (isBargeInSpeech) {
-              // Immediately silence the bot and stop all audio synthesis playback!
+            if (isInterrupt && !isAcousticEchoOfAi(formatted) && !isAcousticEchoOfAi(rawInterim)) {
+              // User explicitly commanded stop/chup/ruko/bas: immediately halt playback!
               interruptSpeakingRef.current();
-              // Do NOT return here! Fall through so the words the user just spoke are queued into input field!
-            } else {
-              // Audio is just the speaker echoing back AI phrases, drop it
-              return;
             }
-          } else {
-            return;
           }
+          // Discard turn buffers during AI speech so speaker audio NEVER leaks into input field!
+          accumulatedTurnFinalRef.current = "";
+          return;
         }
 
         if (newlyFinalized) {
