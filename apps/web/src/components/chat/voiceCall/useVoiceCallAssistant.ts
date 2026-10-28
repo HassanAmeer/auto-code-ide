@@ -1230,13 +1230,21 @@ export function useVoiceCallAssistant({
         updateCallStatus("speaking");
         isTtsActiveRef.current = true;
         setMicrophoneMuted(false);
+        addVoiceCallLog({ category: "TTS", title: "TTS Playback Started", level: "info" });
       },
       onChunkStarted: (chunk: string) => {
         currentPlayingTtsChunkRef.current = chunk;
         setAssistantSpokenText(chunk);
         addAiSpokenPhrase(chunk);
+        addVoiceCallLog({
+          category: "TTS",
+          title: "TTS Speaking Sentence",
+          detail: chunk,
+          level: "info",
+        });
       },
       onFinished: () => {
+        addVoiceCallLog({ category: "TTS", title: "TTS Playback Completed", level: "success" });
         currentPlayingTtsChunkRef.current = "";
         setAssistantSpokenText("");
         waitingForAssistantResponseRef.current = false;

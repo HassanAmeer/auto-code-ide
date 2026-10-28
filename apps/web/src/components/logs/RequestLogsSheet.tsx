@@ -15,6 +15,12 @@ import {
   ClockIcon,
   ShieldCheckIcon,
   ExternalLinkIcon,
+  RadioIcon,
+  HeadphonesIcon,
+  ActivityIcon,
+  SparklesIcon,
+  MicIcon,
+  Volume2Icon,
 } from "lucide-react";
 import {
   networkLogger,
@@ -24,6 +30,12 @@ import {
   type AiModelLogEntry,
 } from "../../lib/networkLogger";
 import { useNetworkLogs, useAiModelLogs } from "./useNetworkLogs";
+import {
+  useVoiceCallLogs,
+  clearVoiceCallLogs,
+  type VoiceCallLogEntry,
+  type VoiceLogCategory,
+} from "../../lib/speech/voiceCallLogger";
 import { Button } from "../ui/button";
 
 interface RequestLogsSheetProps {
@@ -32,7 +44,18 @@ interface RequestLogsSheetProps {
 }
 
 export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
-  const [mainTab, setMainTab] = useState<"ai" | "network">("ai");
+  const [mainTab, setMainTab] = useState<"ai" | "network" | "bot">("bot");
+
+  // Bot Logs State
+  const botLogs = useVoiceCallLogs();
+  const [botFilter, setBotFilter] = useState<
+    "all" | "BOT" | "AI" | "LIVEKIT" | "STT" | "INTERRUPT" | "NOISE_GATE" | "error"
+  >("all");
+  const [botSearchQuery, setBotSearchQuery] = useState("");
+  const [selectedBotLogId, setSelectedBotLogId] = useState<string | null>(null);
+  const [botActiveTab, setBotActiveTab] = useState<
+    "overview" | "payload" | "response" | "metadata"
+  >("overview");
 
   // AI Logs State
   const aiLogs = useAiModelLogs();
@@ -121,6 +144,49 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
     if (!selectedAiLogId) return null;
     return aiLogs.find((l) => l.id === selectedAiLogId) ?? null;
   }, [aiLogs, selectedAiLogId]);
+
+  // Filtered Bot & Call Logs
+  const filteredBotLogs = useMemo(() => {
+    return botLogs.filter((log) => {
+      if (
+        botFilter === "error" &&
+        log.level !== "error" &&
+        (!log.statusCode || Number(log.statusCode) < 400)
+      ) {
+        return false;
+      }
+      if (botFilter !== "all" && botFilter !== "error" && log.category !== botFilter) {
+        return false;
+      }
+      if (botSearchQuery.trim()) {
+        const q = botSearchQuery.toLowerCase();
+        const matchesTitle = log.title?.toLowerCase().includes(q);
+        const matchesDetail = log.detail?.toLowerCase().includes(q);
+        const matchesModel = log.model?.toLowerCase().includes(q);
+        const matchesCategory = log.category?.toLowerCase().includes(q);
+        const matchesPayload = log.payload
+          ? JSON.stringify(log.payload).toLowerCase().includes(q)
+          : false;
+        const matchesResponse = log.response
+          ? JSON.stringify(log.response).toLowerCase().includes(q)
+          : false;
+        return (
+          matchesTitle ||
+          matchesDetail ||
+          matchesModel ||
+          matchesCategory ||
+          matchesPayload ||
+          matchesResponse
+        );
+      }
+      return true;
+    });
+  }, [botLogs, botFilter, botSearchQuery]);
+
+  const selectedBotLog = useMemo(() => {
+    if (!selectedBotLogId) return null;
+    return botLogs.find((l) => l.id === selectedBotLogId) ?? null;
+  }, [botLogs, selectedBotLogId]);
 
   // Filtered Network Logs
   const filteredNetworkLogs = useMemo(() => {
@@ -301,11 +367,65 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                   {logs.length}
                 </span>
               </button>
+
+              <button
+                type="button"
+                onClick={() => setMainTab("bot")}
+                className={`flex items-center gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full text-2xs sm:text-xs font-semibold transition-all cursor-pointer ${
+                  mainTab === "bot"
+                    ? "bg-purple-500/20 text-purple-300 border border-purple-500/40 shadow-xs"
+                    : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60"
+                }`}
+              >
+                <RadioIcon className="size-3.5 text-purple-400 shrink-0" />
+                <span className="hidden sm:inline">Bot Logs</span>
+                <span className="inline sm:hidden">Bot</span>
+                <span
+                  className={`rounded-full px-1.5 py-0.2 text-[10px] font-mono ${
+                    mainTab === "bot"
+                      ? "bg-purple-500/30 text-purple-200 font-bold"
+                      : "bg-zinc-800 text-zinc-400"
+                  }`}
+                >
+                  {botLogs.length}
+                </span>
+              </button>
             </div>
           </div>
 
           <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-            {mainTab === "ai" ? (
+            {mainTab === "bot" ? (
+              <>
+                <Button
+                  size="xs"
+                  variant="outline"
+                  onClick={() =>
+                    copyToClipboard(JSON.stringify(filteredBotLogs, null, 2), "copyAllBotLogs")
+                  }
+                  title="Copy all currently filtered Bot & Call logs as JSON"
+                  className="h-7 text-xs gap-1 border-zinc-800/80 hover:bg-zinc-900 hover:text-cyan-400 text-zinc-400 px-2 sm:px-2.5"
+                  style={{ borderRadius: "12px" }}
+                >
+                  {copiedKey === "copyAllBotLogs" ? (
+                    <CheckIcon className="size-3.5 text-emerald-400" />
+                  ) : (
+                    <CopyIcon className="size-3.5" />
+                  )}
+                  <span className="hidden sm:inline">Copy All</span>
+                </Button>
+                <Button
+                  size="xs"
+                  variant="outline"
+                  onClick={() => clearVoiceCallLogs()}
+                  title="Clear all recorded Bot & Call logs"
+                  className="h-7 text-xs gap-1 border-zinc-800/80 hover:bg-zinc-900 hover:text-rose-400 text-zinc-400 px-2 sm:px-2.5"
+                  style={{ borderRadius: "12px" }}
+                >
+                  <Trash2Icon className="size-3.5" />
+                  <span className="hidden sm:inline">Clear Bot Logs</span>
+                </Button>
+              </>
+            ) : mainTab === "ai" ? (
               <>
                 <Button
                   size="xs"
@@ -1792,6 +1912,575 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
           </div>
         )}
 
+        {/* ========================================================================= */}
+        {/* VIEW 3: BOT & VOICE CALL DIAGNOSTICS LOGS (A to Z Details) */}
+        {/* ========================================================================= */}
+        {mainTab === "bot" && (
+          <div className="flex flex-col flex-1 min-h-0">
+            {/* Filter & Search Toolbar */}
+            <div className="flex flex-col gap-2 border-b border-zinc-800/80 bg-zinc-900/30 p-3">
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-zinc-500" />
+                  <input
+                    type="text"
+                    placeholder="Search Bot Runs, User Speech, LiveKit, Models, Prompts, Errors..."
+                    value={botSearchQuery}
+                    onChange={(e) => setBotSearchQuery(e.target.value)}
+                    className="w-full rounded-md border border-zinc-800 bg-zinc-900/80 pl-8 pr-8 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 focus:border-purple-500 focus:outline-none"
+                  />
+                  {botSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setBotSearchQuery("")}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                    >
+                      <XIcon className="size-3" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+                  {(
+                    [
+                      { id: "all", label: `All (${botLogs.length})` },
+                      {
+                        id: "BOT",
+                        label: `Bot (${botLogs.filter((l) => l.category === "BOT").length})`,
+                      },
+                      {
+                        id: "AI",
+                        label: `AI (${botLogs.filter((l) => l.category === "AI").length})`,
+                      },
+                      {
+                        id: "LIVEKIT",
+                        label: `LiveKit (${botLogs.filter((l) => l.category === "LIVEKIT").length})`,
+                      },
+                      {
+                        id: "STT",
+                        label: `Speech (${botLogs.filter((l) => l.category === "STT").length})`,
+                      },
+                      {
+                        id: "INTERRUPT",
+                        label: `Interrupts (${botLogs.filter((l) => l.category === "INTERRUPT").length})`,
+                      },
+                      {
+                        id: "NOISE_GATE",
+                        label: `Noise Gate (${botLogs.filter((l) => l.category === "NOISE_GATE").length})`,
+                      },
+                      {
+                        id: "error",
+                        label: `Errors (${botLogs.filter((l) => l.level === "error" || (l.statusCode && Number(l.statusCode) >= 400)).length})`,
+                      },
+                    ] as const
+                  ).map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setBotFilter(tab.id)}
+                      className={`px-2.5 py-1 font-medium transition-colors cursor-pointer text-xs shrink-0 whitespace-nowrap ${
+                        botFilter === tab.id
+                          ? "bg-purple-500/20 text-purple-300 border border-purple-500/40 font-semibold shadow-xs"
+                          : "bg-zinc-800/80 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 border border-transparent"
+                      }`}
+                      style={{ borderRadius: "12px" }}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="text-[11px] font-mono text-zinc-500 shrink-0 hidden sm:block">
+                  Showing {filteredBotLogs.length} of {botLogs.length} events
+                </div>
+              </div>
+            </div>
+
+            {/* Split Content: List + Inspector */}
+            <div className="flex flex-1 min-h-0 divide-x divide-zinc-800/80">
+              {/* Left Panel: Bot Events List */}
+              <div
+                className={`flex flex-col overflow-y-auto ${
+                  selectedBotLog ? "w-2/5 hidden md:flex" : "w-full"
+                }`}
+              >
+                {filteredBotLogs.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center p-12 text-center text-zinc-500">
+                    <RadioIcon className="size-10 stroke-1 text-zinc-600 mb-2 animate-pulse" />
+                    <p className="text-xs font-semibold text-zinc-400">
+                      No Bot or Voice Call activity recorded yet
+                    </p>
+                    <p className="text-[11px] text-zinc-600 mt-1 max-w-xs">
+                      Start a voice call, speak into the mic, or trigger an agent task. STT
+                      transcripts, LiveKit WebRTC messages, AI model dispatches, noise gating, and
+                      status codes will stream here live.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-zinc-900">
+                    {filteredBotLogs.map((log) => {
+                      const isSelected = selectedBotLogId === log.id;
+
+                      const getCategoryStyle = (cat: VoiceLogCategory) => {
+                        switch (cat) {
+                          case "BOT":
+                            return "bg-cyan-500/15 text-cyan-300 border-cyan-500/30";
+                          case "AI":
+                            return "bg-purple-500/15 text-purple-300 border-purple-500/30";
+                          case "LIVEKIT":
+                            return "bg-emerald-500/15 text-emerald-300 border-emerald-500/30";
+                          case "STT":
+                            return "bg-blue-500/15 text-blue-300 border-blue-500/30";
+                          case "INTERRUPT":
+                            return "bg-rose-500/20 text-rose-300 border-rose-500/40 font-bold";
+                          case "NOISE_GATE":
+                            return "bg-amber-500/15 text-amber-300 border-amber-500/30";
+                          case "TTS":
+                            return "bg-teal-500/15 text-teal-300 border-teal-500/30";
+                          default:
+                            return "bg-zinc-700/30 text-zinc-300 border-zinc-600/30";
+                        }
+                      };
+
+                      const timeStr = new Date(log.timestamp).toLocaleTimeString([], {
+                        hour12: false,
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        second: "2-digit",
+                      });
+
+                      return (
+                        <div
+                          key={log.id}
+                          onClick={() => setSelectedBotLogId(log.id)}
+                          className={`flex flex-col gap-1.5 p-3 transition-colors cursor-pointer hover:bg-zinc-900/60 ${
+                            isSelected
+                              ? "bg-zinc-900 border-l-2 border-purple-500"
+                              : log.level === "error"
+                                ? "bg-rose-950/10 hover:bg-rose-950/20"
+                                : ""
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
+                              {/* Category Badge */}
+                              <span
+                                className={`rounded px-1.5 py-0.5 text-[10px] font-mono font-bold border uppercase tracking-wider ${getCategoryStyle(
+                                  log.category,
+                                )}`}
+                              >
+                                {log.category}
+                              </span>
+
+                              {/* Status Badge */}
+                              {log.statusCode ? (
+                                <span
+                                  className={`rounded px-1.5 py-0.5 text-[10px] font-mono font-semibold border ${
+                                    Number(log.statusCode) >= 400 || log.level === "error"
+                                      ? "bg-rose-500/20 text-rose-300 border-rose-500/40"
+                                      : "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
+                                  }`}
+                                >
+                                  {String(log.statusCode).startsWith("HTTP")
+                                    ? log.statusCode
+                                    : `${log.statusCode}`}
+                                </span>
+                              ) : log.category === "INTERRUPT" ? (
+                                <span className="rounded px-1.5 py-0.5 text-[10px] font-mono font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40">
+                                  INTERRUPTED
+                                </span>
+                              ) : log.category === "NOISE_GATE" ? (
+                                <span className="rounded px-1.5 py-0.5 text-[10px] font-mono font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                                  DROPPED
+                                </span>
+                              ) : null}
+
+                              {/* Model Pill */}
+                              {log.model && (
+                                <span className="rounded px-1.5 py-0.5 text-[10px] font-mono bg-zinc-800 text-zinc-300 border border-zinc-700/60 truncate max-w-[150px] flex items-center gap-1">
+                                  <CpuIcon className="size-2.5 text-zinc-400 shrink-0" />
+                                  {log.model}
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {log.durationMs !== undefined && log.durationMs > 0 && (
+                                <span className="text-[10px] font-mono text-zinc-400 flex items-center gap-0.5">
+                                  <ClockIcon className="size-2.5 text-zinc-500" />
+                                  {log.durationMs}ms
+                                </span>
+                              )}
+                              <span className="text-[10px] font-mono text-zinc-500">{timeStr}</span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const textToCopy =
+                                    log.detail ||
+                                    JSON.stringify(log.response || log.payload || log, null, 2);
+                                  copyToClipboard(textToCopy, `listCopy_${log.id}`);
+                                }}
+                                className="p-1 rounded hover:bg-zinc-800 text-zinc-500 hover:text-zinc-200 transition-colors cursor-pointer"
+                                title="Copy event detail"
+                              >
+                                {copiedKey === `listCopy_${log.id}` ? (
+                                  <CheckIcon className="size-3 text-emerald-400" />
+                                ) : (
+                                  <CopyIcon className="size-3" />
+                                )}
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="text-xs font-semibold text-zinc-200 truncate flex items-center gap-1.5">
+                            <span className="truncate">{log.title}</span>
+                          </div>
+
+                          {log.detail && (
+                            <p className="text-[11px] text-zinc-400 line-clamp-2 leading-relaxed font-mono">
+                              {log.detail}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Right Panel: Selected Bot Log Inspector */}
+              {selectedBotLog ? (
+                <div className="flex flex-1 flex-col overflow-y-auto bg-zinc-950">
+                  {/* Top Header of Inspector */}
+                  <div className="border-b border-zinc-800/80 bg-zinc-900/60 p-3.5 space-y-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 flex-wrap min-w-0">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedBotLogId(null)}
+                          className="md:hidden text-zinc-400 hover:text-zinc-100 p-1 -ml-1 text-xs"
+                        >
+                          &larr; Back
+                        </button>
+                        <span className="rounded px-2 py-0.5 text-xs font-mono font-bold bg-purple-500/20 text-purple-300 border border-purple-500/40">
+                          {selectedBotLog.category}
+                        </span>
+                        {selectedBotLog.statusCode && (
+                          <span
+                            className={`rounded px-2 py-0.5 text-xs font-mono font-bold border ${
+                              Number(selectedBotLog.statusCode) >= 400 ||
+                              selectedBotLog.level === "error"
+                                ? "bg-rose-500/20 text-rose-300 border-rose-500/40"
+                                : "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
+                            }`}
+                          >
+                            {selectedBotLog.statusCode}
+                          </span>
+                        )}
+                        {selectedBotLog.model && (
+                          <span className="rounded px-2 py-0.5 text-xs font-mono bg-zinc-800 text-zinc-300 border border-zinc-700/60 flex items-center gap-1">
+                            <CpuIcon className="size-3 text-purple-400" />
+                            {selectedBotLog.model}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <Button
+                          size="xs"
+                          variant="outline"
+                          onClick={() =>
+                            copyToClipboard(
+                              JSON.stringify(selectedBotLog, null, 2),
+                              `copyFull_${selectedBotLog.id}`,
+                            )
+                          }
+                          className="h-7 text-xs gap-1 border-zinc-800 hover:bg-zinc-800 hover:text-zinc-100 text-zinc-400"
+                        >
+                          {copiedKey === `copyFull_${selectedBotLog.id}` ? (
+                            <CheckIcon className="size-3 text-emerald-400" />
+                          ) : (
+                            <CopyIcon className="size-3" />
+                          )}
+                          Copy JSON
+                        </Button>
+                      </div>
+                    </div>
+
+                    <h3 className="text-sm font-semibold text-zinc-100">{selectedBotLog.title}</h3>
+                    <div className="flex items-center gap-3 text-[11px] font-mono text-zinc-500">
+                      <span>{new Date(selectedBotLog.timestamp).toISOString()}</span>
+                      {selectedBotLog.durationMs !== undefined && (
+                        <span>Duration: {selectedBotLog.durationMs}ms</span>
+                      )}
+                      <span>ID: {selectedBotLog.id}</span>
+                    </div>
+
+                    {/* Inspector Sub-Tabs */}
+                    <div className="flex items-center gap-1 border-t border-zinc-800/80 pt-2 text-xs">
+                      {(
+                        [
+                          { id: "overview", label: "Overview" },
+                          { id: "payload", label: "Payload / Prompt" },
+                          { id: "response", label: "Response / Output" },
+                          { id: "metadata", label: "Full JSON Record" },
+                        ] as const
+                      ).map((tab) => (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          onClick={() => setBotActiveTab(tab.id)}
+                          className={`px-3 py-1 font-medium transition-colors cursor-pointer text-xs rounded-md ${
+                            botActiveTab === tab.id
+                              ? "bg-zinc-800 text-zinc-100 font-semibold"
+                              : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
+                          }`}
+                        >
+                          {tab.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Inspector Body */}
+                  <div className="p-4 space-y-4 text-xs">
+                    {botActiveTab === "overview" && (
+                      <div className="space-y-4">
+                        {/* Event Overview Grid */}
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                          <div className="rounded-lg border border-zinc-800/80 bg-zinc-900/40 p-2.5">
+                            <span className="text-[10px] text-zinc-500 uppercase font-mono">
+                              Category
+                            </span>
+                            <p className="text-xs font-semibold text-zinc-200 mt-0.5">
+                              {selectedBotLog.category}
+                            </p>
+                          </div>
+                          <div className="rounded-lg border border-zinc-800/80 bg-zinc-900/40 p-2.5">
+                            <span className="text-[10px] text-zinc-500 uppercase font-mono">
+                              Status Code
+                            </span>
+                            <p className="text-xs font-semibold text-zinc-200 mt-0.5">
+                              {selectedBotLog.statusCode ||
+                                (selectedBotLog.level === "error" ? "ERROR" : "OK")}
+                            </p>
+                          </div>
+                          <div className="rounded-lg border border-zinc-800/80 bg-zinc-900/40 p-2.5">
+                            <span className="text-[10px] text-zinc-500 uppercase font-mono">
+                              Model
+                            </span>
+                            <p className="text-xs font-semibold text-zinc-200 mt-0.5 truncate">
+                              {selectedBotLog.model || "N/A"}
+                            </p>
+                          </div>
+                          <div className="rounded-lg border border-zinc-800/80 bg-zinc-900/40 p-2.5">
+                            <span className="text-[10px] text-zinc-500 uppercase font-mono">
+                              Duration
+                            </span>
+                            <p className="text-xs font-semibold text-zinc-200 mt-0.5">
+                              {selectedBotLog.durationMs !== undefined
+                                ? `${selectedBotLog.durationMs}ms`
+                                : "N/A"}
+                            </p>
+                          </div>
+                          <div className="rounded-lg border border-zinc-800/80 bg-zinc-900/40 p-2.5">
+                            <span className="text-[10px] text-zinc-500 uppercase font-mono">
+                              Level
+                            </span>
+                            <p className="text-xs font-semibold text-zinc-200 mt-0.5 uppercase">
+                              {selectedBotLog.level || "info"}
+                            </p>
+                          </div>
+                          <div className="rounded-lg border border-zinc-800/80 bg-zinc-900/40 p-2.5">
+                            <span className="text-[10px] text-zinc-500 uppercase font-mono">
+                              Event Time
+                            </span>
+                            <p className="text-xs font-semibold text-zinc-200 mt-0.5 font-mono">
+                              {new Date(selectedBotLog.timestamp).toLocaleTimeString()}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Detail text */}
+                        {selectedBotLog.detail && (
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between">
+                              <h4 className="text-[11px] font-sans font-semibold uppercase tracking-wider text-zinc-400">
+                                Message & Description
+                              </h4>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  copyToClipboard(selectedBotLog.detail || "", "descCopy")
+                                }
+                                className="text-zinc-400 hover:text-zinc-200 flex items-center gap-1 text-[11px]"
+                              >
+                                {copiedKey === "descCopy" ? (
+                                  <CheckIcon className="size-3 text-emerald-400" />
+                                ) : (
+                                  <CopyIcon className="size-3" />
+                                )}
+                                Copy
+                              </button>
+                            </div>
+                            <pre className="rounded-md border border-zinc-800 bg-zinc-900/70 p-3 text-[11px] text-zinc-200 whitespace-pre-wrap overflow-x-auto leading-relaxed">
+                              {selectedBotLog.detail}
+                            </pre>
+                          </div>
+                        )}
+
+                        {/* Metadata pills if present */}
+                        {selectedBotLog.metadata &&
+                          Object.keys(selectedBotLog.metadata).length > 0 && (
+                            <div className="space-y-1.5">
+                              <h4 className="text-[11px] font-sans font-semibold uppercase tracking-wider text-zinc-400">
+                                Diagnostic Metadata
+                              </h4>
+                              <div className="p-3 rounded-lg border border-zinc-800/80 bg-zinc-900/40 font-mono text-[11px] space-y-1">
+                                {Object.entries(selectedBotLog.metadata).map(([k, v]) => (
+                                  <div key={k} className="flex items-center justify-between gap-2">
+                                    <span className="text-zinc-500">{k}:</span>
+                                    <span className="text-zinc-300 font-semibold">{String(v)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                      </div>
+                    )}
+
+                    {botActiveTab === "payload" && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-[11px] font-sans font-semibold uppercase tracking-wider text-zinc-400">
+                            Payload & Incoming Input
+                          </h4>
+                          {selectedBotLog.payload && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                copyToClipboard(
+                                  typeof selectedBotLog.payload === "string"
+                                    ? selectedBotLog.payload
+                                    : JSON.stringify(selectedBotLog.payload, null, 2),
+                                  "botPayloadCopy",
+                                )
+                              }
+                              className="text-zinc-400 hover:text-zinc-200 flex items-center gap-1 text-[11px]"
+                            >
+                              {copiedKey === "botPayloadCopy" ? (
+                                <CheckIcon className="size-3 text-emerald-400" />
+                              ) : (
+                                <CopyIcon className="size-3" />
+                              )}
+                              Copy Payload
+                            </button>
+                          )}
+                        </div>
+                        {selectedBotLog.payload ? (
+                          <pre className="rounded-md border border-zinc-800 bg-zinc-900/70 p-3 text-[11px] text-zinc-200 whitespace-pre-wrap overflow-x-auto font-mono">
+                            {typeof selectedBotLog.payload === "string"
+                              ? selectedBotLog.payload
+                              : JSON.stringify(selectedBotLog.payload, null, 2)}
+                          </pre>
+                        ) : (
+                          <p className="text-zinc-500 text-[11px]">
+                            No payload recorded for this event
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {botActiveTab === "response" && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-[11px] font-sans font-semibold uppercase tracking-wider text-zinc-400">
+                            Response & Output Data
+                          </h4>
+                          {(selectedBotLog.response || selectedBotLog.detail) && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                copyToClipboard(
+                                  selectedBotLog.response
+                                    ? typeof selectedBotLog.response === "string"
+                                      ? selectedBotLog.response
+                                      : JSON.stringify(selectedBotLog.response, null, 2)
+                                    : selectedBotLog.detail || "",
+                                  "botResponseCopy",
+                                )
+                              }
+                              className="text-zinc-400 hover:text-zinc-200 flex items-center gap-1 text-[11px]"
+                            >
+                              {copiedKey === "botResponseCopy" ? (
+                                <CheckIcon className="size-3 text-emerald-400" />
+                              ) : (
+                                <CopyIcon className="size-3" />
+                              )}
+                              Copy Response
+                            </button>
+                          )}
+                        </div>
+                        {selectedBotLog.response ? (
+                          <pre className="rounded-md border border-zinc-800 bg-zinc-900/70 p-3 text-[11px] text-zinc-200 whitespace-pre-wrap overflow-x-auto font-mono">
+                            {typeof selectedBotLog.response === "string"
+                              ? selectedBotLog.response
+                              : JSON.stringify(selectedBotLog.response, null, 2)}
+                          </pre>
+                        ) : selectedBotLog.detail ? (
+                          <pre className="rounded-md border border-zinc-800 bg-zinc-900/70 p-3 text-[11px] text-zinc-200 whitespace-pre-wrap overflow-x-auto font-mono">
+                            {selectedBotLog.detail}
+                          </pre>
+                        ) : (
+                          <p className="text-zinc-500 text-[11px]">No response body recorded</p>
+                        )}
+                      </div>
+                    )}
+
+                    {botActiveTab === "metadata" && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-[11px] font-sans font-semibold uppercase tracking-wider text-zinc-400">
+                            Complete Event JSON
+                          </h4>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              copyToClipboard(
+                                JSON.stringify(selectedBotLog, null, 2),
+                                "fullEventJson",
+                              )
+                            }
+                            className="text-zinc-400 hover:text-zinc-200 flex items-center gap-1 text-[11px]"
+                          >
+                            {copiedKey === "fullEventJson" ? (
+                              <CheckIcon className="size-3 text-emerald-400" />
+                            ) : (
+                              <CopyIcon className="size-3" />
+                            )}
+                            Copy Full JSON
+                          </button>
+                        </div>
+                        <pre className="rounded-md border border-zinc-800 bg-zinc-900/70 p-3 text-[11px] text-zinc-200 whitespace-pre-wrap overflow-x-auto font-mono">
+                          {JSON.stringify(selectedBotLog, null, 2)}
+                        </pre>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="hidden md:flex flex-1 items-center justify-center p-8 text-center text-zinc-600 text-xs">
+                  Select any Bot or Call event from the left list to inspect status code, model,
+                  LiveKit messages, and full payload details.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Bottom Cupertino iOS Toolbar with Bottom-Left Close Button */}
         <div className="shrink-0 flex items-center justify-between px-3 py-2 sm:px-4 sm:py-2.5 bg-zinc-900/95 border-t border-zinc-800/80 backdrop-blur-md text-xs select-none">
           {/* Bottom-Left Close Button */}
@@ -1808,7 +2497,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
           <div className="flex items-center gap-2 text-3xs font-mono text-zinc-400">
             <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
             <span className="hidden sm:inline">Live Inspector &bull;</span>
-            <span>{aiLogs.length + logs.length} Records</span>
+            <span>{aiLogs.length + logs.length + botLogs.length} Records</span>
           </div>
         </div>
       </div>

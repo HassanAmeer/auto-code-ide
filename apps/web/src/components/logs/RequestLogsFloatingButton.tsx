@@ -3,25 +3,33 @@ import { ActivityIcon } from "lucide-react";
 import { useNetworkLogs } from "./useNetworkLogs";
 import { RequestLogsSheet } from "./RequestLogsSheet";
 import { useShowLogFloatingButton } from "../../lib/floatingLogButtonSettings";
+import { useVoiceCallLogs } from "../../lib/speech/voiceCallLogger";
 
 export function RequestLogsFloatingButton() {
   const [showButton] = useShowLogFloatingButton();
   const [isOpen, setIsOpen] = useState(false);
   const logs = useNetworkLogs();
+  const botLogs = useVoiceCallLogs();
 
   if (!showButton) {
     return null;
   }
 
   const hasRecentError =
-    logs.length > 0 && (logs[0]?.state === "error" || (logs[0]?.status && logs[0].status >= 400));
+    (logs.length > 0 &&
+      (logs[0]?.state === "error" || (logs[0]?.status && logs[0].status >= 400))) ||
+    (botLogs.length > 0 &&
+      (botLogs[0]?.level === "error" ||
+        (botLogs[0]?.statusCode && Number(botLogs[0].statusCode) >= 400)));
   const isPending = logs.length > 0 && logs[0]?.state === "pending";
+
+  const totalCount = logs.length + botLogs.length;
 
   const iconColorClass = isPending
     ? "text-amber-400 animate-pulse drop-shadow-[0_0_6px_rgba(251,191,36,0.7)]"
     : hasRecentError
       ? "text-rose-400 animate-pulse drop-shadow-[0_0_6px_rgba(244,63,94,0.7)]"
-      : logs.length > 0
+      : totalCount > 0
         ? "text-emerald-400 drop-shadow-[0_0_4px_rgba(52,211,153,0.5)]"
         : "text-zinc-400 group-hover:text-emerald-400";
 
@@ -37,12 +45,12 @@ export function RequestLogsFloatingButton() {
         type="button"
         onClick={() => setIsOpen(true)}
         className={`fixed bottom-[1.5px] right-[1.5px] z-[90] flex scale-[0.66] origin-bottom-right items-center gap-1.5 rounded-full border ${borderClass} px-2 py-1 text-xs font-medium text-zinc-200 shadow-lg backdrop-blur-md transition-all duration-150 hover:scale-[1] hover:bg-zinc-800 hover:border-zinc-500 hover:text-white active:scale-[0.62] cursor-pointer group`}
-        title={`Open Network & Runtime Logs (${logs.length} captured)`}
+        title={`Open Network, AI & Bot Logs (${totalCount} captured)`}
       >
         <ActivityIcon className={`size-3.5 transition-all shrink-0 ${iconColorClass}`} />
 
         <span className="text-[10px] font-mono font-bold text-zinc-300 group-hover:text-white leading-none">
-          {logs.length}
+          {totalCount}
         </span>
       </button>
 

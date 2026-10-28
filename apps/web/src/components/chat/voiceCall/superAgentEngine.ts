@@ -802,8 +802,11 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
   const startTime = Date.now();
   addVoiceCallLog({
     category: "AI",
-    title: `Prompt Sent to ${selectedModel}`,
+    title: `AI Prompt Sent (${selectedModel})`,
     detail: userText,
+    model: selectedModel,
+    payload: { prompt: userText, instanceId: options.selectedInstanceId },
+    level: "info",
   });
 
   const llmRes = await querySuperAgentLLM(userText, {
@@ -822,6 +825,11 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
       category: "AI",
       title: `AI Response Received (${Date.now() - startTime}ms)`,
       detail: fullReply,
+      model: selectedModel,
+      statusCode: 200,
+      durationMs: Date.now() - startTime,
+      response: { reply: fullReply, spokenReply: spokenReply || fullReply },
+      level: "success",
     });
 
     // Extract [SPOKEN] section if model included it (supports [SPOKEN]:, [SPOKEN], **[SPOKEN]**, etc.)
@@ -862,6 +870,17 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
   // 7. Dynamic User-Friendly Error Recovery (Only when network/model truly fails)
   const errText = String(llmRes.error || "Model returned an empty response");
   const errCode = String(llmRes.code || "").toLowerCase();
+
+  addVoiceCallLog({
+    category: "AI",
+    title: `AI Model Failed (${selectedModel})`,
+    detail: errText,
+    model: selectedModel,
+    statusCode: errCode || 500,
+    durationMs: Date.now() - startTime,
+    response: { error: errText, code: errCode },
+    level: "error",
+  });
 
   let friendlyError = "";
   if (

@@ -791,10 +791,19 @@ export function SuperCallAssistantView() {
       );
       setIsProcessing(true);
       setAgentStatus("Analyzing request...");
+      const dispatchStartTime = Date.now();
+
       void livekitRef.current?.sendDataMessage({
         type: "user_turn",
         text: userText,
         timestamp: Date.now(),
+      });
+
+      addVoiceCallLog({
+        category: "LIVEKIT",
+        title: "LiveKit Data Sent (user_turn)",
+        detail: userText,
+        payload: { type: "user_turn", text: userText },
       });
 
       try {
@@ -897,6 +906,23 @@ export function SuperCallAssistantView() {
         };
 
         handleAddMessage("assistant", res.reply, enrichedMeta);
+        const durationMs = Date.now() - dispatchStartTime;
+        addVoiceCallLog({
+          category: "BOT",
+          title: `Bot Reply Delivered (${durationMs}ms)`,
+          detail: res.reply,
+          model: effectiveSelectedModel,
+          statusCode: 200,
+          durationMs,
+          response: {
+            reply: res.reply,
+            spokenReply: res.spokenReply,
+            actionTaken: res.actionTaken,
+            toolsCalled: res.toolsCalled,
+          },
+          level: "success",
+        });
+
         speakText(res.spokenReply, loadTtsSettings(), () => {
           if (inputRef.current !== document.activeElement) {
             isUserEditingRef.current = false;
@@ -906,6 +932,17 @@ export function SuperCallAssistantView() {
       } catch (err: any) {
         console.error("Super agent error:", err);
         const errDetail = err?.message || String(err);
+        const durationMs = Date.now() - dispatchStartTime;
+        addVoiceCallLog({
+          category: "BOT",
+          title: "Bot Dispatch Failed",
+          detail: errDetail,
+          model: effectiveSelectedModel,
+          statusCode: err?.status || 500,
+          durationMs,
+          level: "error",
+        });
+
         const errorMsg = isUrduLanguage(userText)
           ? `⚠️ Issue: ${errDetail}. Main dobara check karta hoon.`
           : `⚠️ Issue: ${errDetail}. Let me re-check.`;
@@ -977,6 +1014,13 @@ export function SuperCallAssistantView() {
 
   const livekit = useLiveKitCall({
     onDataReceived: (data) => {
+      addVoiceCallLog({
+        category: "LIVEKIT",
+        title: `LiveKit Received (${data && typeof data === "object" ? data.type || "event" : "data"})`,
+        detail: typeof data === "object" ? JSON.stringify(data) : String(data),
+        payload: data,
+        level: "info",
+      });
       if (data && typeof data === "object") {
         if (data.type === "filler" && data.text) {
           setAgentStatus(data.text);
@@ -987,6 +1031,12 @@ export function SuperCallAssistantView() {
     },
     onError: (err) => {
       console.warn("[LiveKit Call Notice]:", err);
+      addVoiceCallLog({
+        category: "LIVEKIT",
+        title: "LiveKit Connection Notice",
+        detail: String(err),
+        level: "warn",
+      });
     },
   });
 
@@ -996,15 +1046,33 @@ export function SuperCallAssistantView() {
 
   const handleToggleCallSession = useCallback(async () => {
     if (isCallActive) {
+      addVoiceCallLog({
+        category: "SYSTEM",
+        title: "Voice Call Ended",
+        detail: "User disconnected the call",
+        level: "info",
+      });
       if (callStatus === "speaking" || callStatus === "thinking") {
         interruptSpeaking();
       }
       endCall();
       await livekit.disconnect();
     } else {
+      addVoiceCallLog({
+        category: "SYSTEM",
+        title: "Voice Call Started",
+        detail: "User initiated call session",
+        level: "info",
+      });
       toggleCall();
       try {
         await livekit.connect("autojobs-call-room");
+        addVoiceCallLog({
+          category: "LIVEKIT",
+          title: "LiveKit Room Connected",
+          detail: "Connected to room: autojobs-call-room",
+          level: "success",
+        });
       } catch (err) {
         console.warn("[LiveKit auto-connect notice]:", err);
       }
