@@ -1564,10 +1564,13 @@ export function useVoiceCallAssistant({
   const startCall = useCallback(async () => {
     if (disabled) return;
     if (!isSpeechRecognitionSupported()) {
-      alert(
-        "Speech recognition is not supported in this browser. Please use Google Chrome or Edge.",
-      );
-      return;
+      addVoiceCallLog({
+        category: "SYSTEM",
+        title: "Speech Recognition Notice",
+        detail:
+          "Speech recognition is limited in this browser. Please use Google Chrome or Edge for full Roman Urdu / English STT.",
+        level: "warn",
+      });
     }
 
     try {
@@ -1614,13 +1617,9 @@ export function useVoiceCallAssistant({
           // Wire Acoustic Noise Shield (Fan Denoise + Audio Gate + Speaker Bleed Blocker)
           const shield = createAcousticNoiseShield(audioCtx, stream);
           noiseShieldRef.current = shield;
+          analyserRef.current = shield.analyserNode;
 
-          const source = audioCtx.createMediaStreamSource(shield.outputStream);
-          const analyser = audioCtx.createAnalyser();
-          analyser.fftSize = 128;
-          analyser.smoothingTimeConstant = 0.8;
-          source.connect(analyser);
-          analyserRef.current = analyser;
+          const analyser = shield.analyserNode;
 
           const freqData = new Uint8Array(analyser.frequencyBinCount);
           levelCheckIntervalRef.current = setInterval(() => {

@@ -2969,14 +2969,14 @@ export function SuperCallAssistantView() {
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  if (callStatus === "speaking" || isProcessing) {
+                  if (isCallActive && (callStatus === "speaking" || callStatus === "thinking")) {
                     handleStopSpeaking();
                     return;
                   }
                   void handleToggleCallSession();
                 }}
                 className={cn(
-                  "relative z-10 flex items-center justify-center size-7 sm:size-9 rounded-full transition-all duration-300 cursor-pointer select-none",
+                  "relative z-10 flex items-center justify-center size-9 sm:size-11 rounded-full transition-all duration-300 cursor-pointer select-none",
                   "bg-transparent border-0 shadow-none",
                 )}
               >
@@ -2994,10 +2994,14 @@ export function SuperCallAssistantView() {
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
+                    if (isCallActive && (callStatus === "speaking" || callStatus === "thinking")) {
+                      handleStopSpeaking();
+                      return;
+                    }
                     void handleToggleCallSession();
                   }}
                   className={cn(
-                    "relative z-20 flex size-4.5 sm:size-6 items-center justify-center rounded-full transition-all duration-200 cursor-pointer active:scale-90 bg-transparent border-0 shadow-none outline-none focus:outline-none",
+                    "relative z-20 flex size-7 sm:size-8 items-center justify-center rounded-full transition-all duration-200 cursor-pointer active:scale-90 bg-transparent border-0 shadow-none outline-none focus:outline-none",
                     isCallActive
                       ? "text-rose-400/90 hover:text-rose-300"
                       : "text-zinc-300 hover:text-white",
@@ -3009,9 +3013,9 @@ export function SuperCallAssistantView() {
                   }
                 >
                   {isCallActive ? (
-                    <PhoneOff className="size-3 sm:size-4" strokeWidth={2.4} />
+                    <PhoneOff className="size-3.5 sm:size-4.5" strokeWidth={2.4} />
                   ) : (
-                    <PhoneCall className="size-3 sm:size-4" strokeWidth={2.2} />
+                    <PhoneCall className="size-3.5 sm:size-4.5" strokeWidth={2.2} />
                   )}
                 </button>
               </div>

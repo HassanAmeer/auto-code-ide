@@ -328,7 +328,7 @@ import {
   getComposerSubmissionValidationMessage,
   submitComposerDraft,
 } from "./composerSubmission";
-import { useVoiceCallAssistant, VoiceCallFloatingWidget } from "./voiceCall";
+import { useVoiceCallAssistant, VoiceCallButton } from "./voiceCall";
 import { ComposerPromptLengthValidation } from "./ComposerPromptLengthValidation";
 import { PierreEntryIcon } from "./PierreEntryIcon";
 import { pendingDraftWork } from "./pendingDraftWork";
@@ -7949,6 +7949,15 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   }
                   className="flex shrink-0 flex-nowrap items-center justify-end gap-1 sm:gap-1.5"
                 >
+                  {/* Voice Call Button in Chat Composer Toolbar */}
+                  <VoiceCallButton
+                    isCallActive={isCallActive}
+                    onToggleCall={toggleVoiceCall}
+                    callStatus={callStatus}
+                    analyserNode={analyserNode}
+                    onInterrupt={interruptSpeaking}
+                    className="mr-0.5"
+                  />
                   {showComposerAttachAction ? (
                     <>
                       <input

@@ -86,6 +86,7 @@ export function subscribeNoiseShieldSettings(
 
 export interface AcousticNoiseShieldController {
   outputStream: MediaStream;
+  analyserNode: AnalyserNode;
   setBotSpeaking: (isSpeaking: boolean) => void;
   updateSettings: (patch: Partial<AcousticNoiseShieldSettings>) => void;
   isGateOpen: () => boolean;
@@ -194,6 +195,7 @@ export function createAcousticNoiseShield(
 
   return {
     outputStream: destination.stream,
+    analyserNode: analyser,
     setBotSpeaking: (speaking: boolean) => {
       isBotSpeaking = speaking;
       updateGateState();

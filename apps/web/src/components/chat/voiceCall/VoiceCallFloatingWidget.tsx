@@ -65,12 +65,10 @@ export const VoiceCallFloatingWidget = memo(function VoiceCallFloatingWidget({
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            if (isCallActive) {
-              if (callStatus === "speaking" || callStatus === "thinking") {
-                onInterrupt();
-              }
-              onToggleCall();
+            if (isCallActive && (callStatus === "speaking" || callStatus === "thinking")) {
+              onInterrupt();
             }
+            onToggleCall();
           }}
           className={cn(
             "relative z-10 flex items-center justify-center size-14 sm:size-15 rounded-full transition-all duration-300 cursor-pointer",
@@ -93,7 +91,7 @@ export const VoiceCallFloatingWidget = memo(function VoiceCallFloatingWidget({
               onToggleCall();
             }}
             className={cn(
-              "relative z-20 flex size-7 items-center justify-center rounded-full transition-all duration-200 cursor-pointer active:scale-90 bg-transparent border-0 shadow-none outline-none focus:outline-none",
+              "relative z-20 flex size-9 items-center justify-center rounded-full transition-all duration-200 cursor-pointer active:scale-90 bg-transparent border-0 shadow-none outline-none focus:outline-none",
               isCallActive ? "text-red-400 hover:text-red-300" : "text-zinc-300 hover:text-white",
             )}
             title={
@@ -101,9 +99,9 @@ export const VoiceCallFloatingWidget = memo(function VoiceCallFloatingWidget({
             }
           >
             {isCallActive ? (
-              <PhoneOff className="size-3.5" strokeWidth={2.5} />
+              <PhoneOff className="size-4" strokeWidth={2.5} />
             ) : (
-              <PhoneCall className="size-3.5" strokeWidth={2.5} />
+              <PhoneCall className="size-4" strokeWidth={2.5} />
             )}
           </button>
         </div>
