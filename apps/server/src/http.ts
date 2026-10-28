@@ -88,6 +88,12 @@ import {
   getLiveKitRoomInfo,
   geminiKeyRotator,
 } from "./botBridge.ts";
+import {
+  getServerSessionLedger,
+  addServerDecisionPoint,
+  clearServerSessionLedger,
+  formatServerLedgerBulletSummary,
+} from "./multiTurnSessionLedger.ts";
 
 const OTLP_TRACES_PROXY_PATH = "/api/observability/v1/traces";
 const LOOPBACK_HOSTNAMES = new Set(["127.0.0.1", "::1", "localhost"]);
@@ -1627,6 +1633,78 @@ export const layerGeminiStatusRoute = HttpRouter.add(
     return HttpServerResponse.jsonUnsafe({
       ok: true,
       rotator: geminiKeyRotator.getStatusSummary(),
+    });
+  }),
+);
+
+// ── Multi-Turn Session Ledger API (Lambay Mashwaray ke liye Memory) 🧠 ───────
+
+export const layerSessionLedgerGetRoute = HttpRouter.add(
+  "GET",
+  "/api/session-ledger",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const url = HttpServerRequest.toURL(request);
+    const sessionId = Option.isSome(url)
+      ? (url.value.searchParams.get("sessionId") ?? "default")
+      : "default";
+
+    const ledger = getServerSessionLedger(sessionId);
+    const summary = formatServerLedgerBulletSummary(ledger);
+
+    return HttpServerResponse.jsonUnsafe({
+      ok: true,
+      ledger,
+      summary,
+    });
+  }),
+);
+
+export const layerSessionLedgerAddDecisionRoute = HttpRouter.add(
+  "POST",
+  "/api/session-ledger/decision",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const body = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      sessionId?: string;
+      text?: string;
+      category?: "architecture" | "decision" | "action_item" | "preference" | "general";
+    };
+
+    const sessionId = body?.sessionId ?? "default";
+    const text = body?.text?.trim() ?? "";
+    if (!text) {
+      return HttpServerResponse.jsonUnsafe({ ok: false, error: "text required" });
+    }
+
+    const point = addServerDecisionPoint(sessionId, text, { category: body?.category });
+    const ledger = getServerSessionLedger(sessionId);
+
+    return HttpServerResponse.jsonUnsafe({
+      ok: true,
+      point,
+      ledger,
+      summary: formatServerLedgerBulletSummary(ledger),
+    });
+  }),
+);
+
+export const layerSessionLedgerClearRoute = HttpRouter.add(
+  "POST",
+  "/api/session-ledger/clear",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const body = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      sessionId?: string;
+    };
+
+    const sessionId = body?.sessionId ?? "default";
+    clearServerSessionLedger(sessionId);
+
+    return HttpServerResponse.jsonUnsafe({
+      ok: true,
+      sessionId,
+      cleared: true,
     });
   }),
 );

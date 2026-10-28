@@ -45,6 +45,7 @@ import {
   RotateCcw,
   Brain,
   Bookmark,
+  BookOpen,
   ExternalLink,
   Globe,
   Terminal,
@@ -53,6 +54,14 @@ import {
   Save,
   Key,
 } from "lucide-react";
+import {
+  loadSessionLedger,
+  subscribeSessionLedger,
+  addDecisionPoint,
+  clearSessionLedger,
+  formatLedgerAsBulletSummary,
+  type SessionLedgerData,
+} from "~/lib/speech/multiTurnSessionLedger";
 import { useGroqSettings, GROQ_MODEL_OPTIONS, fetchGroqLiveModels } from "~/lib/groqVoiceSettings";
 import { executeTerminalCommand } from "~/components/chat/terminal/terminalClient";
 import { Link } from "@tanstack/react-router";
@@ -405,9 +414,21 @@ export function SuperCallAssistantView() {
   // Command Center / Right Sidebar Drawer
   const [isCommandCenterOpen, setIsCommandCenterOpen] = useState(false);
   const [commandCenterTab, setCommandCenterTab] = useState<
-    "memory" | "tasks" | "voice" | "settings" | "logs"
+    "memory" | "ledger" | "tasks" | "voice" | "settings" | "logs"
   >("memory");
   const [isInputFocused, setIsInputFocused] = useState(false);
+
+  // Multi-Turn Session Ledger State (Lambay Mashwaray ke liye Memory)
+  const [sessionLedger, setSessionLedger] = useState<SessionLedgerData>(() =>
+    loadSessionLedger(activeSessionId || "default"),
+  );
+  const [newDecisionInput, setNewDecisionInput] = useState("");
+  const [isCopiedSummary, setIsCopiedSummary] = useState(false);
+
+  useEffect(() => {
+    setSessionLedger(loadSessionLedger(activeSessionId || "default"));
+    return subscribeSessionLedger(activeSessionId || "default", setSessionLedger);
+  }, [activeSessionId]);
 
   // Live Voice Call Trace & Diagnostics Logs
   const [voiceLogs, setVoiceLogs] = useState<VoiceCallLogEntry[]>([]);
@@ -1221,6 +1242,25 @@ export function SuperCallAssistantView() {
 
               <button
                 type="button"
+                onClick={() => setCommandCenterTab("ledger")}
+                className={cn(
+                  "py-1.5 px-0.5 text-[11px] font-medium border-b-2 transition-colors cursor-pointer flex items-center justify-center gap-1 whitespace-nowrap",
+                  commandCenterTab === "ledger"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <BookOpen className="size-3.5 shrink-0" />
+                <span className="hidden sm:inline">Ledger</span>
+                {sessionLedger.decisions.length > 0 && (
+                  <span className="text-[8px] px-1 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-mono leading-none">
+                    {sessionLedger.decisions.length}
+                  </span>
+                )}
+              </button>
+
+              <button
+                type="button"
                 onClick={() => setCommandCenterTab("tasks")}
                 className={cn(
                   "py-1.5 px-0.5 text-[11px] font-medium border-b-2 transition-colors cursor-pointer flex items-center justify-center gap-1 whitespace-nowrap",
@@ -1493,6 +1533,144 @@ export function SuperCallAssistantView() {
                           </div>
                         ))}
                       </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* TAB: MULTI-TURN SESSION LEDGER (Lambay Mashwaray ke liye Memory) 🧠 */}
+              {commandCenterTab === "ledger" && (
+                <div className="space-y-4">
+                  <div className="bg-gradient-to-r from-emerald-500/10 via-teal-500/5 to-transparent p-3 rounded-lg border border-emerald-500/20">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <BookOpen className="size-4 text-emerald-400" />
+                          <h3 className="text-xs font-semibold text-foreground">
+                            Multi-Turn Session Ledger 🧠
+                          </h3>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-mono">
+                            {sessionLedger.decisions.length} Decisions
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground leading-relaxed">
+                          Har 5-8 baaton ke baad background mein automatic "Decision Summary"
+                          maintain hoti hai. Lambay mashwaray ke baad agar aap 1 ghante baad bhi
+                          poochen:{" "}
+                          <span className="text-foreground italic font-medium">
+                            "Acha humne shuru mein kya decide kiya tha?"
+                          </span>{" "}
+                          — to bot foran bullet summary dega.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {sessionLedger.decisions.length > 0 && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const summary = formatLedgerAsBulletSummary(sessionLedger);
+                                void navigator.clipboard.writeText(summary);
+                                setIsCopiedSummary(true);
+                                setTimeout(() => setIsCopiedSummary(false), 2000);
+                              }}
+                              className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground text-[10px] flex items-center gap-1 cursor-pointer transition-colors"
+                              title="Copy bullet points summary"
+                            >
+                              {isCopiedSummary ? (
+                                <Check className="size-3 text-emerald-400" />
+                              ) : (
+                                <Copy className="size-3" />
+                              )}
+                              <span>{isCopiedSummary ? "Copied" : "Copy"}</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (
+                                  window.confirm(
+                                    "Are you sure you want to clear this session's decision ledger?",
+                                  )
+                                ) {
+                                  clearSessionLedger(activeSessionId || "default");
+                                }
+                              }}
+                              className="p-1 rounded hover:bg-red-500/20 text-muted-foreground hover:text-red-400 text-[10px] flex items-center gap-1 cursor-pointer transition-colors"
+                              title="Clear session ledger"
+                            >
+                              <RotateCcw className="size-3" />
+                              <span>Reset</span>
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Manual Quick Add Decision */}
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const text = newDecisionInput.trim();
+                      if (!text) return;
+                      addDecisionPoint(activeSessionId || "default", text);
+                      setNewDecisionInput("");
+                    }}
+                    className="flex gap-2"
+                  >
+                    <input
+                      type="text"
+                      value={newDecisionInput}
+                      onChange={(e) => setNewDecisionInput(e.target.value)}
+                      placeholder="Naya faisla ya decision point darj karein..."
+                      className="flex-1 bg-background border border-border/80 rounded-md px-2.5 py-1 text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!newDecisionInput.trim()}
+                      className="px-2.5 py-1 text-xs bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-md flex items-center gap-1 font-medium transition-colors cursor-pointer"
+                    >
+                      <Plus className="size-3.5" />
+                      Add
+                    </button>
+                  </form>
+
+                  {/* Decision Points List */}
+                  <div className="space-y-2">
+                    {sessionLedger.decisions.length === 0 ? (
+                      <div className="text-center py-8 px-4 border border-dashed border-border/60 rounded-lg text-muted-foreground space-y-2">
+                        <BookOpen className="size-8 mx-auto opacity-30 text-emerald-400" />
+                        <p className="text-xs font-medium">
+                          Abhi tak koi decision point record nahi hua.
+                        </p>
+                        <p className="text-[10px] max-w-xs mx-auto">
+                          Call ya chat ke doran har 5-8 turns baad automatic bullet points yahan add
+                          hotay jayeinge ya aap upar manual bhi likh sakte hain.
+                        </p>
+                      </div>
+                    ) : (
+                      sessionLedger.decisions.map((decision, idx) => (
+                        <div
+                          key={decision.id || idx}
+                          className="p-2.5 rounded-lg border border-border/60 bg-card/60 hover:border-emerald-500/40 transition-colors flex items-start gap-2.5"
+                        >
+                          <span className="shrink-0 text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
+                            Point {idx + 1}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs text-foreground font-medium leading-relaxed">
+                              {decision.text}
+                            </p>
+                            <p className="text-[9px] text-muted-foreground mt-0.5">
+                              Turn #{decision.turnIndex} •{" "}
+                              {new Date(decision.timestamp).toLocaleTimeString([], {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </p>
+                          </div>
+                        </div>
+                      ))
                     )}
                   </div>
                 </div>

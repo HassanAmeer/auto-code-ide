@@ -15,6 +15,13 @@ import {
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import { speakText, sanitizeTextForSpeech } from "~/lib/speech/tts";
 import { addVoiceCallLog } from "~/lib/speech/voiceCallLogger";
+import {
+  loadSessionLedger,
+  formatLedgerAsBulletSummary,
+  isLedgerRecallQuery,
+  recordTurnAndCheckLedger,
+  addDecisionPoint,
+} from "~/lib/speech/multiTurnSessionLedger";
 import { buildSuperAgentSystemPrompt } from "./superAgentPrompt";
 
 export interface SuperAgentRunOptions {
@@ -415,8 +422,15 @@ export async function executeSuperAgentInstruction(
       userText,
     );
 
+  const isLedgerReq = isLedgerRecallQuery(userText);
+
   let filler = "";
-  if (isGitFeaturesReq) {
+  if (isLedgerReq) {
+    filler =
+      lang === "urdu"
+        ? "Ji boss, main session ledger aur hamare pehle ke ahem faislay check kar raha hoon..."
+        : "Checking our session decision ledger right away...";
+  } else if (isGitFeaturesReq) {
     filler =
       lang === "urdu"
         ? "Ji bilkul, main abhi recent commits aur git history check kar ke batata hoon..."
@@ -614,6 +628,30 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
     }
   }
 
+  // 3b-4. Multi-Turn Session Ledger Recall (Lambay Mashwaray ke liye Memory)
+  const activeChatId = options.chatId || "default";
+  const sessionLedger = loadSessionLedger(activeChatId);
+
+  if (isLedgerReq) {
+    actionTag = "recall_session_ledger";
+    onStatusUpdate?.("Tool Calling: recall_session_ledger...");
+    toolsExecuted.push({
+      name: "recall_session_ledger",
+      summary: `Recalled ${sessionLedger.decisions.length} decision points for session "${activeChatId}"`,
+      status: "completed",
+    });
+
+    if (sessionLedger.decisions.length > 0) {
+      const bulletSummary = formatLedgerAsBulletSummary(sessionLedger);
+      runtimeFacts +=
+        `\n[MULTI-TURN SESSION LEDGER - DECISION SUMMARY (${sessionLedger.decisions.length} DECISIONS RECORDED)]:\n` +
+        bulletSummary +
+        `\n\nINSTRUCTION: The user is asking about previously established decisions or agreements in this session. Present these exact points clearly in Roman Urdu with a polite, sharp tone (e.g. "Ji boss, humne is session mein shuru mein yeh ahem faislay kiye the..."). At the end, invite them on how they want to proceed!\n`;
+    } else {
+      runtimeFacts += `\n[MULTI-TURN SESSION LEDGER]: Abhi tak is session mein koi specific faisla ya decision save nahi hua hai.\n`;
+    }
+  }
+
   // 3c. Scheduled Task Creation
   const isScheduleReq =
     /\b(schedule|cron|timing|baje|daily|interval)\b/i.test(userText) &&
@@ -794,6 +832,8 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
     activeProjectName: targetName,
     runtimeFacts,
     projectRules: customProjectRules,
+    sessionLedgerSummary:
+      sessionLedger.decisions.length > 0 ? formatLedgerAsBulletSummary(sessionLedger) : undefined,
   });
 
   onStatusUpdate?.(`Thinking with ${selectedModel}...`);
@@ -856,6 +896,33 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
     const sanitizedFull = sanitizeTextForSpeech(fullReply);
 
     const finalSpoken = sanitizedSpoken || sanitizedFull || fullReply;
+
+    // Multi-Turn Session Ledger: Record turn & auto-extract decisions every 5-8 turns
+    try {
+      const combinedHistory = [
+        ...(options.conversationHistory || []),
+        { role: "user" as const, text: userText },
+        { role: "assistant" as const, text: fullReply },
+      ];
+      const ledgerResult = recordTurnAndCheckLedger(
+        activeChatId,
+        { role: "assistant", text: fullReply },
+        combinedHistory,
+      );
+      if (ledgerResult.extractedPoints.length > 0) {
+        addVoiceCallLog({
+          category: "AI",
+          title: `Session Ledger Updated (${ledgerResult.extractedPoints.length} New Points)`,
+          detail: ledgerResult.extractedPoints
+            .map((p) => `Point ${p.pointNumber}: ${p.text}`)
+            .join("\n"),
+          model: selectedModel,
+          level: "info",
+        });
+      }
+    } catch (err) {
+      console.warn("Failed to update session ledger:", err);
+    }
 
     return {
       reply: fullReply,

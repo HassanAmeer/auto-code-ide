@@ -13,6 +13,7 @@ export interface SuperAgentPromptContext {
   activeProjectName?: string;
   runtimeFacts?: string;
   projectRules?: string[];
+  sessionLedgerSummary?: string;
 }
 
 /**
@@ -33,6 +34,7 @@ export function buildSuperAgentSystemPrompt(context: SuperAgentPromptContext): s
     activeProjectName,
     runtimeFacts,
     projectRules = [],
+    sessionLedgerSummary,
   } = context;
 
   const projectListStr =
@@ -181,6 +183,7 @@ ${scheduledTasksListStr}
 
 Recent Activities Ledger:
 ${activitiesListStr}
+${sessionLedgerSummary ? `\n==================================================\n🧠 MULTI-TURN SESSION LEDGER (DECISION SUMMARY & MEMORY)\n==================================================\nThe following key decisions and agreements have been established during this session:\n${sessionLedgerSummary}\n\nIMPORTANT: If the user asks what was decided earlier (e.g. "Acha humne shuru mein kya decide kiya tha?"), recite these bullet points directly and accurately!\n` : ""}
 ${runtimeFacts ? `\n==================================================\n4. LIVE REAL-TIME FACTS FOR THIS REQUEST\n==================================================\n${runtimeFacts}\n` : ""}
 
 ==================================================

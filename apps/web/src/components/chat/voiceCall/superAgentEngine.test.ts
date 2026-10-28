@@ -214,5 +214,25 @@ describe("superAgentEngine", () => {
       // Original note remains completely intact!
       expect(notesStore.loadNotes().length).toBe(1);
     });
+
+    it("recalls multi-turn session ledger decisions when asked 'humne shuru mein kya decide kiya tha'", async () => {
+      const { addDecisionPoint } = await import("~/lib/speech/multiTurnSessionLedger");
+      const testChatId = "chat-ledger-session";
+
+      addDecisionPoint(testChatId, "LiveKit VPS setup barkarar rakhna hai.");
+      addDecisionPoint(testChatId, "Edge-TTS Asad Neural voice use hogi.");
+      addDecisionPoint(testChatId, "Codebase review complete ho chuka hai.");
+
+      const res = await executeSuperAgentInstruction({
+        userText: "Acha humne shuru mein kya decide kiya tha?",
+        projects: [],
+        selectedModel: "Gemini 2.5 Flash",
+        chatId: testChatId,
+      });
+
+      expect(res.actionTaken).toBe("recall_session_ledger");
+      expect(res.toolsCalled).toBeDefined();
+      expect(res.toolsCalled?.some((t) => t.name === "recall_session_ledger")).toBe(true);
+    });
   });
 });
