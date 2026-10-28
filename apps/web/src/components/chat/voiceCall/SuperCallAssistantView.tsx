@@ -53,7 +53,14 @@ import {
   EyeOff,
   Save,
   Key,
+  ChevronRight,
+  Search,
+  History,
+  Calendar,
+  Wrench,
 } from "lucide-react";
+import ChatMarkdown from "~/components/ChatMarkdown";
+import type { ToolCallRecord } from "./superAgentEngine";
 import {
   loadSessionLedger,
   subscribeSessionLedger,
@@ -376,6 +383,201 @@ function CodeDiffCard({ diffText }: { diffText: string }) {
     </div>
   );
 }
+function getToolCallIcon(name: string) {
+  const lower = name.toLowerCase();
+  if (lower.includes("search") || lower.includes("inspect") || lower.includes("file")) {
+    return <Search className="size-3.5 text-sky-400 shrink-0" />;
+  }
+  if (
+    lower.includes("media") ||
+    lower.includes("youtube") ||
+    lower.includes("link") ||
+    lower.includes("web")
+  ) {
+    return <Globe className="size-3.5 text-emerald-400 shrink-0" />;
+  }
+  if (lower.includes("note")) {
+    return <FileText className="size-3.5 text-amber-400 shrink-0" />;
+  }
+  if (lower.includes("memory")) {
+    return <Brain className="size-3.5 text-purple-400 shrink-0" />;
+  }
+  if (lower.includes("ledger") || lower.includes("history")) {
+    return <History className="size-3.5 text-cyan-400 shrink-0" />;
+  }
+  if (lower.includes("schedule") || lower.includes("task") || lower.includes("shift")) {
+    return <Calendar className="size-3.5 text-indigo-400 shrink-0" />;
+  }
+  if (lower.includes("git")) {
+    return <GitBranch className="size-3.5 text-teal-400 shrink-0" />;
+  }
+  if (lower.includes("radar") || lower.includes("health") || lower.includes("scan")) {
+    return <Activity className="size-3.5 text-rose-400 shrink-0" />;
+  }
+  if (lower.includes("worker") || lower.includes("agent") || lower.includes("dispatch")) {
+    return <Terminal className="size-3.5 text-purple-400 shrink-0" />;
+  }
+  return <Wrench className="size-3.5 text-zinc-400 shrink-0" />;
+}
+
+function LiveWorkingTimer({ startTime }: { startTime: number }) {
+  const [seconds, setSeconds] = useState(0);
+
+  useEffect(() => {
+    const update = () => {
+      setSeconds(Math.max(0, Math.floor((Date.now() - startTime) / 1000)));
+    };
+    update();
+    const interval = setInterval(update, 1000);
+    return () => clearInterval(interval);
+  }, [startTime]);
+
+  return <span className="tabular-nums font-mono text-[11px] text-zinc-500">{seconds}s</span>;
+}
+
+function ThinkingDisclosure({ thought, durationMs }: { thought: string; durationMs?: number }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="w-full max-w-xl my-1.5">
+      <button
+        type="button"
+        onClick={() => setExpanded((prev) => !prev)}
+        className="group/thinking flex items-center gap-1.5 py-1 px-2 rounded-md text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40 transition-colors cursor-pointer select-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/50"
+      >
+        <Brain className="size-3.5 text-purple-400 shrink-0" />
+        <span className="font-medium text-zinc-300">
+          Thought {durationMs ? `for ${Math.max(1, Math.round(durationMs / 1000))}s` : ""}
+        </span>
+        <ChevronRight
+          className={cn(
+            "size-3 text-zinc-500 transition-transform duration-200 group-hover/thinking:text-zinc-300",
+            expanded && "rotate-90",
+          )}
+        />
+      </button>
+
+      {expanded && (
+        <div className="ms-5 mt-1 p-3 rounded-lg bg-zinc-950/70 border border-zinc-800/80 text-[11px] text-zinc-300 font-mono whitespace-pre-wrap leading-relaxed select-text max-h-60 overflow-y-auto shadow-inner">
+          {thought}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ToolCallingGroupDisclosure({ tools }: { tools: ToolCallRecord[] }) {
+  const [expanded, setExpanded] = useState(false);
+  if (!tools || tools.length === 0) return null;
+
+  const isSingle = tools.length === 1;
+  const singleTool = tools[0]!;
+
+  return (
+    <div className="w-full max-w-xl my-1.5">
+      <button
+        type="button"
+        onClick={() => setExpanded((prev) => !prev)}
+        className="group/tool flex items-center gap-2 py-1 px-2 rounded-md text-xs text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800/40 transition-colors cursor-pointer select-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/50"
+      >
+        {isSingle ? (
+          getToolCallIcon(singleTool.name)
+        ) : (
+          <Terminal className="size-3.5 text-purple-400 shrink-0" />
+        )}
+
+        <span className="font-mono text-zinc-200 font-medium">
+          {isSingle ? singleTool.name : `Used ${tools.length} tools`}
+        </span>
+
+        {isSingle && singleTool.summary && (
+          <span className="text-[11px] text-zinc-400 truncate max-w-[260px] sm:max-w-xs font-sans">
+            — {singleTool.summary}
+          </span>
+        )}
+
+        <span className="ms-auto flex items-center gap-1.5 shrink-0">
+          <span className="text-[10px] text-emerald-400 font-sans flex items-center gap-1">
+            <CheckCircle2 className="size-3 text-emerald-400" />
+            <span className="hidden sm:inline">Executed</span>
+          </span>
+          <ChevronRight
+            className={cn(
+              "size-3 text-zinc-500 transition-transform duration-200 group-hover/tool:text-zinc-300",
+              expanded && "rotate-90",
+            )}
+          />
+        </span>
+      </button>
+
+      {expanded && (
+        <div className="ms-5 mt-1.5 space-y-2.5 p-3 rounded-lg bg-zinc-950/70 border border-zinc-800/80 max-h-72 overflow-y-auto shadow-inner">
+          {tools.map((tool, idx) => (
+            <div
+              key={idx}
+              className="space-y-1 pb-2 border-b border-zinc-800/60 last:border-0 last:pb-0"
+            >
+              <div className="flex items-center gap-2 text-xs">
+                {getToolCallIcon(tool.name)}
+                <span className="font-mono font-semibold text-purple-300">{tool.name}</span>
+                <span className="ms-auto text-[10px] text-emerald-400 flex items-center gap-1 font-sans">
+                  <CheckCircle2 className="size-2.5 text-emerald-400" />
+                  <span>Completed</span>
+                </span>
+              </div>
+              {tool.summary && (
+                <p className="text-[11px] text-zinc-400 leading-relaxed font-sans ps-5">
+                  {tool.summary}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LiveProcessingActivityRow({
+  agentStatus,
+  selectedModel,
+  dispatchStartTime,
+}: {
+  agentStatus: string | null;
+  selectedModel: string;
+  dispatchStartTime: number;
+}) {
+  const isTool = agentStatus?.startsWith("Tool Calling:");
+  const toolName = isTool ? agentStatus?.replace(/^Tool Calling:\s*/, "") : null;
+
+  return (
+    <div className="flex items-center gap-2 py-1.5 px-2.5 rounded-md bg-zinc-900/50 border border-zinc-800/60 text-xs w-fit max-w-full my-2 animate-in fade-in duration-150">
+      {isTool ? (
+        <span className="flex size-4 items-center justify-center">
+          <Terminal className="size-3.5 text-purple-400 animate-pulse" />
+        </span>
+      ) : (
+        <span className="flex size-4 items-center justify-center">
+          <Brain className="size-3.5 text-purple-400 animate-pulse" />
+        </span>
+      )}
+
+      <span className="live-tool-shine font-medium text-foreground truncate max-w-[280px] sm:max-w-md">
+        {isTool ? (
+          <>
+            <span className="text-zinc-500 font-mono">Calling tool: </span>
+            <span className="text-purple-300 font-mono">{toolName}</span>
+          </>
+        ) : (
+          agentStatus || `Thinking with ${selectedModel}...`
+        )}
+      </span>
+
+      <LiveWorkingTimer startTime={dispatchStartTime} />
+    </div>
+  );
+}
+
 // ── End CodeDiffCard ────────────────────────────────────────────────────────
 
 export function SuperCallAssistantView() {
@@ -398,6 +600,7 @@ export function SuperCallAssistantView() {
   const [tasksSheetTab, setTasksSheetTab] = useState<"scheduled" | "history">("scheduled");
   const [inputText, setInputText] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [activeDispatchStartTime, setActiveDispatchStartTime] = useState<number>(0);
   const [agentStatus, setAgentStatus] = useState<string | null>(null);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const activeAbortControllerRef = useRef<AbortController | null>(null);
@@ -830,9 +1033,10 @@ export function SuperCallAssistantView() {
       const controller = new AbortController();
       activeAbortControllerRef.current = controller;
 
-      setIsProcessing(true);
-      setAgentStatus("Analyzing request...");
       const dispatchStartTime = Date.now();
+      setIsProcessing(true);
+      setActiveDispatchStartTime(dispatchStartTime);
+      setAgentStatus("Analyzing request...");
 
       void livekitRef.current?.sendDataMessage({
         type: "user_turn",
@@ -949,6 +1153,8 @@ export function SuperCallAssistantView() {
         const codeDiff = diffMatch ? diffMatch[1] : undefined;
         const enrichedMeta = {
           ...meta,
+          ...(res.thought ? { thought: res.thought } : {}),
+          ...(res.durationMs ? { durationMs: res.durationMs } : {}),
           ...(res.referencedMemory ? { referencedMemory: res.referencedMemory } : {}),
           ...(res.toolsCalled && res.toolsCalled.length > 0
             ? { toolsCalled: res.toolsCalled }
@@ -1025,6 +1231,7 @@ export function SuperCallAssistantView() {
         if (activeAbortControllerRef.current === controller) {
           activeAbortControllerRef.current = null;
           setIsProcessing(false);
+          setActiveDispatchStartTime(0);
           setAgentStatus(null);
         }
       }
@@ -1087,6 +1294,7 @@ export function SuperCallAssistantView() {
       activeAbortControllerRef.current = null;
     }
     setIsProcessing(false);
+    setActiveDispatchStartTime(0);
     setAgentStatus(null);
     stopSpeaking();
     interruptSpeaking();
@@ -2471,34 +2679,26 @@ export function SuperCallAssistantView() {
             return (
               <div key={msg.id} className="flex flex-col items-start w-full py-2.5 group">
                 <div className="text-left w-full max-w-[95%]">
-                  <p className="text-sm sm:text-base font-normal text-zinc-200 whitespace-pre-wrap leading-relaxed select-text">
-                    {msg.text}
-                  </p>
-
-                  {/* Tool Calling Badges (like in projects view) */}
-                  {msg.meta?.toolsCalled && msg.meta.toolsCalled.length > 0 && (
-                    <div className="flex flex-col gap-1.5 my-2.5 w-full max-w-xl">
-                      {msg.meta.toolsCalled.map((tool: any, idx: number) => (
-                        <div
-                          key={idx}
-                          className="flex items-center gap-2 py-1 px-2.5 rounded-md bg-zinc-900/60 border border-zinc-800/80 text-xs text-zinc-300 font-mono"
-                        >
-                          <Terminal className="size-3.5 text-purple-400 shrink-0" />
-                          <span className="text-zinc-500 font-medium">Tool Calling:</span>
-                          <span className="text-purple-300 font-semibold">{tool.name}</span>
-                          {tool.summary && (
-                            <span className="text-zinc-400 truncate text-[11px]">
-                              — {tool.summary}
-                            </span>
-                          )}
-                          <span className="ml-auto text-[10px] text-emerald-400 flex items-center gap-1 shrink-0 font-sans">
-                            <CheckCircle2 className="size-3 text-emerald-400" />
-                            <span>Executed</span>
-                          </span>
-                        </div>
-                      ))}
-                    </div>
+                  {/* Thinking Disclosure (Collapsible, exact project chat design) */}
+                  {msg.meta?.thought && (
+                    <ThinkingDisclosure
+                      thought={msg.meta.thought}
+                      durationMs={msg.meta.durationMs}
+                    />
                   )}
+
+                  {/* Tool Calling Badges / Group Disclosure (Collapsible, exact project chat design) */}
+                  {msg.meta?.toolsCalled && msg.meta.toolsCalled.length > 0 && (
+                    <ToolCallingGroupDisclosure tools={msg.meta.toolsCalled} />
+                  )}
+
+                  <div className="text-sm sm:text-base font-normal text-zinc-200 leading-relaxed select-text my-1">
+                    <ChatMarkdown
+                      text={msg.text}
+                      className="text-sm sm:text-base text-zinc-200"
+                      lineBreaks
+                    />
+                  </div>
 
                   {/* Delegated Task Execution Card */}
                   {msg.meta?.delegatedTask && (
@@ -2614,28 +2814,13 @@ export function SuperCallAssistantView() {
             );
           })}
 
-          {/* Live Processing & Tool Calling Indicator (Boxless, Avatarless) */}
+          {/* Live Processing & Tool Calling Indicator (Collapsible matching project chats) */}
           {isProcessing && (
-            <div className="flex flex-col items-start gap-1.5 py-2.5 w-full animate-in fade-in duration-150">
-              <div className="flex items-center gap-2 text-xs text-zinc-300 font-mono bg-zinc-900/60 px-3 py-1.5 rounded-lg border border-purple-500/30">
-                <Loader2 className="size-3.5 text-purple-400 animate-spin shrink-0" />
-                {agentStatus?.startsWith("Tool Calling:") ? (
-                  <>
-                    <span className="text-zinc-500">Tool Calling:</span>
-                    <span className="text-purple-300 font-medium">
-                      {agentStatus.replace(/^Tool Calling:\s*/, "")}
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <span className="text-zinc-500">Thinking:</span>
-                    <span className="text-purple-300 font-medium">
-                      {agentStatus || "Processing response..."}
-                    </span>
-                  </>
-                )}
-              </div>
-            </div>
+            <LiveProcessingActivityRow
+              agentStatus={agentStatus}
+              selectedModel={groqSettings.enabled ? groqSettings.model || "Groq" : effectiveModel}
+              dispatchStartTime={activeDispatchStartTime || Date.now()}
+            />
           )}
 
           <div ref={messagesEndRef} />

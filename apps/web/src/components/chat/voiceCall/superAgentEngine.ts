@@ -71,6 +71,8 @@ export interface SuperAgentResult {
     source: "manual" | "imported_from_notes";
   };
   toolsCalled?: ToolCallRecord[];
+  thought?: string;
+  durationMs?: number;
   details?: unknown;
 }
 
@@ -987,6 +989,17 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
       level: "success",
     });
 
+    let thoughtText = "";
+    const thinkMatch = fullReply.match(
+      /<(?:think|thought|reasoning)>([\s\S]*?)<\/(?:think|thought|reasoning)>/i,
+    );
+    if (thinkMatch && thinkMatch[1]) {
+      thoughtText = thinkMatch[1].trim();
+      fullReply = fullReply
+        .replace(/<(?:think|thought|reasoning)>[\s\S]*?<\/(?:think|thought|reasoning)>/gi, "")
+        .trim();
+    }
+
     // Extract [SPOKEN] section if model included it (supports [SPOKEN]:, [SPOKEN], **[SPOKEN]**, etc.)
     const spokenMatch = fullReply.match(/(?:\*{0,2}\[?\s*SPOKEN\s*\]?:?\*{0,2})\s*([\s\S]+)$/i);
     if (spokenMatch && spokenMatch[1]) {
@@ -1046,6 +1059,8 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
       delegatedTask: delegatedTaskInfo,
       referencedMemory: referencedMemoryInfo,
       toolsCalled: toolsExecuted,
+      thought: thoughtText || undefined,
+      durationMs: Date.now() - startTime,
     };
   }
 

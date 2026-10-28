@@ -4,7 +4,7 @@ import { useProjects } from "~/state/entities";
 import { VoiceCallFloatingWidget } from "./VoiceCallFloatingWidget";
 import { useVoiceCallAssistant } from "./useVoiceCallAssistant";
 import { executeSuperAgentInstruction } from "./superAgentEngine";
-import { speakText } from "~/lib/speech/tts";
+import { speakText, stopSpeaking } from "~/lib/speech/tts";
 
 /**
  * Inner component that mounts the voice call assistant hook & floating widget.
