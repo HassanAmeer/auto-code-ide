@@ -2433,6 +2433,10 @@ export function SuperCallAssistantView() {
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
+                  if (callStatus === "speaking" || isProcessing) {
+                    handleStopSpeaking();
+                    return;
+                  }
                   void handleToggleCallSession();
                 }}
                 className={cn(
