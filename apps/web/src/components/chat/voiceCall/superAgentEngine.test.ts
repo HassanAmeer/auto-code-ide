@@ -251,5 +251,19 @@ describe("superAgentEngine", () => {
       expect(res.toolsCalled).toBeDefined();
       expect(res.toolsCalled?.some((t) => t.name === "research_media_link")).toBe(true);
     });
+
+    it("immediately throws AbortError when signal is aborted", async () => {
+      const controller = new AbortController();
+      controller.abort();
+
+      await expect(
+        executeSuperAgentInstruction({
+          userText: "Kuch der lagne wala kaam karo",
+          projects: [],
+          selectedModel: "Gemini 2.5 Flash",
+          signal: controller.signal,
+        }),
+      ).rejects.toThrow("Aborted");
+    });
   });
 });

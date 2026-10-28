@@ -16,15 +16,32 @@ const GlobalVoiceCallWidgetInner = memo(function GlobalVoiceCallWidgetInner() {
   const [spokenText, setSpokenText] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const spokenTextRef = useRef("");
+  const activeAbortControllerRef = useRef<AbortController | null>(null);
 
   const handleTranscriptChange = useCallback((text: string) => {
     spokenTextRef.current = text;
     setSpokenText(text);
   }, []);
 
+  const handleInterrupt = useCallback(() => {
+    if (activeAbortControllerRef.current) {
+      activeAbortControllerRef.current.abort();
+      activeAbortControllerRef.current = null;
+    }
+    setIsProcessing(false);
+    stopSpeaking();
+  }, []);
+
   const handleAutoSend = useCallback(async () => {
     const text = spokenTextRef.current.trim();
     if (!text || isProcessing) return;
+
+    if (activeAbortControllerRef.current) {
+      activeAbortControllerRef.current.abort();
+      activeAbortControllerRef.current = null;
+    }
+    const controller = new AbortController();
+    activeAbortControllerRef.current = controller;
 
     setIsProcessing(true);
     spokenTextRef.current = "";
@@ -39,13 +56,21 @@ const GlobalVoiceCallWidgetInner = memo(function GlobalVoiceCallWidgetInner() {
         projects,
         activeProjectId: activeProjId,
         selectedModel,
+        signal: controller.signal,
       });
 
-      speakText(res.spokenReply);
-    } catch (err) {
-      console.error("Global voice assistant error:", err);
+      if (!controller.signal.aborted) {
+        speakText(res.spokenReply);
+      }
+    } catch (err: any) {
+      if (err?.name !== "AbortError" && !controller.signal.aborted) {
+        console.error("Global voice assistant error:", err);
+      }
     } finally {
-      setIsProcessing(false);
+      if (activeAbortControllerRef.current === controller) {
+        activeAbortControllerRef.current = null;
+        setIsProcessing(false);
+      }
     }
   }, [isProcessing, projects]);
 
@@ -64,6 +89,8 @@ const GlobalVoiceCallWidgetInner = memo(function GlobalVoiceCallWidgetInner() {
   } = useVoiceCallAssistant({
     onTranscriptChange: handleTranscriptChange,
     onAutoSend: handleAutoSend,
+    onInterrupt: handleInterrupt,
+    canInterrupt: true,
     prompt: spokenText,
     phase: isProcessing ? "running" : "ready",
     disabled: false,

@@ -577,6 +577,11 @@ export function useVoiceCallAssistant({
     clearTurnTimeout();
     cleanupRecognition();
 
+    // Instantly abort any active parent generation/turn/dispatch
+    if (canInterruptRef.current && onInterruptRef.current) {
+      onInterruptRef.current();
+    }
+
     if (levelCheckIntervalRef.current) {
       clearInterval(levelCheckIntervalRef.current);
       levelCheckIntervalRef.current = null;

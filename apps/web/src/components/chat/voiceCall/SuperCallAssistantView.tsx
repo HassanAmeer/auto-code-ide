@@ -400,6 +400,18 @@ export function SuperCallAssistantView() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [agentStatus, setAgentStatus] = useState<string | null>(null);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const activeAbortControllerRef = useRef<AbortController | null>(null);
+  const handleInterruptRef = useRef<() => void>(() => {});
+
+  useEffect(() => {
+    return () => {
+      if (activeAbortControllerRef.current) {
+        activeAbortControllerRef.current.abort();
+        activeAbortControllerRef.current = null;
+      }
+      stopSpeaking();
+    };
+  }, []);
 
   const handleCopyMessage = useCallback((text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -811,6 +823,13 @@ export function SuperCallAssistantView() {
             } as any)
           : undefined,
       );
+      if (activeAbortControllerRef.current) {
+        activeAbortControllerRef.current.abort();
+        activeAbortControllerRef.current = null;
+      }
+      const controller = new AbortController();
+      activeAbortControllerRef.current = controller;
+
       setIsProcessing(true);
       setAgentStatus("Analyzing request...");
       const dispatchStartTime = Date.now();
@@ -869,13 +888,23 @@ export function SuperCallAssistantView() {
             text: m.text,
           })),
           providerConfig: effectiveProviderConfig,
+          signal: controller.signal,
           onStatusUpdate: (status) => {
-            setAgentStatus(status);
+            if (!controller.signal.aborted) {
+              setAgentStatus(status);
+            }
           },
           onFillerSpoken: (fillerText) => {
-            setAgentStatus(fillerText);
+            if (!controller.signal.aborted) {
+              setAgentStatus(fillerText);
+            }
           },
         });
+
+        if (controller.signal.aborted || !isCallActiveRef.current) {
+          console.log("[SuperAgent] Discarding response: request was aborted or call ended.");
+          return;
+        }
 
         const meta: any = res.delegatedTask
           ? {
@@ -927,6 +956,10 @@ export function SuperCallAssistantView() {
           ...(codeDiff ? { diff: codeDiff } : {}),
         };
 
+        if (controller.signal.aborted || !isCallActiveRef.current) {
+          return;
+        }
+
         handleAddMessage("assistant", res.reply, enrichedMeta);
         const durationMs = Date.now() - dispatchStartTime;
         addVoiceCallLog({
@@ -945,13 +978,24 @@ export function SuperCallAssistantView() {
           level: "success",
         });
 
-        speakText(res.spokenReply, loadTtsSettings(), () => {
-          if (inputRef.current !== document.activeElement) {
-            isUserEditingRef.current = false;
-            setIsUserEditing(false);
-          }
-        });
+        if (!controller.signal.aborted && isCallActiveRef.current) {
+          speakText(res.spokenReply, loadTtsSettings(), () => {
+            if (inputRef.current !== document.activeElement) {
+              isUserEditingRef.current = false;
+              setIsUserEditing(false);
+            }
+          });
+        }
       } catch (err: any) {
+        if (
+          controller.signal.aborted ||
+          err?.name === "AbortError" ||
+          String(err?.message).toLowerCase().includes("aborted")
+        ) {
+          console.log("[SuperAgent] Dispatch was cancelled by user.");
+          return;
+        }
+
         console.error("Super agent error:", err);
         const errDetail = err?.message || String(err);
         const durationMs = Date.now() - dispatchStartTime;
@@ -965,19 +1009,24 @@ export function SuperCallAssistantView() {
           level: "error",
         });
 
-        const errorMsg = isUrduLanguage(userText)
-          ? `⚠️ Issue: ${errDetail}. Main dobara check karta hoon.`
-          : `⚠️ Issue: ${errDetail}. Let me re-check.`;
-        handleAddMessage("assistant", errorMsg);
-        speakText(errorMsg, loadTtsSettings(), () => {
-          if (inputRef.current !== document.activeElement) {
-            isUserEditingRef.current = false;
-            setIsUserEditing(false);
-          }
-        });
+        if (!controller.signal.aborted && isCallActiveRef.current) {
+          const errorMsg = isUrduLanguage(userText)
+            ? `⚠️ Issue: ${errDetail}. Main dobara check karta hoon.`
+            : `⚠️ Issue: ${errDetail}. Let me re-check.`;
+          handleAddMessage("assistant", errorMsg);
+          speakText(errorMsg, loadTtsSettings(), () => {
+            if (inputRef.current !== document.activeElement) {
+              isUserEditingRef.current = false;
+              setIsUserEditing(false);
+            }
+          });
+        }
       } finally {
-        setIsProcessing(false);
-        setAgentStatus(null);
+        if (activeAbortControllerRef.current === controller) {
+          activeAbortControllerRef.current = null;
+          setIsProcessing(false);
+          setAgentStatus(null);
+        }
       }
     },
     [
@@ -1025,10 +1074,33 @@ export function SuperCallAssistantView() {
         void handleSuperAgentDispatch(target);
       }
     },
+    onInterrupt: () => handleInterruptRef.current(),
+    canInterrupt: true,
     prompt: inputText,
     phase: isProcessing ? "running" : "ready",
     isUserEditing,
   });
+
+  const handleCancelProcessing = useCallback(() => {
+    if (activeAbortControllerRef.current) {
+      activeAbortControllerRef.current.abort();
+      activeAbortControllerRef.current = null;
+    }
+    setIsProcessing(false);
+    setAgentStatus(null);
+    stopSpeaking();
+    interruptSpeaking();
+    addVoiceCallLog({
+      category: "SYSTEM",
+      title: "Process Cancelled / Stopped",
+      detail: "Active generation or request was aborted by user",
+      level: "warn",
+    });
+  }, [interruptSpeaking]);
+
+  useEffect(() => {
+    handleInterruptRef.current = handleCancelProcessing;
+  }, [handleCancelProcessing]);
 
   useEffect(() => {
     isCallActiveRef.current = isCallActive;
@@ -1068,15 +1140,13 @@ export function SuperCallAssistantView() {
 
   const handleToggleCallSession = useCallback(async () => {
     if (isCallActive) {
+      handleCancelProcessing();
       addVoiceCallLog({
         category: "SYSTEM",
         title: "Voice Call Ended",
         detail: "User disconnected the call",
         level: "info",
       });
-      if (callStatus === "speaking" || callStatus === "thinking") {
-        interruptSpeaking();
-      }
       endCall();
       await livekit.disconnect();
     } else {
@@ -1099,7 +1169,7 @@ export function SuperCallAssistantView() {
         console.warn("[LiveKit auto-connect notice]:", err);
       }
     }
-  }, [isCallActive, callStatus, interruptSpeaking, endCall, livekit, toggleCall]);
+  }, [isCallActive, handleCancelProcessing, endCall, livekit, toggleCall]);
 
   const handleToggleMicMute = useCallback(() => {
     toggleMicMute();
@@ -1147,9 +1217,8 @@ export function SuperCallAssistantView() {
 
   // Barge-in / Stop Speaking Helper
   const handleStopSpeaking = useCallback(() => {
-    stopSpeaking();
-    interruptSpeaking();
-  }, [interruptSpeaking]);
+    handleCancelProcessing();
+  }, [handleCancelProcessing]);
 
   const [isTranscriptCopied, setIsTranscriptCopied] = useState(false);
 
@@ -2786,10 +2855,6 @@ export function SuperCallAssistantView() {
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  if (isCallActive && (callStatus === "speaking" || callStatus === "thinking")) {
-                    handleStopSpeaking();
-                    return;
-                  }
                   void handleToggleCallSession();
                 }}
                 className={cn(
@@ -2811,10 +2876,6 @@ export function SuperCallAssistantView() {
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    if (isCallActive && (callStatus === "speaking" || callStatus === "thinking")) {
-                      handleStopSpeaking();
-                      return;
-                    }
                     void handleToggleCallSession();
                   }}
                   className={cn(

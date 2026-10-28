@@ -42,6 +42,7 @@ export interface SuperAgentRunOptions {
     | undefined;
   onFillerSpoken?: ((filler: string) => void) | undefined;
   onStatusUpdate?: ((status: string) => void) | undefined;
+  signal?: AbortSignal | undefined;
 }
 
 export interface DelegatedTaskInfo {
@@ -88,6 +89,23 @@ function resolveApiUrl(pathUri: string): string {
   return `http://127.0.0.1:3000${pathUri.startsWith("/") ? pathUri : `/${pathUri}`}`;
 }
 
+export function combineSignals(timeoutMs: number, userSignal?: AbortSignal): AbortSignal {
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  if (!userSignal) return timeoutSignal;
+  if (typeof (AbortSignal as any).any === "function") {
+    return (AbortSignal as any).any([timeoutSignal, userSignal]);
+  }
+  const controller = new AbortController();
+  const onAbort = () => controller.abort();
+  if (userSignal.aborted || timeoutSignal.aborted) {
+    controller.abort();
+    return controller.signal;
+  }
+  userSignal.addEventListener("abort", onAbort, { once: true });
+  timeoutSignal.addEventListener("abort", onAbort, { once: true });
+  return controller.signal;
+}
+
 export function isUrduLanguage(text: string): boolean {
   return (
     /[\u0600-\u06FF]/.test(text) ||
@@ -110,9 +128,14 @@ export async function querySuperAgentLLM(
     };
     systemPrompt: string;
     history?: Array<{ role: "user" | "assistant"; text: string }>;
+    signal?: AbortSignal;
   },
 ): Promise<{ ok: boolean; reply?: string; error?: string; code?: string }> {
-  const { model, instanceId, providerConfig, systemPrompt, history = [] } = options;
+  const { model, instanceId, providerConfig, systemPrompt, history = [], signal } = options;
+
+  if (signal?.aborted) {
+    return { ok: false, error: "Aborted", code: "ABORTED" };
+  }
 
   const messages: Array<{ role: string; content: string }> = [
     { role: "system", content: systemPrompt },
@@ -143,7 +166,7 @@ export async function querySuperAgentLLM(
         apiKey: providerConfig?.apiKey,
         headers: providerConfig?.headers,
       }),
-      signal: AbortSignal.timeout(65000),
+      signal: combineSignals(65000, signal),
     });
 
     let data: any;
@@ -219,7 +242,7 @@ export async function querySuperAgentLLM(
           temperature: 0.7,
           max_tokens: 1500,
         }),
-        signal: AbortSignal.timeout(45000),
+        signal: combineSignals(45000, signal),
       });
 
       const data = await directResp.json();
@@ -345,12 +368,12 @@ async function callWorkerAgentDispatcher(
   }
 }
 
-async function fetchProjectInspection(projectName: string): Promise<any> {
+async function fetchProjectInspection(projectName: string, signal?: AbortSignal): Promise<any> {
   try {
     const res = await fetch(
       resolveApiUrl(`/api/projects/inspect/${encodeURIComponent(projectName)}`),
       {
-        signal: AbortSignal.timeout(10000),
+        signal: combineSignals(10000, signal),
       },
     );
     if (res.ok) {
@@ -368,8 +391,20 @@ async function fetchProjectInspection(projectName: string): Promise<any> {
 export async function executeSuperAgentInstruction(
   options: SuperAgentRunOptions,
 ): Promise<SuperAgentResult> {
-  const { userText, projects, activeProjectId, selectedModel, onFillerSpoken, onStatusUpdate } =
-    options;
+  const {
+    userText,
+    projects,
+    activeProjectId,
+    selectedModel,
+    onFillerSpoken,
+    onStatusUpdate,
+    signal,
+  } = options;
+
+  if (signal?.aborted) {
+    throw new DOMException("Aborted", "AbortError");
+  }
+
   const lang = isUrduLanguage(userText) ? "urdu" : "english";
 
   // 1. Identify target project (e.g. "op" or activeProject)
@@ -489,7 +524,7 @@ export async function executeSuperAgentInstruction(
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: extractedUrl }),
-        signal: AbortSignal.timeout(16000),
+        signal: combineSignals(16000, signal),
       });
       const data = (await res.json()) as {
         ok: boolean;
@@ -846,8 +881,9 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
     }
 
     // Always fetch live disk inspection so AI knows exact files & lines
+    if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
     onStatusUpdate?.(`Tool Calling: inspect_project_files (${targetName})...`);
-    const inspectData = await fetchProjectInspection(targetName);
+    const inspectData = await fetchProjectInspection(targetName, signal);
     if (inspectData && inspectData.ok) {
       toolsExecuted.push({
         name: "inspect_project_files",
@@ -924,13 +960,17 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
     level: "info",
   });
 
+  if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
   const llmRes = await querySuperAgentLLM(userText, {
     model: selectedModel,
     instanceId: options.selectedInstanceId,
     providerConfig: options.providerConfig,
     systemPrompt,
     history: options.conversationHistory,
+    signal,
   });
+
+  if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
 
   if (llmRes.ok && llmRes.reply && llmRes.reply.trim()) {
     let fullReply = llmRes.reply.trim();
