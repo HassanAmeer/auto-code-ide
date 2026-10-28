@@ -843,7 +843,6 @@ export function SuperCallAssistantView() {
           },
           onFillerSpoken: (fillerText) => {
             setAgentStatus(fillerText);
-            speakText(fillerText, loadTtsSettings());
           },
         });
 
@@ -981,7 +980,6 @@ export function SuperCallAssistantView() {
       if (data && typeof data === "object") {
         if (data.type === "filler" && data.text) {
           setAgentStatus(data.text);
-          speakText(data.text, loadTtsSettings());
         } else if (data.type === "tool_status" && data.tool) {
           setAgentStatus(`Tool Calling: ${data.tool}...`);
         }

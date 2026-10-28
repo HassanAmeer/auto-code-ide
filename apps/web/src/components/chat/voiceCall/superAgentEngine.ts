@@ -445,7 +445,6 @@ export async function executeSuperAgentInstruction(
 
   if (filler) {
     onFillerSpoken?.(filler);
-    speakText(filler);
     onStatusUpdate?.(filler);
   }
 

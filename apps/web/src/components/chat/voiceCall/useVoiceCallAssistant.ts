@@ -414,6 +414,7 @@ export function useVoiceCallAssistant({
   const isAbortingRef = useRef(false);
   const accumulatedTurnFinalRef = useRef<string>("");
   const lastFinalizedIndexRef = useRef<number>(-1);
+  const turnStartResultIndexRef = useRef<number>(0);
   const recentEmittedTranscriptsRef = useRef<Set<string>>(new Set());
   const interruptSpeakingRef = useRef<() => void>(() => {});
   const startFreshRecognitionRef = useRef<() => void>(() => {});
@@ -543,6 +544,7 @@ export function useVoiceCallAssistant({
     lastTranscribedTextRef.current = "";
     accumulatedTurnFinalRef.current = "";
     lastFinalizedIndexRef.current = -1;
+    turnStartResultIndexRef.current = 0;
     recentEmittedTranscriptsRef.current.clear();
     preTurnMessageIdsRef.current.clear();
     isEndingCallRef.current = false;
@@ -791,6 +793,7 @@ export function useVoiceCallAssistant({
 
       recognition.onstart = () => {
         isRecognitionRunningRef.current = true;
+        turnStartResultIndexRef.current = 0;
         if (
           !isTtsActiveRef.current &&
           callStatusRef.current !== "speaking" &&
@@ -821,11 +824,52 @@ export function useVoiceCallAssistant({
           isStreamingPlayerBusy ||
           Date.now() - lastTtsEndedTimestampRef.current < ACOUSTIC_ECHO_COOLDOWN_MS;
 
-        // Build entire session transcript from event.results from 0 to end (never drops chunks!)
+        // ACOUSTIC ECHO SHIELD & INTERRUPT DETECTOR:
+        // While AI is speaking, playing TTS audio, or during the 300ms post-TTS cooldown:
+        // The laptop speaker is blaring audio directly into the laptop microphone!
+        // We MUST DROP ALL incoming speech so the speaker sound is NEVER transcribed.
+        // The ONLY exception is an explicit user interruption command ("stop", "ruko", "chup", "bas", "wait").
+        if (isAiSpeakingOrBusy) {
+          let recentUtterance = "";
+          for (let i = Math.max(0, event.results.length - 2); i < event.results.length; ++i) {
+            const item = event.results[i];
+            if (item && item[0]) {
+              recentUtterance += (recentUtterance ? " " : "") + (item[0].transcript || "").trim();
+            }
+          }
+          const formattedRecent = formatSttTranscript(recentUtterance, effectiveMode);
+          const isInterrupt =
+            containsInterruptCommand(formattedRecent) || containsInterruptCommand(recentUtterance);
+
+          if (isInterrupt) {
+            addVoiceCallLog({
+              category: "INTERRUPT",
+              title: "Call Interrupted (Chup/Stop)",
+              detail: `Command: "${formattedRecent}"`,
+            });
+            // User explicitly commanded stop/chup/ruko/bas: immediately halt playback!
+            interruptSpeakingRef.current();
+            try {
+              recognitionRef.current?.abort();
+            } catch {}
+          }
+          // Purge any speech heard while AI is speaking so it never leaks into user turn!
+          turnStartResultIndexRef.current = event.results.length;
+          accumulatedTurnFinalRef.current = "";
+          return;
+        }
+
+        // Clean turn extraction: only process speech that occurred in THIS turn
+        let startIndex = turnStartResultIndexRef.current;
+        if (startIndex >= event.results.length) {
+          startIndex = 0;
+          turnStartResultIndexRef.current = 0;
+        }
+
         let fullSessionFinalized = "";
         let currentInterim = "";
 
-        for (let i = 0; i < event.results.length; ++i) {
+        for (let i = startIndex; i < event.results.length; ++i) {
           const item = event.results[i];
           if (!item || !item[0]) continue;
           const transcript = item[0].transcript || "";
@@ -843,33 +887,6 @@ export function useVoiceCallAssistant({
         ).trim();
 
         if (!rawSpeech) return;
-
-        // ACOUSTIC ECHO SHIELD & INTERRUPT DETECTOR:
-        // While AI is speaking, playing TTS audio, or during the 300ms post-TTS cooldown:
-        // The laptop speaker is blaring audio directly into the laptop microphone!
-        // We MUST DROP ALL incoming speech so the speaker sound is NEVER transcribed.
-        // The ONLY exception is an explicit user interruption command ("stop", "ruko", "chup", "bas", "wait").
-        if (isAiSpeakingOrBusy) {
-          const formatted = formatSttTranscript(rawSpeech, effectiveMode);
-          const isInterrupt =
-            containsInterruptCommand(formatted) || containsInterruptCommand(rawSpeech);
-
-          if (isInterrupt) {
-            addVoiceCallLog({
-              category: "INTERRUPT",
-              title: "Call Interrupted (Chup/Stop)",
-              detail: `Command: "${formatted}"`,
-            });
-            // User explicitly commanded stop/chup/ruko/bas: immediately halt playback!
-            interruptSpeakingRef.current();
-            try {
-              recognitionRef.current?.abort();
-            } catch {}
-          }
-          // Discard turn buffers during AI speech so speaker audio NEVER leaks into input field!
-          accumulatedTurnFinalRef.current = "";
-          return;
-        }
 
         // NOISE GATING & AMBIENT NOISE FILTER:
         // Filter out ambient mic hiss, fan rumble, breath noise, and low-energy noise syllables
@@ -918,9 +935,10 @@ export function useVoiceCallAssistant({
         const stripped = stripInterruptCommand(processedSpeech);
         const speechToUse = stripped.length > 0 ? stripped : processedSpeech;
 
-        const combinedText = manualBaselineRef.current
-          ? (manualBaselineRef.current + " " + speechToUse).trim()
-          : speechToUse.trim();
+        const combinedText =
+          isUserEditingRef.current && manualBaselineRef.current
+            ? (manualBaselineRef.current + " " + speechToUse).trim()
+            : speechToUse.trim();
 
         if (!combinedText) return;
 
@@ -1295,6 +1313,8 @@ export function useVoiceCallAssistant({
     lastTranscribedTextRef.current = "";
     accumulatedTurnFinalRef.current = "";
     lastFinalizedIndexRef.current = -1;
+    turnStartResultIndexRef.current = 0;
+    turnStartResultIndexRef.current = 0;
 
     // Reset SpeechRecognition session so that the next user turn starts clean from index 0
     try {
