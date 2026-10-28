@@ -82,7 +82,12 @@ import {
 import * as ServerEnvironment from "./environment/ServerEnvironment.ts";
 import { WEBHOOK_ROUTE_PREFIX } from "./scheduledTasks/ScheduledTaskService.ts";
 import { browserApiCorsAllowedHeaders, browserApiCorsAllowedMethods } from "./httpCors.ts";
-import { runSuperBotTurn, getLiveKitToken, getLiveKitRoomInfo } from "./botBridge.ts";
+import {
+  runSuperBotTurn,
+  getLiveKitToken,
+  getLiveKitRoomInfo,
+  geminiKeyRotator,
+} from "./botBridge.ts";
 
 const OTLP_TRACES_PROXY_PATH = "/api/observability/v1/traces";
 const LOOPBACK_HOSTNAMES = new Set(["127.0.0.1", "::1", "localhost"]);
@@ -1463,6 +1468,10 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
           chatUrl = `${rawBase}/v1/chat/completions`;
         }
 
+        if (model.toLowerCase().includes("gemini") && !apiKey) {
+          apiKey = geminiKeyRotator.getActiveKey() || apiKey;
+        }
+
         const reqHeaders: Record<string, string> = {
           "Content-Type": "application/json",
           Accept: "application/json",
@@ -1520,6 +1529,46 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
             data?.error ||
             data?.message ||
             `HTTP ${response.status} ${response.statusText}`;
+
+          // GOLDEN RULE FAILOVER: Only rotate on 429 / RESOURCE_EXHAUSTED
+          if (
+            geminiKeyRotator.isQuotaExhausted(response.status, data) &&
+            geminiKeyRotator.getKeysCount() > 1
+          ) {
+            geminiKeyRotator.markQuotaExhausted(apiKey || "");
+            const nextKey = geminiKeyRotator.getActiveKey();
+            if (nextKey && nextKey !== apiKey) {
+              const retryHeaders = { ...reqHeaders };
+              retryHeaders["Authorization"] = `Bearer ${nextKey.trim()}`;
+              retryHeaders["x-api-key"] = nextKey.trim();
+              try {
+                const retryRes = await fetch(chatUrl, {
+                  method: "POST",
+                  headers: retryHeaders,
+                  body: JSON.stringify({
+                    model,
+                    messages: enrichedMessages,
+                    temperature: bodyJson?.temperature ?? 0.7,
+                    max_tokens: bodyJson?.maxTokens ?? 1500,
+                  }),
+                  signal: AbortSignal.timeout(45000),
+                });
+                if (retryRes.ok) {
+                  const retryData = await retryRes.json();
+                  geminiKeyRotator.markSuccess(nextKey);
+                  const retryContent =
+                    retryData?.choices?.[0]?.message?.content ||
+                    retryData?.choices?.[0]?.text ||
+                    retryData?.candidates?.[0]?.content?.parts?.[0]?.text ||
+                    "";
+                  if (retryContent) {
+                    return { ok: true, reply: retryContent, rotatedKey: true };
+                  }
+                }
+              } catch {}
+            }
+          }
+
           return {
             ok: false,
             status: response.status,
@@ -1568,6 +1617,17 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
     });
 
     return HttpServerResponse.jsonUnsafe(result);
+  }),
+);
+
+export const layerGeminiStatusRoute = HttpRouter.add(
+  "GET",
+  "/api/gemini/status",
+  Effect.sync(() => {
+    return HttpServerResponse.jsonUnsafe({
+      ok: true,
+      rotator: geminiKeyRotator.getStatusSummary(),
+    });
   }),
 );
 

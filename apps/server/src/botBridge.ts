@@ -109,3 +109,69 @@ export async function getLiveKitRoomInfo(roomName = "autojobs-call-room"): Promi
     };
   }
 }
+
+export { geminiKeyRotator, SmartGeminiKeyRotator } from "./geminiKeyRotator.ts";
+import { geminiKeyRotator } from "./geminiKeyRotator.ts";
+
+/**
+ * Executes a Gemini request with Smart Multi-Key Auto-Rotation and Quota-Only Failover (Digi-Labs Inspired).
+ * GOLDEN RULE:
+ * 1. Only 429 / RESOURCE_EXHAUSTED rotates to next key.
+ * 2. 400 Bad Request or client errors fail immediately without wasting healthy keys.
+ */
+export async function queryGeminiWithRotation(opts: {
+  model?: string;
+  prompt: string;
+  systemInstruction?: string;
+  temperature?: number;
+}): Promise<{ ok: boolean; reply?: string; error?: string; keysAttempted: number }> {
+  const model = opts.model || "gemini-2.5-flash";
+  const systemInstruction = opts.systemInstruction || "";
+
+  const outcome = await geminiKeyRotator.executeWithRotation(async (apiKey) => {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${apiKey}`;
+      const payload: any = {
+        contents: [{ role: "user", parts: [{ text: opts.prompt }] }],
+        generationConfig: {
+          temperature: opts.temperature ?? 0.7,
+          maxOutputTokens: 1500,
+        },
+      };
+      if (systemInstruction) {
+        payload.systemInstruction = { parts: [{ text: systemInstruction }] };
+      }
+
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(30000),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        return {
+          status: res.status,
+          error: data?.error?.message || `HTTP ${res.status}`,
+        };
+      }
+
+      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      return {
+        status: 200,
+        data: { text },
+      };
+    } catch (err: any) {
+      return {
+        status: 500,
+        error: err?.message || String(err),
+      };
+    }
+  });
+
+  if (outcome.ok && outcome.data) {
+    return { ok: true, reply: outcome.data.text, keysAttempted: outcome.keysAttempted };
+  }
+  return { ok: false, error: outcome.error, keysAttempted: outcome.keysAttempted };
+}

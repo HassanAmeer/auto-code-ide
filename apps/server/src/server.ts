@@ -687,6 +687,7 @@ const layerMakeRoutes = Layer.mergeAll(
     ServerHttp.layerLiveKitStatusRoute,
     ServerHttp.layerGroqModelsRoute,
     ServerHttp.layerSuperAgentChatRoute,
+    ServerHttp.layerGeminiStatusRoute,
     ServerHttp.layerBotWishlistGetRoute,
     ServerHttp.layerBotWishlistToggleApproveRoute,
     ServerHttp.layerBotWishlistUpdateStatusRoute,

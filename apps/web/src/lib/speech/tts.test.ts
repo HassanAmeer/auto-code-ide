@@ -9,6 +9,8 @@ import {
   isMaleVoice,
   isFemaleVoice,
   VOICE_DELIVERY_STYLES,
+  VOCAL_STYLES,
+  getGeminiActingPrefix,
   getDeliveryStyleMultipliers,
   getNeuralVoiceScore,
   injectNaturalCadencePauses,
@@ -260,15 +262,20 @@ describe("TTS 6 Voice Presets & Gender Distinction", () => {
 
 describe("Digi-Labs Voice Delivery Styles & Co-Tuning", () => {
   it("contains all 5 vocal delivery styles with proper rate, pitch, and volume co-tuning", () => {
-    expect(VOICE_DELIVERY_STYLES.natural).toBeDefined();
-    expect(VOICE_DELIVERY_STYLES.business).toBeDefined();
-    expect(VOICE_DELIVERY_STYLES.promo).toBeDefined();
-    expect(VOICE_DELIVERY_STYLES.explainer).toBeDefined();
-    expect(VOICE_DELIVERY_STYLES.calm).toBeDefined();
+    expect(VOCAL_STYLES.natural).toBeDefined();
+    expect(VOCAL_STYLES.business).toBeDefined();
+    expect(VOCAL_STYLES.promo).toBeDefined();
+    expect(VOCAL_STYLES.explainer).toBeDefined();
+    expect(VOCAL_STYLES.calm).toBeDefined();
 
-    expect(VOICE_DELIVERY_STYLES.business.rate).toBe("+4%");
-    expect(VOICE_DELIVERY_STYLES.business.pitch).toBe("+5Hz");
-    expect(VOICE_DELIVERY_STYLES.business.volume).toBe("+6%");
+    expect(VOCAL_STYLES.business.edgePreset.rate).toBe("+4%");
+    expect(VOCAL_STYLES.business.edgePreset.pitch).toBe("+5Hz");
+    expect(VOCAL_STYLES.business.edgePreset.volume).toBe("+6%");
+
+    expect(getGeminiActingPrefix("explainer")).toContain("friendly expert");
+    expect(getGeminiActingPrefix("business")).toContain("confident");
+    expect(getGeminiActingPrefix("promo")).toContain("excited product promo");
+    expect(getGeminiActingPrefix("calm")).toContain("narrator");
 
     expect(VOICE_DELIVERY_STYLES.promo.rate).toBe("+18%");
     expect(VOICE_DELIVERY_STYLES.calm.rate).toBe("-14%");

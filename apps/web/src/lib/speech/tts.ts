@@ -26,22 +26,40 @@ export type TtsDeliveryStyleId = "natural" | "business" | "promo" | "explainer" 
 export interface VoiceDeliveryStyle {
   id: TtsDeliveryStyleId;
   label: string;
-  rate: string; // e.g. "+4%"
-  pitch: string; // e.g. "+5Hz"
-  volume: string; // e.g. "+6%"
+  geminiActingPrefix: string;
+  edgePreset: { rate: string; pitch: string; volume: string };
+  // Backwards-compatible accessors for existing UI components
+  rate: string;
+  pitch: string;
+  volume: string;
 }
 
-export const VOICE_DELIVERY_STYLES: Record<string, VoiceDeliveryStyle> = {
+export const VOCAL_STYLES: Record<string, VoiceDeliveryStyle> = {
   natural: {
     id: "natural",
     label: "Normal (Natural human voice)",
+    geminiActingPrefix: "",
+    edgePreset: { rate: "+0%", pitch: "+0Hz", volume: "+0%" },
     rate: "+0%",
+    pitch: "+0Hz",
+    volume: "+0%",
+  },
+  explainer: {
+    id: "explainer",
+    label: "Explainer (Friendly, clear & unhurried)",
+    geminiActingPrefix:
+      "Say this like a friendly expert explaining something simply — relaxed, clear and unhurried:",
+    edgePreset: { rate: "-6%", pitch: "+0Hz", volume: "+0%" },
+    rate: "-6%",
     pitch: "+0Hz",
     volume: "+0%",
   },
   business: {
     id: "business",
     label: "Business (Confident brand voice)",
+    geminiActingPrefix:
+      "Say this in a confident, polished corporate voice — warm, clear and authoritative:",
+    edgePreset: { rate: "+4%", pitch: "+5Hz", volume: "+6%" },
     rate: "+4%",
     pitch: "+5Hz",
     volume: "+6%",
@@ -49,42 +67,54 @@ export const VOICE_DELIVERY_STYLES: Record<string, VoiceDeliveryStyle> = {
   promo: {
     id: "promo",
     label: "Energetic (Fast & punchy)",
+    geminiActingPrefix:
+      "Say this like an excited product promo — fast, punchy, high energy, selling it:",
+    edgePreset: { rate: "+18%", pitch: "+30Hz", volume: "+12%" },
     rate: "+18%",
     pitch: "+30Hz",
     volume: "+12%",
   },
-  explainer: {
-    id: "explainer",
-    label: "Explainer (Clear, friendly & unhurried)",
-    rate: "-6%",
-    pitch: "+0Hz",
-    volume: "+0%",
-  },
   calm: {
     id: "calm",
     label: "Calm (Slow & soothing narration)",
+    geminiActingPrefix:
+      "Say this calmly and slowly, like a narrator reading to someone at the end of the day:",
+    edgePreset: { rate: "-14%", pitch: "-20Hz", volume: "-4%" },
     rate: "-14%",
     pitch: "-20Hz",
     volume: "-4%",
   },
 };
 
+export const VOICE_DELIVERY_STYLES = VOCAL_STYLES;
+
+export function getGeminiActingPrefix(styleId?: string): string {
+  const style =
+    (styleId && (VOCAL_STYLES[styleId] || VOICE_DELIVERY_STYLES[styleId])) || VOCAL_STYLES.natural;
+  return style.geminiActingPrefix || "";
+}
+
 export function getDeliveryStyleMultipliers(styleId?: string): {
   rateMultiplier: number;
   pitchMultiplier: number;
   volumeMultiplier: number;
 } {
-  const style = (styleId && VOICE_DELIVERY_STYLES[styleId]) || VOICE_DELIVERY_STYLES.natural;
+  const style =
+    (styleId && (VOCAL_STYLES[styleId] || VOICE_DELIVERY_STYLES[styleId])) || VOCAL_STYLES.natural;
 
-  const rateMatch = style.rate.match(/([+-]?\d+)%/);
+  const rateStr = style.edgePreset?.rate || style.rate || "+0%";
+  const pitchStr = style.edgePreset?.pitch || style.pitch || "+0Hz";
+  const volStr = style.edgePreset?.volume || style.volume || "+0%";
+
+  const rateMatch = rateStr.match(/([+-]?\d+)%/);
   const ratePct = rateMatch ? parseInt(rateMatch[1], 10) : 0;
   const rateMultiplier = 1 + ratePct / 100;
 
-  const pitchMatch = style.pitch.match(/([+-]?\d+)Hz/);
+  const pitchMatch = pitchStr.match(/([+-]?\d+)Hz/);
   const pitchHz = pitchMatch ? parseInt(pitchMatch[1], 10) : 0;
   const pitchMultiplier = 1 + pitchHz / 200;
 
-  const volMatch = style.volume.match(/([+-]?\d+)%/);
+  const volMatch = volStr.match(/([+-]?\d+)%/);
   const volPct = volMatch ? parseInt(volMatch[1], 10) : 0;
   const volumeMultiplier = 1 + volPct / 100;
 
