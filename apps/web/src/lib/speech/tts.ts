@@ -21,12 +21,83 @@ export type TtsLanguageMode =
   | "auto-female"
   | TtsVoiceId;
 
+export type TtsDeliveryStyleId = "natural" | "business" | "promo" | "explainer" | "calm";
+
+export interface VoiceDeliveryStyle {
+  id: TtsDeliveryStyleId;
+  label: string;
+  rate: string; // e.g. "+4%"
+  pitch: string; // e.g. "+5Hz"
+  volume: string; // e.g. "+6%"
+}
+
+export const VOICE_DELIVERY_STYLES: Record<string, VoiceDeliveryStyle> = {
+  natural: {
+    id: "natural",
+    label: "Normal (Natural human voice)",
+    rate: "+0%",
+    pitch: "+0Hz",
+    volume: "+0%",
+  },
+  business: {
+    id: "business",
+    label: "Business (Confident brand voice)",
+    rate: "+4%",
+    pitch: "+5Hz",
+    volume: "+6%",
+  },
+  promo: {
+    id: "promo",
+    label: "Energetic (Fast & punchy)",
+    rate: "+18%",
+    pitch: "+30Hz",
+    volume: "+12%",
+  },
+  explainer: {
+    id: "explainer",
+    label: "Explainer (Clear, friendly & unhurried)",
+    rate: "-6%",
+    pitch: "+0Hz",
+    volume: "+0%",
+  },
+  calm: {
+    id: "calm",
+    label: "Calm (Slow & soothing narration)",
+    rate: "-14%",
+    pitch: "-20Hz",
+    volume: "-4%",
+  },
+};
+
+export function getDeliveryStyleMultipliers(styleId?: string): {
+  rateMultiplier: number;
+  pitchMultiplier: number;
+  volumeMultiplier: number;
+} {
+  const style = (styleId && VOICE_DELIVERY_STYLES[styleId]) || VOICE_DELIVERY_STYLES.natural;
+
+  const rateMatch = style.rate.match(/([+-]?\d+)%/);
+  const ratePct = rateMatch ? parseInt(rateMatch[1], 10) : 0;
+  const rateMultiplier = 1 + ratePct / 100;
+
+  const pitchMatch = style.pitch.match(/([+-]?\d+)Hz/);
+  const pitchHz = pitchMatch ? parseInt(pitchMatch[1], 10) : 0;
+  const pitchMultiplier = 1 + pitchHz / 200;
+
+  const volMatch = style.volume.match(/([+-]?\d+)%/);
+  const volPct = volMatch ? parseInt(volMatch[1], 10) : 0;
+  const volumeMultiplier = 1 + volPct / 100;
+
+  return { rateMultiplier, pitchMultiplier, volumeMultiplier };
+}
+
 export interface TtsSettings {
   language: TtsLanguageMode;
   voiceURI?: string;
   rate: number;
   pitch: number;
   volume: number;
+  deliveryStyle?: TtsDeliveryStyleId;
 }
 
 export interface TtsAccentPreset {
@@ -144,6 +215,7 @@ export const DEFAULT_TTS_SETTINGS: TtsSettings = {
   rate: 1.0,
   pitch: 1.0,
   volume: 1.0,
+  deliveryStyle: "natural",
 };
 
 /**
@@ -217,12 +289,17 @@ export function loadTtsSettings(): TtsSettings {
     const rate = typeof parsed.rate === "number" && !isNaN(parsed.rate) ? parsed.rate : 1.0;
     const pitch = typeof parsed.pitch === "number" && !isNaN(parsed.pitch) ? parsed.pitch : 1.0;
     const volume = typeof parsed.volume === "number" && !isNaN(parsed.volume) ? parsed.volume : 1.0;
+    const validStyles: TtsDeliveryStyleId[] = ["natural", "business", "promo", "explainer", "calm"];
+    const deliveryStyle: TtsDeliveryStyleId = validStyles.includes(parsed.deliveryStyle)
+      ? parsed.deliveryStyle
+      : "natural";
     return {
       language: normalizedLang,
       voiceURI,
       rate,
       pitch,
       volume,
+      deliveryStyle,
     };
   } catch {
     return DEFAULT_TTS_SETTINGS;
@@ -629,6 +706,84 @@ export function sanitizeTextForSpeech(markdown: string): string {
 }
 
 /**
+ * Neural Voices Priority (Inspired by Digi-Labs / Microsoft Edge Neural Voices)
+ * Matches top-tier human sounding voices in Chromium/Edge/Windows/Android platforms.
+ */
+export const DIGI_LABS_NEURAL_VOICE_NAMES = [
+  "ur-pk-asadneural",
+  "ur-pk-uzmaneural",
+  "hi-in-madhurneural",
+  "hi-in-swaraneural",
+  "en-us-andrewmultilingualneural",
+  "en-us-brianmultilingualneural",
+  "en-us-avamultilingualneural",
+  "en-us-emmamultilingualneural",
+  "asad",
+  "uzma",
+  "madhur",
+  "swara",
+  "andrew",
+  "brian",
+  "ava",
+  "emma",
+];
+
+export function getNeuralVoiceScore(voice: SpeechSynthesisVoice): number {
+  const name = voice.name.toLowerCase();
+  const uri = (voice.voiceURI || "").toLowerCase();
+  const text = `${name} ${uri}`;
+
+  // Top tier: Exact Edge/Digi-Labs neural voices
+  if (text.includes("asad") || text.includes("uzma")) return 100;
+  if (text.includes("madhur") || text.includes("swara")) return 90;
+  if (text.includes("andrew") || text.includes("brian")) return 85;
+  if (text.includes("neural") || text.includes("natural") || text.includes("online")) return 75;
+  if (name.includes("google") || uri.includes("google")) return 50;
+  return 10;
+}
+
+/**
+ * Injects subtle breath pauses at Urdu clause boundaries and conjunctions,
+ * inspired by Digi-Labs natural cadence tuning.
+ * Prevents speech engines from rushing through long sentences without breathing.
+ */
+export function injectNaturalCadencePauses(text: string): string {
+  if (!text) return "";
+
+  let result = text
+    // 1. Standardize Urdu Unicode punctuation to natural speech pauses
+    .replace(/،/g, ", ")
+    .replace(/۔/g, ". ")
+    .replace(/؟/g, "? ")
+    .replace(/؛/g, "; ");
+
+  // 2. Add micro-pause after conversational honorifics and acknowledgments if no punctuation follows
+  result = result.replace(
+    /\b(assalam[\s-]o[\s-]alaikum|walaikum[\s-]assalam|ji boss|haan ji|jee haan|acha boss|shukriya|meherbani)\b(?!\s*[,.?!;:])/gi,
+    "$1,",
+  );
+
+  // 3. Add breath micro-pause before Subcontinental conjunctions when not preceded by punctuation
+  result = result.replace(
+    /([^\s,;:.?!۔،])\s+(lekin|magar|kyunki|kyunkay|taake|is\s+liye|halanke|warna|balkay|phir\s+bhi)\b/gi,
+    "$1, $2",
+  );
+
+  // 4. Clean up any accidental double commas or weird spaces
+  result = result
+    .replace(/,\s*,+/g, ",")
+    .replace(/\s+,/g, ",")
+    .replace(/,\s*/g, ", ")
+    .replace(/\.\s*\.+/g, ".")
+    .replace(/\s+\./g, ".")
+    .replace(/\.\s*/g, ". ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+  return result;
+}
+
+/**
  * Speak provided text with active or specified settings.
  */
 export function speakText(text: string, options?: Partial<TtsSettings>, onEnd?: () => void): void {
@@ -643,7 +798,8 @@ export function speakText(text: string, options?: Partial<TtsSettings>, onEnd?: 
       ? Object.fromEntries(Object.entries(options).filter(([_, v]) => v !== undefined))
       : {}),
   };
-  const clean = sanitizeTextForSpeech(text);
+  const sanitized = sanitizeTextForSpeech(text);
+  const clean = injectNaturalCadencePauses(sanitized);
   if (!clean) {
     onEnd?.();
     return;
@@ -675,7 +831,7 @@ export function speakText(text: string, options?: Partial<TtsSettings>, onEnd?: 
     preset = getActiveTtsPreset(settings);
   }
 
-  // Match the best browser voice based on preferred languages and target gender
+  // Match the best browser voice based on preferred languages and target gender (prioritizing neural voices)
   let matchedVoice: SpeechSynthesisVoice | undefined;
   let targetPitch = 1.0;
   let targetRate = 1.0;
@@ -684,37 +840,47 @@ export function speakText(text: string, options?: Partial<TtsSettings>, onEnd?: 
 
   if (preset.gender === "male") {
     let isRealMaleVoice = false;
-    // 1. First priority: Look for explicit male voice in preferredLangs
+    // 1. First priority: Look for explicit male voice in preferredLangs (prioritizing neural)
     for (const prefLang of preset.preferredLangs) {
-      const candidates = voices.filter(
-        (v) =>
-          v.lang.toLowerCase().startsWith(prefLang.toLowerCase()) ||
-          prefLang.toLowerCase().startsWith(v.lang.toLowerCase()),
-      );
-      const maleCandidate = candidates.find(isMaleVoice);
-      if (maleCandidate) {
-        matchedVoice = maleCandidate;
+      const candidates = voices
+        .filter(
+          (v) =>
+            v.lang.toLowerCase().startsWith(prefLang.toLowerCase()) ||
+            prefLang.toLowerCase().startsWith(v.lang.toLowerCase()),
+        )
+        .filter(isMaleVoice)
+        .sort((a, b) => getNeuralVoiceScore(b) - getNeuralVoiceScore(a));
+
+      if (candidates.length > 0) {
+        matchedVoice = candidates[0];
         isRealMaleVoice = true;
         break;
       }
     }
 
-    // 2. Second priority: If English male, look for any explicit male English voice
+    // 2. Second priority: If English male, look for any explicit male English voice (prioritizing neural)
     if (!matchedVoice && preset.category === "english") {
-      matchedVoice = voices.find((v) => v.lang.startsWith("en") && isMaleVoice(v));
-      if (matchedVoice) isRealMaleVoice = true;
+      const candidates = voices
+        .filter((v) => v.lang.startsWith("en") && isMaleVoice(v))
+        .sort((a, b) => getNeuralVoiceScore(b) - getNeuralVoiceScore(a));
+      if (candidates.length > 0) {
+        matchedVoice = candidates[0];
+        isRealMaleVoice = true;
+      }
     }
 
-    // 3. Fallback: Select best language candidate
+    // 3. Fallback: Select best language candidate (prioritizing neural)
     if (!matchedVoice) {
       for (const prefLang of preset.preferredLangs) {
-        const candidate = voices.find(
-          (v) =>
-            v.lang.toLowerCase().startsWith(prefLang.toLowerCase()) ||
-            prefLang.toLowerCase().startsWith(v.lang.toLowerCase()),
-        );
-        if (candidate) {
-          matchedVoice = candidate;
+        const candidates = voices
+          .filter(
+            (v) =>
+              v.lang.toLowerCase().startsWith(prefLang.toLowerCase()) ||
+              prefLang.toLowerCase().startsWith(v.lang.toLowerCase()),
+          )
+          .sort((a, b) => getNeuralVoiceScore(b) - getNeuralVoiceScore(a));
+        if (candidates.length > 0) {
+          matchedVoice = candidates[0];
           break;
         }
       }
@@ -732,20 +898,35 @@ export function speakText(text: string, options?: Partial<TtsSettings>, onEnd?: 
       targetRate = Math.max(0.5, Math.min(1.75, userRate * 0.94));
     }
   } else {
-    // Gender: Female
+    // Gender: Female (prioritizing neural voices)
     for (const prefLang of preset.preferredLangs) {
-      const candidates = voices.filter(
-        (v) =>
-          v.lang.toLowerCase().startsWith(prefLang.toLowerCase()) ||
-          prefLang.toLowerCase().startsWith(v.lang.toLowerCase()),
-      );
-      const femaleCandidate = candidates.find(isFemaleVoice);
-      if (femaleCandidate) {
-        matchedVoice = femaleCandidate;
+      const candidates = voices
+        .filter(
+          (v) =>
+            v.lang.toLowerCase().startsWith(prefLang.toLowerCase()) ||
+            prefLang.toLowerCase().startsWith(v.lang.toLowerCase()),
+        )
+        .filter(isFemaleVoice)
+        .sort((a, b) => getNeuralVoiceScore(b) - getNeuralVoiceScore(a));
+      if (candidates.length > 0) {
+        matchedVoice = candidates[0];
         break;
       }
-      if (candidates.length > 0 && !matchedVoice) {
-        matchedVoice = candidates[0];
+    }
+
+    if (!matchedVoice) {
+      for (const prefLang of preset.preferredLangs) {
+        const candidates = voices
+          .filter(
+            (v) =>
+              v.lang.toLowerCase().startsWith(prefLang.toLowerCase()) ||
+              prefLang.toLowerCase().startsWith(v.lang.toLowerCase()),
+          )
+          .sort((a, b) => getNeuralVoiceScore(b) - getNeuralVoiceScore(a));
+        if (candidates.length > 0) {
+          matchedVoice = candidates[0];
+          break;
+        }
       }
     }
 
@@ -761,6 +942,15 @@ export function speakText(text: string, options?: Partial<TtsSettings>, onEnd?: 
   if (!matchedVoice && voices.length > 0) {
     matchedVoice = voices[0];
   }
+
+  // Apply Vocal Delivery Style co-tuning multipliers (Digi-Labs Rate, Pitch, and Volume co-tuning)
+  const deliveryMultipliers = getDeliveryStyleMultipliers(settings.deliveryStyle);
+  targetPitch = Math.max(0.5, Math.min(1.5, targetPitch * deliveryMultipliers.pitchMultiplier));
+  targetRate = Math.max(0.5, Math.min(1.75, targetRate * deliveryMultipliers.rateMultiplier));
+  const finalVolume = Math.max(
+    0,
+    Math.min(1.0, (settings.volume ?? 1.0) * deliveryMultipliers.volumeMultiplier),
+  );
 
   // High accuracy text adaptation for Roman Urdu & language tags
   let spokenText = clean;
@@ -785,7 +975,7 @@ export function speakText(text: string, options?: Partial<TtsSettings>, onEnd?: 
   if (matchedVoice) {
     utterance.voice = matchedVoice;
   }
-  utterance.volume = settings.volume;
+  utterance.volume = finalVolume;
 
   activeUtterancesSet.add(utterance);
 

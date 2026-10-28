@@ -99,9 +99,12 @@ import {
   speakText,
   stopSpeaking,
   loadTtsSettings,
+  saveTtsSettings,
   subscribeTtsSettings,
   getActiveTtsPreset,
   TTS_ACCENTS,
+  VOICE_DELIVERY_STYLES,
+  type TtsDeliveryStyleId,
   type TtsSettings,
 } from "~/lib/speech/tts";
 import {
@@ -1687,6 +1690,66 @@ export function SuperCallAssistantView() {
                     </div>
                   </div>
 
+                  {/* Vocal Delivery Style Presets (Inspired by Digi-Labs) */}
+                  <div className="p-3.5 rounded-xl border border-border/70 bg-card/60 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <Volume2 className="size-3.5 text-primary" />
+                        <span className="text-xs font-semibold text-foreground">
+                          Vocal Delivery Style (Digi-Labs)
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-mono text-primary uppercase font-bold">
+                        {ttsSettings.deliveryStyle || "natural"}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">
+                      Rate, Pitch aur Volume ko co-tune karta hai taake awaz natural lagay bina
+                      chipmunk effect ke.
+                    </p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {Object.values(VOICE_DELIVERY_STYLES).map((style) => {
+                        const isSelected = (ttsSettings.deliveryStyle || "natural") === style.id;
+                        return (
+                          <button
+                            key={style.id}
+                            type="button"
+                            onClick={() => {
+                              const updated: TtsSettings = {
+                                ...ttsSettings,
+                                deliveryStyle: style.id,
+                              };
+                              setTtsSettings(updated);
+                              saveTtsSettings(updated);
+                            }}
+                            className={cn(
+                              "p-2 rounded-lg border text-left transition-all cursor-pointer flex flex-col justify-between gap-1",
+                              isSelected
+                                ? "border-primary bg-primary/10 text-foreground ring-1 ring-primary/40 shadow-xs"
+                                : "border-border/60 bg-muted/20 text-muted-foreground hover:bg-muted/40",
+                            )}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-medium text-foreground">
+                                {style.id === "natural" && "🌿 Natural"}
+                                {style.id === "business" && "💼 Business"}
+                                {style.id === "promo" && "⚡ Energetic"}
+                                {style.id === "explainer" && "🎙️ Explainer"}
+                                {style.id === "calm" && "🕊️ Calm"}
+                              </span>
+                              {isSelected && (
+                                <CheckCircle2 className="size-3 text-primary shrink-0" />
+                              )}
+                            </div>
+                            <span className="text-[9px] font-mono text-muted-foreground">
+                              {style.rate} | {style.pitch} | {style.volume}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
                   {/* Speech Rate & Speed Control */}
                   <div className="p-3.5 rounded-xl border border-border/70 bg-card/60 space-y-3">
                     <div className="flex items-center justify-between">
@@ -1707,7 +1770,7 @@ export function SuperCallAssistantView() {
                         const newRate = parseFloat(e.target.value);
                         const updated = { ...ttsSettings, rate: newRate };
                         setTtsSettings(updated);
-                        localStorage.setItem("t3code:tts-settings:v1", JSON.stringify(updated));
+                        saveTtsSettings(updated);
                       }}
                       className="w-full accent-primary cursor-pointer"
                     />

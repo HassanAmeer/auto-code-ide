@@ -17,6 +17,8 @@ import {
   type TtsLanguageMode,
   type TtsSettings,
   type TtsVoiceId,
+  type TtsDeliveryStyleId,
+  VOICE_DELIVERY_STYLES,
   TTS_ACCENTS,
   TTS_LANG_LABELS,
   loadTtsSettings,
@@ -153,6 +155,12 @@ export function SttTtsSettingsPanel() {
 
   const updateTtsPitch = (pitch: number) => {
     const updated = { ...tts, pitch };
+    setTts(updated);
+    saveTtsSettings(updated);
+  };
+
+  const updateTtsDeliveryStyle = (deliveryStyle: TtsDeliveryStyleId) => {
+    const updated = { ...tts, deliveryStyle };
     setTts(updated);
     saveTtsSettings(updated);
   };
@@ -519,6 +527,42 @@ export function SttTtsSettingsPanel() {
                   </SelectGroup>
                 </SelectPopup>
               </Select>
+            }
+          />
+
+          <SettingsRow
+            title="Vocal delivery style (Digi-Labs)"
+            description="Co-tunes speed rate, pitch tone frequency, and volume in lockstep to preserve natural timbre without chipmunk audio."
+            control={
+              <div className="flex flex-wrap items-center gap-1.5 sm:max-w-md">
+                {Object.values(VOICE_DELIVERY_STYLES).map((style) => {
+                  const isSelected = (tts.deliveryStyle || "natural") === style.id;
+                  return (
+                    <button
+                      key={style.id}
+                      type="button"
+                      onClick={() => updateTtsDeliveryStyle(style.id)}
+                      className={cn(
+                        "px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-all cursor-pointer flex items-center gap-1.5",
+                        isSelected
+                          ? "border-primary bg-primary/10 text-primary font-semibold ring-1 ring-primary/40 shadow-xs"
+                          : "border-border/60 bg-muted/20 text-muted-foreground hover:bg-muted/40 hover:text-foreground",
+                      )}
+                    >
+                      <span>
+                        {style.id === "natural" && "🌿 Natural"}
+                        {style.id === "business" && "💼 Business"}
+                        {style.id === "promo" && "⚡ Energetic"}
+                        {style.id === "explainer" && "🎙️ Explainer"}
+                        {style.id === "calm" && "🕊️ Calm"}
+                      </span>
+                      <span className="text-[10px] font-mono text-muted-foreground/80">
+                        ({style.rate})
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             }
           />
 

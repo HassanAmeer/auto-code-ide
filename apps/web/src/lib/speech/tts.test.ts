@@ -8,6 +8,10 @@ import {
   normalizeTtsLanguage,
   isMaleVoice,
   isFemaleVoice,
+  VOICE_DELIVERY_STYLES,
+  getDeliveryStyleMultipliers,
+  getNeuralVoiceScore,
+  injectNaturalCadencePauses,
 } from "./tts";
 
 describe("stripCodeBlocks", () => {
@@ -251,5 +255,116 @@ describe("TTS 6 Voice Presets & Gender Distinction", () => {
     expect(normalizeTtsLanguage("auto-male")).toBe("auto-male");
     expect(normalizeTtsLanguage("auto-female")).toBe("auto-female");
     expect(normalizeTtsLanguage("invalid-mode")).toBe("roman-urdu");
+  });
+});
+
+describe("Digi-Labs Voice Delivery Styles & Co-Tuning", () => {
+  it("contains all 5 vocal delivery styles with proper rate, pitch, and volume co-tuning", () => {
+    expect(VOICE_DELIVERY_STYLES.natural).toBeDefined();
+    expect(VOICE_DELIVERY_STYLES.business).toBeDefined();
+    expect(VOICE_DELIVERY_STYLES.promo).toBeDefined();
+    expect(VOICE_DELIVERY_STYLES.explainer).toBeDefined();
+    expect(VOICE_DELIVERY_STYLES.calm).toBeDefined();
+
+    expect(VOICE_DELIVERY_STYLES.business.rate).toBe("+4%");
+    expect(VOICE_DELIVERY_STYLES.business.pitch).toBe("+5Hz");
+    expect(VOICE_DELIVERY_STYLES.business.volume).toBe("+6%");
+
+    expect(VOICE_DELIVERY_STYLES.promo.rate).toBe("+18%");
+    expect(VOICE_DELIVERY_STYLES.calm.rate).toBe("-14%");
+  });
+
+  it("calculates accurate multipliers from delivery style presets", () => {
+    const natural = getDeliveryStyleMultipliers("natural");
+    expect(natural.rateMultiplier).toBe(1.0);
+    expect(natural.pitchMultiplier).toBe(1.0);
+    expect(natural.volumeMultiplier).toBe(1.0);
+
+    const business = getDeliveryStyleMultipliers("business");
+    expect(business.rateMultiplier).toBeCloseTo(1.04, 2);
+    expect(business.pitchMultiplier).toBeGreaterThan(1.0);
+    expect(business.volumeMultiplier).toBeCloseTo(1.06, 2);
+
+    const promo = getDeliveryStyleMultipliers("promo");
+    expect(promo.rateMultiplier).toBeCloseTo(1.18, 2);
+    expect(promo.volumeMultiplier).toBeCloseTo(1.12, 2);
+
+    const calm = getDeliveryStyleMultipliers("calm");
+    expect(calm.rateMultiplier).toBeCloseTo(0.86, 2);
+    expect(calm.pitchMultiplier).toBeLessThan(1.0);
+    expect(calm.volumeMultiplier).toBeCloseTo(0.96, 2);
+  });
+});
+
+describe("Neural Voices Priority (Digi-Labs / Edge Neural)", () => {
+  it("ranks Microsoft Edge Neural voices (Asad, Uzma, Madhur, Swara, Andrew) higher than generic synthesizers", () => {
+    const asadVoice = {
+      name: "Microsoft Asad Online (Natural) - Urdu (Pakistan)",
+      voiceURI: "ur-PK-AsadNeural",
+      lang: "ur-PK",
+    } as SpeechSynthesisVoice;
+    const uzmaVoice = {
+      name: "Microsoft Uzma Online (Natural) - Urdu (Pakistan)",
+      voiceURI: "ur-PK-UzmaNeural",
+      lang: "ur-PK",
+    } as SpeechSynthesisVoice;
+    const madhurVoice = {
+      name: "Microsoft Madhur Online (Natural) - Hindi (India)",
+      voiceURI: "hi-IN-MadhurNeural",
+      lang: "hi-IN",
+    } as SpeechSynthesisVoice;
+    const andrewVoice = {
+      name: "Microsoft Andrew Multilingual Online (Natural)",
+      voiceURI: "en-US-AndrewMultilingualNeural",
+      lang: "en-US",
+    } as SpeechSynthesisVoice;
+    const googleVoice = {
+      name: "Google US English",
+      voiceURI: "Google US English",
+      lang: "en-US",
+    } as SpeechSynthesisVoice;
+    const genericVoice = {
+      name: "eSpeak generic",
+      voiceURI: "espeak",
+      lang: "en",
+    } as SpeechSynthesisVoice;
+
+    expect(getNeuralVoiceScore(asadVoice)).toBe(100);
+    expect(getNeuralVoiceScore(uzmaVoice)).toBe(100);
+    expect(getNeuralVoiceScore(madhurVoice)).toBe(90);
+    expect(getNeuralVoiceScore(andrewVoice)).toBe(85);
+    expect(getNeuralVoiceScore(googleVoice)).toBe(50);
+    expect(getNeuralVoiceScore(genericVoice)).toBe(10);
+
+    expect(getNeuralVoiceScore(asadVoice)).toBeGreaterThan(getNeuralVoiceScore(googleVoice));
+    expect(getNeuralVoiceScore(uzmaVoice)).toBeGreaterThan(getNeuralVoiceScore(genericVoice));
+  });
+});
+
+describe("Natural Urdu Cadence & Breath-Punctuation", () => {
+  it("standardizes Urdu Unicode punctuation to natural speech pauses", () => {
+    const input = "وعلیکم السلام باس۔ میں ٹھیک ہوں، آپ بتائیں۔";
+    const result = injectNaturalCadencePauses(input);
+    expect(result).toContain(". ");
+    expect(result).toContain(", ");
+    expect(result).not.toContain("۔");
+    expect(result).not.toContain("،");
+  });
+
+  it("adds micro-pauses at Subcontinental conjunctions (lekin, magar, kyunki, taake)", () => {
+    const input = "Main ne file check ki lekin us mein issue tha kyunki server band tha";
+    const result = injectNaturalCadencePauses(input);
+    expect(result).toContain("ki, lekin");
+    expect(result).toContain("tha, kyunki");
+  });
+
+  it("adds micro-pause after conversational honorifics without double commas", () => {
+    const input = "Assalam o alaikum boss hum ne deploy kar diya";
+    const result = injectNaturalCadencePauses(input);
+    expect(result).toContain("Assalam o alaikum, boss");
+
+    const alreadyPunctuated = "Ji boss, main dekh raha hoon.";
+    const result2 = injectNaturalCadencePauses(alreadyPunctuated);
+    expect(result2).toBe("Ji boss, main dekh raha hoon.");
   });
 });
