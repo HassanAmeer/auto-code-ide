@@ -3,6 +3,7 @@
  */
 
 import { saveServerSetting } from "../serverSettingsSync";
+import { adaptRomanUrduForVoice } from "./romanUrduSpeechAdapter";
 
 export type TtsVoiceId =
   | "english-male"
@@ -80,32 +81,32 @@ export const TTS_ACCENTS: TtsAccentPreset[] = [
     description: "Fluent and professional English female voice.",
   },
 
-  // 2. Roman Urdu Male & Female
+  // 2. Roman Urdu Male & Female (High Accuracy Pakistani Accent)
   {
     id: "roman-urdu-male",
-    name: "Roman Urdu (Male Voice)",
-    nameUrdu: "رومن اردو (مردانہ آواز)",
+    name: "Roman Urdu (Male HD - High Accuracy)",
+    nameUrdu: "رومن اردو (مردانہ آواز - ہائی ایکوریسی)",
     category: "roman-urdu",
     gender: "male",
-    preferredLangs: ["en-IN", "ur-PK", "ur", "hi-IN", "en-GB", "en-US"],
-    pitch: 0.88,
-    rate: 0.98,
+    preferredLangs: ["ur-PK", "ur", "en-IN", "hi-IN", "en-GB", "en-US"],
+    pitch: 0.9,
+    rate: 0.96,
     sampleText:
-      "Assalam o alaikum! Yeh Roman Urdu male voice ka test hai. Main aap ki kya madad kar sakta hoon?",
-    description: "Natural Pakistani / Subcontinental accent for Roman Urdu (Male).",
+      "Assalam o alaikum! Yeh Roman Urdu male high accuracy voice ka test hai. Main aap ki kya madad kar sakta hoon?",
+    description: "Authentic Pakistani Roman Urdu accent with enhanced phonetic clarity (Male).",
   },
   {
     id: "roman-urdu-female",
-    name: "Roman Urdu (Female Voice)",
-    nameUrdu: "رومن اردو (زنانہ آواز)",
+    name: "Roman Urdu (Female HD - High Accuracy)",
+    nameUrdu: "رومن اردو (زنانہ آواز - ہائی ایکوریسی)",
     category: "roman-urdu",
     gender: "female",
-    preferredLangs: ["en-IN", "ur-PK", "ur", "hi-IN", "en-GB", "en-US"],
-    pitch: 1.05,
-    rate: 0.98,
+    preferredLangs: ["ur-PK", "ur", "en-IN", "hi-IN", "en-GB", "en-US"],
+    pitch: 1.06,
+    rate: 0.96,
     sampleText:
-      "Assalam o alaikum! Yeh Roman Urdu female voice ka test hai. Main aap ki kya madad kar sakti hoon?",
-    description: "Clear and expressive Roman Urdu conversational voice (Female).",
+      "Assalam o alaikum! Yeh Roman Urdu female high accuracy voice ka test hai. Main aap ki kya madad kar sakti hoon?",
+    description: "Clear and fluent Pakistani Roman Urdu conversational voice (Female).",
   },
 
   // 3. Natural Urdu Male & Female
@@ -648,7 +649,6 @@ export function speakText(text: string, options?: Partial<TtsSettings>, onEnd?: 
     return;
   }
 
-  const utterance = new SpeechSynthesisUtterance(clean);
   const voices = getAvailableVoices();
 
   // Determine active preset (with dynamic auto-detect if in auto-male or auto-female mode)
@@ -677,9 +677,13 @@ export function speakText(text: string, options?: Partial<TtsSettings>, onEnd?: 
 
   // Match the best browser voice based on preferred languages and target gender
   let matchedVoice: SpeechSynthesisVoice | undefined;
-  let isRealMaleVoice = false;
+  let targetPitch = 1.0;
+  let targetRate = 1.0;
+  const userPitch = settings.pitch || 1.0;
+  const userRate = settings.rate || 1.0;
 
   if (preset.gender === "male") {
+    let isRealMaleVoice = false;
     // 1. First priority: Look for explicit male voice in preferredLangs
     for (const prefLang of preset.preferredLangs) {
       const candidates = voices.filter(
@@ -720,15 +724,12 @@ export function speakText(text: string, options?: Partial<TtsSettings>, onEnd?: 
     // If it's a real male voice, keep natural acoustic timbre.
     // If it's a fallback voice (like Chrome's Google US English or Google Hindi which are female),
     // pitch shift down by 0.74 to transform the formant into an authentic masculine baritone!
-    const userPitch = settings.pitch || 1.0;
-    const userRate = settings.rate || 1.0;
-
     if (isRealMaleVoice) {
-      utterance.pitch = Math.max(0.5, Math.min(1.5, userPitch * preset.pitch));
-      utterance.rate = Math.max(0.5, Math.min(1.75, userRate * preset.rate));
+      targetPitch = Math.max(0.5, Math.min(1.5, userPitch * preset.pitch));
+      targetRate = Math.max(0.5, Math.min(1.75, userRate * preset.rate));
     } else {
-      utterance.pitch = Math.max(0.5, Math.min(1.5, userPitch * 0.74));
-      utterance.rate = Math.max(0.5, Math.min(1.75, userRate * 0.94));
+      targetPitch = Math.max(0.5, Math.min(1.5, userPitch * 0.74));
+      targetRate = Math.max(0.5, Math.min(1.75, userRate * 0.94));
     }
   } else {
     // Gender: Female
@@ -748,15 +749,12 @@ export function speakText(text: string, options?: Partial<TtsSettings>, onEnd?: 
       }
     }
 
-    const userPitch = settings.pitch || 1.0;
-    const userRate = settings.rate || 1.0;
-
     if (matchedVoice && isMaleVoice(matchedVoice)) {
-      utterance.pitch = Math.max(0.5, Math.min(1.5, userPitch * 1.3));
-      utterance.rate = Math.max(0.5, Math.min(1.75, userRate * 1.0));
+      targetPitch = Math.max(0.5, Math.min(1.5, userPitch * 1.3));
+      targetRate = Math.max(0.5, Math.min(1.75, userRate * 1.0));
     } else {
-      utterance.pitch = Math.max(0.5, Math.min(1.5, userPitch * preset.pitch));
-      utterance.rate = Math.max(0.5, Math.min(1.75, userRate * preset.rate));
+      targetPitch = Math.max(0.5, Math.min(1.5, userPitch * preset.pitch));
+      targetRate = Math.max(0.5, Math.min(1.75, userRate * preset.rate));
     }
   }
 
@@ -764,23 +762,29 @@ export function speakText(text: string, options?: Partial<TtsSettings>, onEnd?: 
     matchedVoice = voices[0];
   }
 
+  // High accuracy text adaptation for Roman Urdu & language tags
+  let spokenText = clean;
+  let targetLang = "en-IN";
+
+  if (preset.category === "roman-urdu") {
+    const adapted = adaptRomanUrduForVoice(clean, matchedVoice);
+    spokenText = adapted.text;
+    targetLang = adapted.lang;
+  } else if (preset.category === "natural-urdu") {
+    spokenText = clean;
+    targetLang = matchedVoice?.lang?.startsWith("ur") ? matchedVoice.lang : "ur-PK";
+  } else {
+    spokenText = clean;
+    targetLang = matchedVoice?.lang || "en-US";
+  }
+
+  const utterance = new SpeechSynthesisUtterance(spokenText);
+  utterance.pitch = targetPitch;
+  utterance.rate = targetRate;
+  utterance.lang = targetLang;
   if (matchedVoice) {
     utterance.voice = matchedVoice;
   }
-
-  // Set appropriate language tag
-  if (preset.category === "natural-urdu") {
-    utterance.lang = matchedVoice?.lang?.startsWith("ur") ? matchedVoice.lang : "ur-PK";
-  } else if (preset.category === "roman-urdu") {
-    utterance.lang = matchedVoice?.lang?.startsWith("en")
-      ? matchedVoice.lang
-      : matchedVoice?.lang?.startsWith("ur")
-        ? matchedVoice.lang
-        : "en-IN";
-  } else {
-    utterance.lang = matchedVoice?.lang || "en-US";
-  }
-
   utterance.volume = settings.volume;
 
   activeUtterancesSet.add(utterance);

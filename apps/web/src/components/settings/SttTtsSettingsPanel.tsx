@@ -111,7 +111,9 @@ export function SttTtsSettingsPanel() {
     } else if (lang === "roman-urdu") {
       newVoiceURI = tts.voiceURI?.includes("female") ? "roman-urdu-female" : "roman-urdu-male";
       setTestText(
-        "Assalam o alaikum! Yeh Roman Urdu text to speech ka test hai. Main aap ki kya madad kar sakta hoon?",
+        tts.voiceURI?.includes("female")
+          ? "Assalam o alaikum! Yeh Roman Urdu female high accuracy voice ka test hai. Main aap ki kya madad kar sakti hoon?"
+          : "Assalam o alaikum! Yeh Roman Urdu male high accuracy voice ka test hai. Main aap ki kya madad kar sakta hoon?",
       );
     }
 
@@ -446,14 +448,14 @@ export function SttTtsSettingsPanel() {
                   alignItemWithTrigger={false}
                   className="max-h-72 overflow-y-auto"
                 >
+                  <SelectItem hideIndicator value="roman-urdu">
+                    ⚡ Roman Urdu (High Accuracy HD)
+                  </SelectItem>
                   <SelectItem hideIndicator value="auto-male">
                     Auto Detect (Male Voice)
                   </SelectItem>
                   <SelectItem hideIndicator value="auto-female">
                     Auto Detect (Female Voice)
-                  </SelectItem>
-                  <SelectItem hideIndicator value="roman-urdu">
-                    Roman Urdu
                   </SelectItem>
                   <SelectItem hideIndicator value="natural-urdu">
                     Natural Urdu (اردو)
@@ -468,7 +470,7 @@ export function SttTtsSettingsPanel() {
 
           <SettingsRow
             title="Synthesizer voice"
-            description="Choose from 6 curated voices across English, Roman Urdu, and Natural Urdu (Male & Female)."
+            description="Choose from curated voices with dedicated High-Accuracy Roman Urdu (Male & Female)."
             control={
               <Select
                 value={activePreset.id}
@@ -485,22 +487,14 @@ export function SttTtsSettingsPanel() {
                   className="max-h-80 overflow-y-auto"
                 >
                   <SelectGroup>
-                    <SelectGroupLabel>English</SelectGroupLabel>
-                    <SelectItem hideIndicator value="english-male">
-                      English (Male Voice)
-                    </SelectItem>
-                    <SelectItem hideIndicator value="english-female">
-                      English (Female Voice)
-                    </SelectItem>
-                  </SelectGroup>
-
-                  <SelectGroup>
-                    <SelectGroupLabel>Roman Urdu</SelectGroupLabel>
+                    <SelectGroupLabel className="text-primary font-semibold">
+                      ⚡ Roman Urdu (High Accuracy)
+                    </SelectGroupLabel>
                     <SelectItem hideIndicator value="roman-urdu-male">
-                      Roman Urdu (Male Voice)
+                      Roman Urdu (Male HD - High Accuracy)
                     </SelectItem>
                     <SelectItem hideIndicator value="roman-urdu-female">
-                      Roman Urdu (Female Voice)
+                      Roman Urdu (Female HD - High Accuracy)
                     </SelectItem>
                   </SelectGroup>
 
@@ -513,10 +507,37 @@ export function SttTtsSettingsPanel() {
                       Natural Urdu (Female Voice) - اردو
                     </SelectItem>
                   </SelectGroup>
+
+                  <SelectGroup>
+                    <SelectGroupLabel>English</SelectGroupLabel>
+                    <SelectItem hideIndicator value="english-male">
+                      English (Male Voice)
+                    </SelectItem>
+                    <SelectItem hideIndicator value="english-female">
+                      English (Female Voice)
+                    </SelectItem>
+                  </SelectGroup>
                 </SelectPopup>
               </Select>
             }
           />
+
+          {activePreset.category === "roman-urdu" && (
+            <div className="mx-4 sm:mx-6 my-1 flex items-start gap-2.5 rounded-md border border-primary/20 bg-primary/5 p-3 text-xs text-foreground">
+              <span className="mt-0.5 inline-flex size-2 rounded-full bg-emerald-500 shrink-0" />
+              <div className="space-y-0.5">
+                <span className="font-semibold text-primary">
+                  Roman Urdu High-Accuracy Engine Active (
+                  {activePreset.gender === "male" ? "Male Voice" : "Female Voice"})
+                </span>
+                <p className="text-muted-foreground text-[11px] leading-relaxed">
+                  Authentic Pakistani pronunciation enabled. Converts syllables to Urdu/Hindi script
+                  and phonetic transliteration so names and words (aap, kaise, theek, shukriya,
+                  masla) sound completely natural.
+                </p>
+              </div>
+            </div>
+          )}
 
           <SettingsRow
             title="Speech speed"
