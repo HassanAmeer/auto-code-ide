@@ -131,6 +131,7 @@ import {
 import { transliterateUrduToRoman } from "~/lib/speech/romanUrduTransliterate";
 import { executeSuperAgentInstruction, isUrduLanguage } from "./superAgentEngine";
 import {
+  addVoiceCallLog,
   subscribeVoiceCallLogs,
   clearVoiceCallLogs,
   type VoiceCallLogEntry,
@@ -840,6 +841,11 @@ export function SuperCallAssistantView() {
         payload: { type: "user_turn", text: userText },
       });
 
+      const isGroqActive = Boolean(groqSettings.enabled && groqSettings.apiKey?.trim());
+      const effectiveSelectedModel = isGroqActive
+        ? groqSettings.model || "llama-3.3-70b-versatile"
+        : effectiveModel;
+
       try {
         const activeProjId = projects[0]?.id ? String(projects[0].id) : undefined;
         const matchingCustomProvider = customProvidersList.find(
@@ -848,11 +854,6 @@ export function SuperCallAssistantView() {
             cp.name === effectiveInstanceId ||
             String(cp.id) === String(effectiveInstanceId),
         );
-
-        const isGroqActive = Boolean(groqSettings.enabled && groqSettings.apiKey?.trim());
-        const effectiveSelectedModel = isGroqActive
-          ? groqSettings.model || "llama-3.3-70b-versatile"
-          : effectiveModel;
 
         const effectiveProviderConfig = isGroqActive
           ? ({
