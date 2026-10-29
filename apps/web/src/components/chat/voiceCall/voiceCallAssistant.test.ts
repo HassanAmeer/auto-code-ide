@@ -302,4 +302,22 @@ describe("VoiceCall Assistant & StreamingTtsPlayer", () => {
     const result = stripAiSpeechFromTranscript(userSpokenDuringTts, aiPhrases);
     expect(result).toBe("khud se unit testing bhi kar sakty hen");
   });
+
+  it("verifies splitTextIntoSentenceUnits splits paragraphs into individual sentences avoiding Chrome 15s freeze", async () => {
+    const { splitTextIntoSentenceUnits } = await import("~/lib/speech/tts");
+
+    const paragraph =
+      "Hello brother! How are you doing today? I have analyzed your codebase and fixed the bug. Everything is working perfectly now.";
+    const units = splitTextIntoSentenceUnits(paragraph);
+
+    expect(units.length).toBe(4);
+    expect(units[0]).toBe("Hello brother!");
+    expect(units[1]).toBe("How are you doing today?");
+    expect(units[2]).toBe("I have analyzed your codebase and fixed the bug.");
+    expect(units[3]).toBe("Everything is working perfectly now.");
+
+    // Single sentence should return single item array
+    const single = "Assalam o alaikum kaise hain aap";
+    expect(splitTextIntoSentenceUnits(single)).toEqual(["Assalam o alaikum kaise hain aap"]);
+  });
 });

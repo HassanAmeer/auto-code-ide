@@ -678,7 +678,13 @@ export function isCurrentlySpeaking(): boolean {
   return Boolean(activeUtterance !== null && window.speechSynthesis.speaking);
 }
 
+let currentSpeechAbortController: { aborted: boolean } | null = null;
+
 export function stopSpeaking(): void {
+  if (currentSpeechAbortController) {
+    currentSpeechAbortController.aborted = true;
+    currentSpeechAbortController = null;
+  }
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
   clearKeepAliveTimer();
   try {
@@ -688,6 +694,9 @@ export function stopSpeaking(): void {
   }
   activeUtterance = null;
   activeUtterancesSet.clear();
+  if (typeof window !== "undefined" && Array.isArray((window as any).__t3_speech_queue)) {
+    (window as any).__t3_speech_queue.length = 0;
+  }
   notifySpeechState(false, null);
   addVoiceCallLog({
     category: "TTS",
@@ -843,15 +852,29 @@ export function injectNaturalCadencePauses(text: string): string {
 }
 
 /**
- * Speak provided text with active or specified settings.
+ * Splits multi-sentence text into individual sentence chunks.
+ * In Desktop Chromium, individual utterances longer than ~15s (or >150 chars)
+ * are killed by browser garbage collection / audio pipeline bugs.
+ * Breaking multi-sentence text into sentences avoids this completely.
  */
-export function speakText(text: string, options?: Partial<TtsSettings>, onEnd?: () => void): void {
-  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-
-  // Only cancel if speech synthesis is actively speaking another utterance
-  if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
-    stopSpeaking();
+export function splitTextIntoSentenceUnits(text: string): string[] {
+  if (!text) return [];
+  const regex = /[^.!?।;:\n]+(?:[.!?।;:\n]+(?:\s+|$)|$)/g;
+  const matches = text.match(regex);
+  if (!matches || matches.length <= 1) {
+    return [text];
   }
+  return matches.map((m) => m.trim()).filter((m) => m.length > 0);
+}
+
+function speakSingleUtterance(
+  clean: string,
+  options?: Partial<TtsSettings>,
+  onEnd?: () => void,
+  abortSignal?: { aborted: boolean },
+): void {
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+  if (abortSignal?.aborted) return;
 
   const baseSettings = loadTtsSettings();
   const settings: TtsSettings = {
@@ -860,12 +883,6 @@ export function speakText(text: string, options?: Partial<TtsSettings>, onEnd?: 
       ? Object.fromEntries(Object.entries(options).filter(([_, v]) => v !== undefined))
       : {}),
   };
-  const sanitized = sanitizeTextForSpeech(text);
-  const clean = injectNaturalCadencePauses(sanitized);
-  if (!clean) {
-    onEnd?.();
-    return;
-  }
 
   // Instantly notify listeners (VoiceCall assistant, sound indicators, noise shields)
   // that speech playback has been triggered, closing the 100-800ms gap before utterance.onstart fires
@@ -953,9 +970,6 @@ export function speakText(text: string, options?: Partial<TtsSettings>, onEnd?: 
     }
 
     // Pitch & rate acoustic engineering for Male:
-    // If it's a real male voice, keep natural acoustic timbre.
-    // If it's a fallback voice (like Chrome's Google US English or Google Hindi which are female),
-    // pitch shift down by 0.74 to transform the formant into an authentic masculine baritone!
     if (isRealMaleVoice) {
       targetPitch = Math.max(0.5, Math.min(1.5, userPitch * preset.pitch));
       targetRate = Math.max(0.5, Math.min(1.75, userRate * preset.rate));
@@ -1009,7 +1023,7 @@ export function speakText(text: string, options?: Partial<TtsSettings>, onEnd?: 
     matchedVoice = voices[0];
   }
 
-  // Apply Vocal Delivery Style co-tuning multipliers (Digi-Labs Rate, Pitch, and Volume co-tuning)
+  // Apply Vocal Delivery Style co-tuning multipliers
   const deliveryMultipliers = getDeliveryStyleMultipliers(settings.deliveryStyle);
   targetPitch = Math.max(0.5, Math.min(1.5, targetPitch * deliveryMultipliers.pitchMultiplier));
   targetRate = Math.max(0.5, Math.min(1.75, targetRate * deliveryMultipliers.rateMultiplier));
@@ -1044,35 +1058,61 @@ export function speakText(text: string, options?: Partial<TtsSettings>, onEnd?: 
   utterance.volume = finalVolume;
 
   activeUtterancesSet.add(utterance);
+  if (typeof window !== "undefined") {
+    (window as any).__t3_speech_queue = (window as any).__t3_speech_queue || [];
+    (window as any).__t3_speech_queue.push(utterance);
+  }
 
   let hasEnded = false;
+  let maxDurationTimer: ReturnType<typeof setTimeout> | null = null;
+
   const finishSpeech = () => {
     if (hasEnded) return;
     hasEnded = true;
     clearKeepAliveTimer();
+    if (maxDurationTimer) {
+      clearTimeout(maxDurationTimer);
+      maxDurationTimer = null;
+    }
     activeUtterancesSet.delete(utterance);
+    if (typeof window !== "undefined" && Array.isArray((window as any).__t3_speech_queue)) {
+      const q = (window as any).__t3_speech_queue;
+      const idx = q.indexOf(utterance);
+      if (idx > -1) q.splice(idx, 1);
+    }
     if (activeUtterance === utterance) {
       activeUtterance = null;
     }
     notifySpeechState(false, null);
-    onEnd?.();
+    if (!abortSignal?.aborted) {
+      onEnd?.();
+    }
   };
 
   utterance.onstart = () => {
+    if (abortSignal?.aborted) {
+      finishSpeech();
+      return;
+    }
     activeUtterance = utterance;
     clearKeepAliveTimer();
     // Safety interval for Desktop Chromium bug (long speech > 15s pausing or freezing unexpectedly).
-    // Uses gentle 2.5s resume tick. Crucially, NEVER call pause()/resume() at rapid <500ms intervals,
-    // and ensure speechSynthesis.paused is promptly cleared.
+    // In Chromium, briefly pausing and resuming kicks the stalled synthesis queue:
     keepAliveTimer = setInterval(() => {
       if (typeof window !== "undefined" && "speechSynthesis" in window) {
-        if (window.speechSynthesis.speaking || window.speechSynthesis.paused) {
+        if (window.speechSynthesis.speaking) {
+          try {
+            window.speechSynthesis.pause();
+            window.speechSynthesis.resume();
+          } catch {}
+        } else if (window.speechSynthesis.paused) {
           try {
             window.speechSynthesis.resume();
           } catch {}
         }
       }
-    }, 2500);
+    }, 3500);
+
     notifySpeechState(true, clean);
     addVoiceCallLog({
       category: "TTS",
@@ -1102,7 +1142,6 @@ export function speakText(text: string, options?: Partial<TtsSettings>, onEnd?: 
       detail: `Speech engine event: "${errCode}"`,
       level: isInterrupted ? "info" : "warn",
     });
-    // In Chrome, if an error occurred, unpause synthesizer so subsequent utterances speak cleanly
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       try {
         window.speechSynthesis.resume();
@@ -1112,7 +1151,6 @@ export function speakText(text: string, options?: Partial<TtsSettings>, onEnd?: 
   };
 
   // Maximum speech duration timeout: ensures state never hangs permanently while allowing complete natural speech.
-  // Dynamically accounts for slow rates, non-English & Urdu phonemes/scripts so speech is NEVER cut off mid-sentence.
   const charCount = clean.length;
   const wordsCount = Math.max(clean.split(/\s+/).filter(Boolean).length, Math.ceil(charCount / 5));
   const isNonEnglishOrUrdu =
@@ -1123,7 +1161,7 @@ export function speakText(text: string, options?: Partial<TtsSettings>, onEnd?: 
   const adjustedWps = Math.max(0.3, wps * effectiveRate);
   const estimatedMs = Math.ceil((wordsCount / adjustedWps) * 1000 + 10000);
   const maxSpeechDurationMs = Math.max(15000, estimatedMs);
-  setTimeout(() => {
+  maxDurationTimer = setTimeout(() => {
     if (!hasEnded && activeUtterance === utterance) {
       console.warn("[TTS] Speech reached max expected duration, forcing completion.");
       finishSpeech();
@@ -1140,4 +1178,61 @@ export function speakText(text: string, options?: Partial<TtsSettings>, onEnd?: 
   }
 
   window.speechSynthesis.speak(utterance);
+}
+
+/**
+ * Speak provided text with active or specified settings.
+ */
+export function speakText(text: string, options?: Partial<TtsSettings>, onEnd?: () => void): void {
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+
+  const sanitized = sanitizeTextForSpeech(text);
+  const clean = injectNaturalCadencePauses(sanitized);
+  if (!clean) {
+    onEnd?.();
+    return;
+  }
+
+  // Only cancel if there is an active utterance currently speaking from a previous operation
+  let didCancel = false;
+  if (
+    activeUtterance !== null &&
+    (window.speechSynthesis.speaking || window.speechSynthesis.pending)
+  ) {
+    stopSpeaking();
+    didCancel = true;
+  }
+
+  const abortController = { aborted: false };
+  currentSpeechAbortController = abortController;
+
+  const startPlayback = () => {
+    if (abortController.aborted) return;
+
+    // Split multi-sentence text into individual sentence chunks to avoid Chromium 15-second speech cutoff bug
+    const sentenceUnits = splitTextIntoSentenceUnits(clean);
+    if (sentenceUnits.length > 1) {
+      let currentIdx = 0;
+      const playNext = () => {
+        if (abortController.aborted) return;
+        if (currentIdx >= sentenceUnits.length) {
+          onEnd?.();
+          return;
+        }
+        const nextUnit = sentenceUnits[currentIdx++];
+        speakSingleUtterance(nextUnit, options, playNext, abortController);
+      };
+      playNext();
+      return;
+    }
+
+    speakSingleUtterance(clean, options, onEnd, abortController);
+  };
+
+  if (didCancel) {
+    // Chromium bug workaround: give the native audio IPC thread 80ms to finish tearing down the previous cancel
+    setTimeout(startPlayback, 80);
+  } else {
+    startPlayback();
+  }
 }

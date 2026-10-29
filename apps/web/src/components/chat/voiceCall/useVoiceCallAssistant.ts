@@ -931,8 +931,18 @@ export function useVoiceCallAssistant({
         // While AI is speaking, playing TTS audio, thinking, or during the post-TTS cooldown:
         // The speaker audio is playing directly into the microphone.
         if (isAiSpeakingOrBusy) {
+          const turnStart = turnStartResultIndexRef.current;
+          if (event.results.length <= turnStart) {
+            // No new speech results in this turn yet — do not interrupt!
+            return;
+          }
+
           let recentUtterance = "";
-          for (let i = Math.max(0, event.results.length - 2); i < event.results.length; ++i) {
+          for (
+            let i = Math.max(turnStart, event.results.length - 2);
+            i < event.results.length;
+            ++i
+          ) {
             const item = event.results[i];
             if (item && item[0]) {
               recentUtterance += (recentUtterance ? " " : "") + (item[0].transcript || "").trim();
@@ -995,9 +1005,10 @@ export function useVoiceCallAssistant({
           const isUserBargeIn = isExplicitInterrupt || wordsList.length >= bargeInWordThreshold;
 
           if (!isUserBargeIn) {
-            // Faint non-command sound or 1-word artifact: do NOT halt the AI!
-            turnStartResultIndexRef.current = event.results.length;
-            accumulatedTurnFinalRef.current = "";
+            // Faint non-command sound or 1-2 words in progress: do NOT halt the AI!
+            // CRITICAL: DO NOT advance turnStartResultIndexRef here!
+            // Advancing turnStartResultIndexRef on word 1 or 2 would permanently chop off
+            // the user's opening words before they reach the 3-word barge-in threshold!
             return;
           }
 
