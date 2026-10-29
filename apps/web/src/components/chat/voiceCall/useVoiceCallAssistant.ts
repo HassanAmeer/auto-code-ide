@@ -33,7 +33,7 @@ import {
 import type { VoiceCallStatus } from "./VoiceVisualizerWaves";
 import type { ChatMessage, SessionPhase } from "~/types";
 
-const ACOUSTIC_ECHO_COOLDOWN_MS = 2500;
+const ACOUSTIC_ECHO_COOLDOWN_MS = 400;
 
 const END_CALL_TRIGGERS = [
   "end call",
@@ -365,9 +365,12 @@ export function isUtteranceEchoOfAi(text: string, aiPhrases: string[]): boolean 
 
     for (const cand of candidates) {
       for (const src of sourceCandidates) {
-        // 1. Direct substring match
-        if (cand.length >= 4 && src.includes(cand)) return true;
-        if (src.length >= 4 && cand.includes(src)) return true;
+        // 1. Direct substring match:
+        // Candidate is contained within the AI source (speaker picked up a snippet of AI speech):
+        if (cand.length >= 6 && src.includes(cand)) return true;
+        // AI source is contained within candidate only if lengths are comparable (pure echo, not mixed user speech):
+        if (src.length >= 6 && cand.includes(src) && Math.abs(cand.length - src.length) <= 5)
+          return true;
 
         // 2. Tokenized word overlap check
         const candWords = cand.split(/\s+/).filter((w) => w.length >= 3);
@@ -379,7 +382,8 @@ export function isUtteranceEchoOfAi(text: string, aiPhrases: string[]): boolean 
             }
           }
           const ratio = matches / candWords.length;
-          if (ratio >= 0.4 || (candWords.length >= 2 && matches >= 2)) {
+          // Substantial majority of candidate's words must match AI source:
+          if (candWords.length >= 2 && ratio >= 0.7) {
             return true;
           }
         }
@@ -399,55 +403,34 @@ export function stripAiSpeechFromTranscript(transcript: string, aiPhrases: strin
   if (!transcript || !transcript.trim()) return "";
   let result = transcript.trim();
 
+  // 1. Check if an AI phrase was echoed at the beginning of the transcript (e.g. AI bleeds into mic before user speaks)
   for (const rawPhrase of aiPhrases) {
     if (!rawPhrase || !rawPhrase.trim()) continue;
     const cleanPhrase = rawPhrase.trim().replace(/[.,!?;:۔()"'`]/g, "");
     const phraseWords = cleanPhrase.toLowerCase().split(/\s+/).filter(Boolean);
-    if (phraseWords.length === 0) continue;
+    if (phraseWords.length < 3) continue;
 
     const resultWords = result.split(/\s+/);
     let matchCount = 0;
-    const minWords = Math.min(resultWords.length, phraseWords.length);
-
-    for (let i = 0; i < minWords; i++) {
+    const checkLen = Math.min(resultWords.length, phraseWords.length);
+    for (let i = 0; i < checkLen; i++) {
       const rw = resultWords[i].toLowerCase().replace(/[.,!?;:۔()"'`]/g, "");
       const pw = phraseWords[i];
-      if (!rw || !pw) break;
-
-      if (rw === pw || (rw.length >= 3 && pw.includes(rw)) || (pw.length >= 3 && rw.includes(pw))) {
+      if (rw === pw || (rw.length >= 3 && pw.includes(rw))) {
         matchCount++;
       } else {
         break;
       }
     }
 
-    // If the transcript begins with 2 or more consecutive words matching AI spoken text:
-    if (matchCount >= 2) {
-      if (matchCount < resultWords.length) {
-        result = resultWords.slice(matchCount).join(" ").trim();
-      } else {
-        return "";
-      }
-    }
-
-    // Also check if any full sentence from AI exists anywhere in result
-    const sentences = rawPhrase
-      .split(/[.!?۔\n]+/)
-      .map((s) => s.trim())
-      .filter((s) => s.length >= 8);
-    for (const s of sentences) {
-      const lowerS = s.toLowerCase();
-      const lowerRes = result.toLowerCase();
-      const idx = lowerRes.indexOf(lowerS);
-      if (idx !== -1) {
-        result = (result.slice(0, idx) + " " + result.slice(idx + s.length))
-          .replace(/\s+/g, " ")
-          .trim();
-      }
+    // Require at least 3 consecutive matching words from the AI phrase to strip as a prefix
+    if (matchCount >= 3) {
+      result = resultWords.slice(matchCount).join(" ").trim();
+      if (!result) return "";
     }
   }
 
-  // If the remaining transcript is an echo of any AI phrase via fuzzy / word-overlap match:
+  // 2. If the remaining transcript is a pure echo of any AI phrase via fuzzy / word-overlap match:
   if (result.length > 0 && isUtteranceEchoOfAi(result, aiPhrases)) {
     return "";
   }
@@ -550,6 +533,7 @@ export function useVoiceCallAssistant({
   const accumulatedTurnFinalRef = useRef<string>("");
   const lastFinalizedIndexRef = useRef<number>(-1);
   const turnStartResultIndexRef = useRef<number>(0);
+  const currentEventResultsLengthRef = useRef<number>(0);
   const recentEmittedTranscriptsRef = useRef<Set<string>>(new Set());
   const interruptSpeakingRef = useRef<() => void>(() => {});
   const startFreshRecognitionRef = useRef<() => void>(() => {});
@@ -907,6 +891,7 @@ export function useVoiceCallAssistant({
       recognition.onstart = () => {
         isRecognitionRunningRef.current = true;
         turnStartResultIndexRef.current = 0;
+        currentEventResultsLengthRef.current = 0;
         if (
           !isTtsActiveRef.current &&
           callStatusRef.current !== "speaking" &&
@@ -921,6 +906,7 @@ export function useVoiceCallAssistant({
         if (!isCallActiveRef.current || disabled) {
           return;
         }
+        currentEventResultsLengthRef.current = event.results?.length || 0;
 
         const isStreamingPlayerBusy = Boolean(
           streamingPlayerRef.current &&
@@ -941,11 +927,6 @@ export function useVoiceCallAssistant({
         // While AI is speaking, playing TTS audio, thinking, or during the post-TTS cooldown:
         // The speaker audio is playing directly into the microphone.
         if (isAiSpeakingOrBusy) {
-          // CRITICAL: Always reset the turn baseline so that NO audio occurring while AI is busy
-          // can EVER leak into the user turn or input field!
-          turnStartResultIndexRef.current = event.results.length;
-          accumulatedTurnFinalRef.current = "";
-
           let recentUtterance = "";
           for (let i = Math.max(0, event.results.length - 2); i < event.results.length; ++i) {
             const item = event.results[i];
@@ -974,7 +955,7 @@ export function useVoiceCallAssistant({
 
           if (isAiSelfEcho) {
             // Speaker audio echoed into the mic while AI is speaking.
-            // Discard immediately: Advance baseline so it's not processed later, and DO NOT interrupt AI!
+            // Discard immediately: Advance baseline past this echo so it is never reprocessed!
             turnStartResultIndexRef.current = event.results.length;
             accumulatedTurnFinalRef.current = "";
             addVoiceCallLog({
@@ -985,53 +966,27 @@ export function useVoiceCallAssistant({
             return;
           }
 
-          // 2. USER BARGE-IN (REAL USER SPEAKING WHILE AI SPEAKS):
-          // Check if user gave an explicit command to interrupt the bot (e.g. "ruko", "stop", "chup", "wait", "suno", etc.)
-          // OR if user spoke 2 or more real words that don't match AI text:
-          const isExplicitInterrupt =
-            containsInterruptCommand(formattedRecent) || containsInterruptCommand(recentUtterance);
-          const wordsSpoken = (formattedRecent || recentUtterance).split(/\s+/).filter(Boolean);
-          const isUserBargeIn = isExplicitInterrupt || wordsSpoken.length >= 2;
-
-          if (isUserBargeIn) {
-            addVoiceCallLog({
-              category: "INTERRUPT",
-              title: isExplicitInterrupt
-                ? "Call Interrupted (User Commanded Stop/Ruko)"
-                : "Call Interrupted (User Started Speaking)",
-              detail: `User said: "${formattedRecent || recentUtterance}"`,
-            });
-
-            // Instantly halt audio playback within 5ms
-            interruptSpeakingRef.current();
-            stopSpeaking();
-            if (streamingPlayerRef.current) {
-              streamingPlayerRef.current.stop();
-            }
-            isTtsActiveRef.current = false;
-            waitingForAssistantResponseRef.current = false;
-            thinkingAmbientSound.stop();
-            updateCallStatus("user-speaking");
-
-            // Strip the command trigger (e.g. "ruko", "stop") if present, so remaining user intent stays
-            const cleanUserWords = stripInterruptCommand(formattedRecent || recentUtterance).trim();
-            const userPromptText =
-              cleanUserWords.length > 0
-                ? cleanUserWords
-                : (formattedRecent || recentUtterance).trim();
-
-            if (userPromptText.length > 0 && !isExplicitInterrupt) {
-              promptRef.current = userPromptText;
-              lastTranscribedTextRef.current = userPromptText;
-              lastSpeechTimestampRef.current = Date.now();
-              hasPendingSpeechRef.current = true;
-              setLiveTranscript(userPromptText);
-              onTranscriptChangeRef.current(userPromptText);
-              clearFinalDispatchTimer();
-            }
+          // If NOT echo, user is speaking (barge-in):
+          // Immediately halt AI playback within 5ms:
+          interruptSpeakingRef.current();
+          stopSpeaking();
+          if (streamingPlayerRef.current) {
+            streamingPlayerRef.current.stop();
           }
+          isTtsActiveRef.current = false;
+          waitingForAssistantResponseRef.current = false;
+          thinkingAmbientSound.stop();
+          updateCallStatus("user-speaking");
 
-          return;
+          addVoiceCallLog({
+            category: "INTERRUPT",
+            title: "Call Interrupted (User Started Speaking)",
+            detail: `User said: "${formattedRecent || recentUtterance}"`,
+          });
+
+          // DO NOT advance turnStartResultIndexRef past user speech!
+          // Fall through directly to normal turn extraction below so the user's complete sentence
+          // from the very first word is preserved and placed into the input field!
         }
 
         // Clean turn extraction: only process speech that occurred in THIS turn
@@ -1575,13 +1530,13 @@ export function useVoiceCallAssistant({
     lastTranscribedTextRef.current = "";
     accumulatedTurnFinalRef.current = "";
     lastFinalizedIndexRef.current = -1;
-    turnStartResultIndexRef.current = 0;
-    turnStartResultIndexRef.current = 0;
+    // Advance turn start index to the current length of recognition results
+    // so next turn only picks up fresh speech without aborting recognition!
+    turnStartResultIndexRef.current = currentEventResultsLengthRef.current;
 
-    // Reset SpeechRecognition session so that the next user turn starts clean from index 0
-    try {
-      recognitionRef.current?.abort();
-    } catch {}
+    // DO NOT abort SpeechRecognition! In Chromium, aborting kills the active audio stream,
+    // causing a 300-800ms gap that swallows the beginning of the next sentence or drops trailing speech.
+    // By keeping SpeechRecognition alive, the microphone is truly 100% full-duplex always-on.
 
     addVoiceCallLog({
       category: "SYSTEM",
@@ -1677,9 +1632,10 @@ export function useVoiceCallAssistant({
 
       const words = currentText.split(/\s+/).filter(Boolean);
       // Dynamic silence threshold:
-      // If user has only spoken 1 or 2 short words (e.g. "Main ne", "Aap"), wait 2.2s so we don't prematurely cut them off while thinking!
-      // Once they have spoken a complete phrase (3+ words), 1.4s of silence is plenty.
-      const requiredSilence = words.length <= 2 ? 2200 : 1400;
+      // - 1 word: wait 3800ms so momentary words ("jo", "kya", "haan") are never prematurely dispatched while user is forming their thought.
+      // - 2 words: wait 2800ms so 2-word pauses don't cut off the rest of the sentence.
+      // - 3+ words: wait 1800ms which provides a natural breathing pause before auto-dispatching.
+      const requiredSilence = words.length <= 1 ? 3800 : words.length === 2 ? 2800 : 1800;
 
       if (elapsed >= requiredSilence) {
         hasPendingSpeechRef.current = false;
