@@ -945,6 +945,31 @@ export function useVoiceCallAssistant({
 
           const formattedRecent = formatSttTranscript(recentUtterance, effectiveMode);
 
+          // 1. SELF-SPEECH ECHO CHECK:
+          // Check if this utterance is part of what the AI itself is speaking:
+          const cleanUtterance = cleanForComparison(recentUtterance);
+          const cleanFormatted = cleanForComparison(formattedRecent);
+          const cleanAi = cleanForComparison(
+            (activeTtsTextRef.current || "") + " " + (allTurnAiTextRef.current || ""),
+          );
+
+          const isAiSelfEcho = Boolean(
+            cleanAi &&
+            cleanUtterance &&
+            (cleanAi.includes(cleanUtterance) ||
+              cleanAi.includes(cleanFormatted) ||
+              cleanUtterance.includes(cleanAi) ||
+              isAcousticEchoOfAi(recentUtterance) ||
+              isAcousticEchoOfAi(formattedRecent)),
+          );
+
+          if (isAiSelfEcho) {
+            // Speaker audio echoed into the mic while AI is speaking.
+            // Discard immediately — NEVER interrupt or halt the AI for its own words!
+            return;
+          }
+
+          // 2. USER BARGE-IN COMMAND:
           // Check if user gave an explicit command to interrupt the bot (e.g. "ruko", "stop", "chup", "wait", "suno", etc.)
           const isExplicitInterrupt =
             containsInterruptCommand(formattedRecent) || containsInterruptCommand(recentUtterance);
@@ -1322,6 +1347,12 @@ export function useVoiceCallAssistant({
             setLiveTranscript("");
             updateCallStatus("listening");
 
+            // Flush the recognition session so all speaker audio that was heard during TTS
+            // is destroyed and purged from Chrome's event.results!
+            try {
+              recognitionRef.current?.abort();
+            } catch {}
+
             // Ensure recognition session remains alive
             if (
               isCallActiveRef.current &&
@@ -1691,7 +1722,12 @@ export function useVoiceCallAssistant({
       setLiveTranscript("");
       setAssistantSpokenText("");
 
-      // 5. Instantly return to listening state
+      // 5. CRITICAL: Instantly abort recognition so all speaker audio in the buffer is destroyed!
+      try {
+        recognitionRef.current?.abort();
+      } catch {}
+
+      // 6. Instantly return to listening state
       updateCallStatus("listening");
       setMicrophoneMuted(false);
       if (!recognitionRef.current && isCallActiveRef.current) {

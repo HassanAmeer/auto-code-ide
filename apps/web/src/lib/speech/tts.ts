@@ -857,6 +857,10 @@ export function speakText(text: string, options?: Partial<TtsSettings>, onEnd?: 
     return;
   }
 
+  // Instantly notify listeners (VoiceCall assistant, sound indicators, noise shields)
+  // that speech playback has been triggered, closing the 100-800ms gap before utterance.onstart fires
+  notifySpeechState(true, clean);
+
   const voices = getAvailableVoices();
 
   // Determine active preset (with dynamic auto-detect if in auto-male or auto-female mode)
