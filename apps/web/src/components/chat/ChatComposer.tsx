@@ -4604,9 +4604,10 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       (text: string) => {
         onPromptChange(text, text.length, text.length, false, []);
         lastSpokenRef.current = text;
-        scheduleDictationCleanup(text, "", false);
+        // Do NOT run asynchronous LLM dictation cleanup during real-time voice calls
+        // to prevent input field flickering, disappearing text, and words mixing.
       },
-      [onPromptChange, scheduleDictationCleanup],
+      [onPromptChange],
     ),
     onAutoSend: useCallback(() => {
       submitComposer(

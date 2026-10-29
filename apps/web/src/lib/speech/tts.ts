@@ -4,6 +4,7 @@
 
 import { saveServerSetting } from "../serverSettingsSync";
 import { adaptRomanUrduForVoice } from "./romanUrduSpeechAdapter";
+import { addVoiceCallLog } from "./voiceCallLogger";
 
 export type TtsVoiceId =
   | "english-male"
@@ -688,6 +689,12 @@ export function stopSpeaking(): void {
   activeUtterance = null;
   activeUtterancesSet.clear();
   notifySpeechState(false, null);
+  addVoiceCallLog({
+    category: "TTS",
+    title: "TTS Audio Stopped",
+    detail: "Speech synthesis queue cancelled and reset",
+    level: "info",
+  });
 }
 
 /**
@@ -1051,27 +1058,53 @@ export function speakText(text: string, options?: Partial<TtsSettings>, onEnd?: 
   utterance.onstart = () => {
     activeUtterance = utterance;
     clearKeepAliveTimer();
-    // Safety interval for Desktop Chromium bug (long speech > 15s pausing unexpectedly).
-    // Uses gentle 10s resume tick. Crucially, NEVER call pause()/resume() at 500ms intervals,
-    // and NEVER prematurely finishSpeech() here, because Android Chrome TTS engines choke
-    // and cancel the utterance after 1-2 words.
+    // Safety interval for Desktop Chromium bug (long speech > 15s pausing or freezing unexpectedly).
+    // Uses gentle 2.5s resume tick. Crucially, NEVER call pause()/resume() at rapid <500ms intervals,
+    // and ensure speechSynthesis.paused is promptly cleared.
     keepAliveTimer = setInterval(() => {
       if (typeof window !== "undefined" && "speechSynthesis" in window) {
-        if (window.speechSynthesis.speaking) {
+        if (window.speechSynthesis.speaking || window.speechSynthesis.paused) {
           try {
             window.speechSynthesis.resume();
           } catch {}
         }
       }
-    }, 10000);
+    }, 2500);
     notifySpeechState(true, clean);
+    addVoiceCallLog({
+      category: "TTS",
+      title: "TTS Speech Started",
+      detail: `Playing "${clean.slice(0, 80)}${clean.length > 80 ? "..." : ""}" (${preset.name})`,
+      model: preset.name,
+      level: "info",
+    });
   };
 
   utterance.onend = () => {
+    addVoiceCallLog({
+      category: "TTS",
+      title: "TTS Speech Finished",
+      detail: `Completed: "${clean.slice(0, 80)}${clean.length > 80 ? "..." : ""}"`,
+      level: "success",
+    });
     finishSpeech();
   };
 
-  utterance.onerror = () => {
+  utterance.onerror = (event: any) => {
+    const errCode = event?.error || "unknown";
+    const isInterrupted = errCode === "interrupted" || errCode === "canceled";
+    addVoiceCallLog({
+      category: "TTS",
+      title: isInterrupted ? "TTS Playback Interrupted" : "TTS Speech Error",
+      detail: `Speech engine event: "${errCode}"`,
+      level: isInterrupted ? "info" : "warn",
+    });
+    // In Chrome, if an error occurred, unpause synthesizer so subsequent utterances speak cleanly
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      try {
+        window.speechSynthesis.resume();
+      } catch {}
+    }
     finishSpeech();
   };
 
@@ -1093,6 +1126,15 @@ export function speakText(text: string, options?: Partial<TtsSettings>, onEnd?: 
       finishSpeech();
     }
   }, maxSpeechDurationMs);
+
+  // Resume unpaused engine state before queuing utterance (prevents Chrome initial freeze)
+  if (typeof window !== "undefined" && "speechSynthesis" in window) {
+    if (window.speechSynthesis.paused) {
+      try {
+        window.speechSynthesis.resume();
+      } catch {}
+    }
+  }
 
   window.speechSynthesis.speak(utterance);
 }

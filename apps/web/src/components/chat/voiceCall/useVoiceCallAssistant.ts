@@ -33,7 +33,7 @@ import {
 import type { VoiceCallStatus } from "./VoiceVisualizerWaves";
 import type { ChatMessage, SessionPhase } from "~/types";
 
-const ACOUSTIC_ECHO_COOLDOWN_MS = 300;
+const ACOUSTIC_ECHO_COOLDOWN_MS = 2500;
 
 const END_CALL_TRIGGERS = [
   "end call",
@@ -341,6 +341,56 @@ function stripInterruptCommand(text: string): string {
 }
 
 /**
+ * Detects whether an utterance heard by the microphone is an acoustic echo
+ * of text that the assistant is currently speaking or spoke recently.
+ * Supports Urdu script transliteration, Roman Urdu, and word-overlap similarity.
+ */
+export function isUtteranceEchoOfAi(text: string, aiPhrases: string[]): boolean {
+  if (!text || !text.trim() || !aiPhrases || aiPhrases.length === 0) return false;
+
+  const clean = cleanForComparison(text);
+  if (!clean || clean.length < 3) return false;
+  const romanClean = cleanForComparison(transliterateUrduToRoman(text));
+
+  const candidates = [clean, romanClean].filter((c) => c && c.length >= 3);
+  if (candidates.length === 0) return false;
+
+  for (const source of aiPhrases) {
+    if (!source || !source.trim()) continue;
+    const cleanSource = cleanForComparison(source);
+    if (!cleanSource || cleanSource.length < 3) continue;
+    const romanCleanSource = cleanForComparison(transliterateUrduToRoman(source));
+
+    const sourceCandidates = [cleanSource, romanCleanSource].filter((s) => s && s.length >= 3);
+
+    for (const cand of candidates) {
+      for (const src of sourceCandidates) {
+        // 1. Direct substring match
+        if (cand.length >= 4 && src.includes(cand)) return true;
+        if (src.length >= 4 && cand.includes(src)) return true;
+
+        // 2. Tokenized word overlap check
+        const candWords = cand.split(/\s+/).filter((w) => w.length >= 3);
+        if (candWords.length > 0) {
+          let matches = 0;
+          for (const w of candWords) {
+            if (src.includes(w)) {
+              matches++;
+            }
+          }
+          const ratio = matches / candWords.length;
+          if (ratio >= 0.4 || (candWords.length >= 2 && matches >= 2)) {
+            return true;
+          }
+        }
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
  * Strips any AI-spoken words that leaked into the microphone from the speakers.
  * Checks for word-level prefix overlap and sentence-level matches against the active
  * or current AI turn text.
@@ -395,6 +445,11 @@ export function stripAiSpeechFromTranscript(transcript: string, aiPhrases: strin
           .trim();
       }
     }
+  }
+
+  // If the remaining transcript is an echo of any AI phrase via fuzzy / word-overlap match:
+  if (result.length > 0 && isUtteranceEchoOfAi(result, aiPhrases)) {
+    return "";
   }
 
   return result;
@@ -723,14 +778,9 @@ export function useVoiceCallAssistant({
 
   const isAcousticEchoOfAi = useCallback(
     (text: string): boolean => {
-      // Interrupt commands (stop, chup, ruko, bas) are explicit user intentions and NEVER an AI echo!
-      if (containsInterruptCommand(text)) {
-        return false;
-      }
+      if (!text || !text.trim()) return false;
 
-      // CRITICAL: Acoustic echo physically ONLY occurs while the AI is speaking,
-      // or within the immediate 300ms acoustic reverberation cooldown window!
-      // Once speakers are silent, there is ZERO acoustic echo — user speech must NEVER be dropped!
+      // Acoustic echo physically occurs while the AI is speaking or within the acoustic echo cooldown window
       const isWithinEchoWindow =
         isTtsActiveRef.current ||
         isCurrentlySpeaking() ||
@@ -740,51 +790,15 @@ export function useVoiceCallAssistant({
         return false;
       }
 
-      const clean = cleanForComparison(text);
-      if (!clean) return false;
-      if (containsInterruptCommand(clean)) return false;
-      const romanClean = cleanForComparison(transliterateUrduToRoman(text));
-
-      // Check ONLY against active TTS text, currently playing chunk, or text generated in this active turn
       const aiSources = [
         activeTtsTextRef.current,
         currentPlayingTtsChunkRef.current,
         assistantSpokenText,
         allTurnAiTextRef.current,
-      ];
+        ...recentAiSpokenPhrasesRef.current,
+      ].filter(Boolean);
 
-      for (const source of aiSources) {
-        if (!source) continue;
-        const cleanSource = cleanForComparison(source);
-        if (!cleanSource) continue;
-        const romanCleanSource = cleanForComparison(transliterateUrduToRoman(source));
-
-        const candidates = [clean, romanClean];
-        const sourceCandidates = [cleanSource, romanCleanSource];
-
-        for (const cand of candidates) {
-          if (!cand || cand.length < 4) continue;
-          for (const src of sourceCandidates) {
-            if (!src || src.length < 4) continue;
-
-            // 1. Direct substring match
-            if (cand.length >= 5 && src.includes(cand)) return true;
-            if (src.length >= 5 && cand.includes(src)) return true;
-
-            // 2. Tokenized word overlap check (require higher threshold: 75% match and at least 3 words)
-            const words = cand.split(/\s+/).filter((w) => w.length >= 3);
-            if (words.length >= 3) {
-              let matches = 0;
-              for (const w of words) {
-                if (src.includes(w)) matches++;
-              }
-              if (matches / words.length >= 0.75) return true;
-            }
-          }
-        }
-      }
-
-      return false;
+      return isUtteranceEchoOfAi(text, aiSources);
     },
     [assistantSpokenText],
   );
@@ -945,40 +959,47 @@ export function useVoiceCallAssistant({
 
           const formattedRecent = formatSttTranscript(recentUtterance, effectiveMode);
 
-          // 1. SELF-SPEECH ECHO CHECK:
-          // Check if this utterance is part of what the AI itself is speaking:
-          const cleanUtterance = cleanForComparison(recentUtterance);
-          const cleanFormatted = cleanForComparison(formattedRecent);
-          const cleanAi = cleanForComparison(
-            (activeTtsTextRef.current || "") + " " + (allTurnAiTextRef.current || ""),
-          );
+          // All AI sources for echo detection:
+          const aiSources = [
+            activeTtsTextRef.current,
+            currentPlayingTtsChunkRef.current,
+            assistantSpokenText,
+            allTurnAiTextRef.current,
+            ...recentAiSpokenPhrasesRef.current,
+          ].filter(Boolean);
 
-          const isAiSelfEcho = Boolean(
-            cleanAi &&
-            cleanUtterance &&
-            (cleanAi.includes(cleanUtterance) ||
-              cleanAi.includes(cleanFormatted) ||
-              cleanUtterance.includes(cleanAi) ||
-              isAcousticEchoOfAi(recentUtterance) ||
-              isAcousticEchoOfAi(formattedRecent)),
-          );
+          const isAiSelfEcho =
+            isUtteranceEchoOfAi(recentUtterance, aiSources) ||
+            isUtteranceEchoOfAi(formattedRecent, aiSources);
 
           if (isAiSelfEcho) {
             // Speaker audio echoed into the mic while AI is speaking.
-            // Discard immediately — NEVER interrupt or halt the AI for its own words!
+            // Discard immediately: Advance baseline so it's not processed later, and DO NOT interrupt AI!
+            turnStartResultIndexRef.current = event.results.length;
+            accumulatedTurnFinalRef.current = "";
+            addVoiceCallLog({
+              category: "NOISE_GATE",
+              title: "Acoustic Speaker Echo Blocked",
+              detail: `Echo discarded: "${formattedRecent || recentUtterance}"`,
+            });
             return;
           }
 
-          // 2. USER BARGE-IN COMMAND:
+          // 2. USER BARGE-IN (REAL USER SPEAKING WHILE AI SPEAKS):
           // Check if user gave an explicit command to interrupt the bot (e.g. "ruko", "stop", "chup", "wait", "suno", etc.)
+          // OR if user spoke 2 or more real words that don't match AI text:
           const isExplicitInterrupt =
             containsInterruptCommand(formattedRecent) || containsInterruptCommand(recentUtterance);
+          const wordsSpoken = (formattedRecent || recentUtterance).split(/\s+/).filter(Boolean);
+          const isUserBargeIn = isExplicitInterrupt || wordsSpoken.length >= 2;
 
-          if (isExplicitInterrupt) {
+          if (isUserBargeIn) {
             addVoiceCallLog({
               category: "INTERRUPT",
-              title: "Call Interrupted (User Commanded Stop/Ruko)",
-              detail: `Command: "${formattedRecent || recentUtterance}"`,
+              title: isExplicitInterrupt
+                ? "Call Interrupted (User Commanded Stop/Ruko)"
+                : "Call Interrupted (User Started Speaking)",
+              detail: `User said: "${formattedRecent || recentUtterance}"`,
             });
 
             // Instantly halt audio playback within 5ms
@@ -987,11 +1008,29 @@ export function useVoiceCallAssistant({
             if (streamingPlayerRef.current) {
               streamingPlayerRef.current.stop();
             }
+            isTtsActiveRef.current = false;
+            waitingForAssistantResponseRef.current = false;
+            thinkingAmbientSound.stop();
+            updateCallStatus("user-speaking");
+
+            // Strip the command trigger (e.g. "ruko", "stop") if present, so remaining user intent stays
+            const cleanUserWords = stripInterruptCommand(formattedRecent || recentUtterance).trim();
+            const userPromptText =
+              cleanUserWords.length > 0
+                ? cleanUserWords
+                : (formattedRecent || recentUtterance).trim();
+
+            if (userPromptText.length > 0 && !isExplicitInterrupt) {
+              promptRef.current = userPromptText;
+              lastTranscribedTextRef.current = userPromptText;
+              lastSpeechTimestampRef.current = Date.now();
+              hasPendingSpeechRef.current = true;
+              setLiveTranscript(userPromptText);
+              onTranscriptChangeRef.current(userPromptText);
+              clearFinalDispatchTimer();
+            }
           }
 
-          // NEVER FALL THROUGH WHILE AI IS SPEAKING!
-          // Any audio heard while AI is speaking is either speaker bleed or an interrupt command.
-          // In either case, it must NEVER be written to the input field!
           return;
         }
 
@@ -1067,11 +1106,19 @@ export function useVoiceCallAssistant({
           currentPlayingTtsChunkRef.current,
           assistantSpokenText,
           allTurnAiTextRef.current,
+          ...recentAiSpokenPhrasesRef.current,
         ].filter(Boolean);
 
         const strippedOfAi = stripAiSpeechFromTranscript(cleanSpeech, aiSourcesForStripping);
         if (!strippedOfAi.trim()) {
           // Entire utterance was AI speech from the speakers! Drop it!
+          addVoiceCallLog({
+            category: "NOISE_GATE",
+            title: "Speaker Echo Blocked (Tail)",
+            detail: `Dropped delayed echo: "${cleanSpeech}"`,
+          });
+          turnStartResultIndexRef.current = event.results.length;
+          accumulatedTurnFinalRef.current = "";
           return;
         }
 
@@ -1089,6 +1136,11 @@ export function useVoiceCallAssistant({
 
         // 3. Acoustic Echo Isolation check:
         if (isAcousticEchoOfAi(processedSpeech) || isAcousticEchoOfAi(cleanSpeech)) {
+          addVoiceCallLog({
+            category: "NOISE_GATE",
+            title: "Acoustic Echo Filtered (Delayed)",
+            detail: `Dropped echo: "${processedSpeech || cleanSpeech}"`,
+          });
           turnStartResultIndexRef.current = event.results.length;
           accumulatedTurnFinalRef.current = "";
           return;
@@ -1139,6 +1191,12 @@ export function useVoiceCallAssistant({
         if (event.error === "aborted" || event.error === "no-speech") {
           return;
         }
+        addVoiceCallLog({
+          category: "STT",
+          title: "Speech Recognition Event",
+          detail: `Event: ${event?.error}`,
+          level: event?.error === "not-allowed" ? "error" : "warn",
+        });
         console.warn("Speech recognition error:", event?.error);
         if (event.error === "not-allowed" || event.error === "service-not-allowed") {
           if (callStatusRef.current === "idle") {

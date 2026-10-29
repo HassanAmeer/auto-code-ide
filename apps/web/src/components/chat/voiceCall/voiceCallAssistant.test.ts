@@ -270,4 +270,25 @@ describe("VoiceCall Assistant & StreamingTtsPlayer", () => {
     const untouchedUrdu = stripAiSpeechFromTranscript(urduUser, aiPhrases);
     expect(untouchedUrdu).toBe("Mujhe aik function bana kar do");
   });
+
+  it("verifies isUtteranceEchoOfAi accurately distinguishes speaker echo from user speech", async () => {
+    const { isUtteranceEchoOfAi } = await import("./useVoiceCallAssistant");
+
+    const aiPhrases = [
+      "Maine aap ke liye code deploy kar diya hai VPS par",
+      "Yeh feature bilkul ready hai aap test kar sakte hain",
+    ];
+
+    // 1. Partial/fuzzy match of AI words in Roman Urdu
+    expect(isUtteranceEchoOfAi("code deploy kar diya hai VPS", aiPhrases)).toBe(true);
+    expect(isUtteranceEchoOfAi("feature bilkul ready hai", aiPhrases)).toBe(true);
+
+    // 2. Urdu script match of AI's Roman Urdu sentence
+    expect(isUtteranceEchoOfAi("کوڈ ڈپلائے کر دیا ہے", aiPhrases)).toBe(true);
+
+    // 3. User speaking an interrupt or new instruction (NOT echo)
+    expect(isUtteranceEchoOfAi("Ruko mujhe login screen check karni hai", aiPhrases)).toBe(false);
+    expect(isUtteranceEchoOfAi("database configure karo", aiPhrases)).toBe(false);
+    expect(isUtteranceEchoOfAi("chup karo", aiPhrases)).toBe(false);
+  });
 });

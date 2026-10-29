@@ -49,7 +49,7 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
   // Bot Logs State
   const botLogs = useVoiceCallLogs();
   const [botFilter, setBotFilter] = useState<
-    "all" | "BOT" | "AI" | "LIVEKIT" | "STT" | "INTERRUPT" | "NOISE_GATE" | "error"
+    "all" | "BOT" | "AI" | "LIVEKIT" | "STT" | "TTS" | "INTERRUPT" | "NOISE_GATE" | "error"
   >("all");
   const [botSearchQuery, setBotSearchQuery] = useState("");
   const [selectedBotLogId, setSelectedBotLogId] = useState<string | null>(null);
@@ -1961,6 +1961,10 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                       {
                         id: "STT",
                         label: `Speech (${botLogs.filter((l) => l.category === "STT").length})`,
+                      },
+                      {
+                        id: "TTS",
+                        label: `TTS (${botLogs.filter((l) => l.category === "TTS").length})`,
                       },
                       {
                         id: "INTERRUPT",
