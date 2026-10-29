@@ -732,121 +732,6 @@ export function SuperCallAssistantView() {
     return projects[0]?.title || (projects[0]?.id ? String(projects[0].id) : "Workspace");
   }, [projects]);
 
-  // Knowledge & Memory Rulebook State in Command Center
-  const [selectedMemoryProject, setSelectedMemoryProject] = useState<string>(activeProjectName);
-  const [projectRules, setProjectRules] = useState<string[]>([]);
-  const [projectBookmarks, setProjectBookmarks] = useState<
-    Array<{ id: string; title: string; url: string; category?: string }>
-  >([]);
-  const [isKnowledgeLoading, setIsKnowledgeLoading] = useState(false);
-  const [newRuleInput, setNewRuleInput] = useState("");
-  const [newBookmarkTitle, setNewBookmarkTitle] = useState("");
-  const [newBookmarkUrl, setNewBookmarkUrl] = useState("");
-  const [newBookmarkCategory, setNewBookmarkCategory] = useState<string>("figma");
-
-  const fetchProjectKnowledge = useCallback(async (projName: string) => {
-    setIsKnowledgeLoading(true);
-    try {
-      const res = await fetch(`/api/bot/knowledge?project=${encodeURIComponent(projName)}`);
-      const data = (await res.json()) as {
-        ok: boolean;
-        knowledge?: {
-          rules?: string[];
-          bookmarks?: Array<{ id: string; title: string; url: string; category?: string }>;
-        };
-      };
-      if (data.ok && data.knowledge) {
-        setProjectRules(Array.isArray(data.knowledge.rules) ? data.knowledge.rules : []);
-        setProjectBookmarks(
-          Array.isArray(data.knowledge.bookmarks) ? data.knowledge.bookmarks : [],
-        );
-      }
-    } catch (e) {
-      console.warn("Failed to load knowledge:", e);
-    } finally {
-      setIsKnowledgeLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (isCommandCenterOpen && commandCenterTab === "memory") {
-      void fetchProjectKnowledge(selectedMemoryProject || activeProjectName);
-    }
-  }, [
-    isCommandCenterOpen,
-    commandCenterTab,
-    selectedMemoryProject,
-    activeProjectName,
-    fetchProjectKnowledge,
-  ]);
-
-  const handleAddRule = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newRuleInput.trim()) return;
-    const ruleText = newRuleInput.trim();
-    setNewRuleInput("");
-    setProjectRules((prev) => [...prev, ruleText]);
-    try {
-      await fetch("/api/bot/knowledge/rule/add", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          projectName: selectedMemoryProject || activeProjectName,
-          rule: ruleText,
-        }),
-      });
-    } catch {}
-  };
-
-  const handleRemoveRule = async (index: number) => {
-    setProjectRules((prev) => prev.filter((_, i) => i !== index));
-    try {
-      await fetch("/api/bot/knowledge/rule/remove", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectName: selectedMemoryProject || activeProjectName, index }),
-      });
-    } catch {}
-  };
-
-  const handleAddBookmark = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newBookmarkTitle.trim() || !newBookmarkUrl.trim()) return;
-    const bm = {
-      id: `bm-${Date.now()}`,
-      title: newBookmarkTitle.trim(),
-      url: newBookmarkUrl.trim(),
-      category: newBookmarkCategory,
-    };
-    setProjectBookmarks((prev) => [...prev, bm]);
-    setNewBookmarkTitle("");
-    setNewBookmarkUrl("");
-    try {
-      await fetch("/api/bot/knowledge/bookmark/add", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          projectName: selectedMemoryProject || activeProjectName,
-          bookmark: bm,
-        }),
-      });
-    } catch {}
-  };
-
-  const handleRemoveBookmark = async (bookmarkId: string) => {
-    setProjectBookmarks((prev) => prev.filter((b) => b.id !== bookmarkId));
-    try {
-      await fetch("/api/bot/knowledge/bookmark/remove", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          projectName: selectedMemoryProject || activeProjectName,
-          bookmarkId,
-        }),
-      });
-    } catch {}
-  };
-
   // Voice Persona Settings
   const [persona, setPersona] = useState<"bilingual" | "professional" | "friendly">(() => {
     if (typeof window === "undefined") return "bilingual";
@@ -1106,8 +991,8 @@ export function SuperCallAssistantView() {
           },
         });
 
-        if (controller.signal.aborted || !isCallActiveRef.current) {
-          console.log("[SuperAgent] Discarding response: request was aborted or call ended.");
+        if (controller.signal.aborted) {
+          console.log("[SuperAgent] Discarding response: request was aborted.");
           return;
         }
 
@@ -1163,7 +1048,7 @@ export function SuperCallAssistantView() {
           ...(codeDiff ? { diff: codeDiff } : {}),
         };
 
-        if (controller.signal.aborted || !isCallActiveRef.current) {
+        if (controller.signal.aborted) {
           return;
         }
 
@@ -1216,17 +1101,19 @@ export function SuperCallAssistantView() {
           level: "error",
         });
 
-        if (!controller.signal.aborted && isCallActiveRef.current) {
+        if (!controller.signal.aborted) {
           const errorMsg = isUrduLanguage(userText)
             ? `⚠️ Issue: ${errDetail}. Main dobara check karta hoon.`
             : `⚠️ Issue: ${errDetail}. Let me re-check.`;
           handleAddMessage("assistant", errorMsg);
-          speakText(errorMsg, loadTtsSettings(), () => {
-            if (inputRef.current !== document.activeElement) {
-              isUserEditingRef.current = false;
-              setIsUserEditing(false);
-            }
-          });
+          if (isCallActiveRef.current) {
+            speakText(errorMsg, loadTtsSettings(), () => {
+              if (inputRef.current !== document.activeElement) {
+                isUserEditingRef.current = false;
+                setIsUserEditing(false);
+              }
+            });
+          }
         }
       } finally {
         if (activeAbortControllerRef.current === controller) {
@@ -1486,10 +1373,7 @@ export function SuperCallAssistantView() {
             <div className="grid grid-cols-5 border-b border-border/50 px-1 bg-muted/20 text-center">
               <button
                 type="button"
-                onClick={() => {
-                  setCommandCenterTab("memory");
-                  void fetchProjectKnowledge(selectedMemoryProject || activeProjectName);
-                }}
+                onClick={() => setCommandCenterTab("memory")}
                 className={cn(
                   "py-1.5 px-0.5 text-[11px] font-medium border-b-2 transition-colors cursor-pointer flex items-center justify-center gap-1 whitespace-nowrap",
                   commandCenterTab === "memory"

@@ -978,17 +978,6 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
     let fullReply = llmRes.reply.trim();
     let spokenReply = "";
 
-    addVoiceCallLog({
-      category: "AI",
-      title: `AI Response Received (${Date.now() - startTime}ms)`,
-      detail: fullReply,
-      model: selectedModel,
-      statusCode: 200,
-      durationMs: Date.now() - startTime,
-      response: { reply: fullReply, spokenReply: spokenReply || fullReply },
-      level: "success",
-    });
-
     let thoughtText = "";
     const thinkMatch = fullReply.match(
       /<(?:think|thought|reasoning)>([\s\S]*?)<\/(?:think|thought|reasoning)>/i,
@@ -1024,6 +1013,17 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
     const sanitizedFull = sanitizeTextForSpeech(fullReply);
 
     const finalSpoken = sanitizedSpoken || sanitizedFull || fullReply;
+
+    addVoiceCallLog({
+      category: "AI",
+      title: `AI Response Received (${Date.now() - startTime}ms)`,
+      detail: fullReply,
+      model: selectedModel,
+      statusCode: 200,
+      durationMs: Date.now() - startTime,
+      response: { reply: fullReply, spokenReply: finalSpoken },
+      level: "success",
+    });
 
     // Multi-Turn Session Ledger: Record turn & auto-extract decisions every 5-8 turns
     try {

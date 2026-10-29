@@ -43,156 +43,155 @@ export function useLiveKitCall(options?: {
 
   const roomRef = useRef<Room | null>(null);
   const audioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
+  const optionsRef = useRef(options);
+  optionsRef.current = options;
 
   // Connect to LiveKit Room on VPS
-  const connect = useCallback(
-    async (customRoomName = "autojobs-call-room") => {
-      if (roomRef.current) {
-        await roomRef.current.disconnect();
+  const connect = useCallback(async (customRoomName = "autojobs-call-room") => {
+    if (roomRef.current) {
+      await roomRef.current.disconnect();
+    }
+
+    setState((s) => ({ ...s, isConnecting: true, error: null }));
+
+    try {
+      // 1. Fetch access token from server endpoint
+      const tokenRes = await fetch(
+        `/api/livekit/token?room=${encodeURIComponent(customRoomName)}&identity=user_${Date.now().toString(36)}`,
+      );
+      const tokenData = (await tokenRes.json()) as {
+        ok: boolean;
+        token?: string | { token: string };
+        serverUrl?: string;
+        error?: string;
+      };
+
+      const rawToken = tokenData.token;
+      const jwtString = typeof rawToken === "string" ? rawToken : rawToken?.token || "";
+
+      if (!tokenData.ok || !jwtString) {
+        throw new Error(tokenData.error || "Failed to acquire LiveKit AccessToken from server");
       }
 
-      setState((s) => ({ ...s, isConnecting: true, error: null }));
+      // Determine secure wss:// endpoint to avoid Mixed Content error when loaded over HTTPS
+      // Note: LiveKit SDK internally appends /rtc, so pass clean base host without /rtc
+      let targetUrl = tokenData.serverUrl || "ws://201.18.218.29:7880";
+      if (typeof window !== "undefined" && window.location.protocol === "https:") {
+        targetUrl = `wss://${window.location.host}`;
+      }
 
-      try {
-        // 1. Fetch access token from server endpoint
-        const tokenRes = await fetch(
-          `/api/livekit/token?room=${encodeURIComponent(customRoomName)}&identity=user_${Date.now().toString(36)}`,
-        );
-        const tokenData = (await tokenRes.json()) as {
-          ok: boolean;
-          token?: string | { token: string };
-          serverUrl?: string;
-          error?: string;
-        };
+      // 2. Initialize LiveKit WebRTC Room
+      const room = new Room({
+        adaptiveStream: true,
+        dynacast: true,
+        audioCaptureDefaults: {
+          autoGainControl: true,
+          echoCancellation: true,
+          noiseSuppression: true,
+        },
+      });
 
-        const rawToken = tokenData.token;
-        const jwtString = typeof rawToken === "string" ? rawToken : rawToken?.token || "";
-
-        if (!tokenData.ok || !jwtString) {
-          throw new Error(tokenData.error || "Failed to acquire LiveKit AccessToken from server");
-        }
-
-        // Determine secure wss:// endpoint to avoid Mixed Content error when loaded over HTTPS
-        // Note: LiveKit SDK internally appends /rtc, so pass clean base host without /rtc
-        let targetUrl = tokenData.serverUrl || "ws://201.18.218.29:7880";
-        if (typeof window !== "undefined" && window.location.protocol === "https:") {
-          targetUrl = `wss://${window.location.host}`;
-        }
-
-        // 2. Initialize LiveKit WebRTC Room
-        const room = new Room({
-          adaptiveStream: true,
-          dynacast: true,
-          audioCaptureDefaults: {
-            autoGainControl: true,
-            echoCancellation: true,
-            noiseSuppression: true,
-          },
-        });
-
-        // 3. Attach Event Listeners
-        room.on(
-          RoomEvent.TrackSubscribed,
-          (
-            track: RemoteTrack,
-            _publication: RemoteTrackPublication,
-            _participant: RemoteParticipant,
-          ) => {
-            if (track.kind === Track.Kind.Audio) {
-              const el = track.attach();
-              el.autoplay = true;
-              audioElementsRef.current.set(track.sid, el);
-              options?.onAudioTrackSubscribed?.(track);
-            }
-          },
-        );
-
-        room.on(
-          RoomEvent.TrackUnsubscribed,
-          (
-            track: RemoteTrack,
-            _publication: RemoteTrackPublication,
-            _participant: RemoteParticipant,
-          ) => {
-            if (track.kind === Track.Kind.Audio) {
-              track.detach();
-              const el = audioElementsRef.current.get(track.sid);
-              if (el) {
-                el.remove();
-                audioElementsRef.current.delete(track.sid);
-              }
-              options?.onAudioTrackUnsubscribed?.(track);
-            }
-          },
-        );
-
-        room.on(RoomEvent.DataReceived, (payload: Uint8Array, participant?: RemoteParticipant) => {
-          try {
-            const str = new TextDecoder().decode(payload);
-            const data = JSON.parse(str);
-            options?.onDataReceived?.(data, participant);
-          } catch {
-            options?.onDataReceived?.(payload, participant);
+      // 3. Attach Event Listeners
+      room.on(
+        RoomEvent.TrackSubscribed,
+        (
+          track: RemoteTrack,
+          _publication: RemoteTrackPublication,
+          _participant: RemoteParticipant,
+        ) => {
+          if (track.kind === Track.Kind.Audio) {
+            const el = track.attach();
+            el.autoplay = true;
+            audioElementsRef.current.set(track.sid, el);
+            optionsRef.current?.onAudioTrackSubscribed?.(track);
           }
-        });
+        },
+      );
 
-        const updateParticipantCount = () => {
-          if (room) {
-            setState((s) => ({
-              ...s,
-              participantCount: (room.remoteParticipants?.size || 0) + 1,
-            }));
+      room.on(
+        RoomEvent.TrackUnsubscribed,
+        (
+          track: RemoteTrack,
+          _publication: RemoteTrackPublication,
+          _participant: RemoteParticipant,
+        ) => {
+          if (track.kind === Track.Kind.Audio) {
+            track.detach();
+            const el = audioElementsRef.current.get(track.sid);
+            if (el) {
+              el.remove();
+              audioElementsRef.current.delete(track.sid);
+            }
+            optionsRef.current?.onAudioTrackUnsubscribed?.(track);
           }
-        };
+        },
+      );
 
-        room.on(RoomEvent.ParticipantConnected, updateParticipantCount);
-        room.on(RoomEvent.ParticipantDisconnected, updateParticipantCount);
+      room.on(RoomEvent.DataReceived, (payload: Uint8Array, participant?: RemoteParticipant) => {
+        try {
+          const str = new TextDecoder().decode(payload);
+          const data = JSON.parse(str);
+          optionsRef.current?.onDataReceived?.(data, participant);
+        } catch {
+          optionsRef.current?.onDataReceived?.(payload, participant);
+        }
+      });
 
-        room.on(RoomEvent.Disconnected, () => {
+      const updateParticipantCount = () => {
+        if (room) {
           setState((s) => ({
             ...s,
-            isConnected: false,
-            isConnecting: false,
-            participantCount: 0,
+            participantCount: (room.remoteParticipants?.size || 0) + 1,
           }));
-        });
-
-        // 4. Connect to WebRTC Server & Publish Mic
-        await room.connect(targetUrl, jwtString, {
-          autoSubscribe: true,
-        });
-
-        try {
-          await room.localParticipant.setMicrophoneEnabled(true);
-        } catch (micErr) {
-          console.warn("[LiveKit] Local mic publish notice:", micErr);
         }
+      };
 
-        roomRef.current = room;
+      room.on(RoomEvent.ParticipantConnected, updateParticipantCount);
+      room.on(RoomEvent.ParticipantDisconnected, updateParticipantCount);
 
-        setState({
-          isConnected: true,
-          isConnecting: false,
-          isMuted: false,
-          error: null,
-          serverUrl: targetUrl,
-          roomName: customRoomName,
-          participantCount: (room.remoteParticipants?.size || 0) + 1,
-        });
-      } catch (err: any) {
-        console.error("[LiveKit] Connection error:", err);
-        const errMsg = err?.message || "Failed to connect to LiveKit WebRTC";
+      room.on(RoomEvent.Disconnected, () => {
         setState((s) => ({
           ...s,
           isConnected: false,
           isConnecting: false,
-          error: errMsg,
+          participantCount: 0,
         }));
-        options?.onError?.(err);
+      });
+
+      // 4. Connect to WebRTC Server & Publish Mic
+      await room.connect(targetUrl, jwtString, {
+        autoSubscribe: true,
+      });
+
+      try {
+        await room.localParticipant.setMicrophoneEnabled(true);
+      } catch (micErr) {
+        console.warn("[LiveKit] Local mic publish notice:", micErr);
       }
-    },
-    [options],
-  );
+
+      roomRef.current = room;
+
+      setState({
+        isConnected: true,
+        isConnecting: false,
+        isMuted: false,
+        error: null,
+        serverUrl: targetUrl,
+        roomName: customRoomName,
+        participantCount: (room.remoteParticipants?.size || 0) + 1,
+      });
+    } catch (err: any) {
+      console.error("[LiveKit] Connection error:", err);
+      const errMsg = err?.message || "Failed to connect to LiveKit WebRTC";
+      setState((s) => ({
+        ...s,
+        isConnected: false,
+        isConnecting: false,
+        error: errMsg,
+      }));
+      optionsRef.current?.onError?.(err);
+    }
+  }, []);
 
   // Disconnect from LiveKit
   const disconnect = useCallback(async () => {
