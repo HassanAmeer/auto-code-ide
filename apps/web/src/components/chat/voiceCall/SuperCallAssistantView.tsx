@@ -1234,16 +1234,24 @@ export function SuperCallAssistantView() {
     livekitRef.current = livekit;
   }, [livekit]);
 
-  const handleToggleCallSession = useCallback(async () => {
-    if (isCallActive) {
-      handleCancelProcessing();
+  const handleToggleCallSession = useCallback(() => {
+    const isCurrentlyActive = isCallActive || isCallActiveRef.current;
+    if (isCurrentlyActive) {
+      endCall();
+      if (activeAbortControllerRef.current) {
+        activeAbortControllerRef.current.abort();
+        activeAbortControllerRef.current = null;
+      }
+      setIsProcessing(false);
+      setActiveDispatchStartTime(0);
+      setAgentStatus(null);
+      stopSpeaking();
       addVoiceCallLog({
         category: "SYSTEM",
         title: "Voice Call Ended",
         detail: "User disconnected the call",
         level: "info",
       });
-      endCall();
     } else {
       addVoiceCallLog({
         category: "SYSTEM",
@@ -1253,7 +1261,7 @@ export function SuperCallAssistantView() {
       });
       toggleCall();
     }
-  }, [isCallActive, handleCancelProcessing, endCall, toggleCall]);
+  }, [isCallActive, endCall, toggleCall]);
 
   const handleToggleMicMute = useCallback(() => {
     toggleMicMute();
@@ -2692,16 +2700,25 @@ export function SuperCallAssistantView() {
 
             {/* Middle / Center: Call Button with Grok Geometric Soundwaves / Circular Wave (Floating in center) */}
             <div className="relative z-10 flex items-center justify-center shrink-0 mx-1 sm:mx-2">
-              <div
+              <button
+                type="button"
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  void handleToggleCallSession();
+                  handleToggleCallSession();
                 }}
                 className={cn(
-                  "relative z-10 flex items-center justify-center size-9 sm:size-11 rounded-full transition-all duration-300 cursor-pointer select-none",
-                  "bg-transparent border-0 shadow-none",
+                  "relative z-10 flex items-center justify-center size-9 sm:size-11 rounded-full transition-all duration-200 cursor-pointer select-none",
+                  "bg-transparent border-0 shadow-none outline-none focus:outline-none",
+                  isCallActive
+                    ? "text-rose-400/90 hover:text-rose-300"
+                    : "text-zinc-300 hover:text-white",
                 )}
+                title={
+                  isCallActive
+                    ? "End Voice Call (کال بند کریں)"
+                    : "Start Voice Call (کال شروع کریں)"
+                }
               >
                 {/* When Call Active: Grok Geometric Soundwave
                     When Call Inactive/Ended: Original circular wave in grey color */}
@@ -2711,33 +2728,15 @@ export function SuperCallAssistantView() {
                   <CircularVoiceWaves callStatus="idle" analyserNode={null} />
                 )}
 
-                {/* Centered Phone Icon: Soft red (halka red) when active call, subtle grey when idle/ended */}
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    void handleToggleCallSession();
-                  }}
-                  className={cn(
-                    "relative z-20 flex size-7 sm:size-8 items-center justify-center rounded-full transition-all duration-200 cursor-pointer active:scale-90 bg-transparent border-0 shadow-none outline-none focus:outline-none",
-                    isCallActive
-                      ? "text-rose-400/90 hover:text-rose-300"
-                      : "text-zinc-300 hover:text-white",
-                  )}
-                  title={
-                    isCallActive
-                      ? "End Voice Call (کال بند کریں)"
-                      : "Start Voice Call (کال شروع کریں)"
-                  }
-                >
+                {/* Centered Phone Icon: Soft red when active call, subtle grey when idle/ended */}
+                <span className="relative z-20 flex size-7 sm:size-8 items-center justify-center pointer-events-none">
                   {isCallActive ? (
                     <PhoneOff className="size-3.5 sm:size-4.5" strokeWidth={2.4} />
                   ) : (
                     <PhoneCall className="size-3.5 sm:size-4.5" strokeWidth={2.2} />
                   )}
-                </button>
-              </div>
+                </span>
+              </button>
             </div>
 
             {/* Right Line Segment (starts at center wave, stops at mic button left edge) */}

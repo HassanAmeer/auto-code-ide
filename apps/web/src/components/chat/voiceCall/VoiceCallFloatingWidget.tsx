@@ -60,51 +60,36 @@ export const VoiceCallFloatingWidget = memo(function VoiceCallFloatingWidget({
           </button>
         )}
 
-        {/* Center Voice Wave Avatar (Borderless) */}
-        <div
+        {/* Center Voice Wave Avatar (Borderless Button) */}
+        <button
+          type="button"
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            if (isCallActive && (callStatus === "speaking" || callStatus === "thinking")) {
-              onInterrupt();
-            }
             onToggleCall();
           }}
           className={cn(
-            "relative z-10 flex items-center justify-center size-14 sm:size-15 rounded-full transition-all duration-300 cursor-pointer",
+            "relative z-10 flex items-center justify-center size-14 sm:size-15 rounded-full transition-all duration-300 cursor-pointer select-none border-0 outline-none focus:outline-none",
             "bg-zinc-950/90 backdrop-blur-xl shadow-xl",
             isCallActive && "shadow-[0_0_24px_rgba(0,0,0,0.7)]",
+            isCallActive ? "text-red-400 hover:text-red-300" : "text-zinc-300 hover:text-white",
           )}
+          title={
+            isCallActive ? "End Voice Call (کال بند کریں)" : "Start Voice Call (کال شروع کریں)"
+          }
         >
           {/* Dual Voice Waves (Active whenever call is active or preparing) */}
           <CircularVoiceWaves callStatus={callStatus} analyserNode={analyserNode} />
 
-          {/* Centered Small Icon (Subtle Red during call, Gray when idle) */}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              if (isCallActive && (callStatus === "speaking" || callStatus === "thinking")) {
-                onInterrupt();
-              }
-              onToggleCall();
-            }}
-            className={cn(
-              "relative z-20 flex size-9 items-center justify-center rounded-full transition-all duration-200 cursor-pointer active:scale-90 bg-transparent border-0 shadow-none outline-none focus:outline-none",
-              isCallActive ? "text-red-400 hover:text-red-300" : "text-zinc-300 hover:text-white",
-            )}
-            title={
-              isCallActive ? "End Voice Call (کال بند کریں)" : "Start Voice Call (کال شروع کریں)"
-            }
-          >
+          {/* Centered Small Icon */}
+          <span className="relative z-20 flex size-9 items-center justify-center pointer-events-none">
             {isCallActive ? (
               <PhoneOff className="size-4" strokeWidth={2.5} />
             ) : (
               <PhoneCall className="size-4" strokeWidth={2.5} />
             )}
-          </button>
-        </div>
+          </span>
+        </button>
 
         {/* Bottom Attached Flag: 🇺🇸 US Flag (Hidden during call) */}
         {!isCallActive && (

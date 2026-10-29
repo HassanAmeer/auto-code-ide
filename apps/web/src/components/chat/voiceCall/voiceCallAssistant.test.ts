@@ -39,6 +39,12 @@ describe("VoiceCall Assistant & StreamingTtsPlayer", () => {
     expect(containsInterruptCommand("wait")).toBe(true);
     expect(containsInterruptCommand("suno")).toBe(true);
     expect(containsInterruptCommand("suno bhai")).toBe(true);
+    expect(containsInterruptCommand("bhai suno")).toBe(true);
+    expect(containsInterruptCommand("ruko ruko")).toBe(true);
+    expect(containsInterruptCommand("meri baat suno")).toBe(true);
+    expect(containsInterruptCommand("hold on")).toBe(true);
+    expect(containsInterruptCommand("pause")).toBe(true);
+    expect(containsInterruptCommand("aram se")).toBe(true);
     expect(containsInterruptCommand("سٹاپ")).toBe(true);
     expect(containsInterruptCommand("روکو")).toBe(true);
     expect(containsInterruptCommand("رک جاؤ")).toBe(true);

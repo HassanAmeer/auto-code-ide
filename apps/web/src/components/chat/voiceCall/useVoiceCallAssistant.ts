@@ -124,6 +124,7 @@ const INTERRUPT_COMMAND_TRIGGERS = [
   "ruk jao",
   "ruk jao please",
   "ruk",
+  "ruko ruko",
   "thamb jao",
   "ek second",
   "ek sec",
@@ -131,6 +132,9 @@ const INTERRUPT_COMMAND_TRIGGERS = [
   "wait",
   "wait please",
   "please wait",
+  "wait wait",
+  "hold on",
+  "pause",
   // "listen" variants:
   "listen",
   "listen to me",
@@ -142,7 +146,15 @@ const INTERRUPT_COMMAND_TRIGGERS = [
   "sunen",
   "suno please",
   "please suno",
+  "suno bhai",
+  "bhai suno",
+  "aray suno",
+  "arey suno",
+  "meri baat suno",
+  "baat suno",
+  "ek baat suno",
   "ek minute suno",
+  "ek minute",
   // Urdu / Roman Urdu speech interruption & silence commands:
   "chup",
   "chup karo",
@@ -159,6 +171,8 @@ const INTERRUPT_COMMAND_TRIGGERS = [
   "aray ruko",
   "arey ruko",
   "nahi ruko",
+  "nahi nahi",
+  "aram se",
   // Urdu script:
   "سٹاپ",
   "روکو",
@@ -845,8 +859,14 @@ export function useVoiceCallAssistant({
           Date.now() - lastTtsEndedTimestampRef.current < ACOUSTIC_ECHO_COOLDOWN_MS;
 
         // ACOUSTIC ECHO SHIELD, SELF-SPEECH GUARD & INSTANT BARGE-IN:
-        // While AI is speaking, playing TTS audio, or during the post-TTS cooldown:
+        // While AI is speaking, playing TTS audio, thinking, or during the post-TTS cooldown:
+        // The speaker audio is playing directly into the microphone.
         if (isAiSpeakingOrBusy) {
+          // CRITICAL: Always reset the turn baseline so that NO audio occurring while AI is busy
+          // can EVER leak into the user turn or input field!
+          turnStartResultIndexRef.current = event.results.length;
+          accumulatedTurnFinalRef.current = "";
+
           let recentUtterance = "";
           for (let i = Math.max(0, event.results.length - 2); i < event.results.length; ++i) {
             const item = event.results[i];
@@ -860,44 +880,29 @@ export function useVoiceCallAssistant({
 
           const formattedRecent = formatSttTranscript(recentUtterance, effectiveMode);
 
-          // 1. SELF-SPEECH TRANSCRIPT GUARD:
-          // Check if this audio is an acoustic echo of AI's own spoken words from the speakers
-          const isEcho = isAcousticEchoOfAi(recentUtterance) || isAcousticEchoOfAi(formattedRecent);
-
-          if (isEcho) {
-            // Drop AI's own echoed voice immediately — never type into input box!
-            turnStartResultIndexRef.current = event.results.length;
-            accumulatedTurnFinalRef.current = "";
-            return;
-          }
-
-          // 2. INSTANT BARGE-IN (<5ms):
-          // User spoke genuine words while AI was speaking!
+          // Check if user gave an explicit command to interrupt the bot (e.g. "ruko", "stop", "chup", "wait", "suno", etc.)
           const isExplicitInterrupt =
             containsInterruptCommand(formattedRecent) || containsInterruptCommand(recentUtterance);
 
-          addVoiceCallLog({
-            category: "INTERRUPT",
-            title: isExplicitInterrupt ? "Call Interrupted (Chup/Stop)" : "Instant Barge-in",
-            detail: `User spoke: "${formattedRecent || recentUtterance}"`,
-          });
-
-          // Instantly halt audio playback within 5ms
-          interruptSpeakingRef.current();
-          stopSpeaking();
-          if (streamingPlayerRef.current) {
-            streamingPlayerRef.current.stop();
-          }
-
           if (isExplicitInterrupt) {
-            // User explicitly said stop/ruko/chup: purge command and return to listening
-            turnStartResultIndexRef.current = event.results.length;
-            accumulatedTurnFinalRef.current = "";
-            return;
+            addVoiceCallLog({
+              category: "INTERRUPT",
+              title: "Call Interrupted (User Commanded Stop/Ruko)",
+              detail: `Command: "${formattedRecent || recentUtterance}"`,
+            });
+
+            // Instantly halt audio playback within 5ms
+            interruptSpeakingRef.current();
+            stopSpeaking();
+            if (streamingPlayerRef.current) {
+              streamingPlayerRef.current.stop();
+            }
           }
 
-          // User spoke a new prompt or question: preserve for the new user turn
-          turnStartResultIndexRef.current = Math.max(0, event.results.length - 2);
+          // NEVER FALL THROUGH WHILE AI IS SPEAKING!
+          // Any audio heard while AI is speaking is either speaker bleed or an interrupt command.
+          // In either case, it must NEVER be written to the input field!
+          return;
         }
 
         // Clean turn extraction: only process speech that occurred in THIS turn
@@ -975,8 +980,10 @@ export function useVoiceCallAssistant({
           return;
         }
 
-        // 3. Acoustic Echo Isolation check
+        // 3. Acoustic Echo Isolation check:
         if (isAcousticEchoOfAi(processedSpeech) || isAcousticEchoOfAi(cleanSpeech)) {
+          turnStartResultIndexRef.current = event.results.length;
+          accumulatedTurnFinalRef.current = "";
           return;
         }
 
