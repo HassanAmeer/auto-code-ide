@@ -102,7 +102,9 @@ export function useLiveKitCall(options?: {
           if (track.kind === Track.Kind.Audio) {
             const el = track.attach();
             el.autoplay = true;
-            audioElementsRef.current.set(track.sid, el);
+            if (track.sid) {
+              audioElementsRef.current.set(track.sid, el);
+            }
             optionsRef.current?.onAudioTrackSubscribed?.(track);
           }
         },
@@ -117,10 +119,12 @@ export function useLiveKitCall(options?: {
         ) => {
           if (track.kind === Track.Kind.Audio) {
             track.detach();
-            const el = audioElementsRef.current.get(track.sid);
-            if (el) {
-              el.remove();
-              audioElementsRef.current.delete(track.sid);
+            if (track.sid) {
+              const el = audioElementsRef.current.get(track.sid);
+              if (el) {
+                el.remove();
+                audioElementsRef.current.delete(track.sid);
+              }
             }
             optionsRef.current?.onAudioTrackUnsubscribed?.(track);
           }

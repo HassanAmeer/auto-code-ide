@@ -1,3 +1,4 @@
+// @effect-diagnostics nodeBuiltinImport:off globalConsole:off
 /**
  * Server-Side Acoustic Noise Shield (FFmpeg afftdn & agate)
  * Inspired by Digi-Labs (digiformationltd-creator/digi-labs)

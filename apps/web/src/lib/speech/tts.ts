@@ -629,13 +629,19 @@ export function getVoicesForMode(
 }
 
 let activeUtterance: SpeechSynthesisUtterance | null = null;
+let activeSpokenText: string | null = null;
 const activeUtterancesSet = new Set<SpeechSynthesisUtterance>();
 const listeners = new Set<(isSpeaking: boolean, speakingText: string | null) => void>();
 
 function notifySpeechState(isSpeaking: boolean, text: string | null = null) {
+  activeSpokenText = isSpeaking ? text : null;
   for (const fn of listeners) {
     fn(isSpeaking, text);
   }
+}
+
+export function getActiveSpokenText(): string | null {
+  return isCurrentlySpeaking() ? activeSpokenText : null;
 }
 
 export function subscribeSpeechState(
@@ -716,11 +722,16 @@ export function sanitizeTextForSpeech(markdown: string): string {
   const withoutCodeBlocks = stripCodeBlocks(markdown);
   return (
     withoutCodeBlocks
+      // Clean URLs (http/https) to avoid speaking long links in voice calls
+      .replace(/https?:\/\/[^\s)]+/gi, "")
+      // Clean absolute/relative file paths (e.g. /home/user/app or src/components/...)
+      .replace(/(?:^|\s)(?:\/[\w.-]+)+\b/g, " ")
+      .replace(/(?:^|\s)(?:[a-zA-Z]:\\[\w.-]+)+\b/g, " ")
       // Clean remaining short inline code (e.g. `foo()` or `name` -> foo, name)
       .replace(/`([^`\n]+)`/g, (_match, inner) => inner.replace(/[()[\]{}]/g, "").trim())
-      .replace(/#+\s+/g, "") // headers
-      .replace(/\*\*([^*]+)\*\*/g, "$1") // bold
-      .replace(/\*([^*]+)\*/g, "$1") // italic
+      .replace(/#+\s+/g, "") // headers (###)
+      .replace(/\*\*([^*]+)\*\*/g, "$1") // bold (**)
+      .replace(/\*([^*]+)\*/g, "$1") // italic (*)
       .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1") // links
       .replace(/!\[.*?\]\(.*?\)/g, "") // images
       .replace(/^\|[-:\s|]+\|$/gm, "") // markdown table divider rows (|---|---|)

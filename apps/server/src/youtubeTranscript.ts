@@ -1,3 +1,4 @@
+// @effect-diagnostics globalFetch:off globalDate:off globalConsole:off
 /**
  * Zero-Cost YouTube Caption & Web Link Extractor
  * Inspired by DIGI LABS (digiformationltd-creator/digi-labs)
@@ -13,11 +14,11 @@ const YOUTUBE_PLAYER_URL = `https://www.youtube.com/youtubei/v1/player?key=${YOU
 export interface MediaResearchResult {
   ok: boolean;
   isYouTube: boolean;
-  videoId?: string;
-  title?: string;
+  videoId?: string | undefined;
+  title?: string | undefined;
   transcript: string;
-  language?: string;
-  error?: string;
+  language?: string | undefined;
+  error?: string | undefined;
 }
 
 /**

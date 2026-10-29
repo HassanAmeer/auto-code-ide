@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { buildFfmpegNoiseShieldFilter } from "./audioNoiseShield.ts";
 
 describe("AudioNoiseShield Server (FFmpeg afftdn & agate)", () => {

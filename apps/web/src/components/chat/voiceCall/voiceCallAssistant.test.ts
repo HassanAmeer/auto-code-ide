@@ -183,4 +183,27 @@ describe("VoiceCall Assistant & StreamingTtsPlayer", () => {
     expect(player.isActive()).toBe(false);
     expect(player.isStopped()).toBe(true);
   });
+
+  it("verifies DIGI LABS VOCAL_STYLES presets and speech sanitizer for URLs and file paths", async () => {
+    const { VOCAL_STYLES, sanitizeTextForSpeech } = await import("~/lib/speech/tts");
+
+    // Verify VOCAL_STYLES presets
+    expect(VOCAL_STYLES.natural).toBeDefined();
+    expect(VOCAL_STYLES.explainer.rate).toBe("-6%");
+    expect(VOCAL_STYLES.business.rate).toBe("+4%");
+    expect(VOCAL_STYLES.promo.rate).toBe("+18%");
+    expect(VOCAL_STYLES.calm.rate).toBe("-14%");
+
+    // Verify sanitizer cleans URLs, file paths, and markdown
+    const dirty =
+      "Check out this URL: https://example.com/api/v1/test and file /home/hasan/Documents/t3forweb/apps/server/src/botBridge.ts or C:\\Windows\\System32\\cmd.exe! **Important note** with `codeRef`";
+    const cleaned = sanitizeTextForSpeech(dirty);
+    expect(cleaned).not.toContain("https://");
+    expect(cleaned).not.toContain("example.com");
+    expect(cleaned).not.toContain("/home/hasan/");
+    expect(cleaned).not.toContain("C:\\Windows");
+    expect(cleaned).not.toContain("**");
+    expect(cleaned).not.toContain("`");
+    expect(cleaned).toContain("Important note with codeRef");
+  });
 });

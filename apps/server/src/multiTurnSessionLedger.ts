@@ -1,3 +1,4 @@
+// @effect-diagnostics globalDate:off globalConsole:off globalRandom:off
 /**
  * Multi-Turn Session Ledger (Server-Side Memory for Long Consultations) 🧠
  *

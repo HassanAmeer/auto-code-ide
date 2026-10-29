@@ -1560,7 +1560,7 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
                   signal: AbortSignal.timeout(45000),
                 });
                 if (retryRes.ok) {
-                  const retryData = await retryRes.json();
+                  const retryData: any = await retryRes.json();
                   geminiKeyRotator.markSuccess(nextKey);
                   const retryContent =
                     retryData?.choices?.[0]?.message?.content ||

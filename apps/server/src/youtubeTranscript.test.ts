@@ -1,10 +1,10 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vite-plus/test";
 import {
   extractYouTubeVideoId,
   decodeHtmlEntities,
   parseCaptionXml,
   researchMediaLink,
-} from "./youtubeTranscript";
+} from "./youtubeTranscript.ts";
 
 describe("youtubeTranscript", () => {
   describe("extractYouTubeVideoId", () => {

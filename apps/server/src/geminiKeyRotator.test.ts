@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { SmartGeminiKeyRotator } from "./geminiKeyRotator.ts";
 
 describe("SmartGeminiKeyRotator (Digi-Labs Inspired)", () => {

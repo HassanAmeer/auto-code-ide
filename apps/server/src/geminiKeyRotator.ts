@@ -1,3 +1,4 @@
+// @effect-diagnostics globalDate:off globalConsole:off
 /**
  * Smart Multi-Key Auto-Rotation with Quota-Only Failover (Inspired by Digi-Labs)
  *

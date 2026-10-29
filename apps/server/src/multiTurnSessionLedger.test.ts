@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach } from "vite-plus/test";
 import {
   getServerSessionLedger,
   addServerDecisionPoint,
@@ -7,7 +7,7 @@ import {
   isServerLedgerRecallQuery,
   extractServerDecisionsFromTurns,
   recordServerTurnAndExtract,
-} from "./multiTurnSessionLedger";
+} from "./multiTurnSessionLedger.ts";
 
 describe("server multiTurnSessionLedger", () => {
   const sessionId = "srv-session-test";

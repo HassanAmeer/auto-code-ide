@@ -1244,33 +1244,20 @@ export function SuperCallAssistantView() {
         level: "info",
       });
       endCall();
-      await livekit.disconnect();
     } else {
       addVoiceCallLog({
         category: "SYSTEM",
         title: "Voice Call Started",
-        detail: "User initiated call session",
+        detail: "User initiated call session (Direct Streaming Full-Duplex Architecture)",
         level: "info",
       });
       toggleCall();
-      try {
-        await livekit.connect("autojobs-call-room");
-        addVoiceCallLog({
-          category: "LIVEKIT",
-          title: "LiveKit Room Connected",
-          detail: "Connected to room: autojobs-call-room",
-          level: "success",
-        });
-      } catch (err) {
-        console.warn("[LiveKit auto-connect notice]:", err);
-      }
     }
-  }, [isCallActive, handleCancelProcessing, endCall, livekit, toggleCall]);
+  }, [isCallActive, handleCancelProcessing, endCall, toggleCall]);
 
   const handleToggleMicMute = useCallback(() => {
     toggleMicMute();
-    void livekit.toggleMute();
-  }, [toggleMicMute, livekit]);
+  }, [toggleMicMute]);
 
   const isUsaSelected = sttSettings.language === "english" || callLanguage === "english";
   const isPakSelected = !isUsaSelected;
@@ -2194,33 +2181,18 @@ export function SuperCallAssistantView() {
       <div className="flex-1 flex flex-col h-full min-w-0 relative">
         {/* Top Header */}
         <header className="h-14 border-b border-border/50 px-3 sm:px-6 flex items-center justify-between shrink-0 bg-background/80 backdrop-blur-md gap-2">
-          {/* Left: LiveKit WebRTC Real-Time Status Pill */}
+          {/* Left: Direct Voice Stream Full-Duplex Status Pill */}
           <div className="flex-1 flex items-center gap-2 overflow-hidden">
-            {livekit.isConnected ? (
+            {isCallActive ? (
               <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[11px] font-medium shadow-xs">
                 <span className="relative flex h-2 w-2">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                 </span>
-                <span className="font-semibold">LiveKit WebRTC</span>
+                <span className="font-semibold">Direct Voice Stream</span>
                 <span className="hidden sm:inline text-emerald-500/80 font-mono text-[10px]">
-                  {livekit.participantCount > 1
-                    ? `(${livekit.participantCount} in room)`
-                    : "Active"}
+                  Full-Duplex
                 </span>
-              </div>
-            ) : livekit.isConnecting ? (
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-[11px] font-medium animate-pulse">
-                <Loader2 className="size-3 animate-spin text-amber-400" />
-                <span className="truncate">Connecting LiveKit WebRTC...</span>
-              </div>
-            ) : livekit.error ? (
-              <div
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-400 text-[11px] font-medium"
-                title={livekit.error}
-              >
-                <span className="size-1.5 rounded-full bg-rose-500" />
-                <span className="truncate max-w-[140px] sm:max-w-xs">{livekit.error}</span>
               </div>
             ) : null}
           </div>

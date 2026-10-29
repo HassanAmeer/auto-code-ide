@@ -1,3 +1,4 @@
+// @effect-diagnostics globalDate:off globalConsole:off globalFetch:off
 /**
  * Super Bot Bridge
  *
@@ -149,7 +150,7 @@ export async function queryGeminiWithRotation(opts: {
         signal: AbortSignal.timeout(30000),
       });
 
-      const data = await res.json();
+      const data: any = await res.json();
       if (!res.ok) {
         return {
           status: res.status,
