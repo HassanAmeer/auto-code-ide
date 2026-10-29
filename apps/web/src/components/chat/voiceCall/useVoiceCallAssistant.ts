@@ -438,6 +438,7 @@ export function useVoiceCallAssistant({
   const recentEmittedTranscriptsRef = useRef<Set<string>>(new Set());
   const interruptSpeakingRef = useRef<() => void>(() => {});
   const startFreshRecognitionRef = useRef<() => void>(() => {});
+  const isInterruptingRef = useRef(false);
 
   // Store latest state in refs for stable timer/recognition callbacks
   const isCallActiveRef = useRef(false);
@@ -1565,56 +1566,66 @@ export function useVoiceCallAssistant({
 
   // User-facing interrupt action (e.g. click wave visualizer or press Stop/Escape or say "stop")
   const interruptSpeaking = useCallback(() => {
-    clearFinalDispatchTimer();
-    clearRestartTimer();
-    clearTurnTimeout();
+    if (isInterruptingRef.current) return;
+    isInterruptingRef.current = true;
+    try {
+      clearFinalDispatchTimer();
+      clearRestartTimer();
+      clearTurnTimeout();
 
-    // 1. Instantly halt audio synthesis playback
-    if (streamingPlayerRef.current) {
-      streamingPlayerRef.current.stop();
-      streamingPlayerRef.current = null;
-    }
-    stopSpeaking();
+      // 1. Instantly halt audio synthesis playback
+      if (streamingPlayerRef.current) {
+        streamingPlayerRef.current.stop();
+        streamingPlayerRef.current = null;
+      }
+      stopSpeaking();
 
-    // 2. Stop ambient thinking sound
-    thinkingAmbientSound.stop();
+      // 2. Stop ambient thinking sound
+      thinkingAmbientSound.stop();
 
-    // 3. Abort model stream / tool execution if active
-    if (canInterruptRef.current && onInterruptRef.current) {
-      onInterruptRef.current();
-    }
+      // 3. Abort model stream / tool execution if active
+      if (canInterruptRef.current && onInterruptRef.current) {
+        try {
+          onInterruptRef.current();
+        } catch (err) {
+          console.warn("[VoiceCall] onInterrupt error:", err);
+        }
+      }
 
-    // 4. Reset turn tracking
-    isTtsActiveRef.current = false;
-    activeTtsTextRef.current = "";
-    currentPlayingTtsChunkRef.current = "";
-    lastTtsEndedTimestampRef.current = Date.now();
-    waitingForAssistantResponseRef.current = false;
-    activeAssistantMessageIdRef.current = null;
-    processedTextOffsetRef.current = 0;
-    isAutoSendingRef.current = false;
-    hasPendingSpeechRef.current = false;
-    manualBaselineRef.current = "";
-    lastTranscribedTextRef.current = "";
-    accumulatedTurnFinalRef.current = "";
-    promptRef.current = "";
-    onTranscriptChangeRef.current("");
-    setLiveTranscript("");
-    setAssistantSpokenText("");
+      // 4. Reset turn tracking
+      isTtsActiveRef.current = false;
+      activeTtsTextRef.current = "";
+      currentPlayingTtsChunkRef.current = "";
+      lastTtsEndedTimestampRef.current = Date.now();
+      waitingForAssistantResponseRef.current = false;
+      activeAssistantMessageIdRef.current = null;
+      processedTextOffsetRef.current = 0;
+      isAutoSendingRef.current = false;
+      hasPendingSpeechRef.current = false;
+      manualBaselineRef.current = "";
+      lastTranscribedTextRef.current = "";
+      accumulatedTurnFinalRef.current = "";
+      promptRef.current = "";
+      onTranscriptChangeRef.current("");
+      setLiveTranscript("");
+      setAssistantSpokenText("");
 
-    // 5. Instantly return to listening state
-    updateCallStatus("listening");
-    setMicrophoneMuted(false);
-    if (!recognitionRef.current && isCallActiveRef.current) {
-      startFreshRecognitionRef.current();
-    } else if (
-      isCallActiveRef.current &&
-      recognitionRef.current &&
-      !isRecognitionRunningRef.current
-    ) {
-      try {
-        recognitionRef.current.start();
-      } catch {}
+      // 5. Instantly return to listening state
+      updateCallStatus("listening");
+      setMicrophoneMuted(false);
+      if (!recognitionRef.current && isCallActiveRef.current) {
+        startFreshRecognitionRef.current();
+      } else if (
+        isCallActiveRef.current &&
+        recognitionRef.current &&
+        !isRecognitionRunningRef.current
+      ) {
+        try {
+          recognitionRef.current.start();
+        } catch {}
+      }
+    } finally {
+      isInterruptingRef.current = false;
     }
   }, [
     clearFinalDispatchTimer,

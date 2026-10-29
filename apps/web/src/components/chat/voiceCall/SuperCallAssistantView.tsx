@@ -1176,7 +1176,8 @@ export function SuperCallAssistantView() {
     isUserEditing,
   });
 
-  const handleCancelProcessing = useCallback(() => {
+  // Called when voice assistant or user interrupts generation / speech
+  const handleAbortProcessing = useCallback(() => {
     if (activeAbortControllerRef.current) {
       activeAbortControllerRef.current.abort();
       activeAbortControllerRef.current = null;
@@ -1185,18 +1186,22 @@ export function SuperCallAssistantView() {
     setActiveDispatchStartTime(0);
     setAgentStatus(null);
     stopSpeaking();
-    interruptSpeaking();
     addVoiceCallLog({
       category: "SYSTEM",
       title: "Process Cancelled / Stopped",
       detail: "Active generation or request was aborted by user",
       level: "warn",
     });
-  }, [interruptSpeaking]);
+  }, []);
+
+  const handleCancelProcessing = useCallback(() => {
+    handleAbortProcessing();
+    interruptSpeaking();
+  }, [handleAbortProcessing, interruptSpeaking]);
 
   useEffect(() => {
-    handleInterruptRef.current = handleCancelProcessing;
-  }, [handleCancelProcessing]);
+    handleInterruptRef.current = handleAbortProcessing;
+  }, [handleAbortProcessing]);
 
   useEffect(() => {
     isCallActiveRef.current = isCallActive;

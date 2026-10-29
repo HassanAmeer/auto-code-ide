@@ -632,11 +632,22 @@ let activeUtterance: SpeechSynthesisUtterance | null = null;
 let activeSpokenText: string | null = null;
 const activeUtterancesSet = new Set<SpeechSynthesisUtterance>();
 const listeners = new Set<(isSpeaking: boolean, speakingText: string | null) => void>();
+let isNotifyingSpeechState = false;
 
 function notifySpeechState(isSpeaking: boolean, text: string | null = null) {
-  activeSpokenText = isSpeaking ? text : null;
-  for (const fn of listeners) {
-    fn(isSpeaking, text);
+  if (isNotifyingSpeechState) return;
+  isNotifyingSpeechState = true;
+  try {
+    activeSpokenText = isSpeaking ? text : null;
+    for (const fn of Array.from(listeners)) {
+      try {
+        fn(isSpeaking, text);
+      } catch (err) {
+        console.warn("[TTS] Error in speech state listener:", err);
+      }
+    }
+  } finally {
+    isNotifyingSpeechState = false;
   }
 }
 

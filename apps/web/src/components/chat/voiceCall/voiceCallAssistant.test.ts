@@ -212,4 +212,33 @@ describe("VoiceCall Assistant & StreamingTtsPlayer", () => {
     expect(cleaned).not.toContain("`");
     expect(cleaned).toContain("Important note with codeRef");
   });
+
+  it("verifies speech state subscriber re-entrancy protection and stops recursion", async () => {
+    const { subscribeSpeechState, stopSpeaking } = await import("~/lib/speech/tts");
+
+    // Provide mock window and speechSynthesis in node test environment
+    const target = typeof window !== "undefined" ? window : (globalThis as any);
+    target.window = target;
+    target.speechSynthesis = {
+      speaking: false,
+      cancel: vi.fn(),
+    };
+
+    let notificationCount = 0;
+    const unsubscribe = subscribeSpeechState((isSpeaking) => {
+      notificationCount++;
+      if (!isSpeaking) {
+        // Simulates nested stopSpeaking or state trigger inside callback
+        stopSpeaking();
+      }
+    });
+
+    // Should not throw Maximum call stack size exceeded
+    expect(() => {
+      stopSpeaking();
+    }).not.toThrow();
+
+    unsubscribe();
+    expect(notificationCount).toBeGreaterThanOrEqual(1);
+  });
 });
