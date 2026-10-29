@@ -290,5 +290,16 @@ describe("VoiceCall Assistant & StreamingTtsPlayer", () => {
     expect(isUtteranceEchoOfAi("Ruko mujhe login screen check karni hai", aiPhrases)).toBe(false);
     expect(isUtteranceEchoOfAi("database configure karo", aiPhrases)).toBe(false);
     expect(isUtteranceEchoOfAi("chup karo", aiPhrases)).toBe(false);
+    expect(isUtteranceEchoOfAi("khud se unit testing bhi kar sakty hen", aiPhrases)).toBe(false);
+  });
+
+  it("verifies user speech during assistant playback is preserved without being wiped", async () => {
+    const { stripAiSpeechFromTranscript } = await import("./useVoiceCallAssistant");
+    const aiPhrases = ["Ji main aap ka assistant hoon aur aap ki poori madad karoon ga."];
+
+    // User speaks while assistant is speaking:
+    const userSpokenDuringTts = "khud se unit testing bhi kar sakty hen";
+    const result = stripAiSpeechFromTranscript(userSpokenDuringTts, aiPhrases);
+    expect(result).toBe("khud se unit testing bhi kar sakty hen");
   });
 });

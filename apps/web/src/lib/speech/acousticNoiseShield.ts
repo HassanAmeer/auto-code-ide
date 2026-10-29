@@ -157,21 +157,7 @@ export function createAcousticNoiseShield(
       return;
     }
 
-    // A. SPEAKER BLEED ECHO-BLOCKER:
-    // If bot is currently speaking through laptop speaker, hard clamp mic gate to zero!
-    if (settings.speakerBleedBlocker && isBotSpeaking) {
-      gateGain.gain.setTargetAtTime(0.001, audioCtx.currentTime, 0.01);
-      isGateOpenState = false;
-      return;
-    }
-
-    // B. AGATE NOISE GATE:
-    if (!settings.echoGate) {
-      gateGain.gain.setTargetAtTime(1.0, audioCtx.currentTime, 0.02);
-      isGateOpenState = true;
-      return;
-    }
-
+    // 1. Analyse real-time RMS energy first to allow user barge-in speech to pass through
     analyser.getByteFrequencyData(freqData);
     let sum = 0;
     for (let i = 0; i < freqData.length; i++) {
@@ -181,14 +167,32 @@ export function createAcousticNoiseShield(
     const threshold = getLinearThreshold(settings.gateThresholdDb);
 
     if (rms > threshold) {
-      // Speech active: Fast attack (15ms)
+      // Speech active (human voice detected / user barge-in): Fast attack (15ms)
+      // Gate opens fully (1.0) so user's voice is NEVER muted or dropped!
       gateGain.gain.setTargetAtTime(1.0, audioCtx.currentTime, 0.015);
       isGateOpenState = true;
-    } else {
-      // Background fan hum / silence: Smooth release (200ms)
-      gateGain.gain.setTargetAtTime(0.02, audioCtx.currentTime, 0.2);
-      isGateOpenState = false;
+      return;
     }
+
+    // 2. SPEAKER BLEED ECHO-BLOCKER:
+    // If bot is speaking and NO vocal energy above threshold is detected from user,
+    // attenuate background speaker loopback.
+    if (settings.speakerBleedBlocker && isBotSpeaking) {
+      gateGain.gain.setTargetAtTime(0.02, audioCtx.currentTime, 0.02);
+      isGateOpenState = false;
+      return;
+    }
+
+    // 3. AGATE NOISE GATE:
+    if (!settings.echoGate) {
+      gateGain.gain.setTargetAtTime(1.0, audioCtx.currentTime, 0.02);
+      isGateOpenState = true;
+      return;
+    }
+
+    // Background fan hum / room silence: Smooth release (200ms)
+    gateGain.gain.setTargetAtTime(0.02, audioCtx.currentTime, 0.2);
+    isGateOpenState = false;
   };
 
   checkInterval = setInterval(updateGateState, 35);

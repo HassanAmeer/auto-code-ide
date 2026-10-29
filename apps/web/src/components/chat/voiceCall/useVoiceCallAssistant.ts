@@ -367,9 +367,9 @@ export function isUtteranceEchoOfAi(text: string, aiPhrases: string[]): boolean 
       for (const src of sourceCandidates) {
         // 1. Direct substring match:
         // Candidate is contained within the AI source (speaker picked up a snippet of AI speech):
-        if (cand.length >= 6 && src.includes(cand)) return true;
+        if (cand.length >= 3 && src.includes(cand)) return true;
         // AI source is contained within candidate only if lengths are comparable (pure echo, not mixed user speech):
-        if (src.length >= 6 && cand.includes(src) && Math.abs(cand.length - src.length) <= 5)
+        if (src.length >= 4 && cand.includes(src) && Math.abs(cand.length - src.length) <= 5)
           return true;
 
         // 2. Tokenized word overlap check
@@ -939,8 +939,14 @@ export function useVoiceCallAssistant({
           }
 
           const formattedRecent = formatSttTranscript(recentUtterance, effectiveMode);
+          const rawOrFormatted = (formattedRecent || recentUtterance).trim();
+          const wordsList = rawOrFormatted.split(/\s+/).filter(Boolean);
 
-          // All AI sources for echo detection:
+          // 1. Check for explicit interrupt commands from user FIRST ("ruko", "stop", "chup", "suno", etc.)
+          const isExplicitInterrupt =
+            containsInterruptCommand(formattedRecent) || containsInterruptCommand(recentUtterance);
+
+          // 2. All AI sources for echo detection:
           const aiSources = [
             activeTtsTextRef.current,
             currentPlayingTtsChunkRef.current,
@@ -950,8 +956,9 @@ export function useVoiceCallAssistant({
           ].filter(Boolean);
 
           const isAiSelfEcho =
-            isUtteranceEchoOfAi(recentUtterance, aiSources) ||
-            isUtteranceEchoOfAi(formattedRecent, aiSources);
+            !isExplicitInterrupt &&
+            (isUtteranceEchoOfAi(recentUtterance, aiSources) ||
+              isUtteranceEchoOfAi(formattedRecent, aiSources));
 
           if (isAiSelfEcho) {
             // Speaker audio echoed into the mic while AI is speaking.
@@ -966,7 +973,22 @@ export function useVoiceCallAssistant({
             return;
           }
 
-          // If NOT echo, user is speaking (barge-in):
+          // 3. User Barge-in validation:
+          // A single isolated word or low-confidence syllable heard while AI is speaking
+          // (that is NOT an explicit interrupt command) is likely background noise or faint echo.
+          // DO NOT interrupt the AI unless:
+          // a) User gave an explicit interrupt command ("ruko", "stop", "suno"), OR
+          // b) User spoke 2 or more real words!
+          const isUserBargeIn = isExplicitInterrupt || wordsList.length >= 2;
+
+          if (!isUserBargeIn) {
+            // Faint non-command sound or 1-word artifact: do NOT halt the AI!
+            turnStartResultIndexRef.current = event.results.length;
+            accumulatedTurnFinalRef.current = "";
+            return;
+          }
+
+          // Real user speaking (barge-in):
           // Immediately halt AI playback within 5ms:
           interruptSpeakingRef.current();
           stopSpeaking();
@@ -980,7 +1002,9 @@ export function useVoiceCallAssistant({
 
           addVoiceCallLog({
             category: "INTERRUPT",
-            title: "Call Interrupted (User Started Speaking)",
+            title: isExplicitInterrupt
+              ? "Call Interrupted (User Commanded Stop/Ruko)"
+              : "Call Interrupted (User Started Speaking)",
             detail: `User said: "${formattedRecent || recentUtterance}"`,
           });
 
@@ -1351,22 +1375,14 @@ export function useVoiceCallAssistant({
             isTtsActiveRef.current = false;
             noiseShieldRef.current?.setBotSpeaking(false);
             waitingForAssistantResponseRef.current = false;
-            promptRef.current = "";
-            lastTranscribedTextRef.current = "";
-            manualBaselineRef.current = "";
-            accumulatedTurnFinalRef.current = "";
-            hasPendingSpeechRef.current = false;
-            onTranscriptChangeRef.current("");
-            setLiveTranscript("");
-            updateCallStatus("listening");
 
-            // Flush the recognition session so all speaker audio that was heard during TTS
-            // is destroyed and purged from Chrome's event.results!
-            try {
-              recognitionRef.current?.abort();
-            } catch {}
+            // Only switch to listening if user is not currently speaking!
+            if (!hasPendingSpeechRef.current && callStatusRef.current !== "user-speaking") {
+              updateCallStatus("listening");
+            }
 
-            // Ensure recognition session remains alive
+            // CRITICAL: NEVER wipe user's prompt (promptRef, lastTranscribedTextRef, onTranscriptChange)
+            // and NEVER call recognition.abort()! User speech during or right after TTS MUST be preserved!
             if (
               isCallActiveRef.current &&
               recognitionRef.current &&

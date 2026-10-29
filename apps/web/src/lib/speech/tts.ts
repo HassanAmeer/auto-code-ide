@@ -848,7 +848,10 @@ export function injectNaturalCadencePauses(text: string): string {
 export function speakText(text: string, options?: Partial<TtsSettings>, onEnd?: () => void): void {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
 
-  stopSpeaking();
+  // Only cancel if speech synthesis is actively speaking another utterance
+  if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+    stopSpeaking();
+  }
 
   const baseSettings = loadTtsSettings();
   const settings: TtsSettings = {
@@ -1118,8 +1121,8 @@ export function speakText(text: string, options?: Partial<TtsSettings>, onEnd?: 
   const wps = isNonEnglishOrUrdu ? 0.6 : 1.0;
   const effectiveRate = Math.max(0.25, Math.min(2.0, options?.rate ?? 1.0));
   const adjustedWps = Math.max(0.3, wps * effectiveRate);
-  const estimatedMs = Math.ceil((wordsCount / adjustedWps) * 1000 + 45000);
-  const maxSpeechDurationMs = Math.max(60000, estimatedMs);
+  const estimatedMs = Math.ceil((wordsCount / adjustedWps) * 1000 + 10000);
+  const maxSpeechDurationMs = Math.max(15000, estimatedMs);
   setTimeout(() => {
     if (!hasEnded && activeUtterance === utterance) {
       console.warn("[TTS] Speech reached max expected duration, forcing completion.");
