@@ -33,7 +33,10 @@ import {
 import type { VoiceCallStatus } from "./VoiceVisualizerWaves";
 import type { ChatMessage, SessionPhase } from "~/types";
 
-const ACOUSTIC_ECHO_COOLDOWN_MS = 400;
+// How long (ms) after TTS finishes to keep echo-guard active (prevents loopback from laptop speaker).
+// Must be long enough to span the inter-chunk gap between sequential streaming TTS sentences.
+// 400ms was too short — speaker echo from the previous chunk triggered false barge-in during the gap.
+const ACOUSTIC_ECHO_COOLDOWN_MS = 1500;
 
 const END_CALL_TRIGGERS = [
   "end call",
@@ -912,7 +915,8 @@ export function useVoiceCallAssistant({
           streamingPlayerRef.current &&
           !streamingPlayerRef.current.isStopped() &&
           (streamingPlayerRef.current.getIsPlaying() ||
-            streamingPlayerRef.current.getQueueLength() > 0),
+            streamingPlayerRef.current.getQueueLength() > 0 ||
+            streamingPlayerRef.current.hasEnqueuedChunks()),
         );
 
         const isAiSpeakingOrBusy =
@@ -978,8 +982,17 @@ export function useVoiceCallAssistant({
           // (that is NOT an explicit interrupt command) is likely background noise or faint echo.
           // DO NOT interrupt the AI unless:
           // a) User gave an explicit interrupt command ("ruko", "stop", "suno"), OR
-          // b) User spoke 2 or more real words!
-          const isUserBargeIn = isExplicitInterrupt || wordsList.length >= 2;
+          // b) During active streaming playback: user spoke 3+ real words (more aggressive protection)
+          // c) Outside streaming (single TTS chunk): user spoke 2+ real words
+          const isStreamingBusy = Boolean(
+            streamingPlayerRef.current &&
+            !streamingPlayerRef.current.isStopped() &&
+            (streamingPlayerRef.current.getIsPlaying() ||
+              streamingPlayerRef.current.getQueueLength() > 0 ||
+              streamingPlayerRef.current.hasEnqueuedChunks()),
+          );
+          const bargeInWordThreshold = isStreamingBusy ? 3 : 2;
+          const isUserBargeIn = isExplicitInterrupt || wordsList.length >= bargeInWordThreshold;
 
           if (!isUserBargeIn) {
             // Faint non-command sound or 1-word artifact: do NOT halt the AI!
@@ -1352,7 +1365,8 @@ export function useVoiceCallAssistant({
           streamingPlayerRef.current &&
           !streamingPlayerRef.current.isStopped() &&
           (streamingPlayerRef.current.getIsPlaying() ||
-            streamingPlayerRef.current.getQueueLength() > 0),
+            streamingPlayerRef.current.getQueueLength() > 0 ||
+            streamingPlayerRef.current.hasEnqueuedChunks()),
         );
         if (isStreamingPlayerBusy) {
           return;

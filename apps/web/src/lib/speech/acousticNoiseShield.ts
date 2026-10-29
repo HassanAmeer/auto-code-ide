@@ -157,14 +157,22 @@ export function createAcousticNoiseShield(
       return;
     }
 
-    // 1. Analyse real-time RMS energy first to allow user barge-in speech to pass through
+    // 1. Analyse real-time RMS energy first to allow user barge-in speech to pass through.
+    //    When bot is speaking, require LOUDER user voice to open the gate (-20dB vs -36dB normal).
+    //    This blocks laptop speaker loopback (~-30dB) from triggering STT while AI is talking,
+    //    while still letting a human voice (-20dB or louder) pass through for real barge-in.
     analyser.getByteFrequencyData(freqData);
     let sum = 0;
     for (let i = 0; i < freqData.length; i++) {
       sum += (freqData[i] || 0) / 255;
     }
     const rms = sum / freqData.length;
-    const threshold = getLinearThreshold(settings.gateThresholdDb);
+
+    // Dual threshold: stricter when bot is speaking to reject speaker echo loopback
+    const effectiveThresholdDb = isBotSpeaking
+      ? Math.max(settings.gateThresholdDb, -20) // -20dB when bot speaking (requires intentional speech, blocks echo)
+      : settings.gateThresholdDb; // -36dB normal (standard listening sensitivity)
+    const threshold = getLinearThreshold(effectiveThresholdDb);
 
     if (rms > threshold) {
       // Speech active (human voice detected / user barge-in): Fast attack (15ms)
