@@ -241,4 +241,33 @@ describe("VoiceCall Assistant & StreamingTtsPlayer", () => {
     unsubscribe();
     expect(notificationCount).toBeGreaterThanOrEqual(1);
   });
+
+  it("verifies stripAiSpeechFromTranscript removes AI speaker bleed without cutting user speech", async () => {
+    const { stripAiSpeechFromTranscript } = await import("./useVoiceCallAssistant");
+
+    const aiPhrases = [
+      "Assalam o alaikum kaise hain aap main AutoCode assistant hoon",
+      "Ji bilkul main aap ki madad kar sakta hoon",
+    ];
+
+    // 1. Microphone heard AI speaker audio followed by user words:
+    const mixed = "Assalam o alaikum kaise hain aap hello brother how are you";
+    const cleaned = stripAiSpeechFromTranscript(mixed, aiPhrases);
+    expect(cleaned).toBe("hello brother how are you");
+
+    // 2. Pure AI speech leaked into microphone (no user words):
+    const pureAiEcho = "Assalam o alaikum kaise hain aap";
+    const strippedPure = stripAiSpeechFromTranscript(pureAiEcho, aiPhrases);
+    expect(strippedPure).toBe("");
+
+    // 3. User spoken words (should be untouched):
+    const userWords = "Hello how are you doing today";
+    const untouched = stripAiSpeechFromTranscript(userWords, aiPhrases);
+    expect(untouched).toBe("Hello how are you doing today");
+
+    // 4. Urdu user words:
+    const urduUser = "Mujhe aik function bana kar do";
+    const untouchedUrdu = stripAiSpeechFromTranscript(urduUser, aiPhrases);
+    expect(untouchedUrdu).toBe("Mujhe aik function bana kar do");
+  });
 });
