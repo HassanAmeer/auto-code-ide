@@ -134,6 +134,8 @@ import {
   loadSttSettings,
   saveSttSettings,
   subscribeSttSettings,
+  createSttSession,
+  type SttController,
   type SttSettings,
 } from "~/lib/speech/stt";
 import {
@@ -1357,6 +1359,45 @@ export function SuperCallAssistantView() {
   const handleStopSpeaking = useCallback(() => {
     handleCancelProcessing();
   }, [handleCancelProcessing]);
+
+  // Unified Dictation / Voice-to-Text STT Session
+  const [isDictating, setIsDictating] = useState(false);
+  const dictationSessionRef = useRef<SttController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      dictationSessionRef.current?.stop();
+    };
+  }, []);
+
+  const handleToggleDictation = useCallback(() => {
+    if (isDictating) {
+      dictationSessionRef.current?.stop();
+      setIsDictating(false);
+    } else {
+      isUserEditingRef.current = true;
+      setIsUserEditing(true);
+      const session = createSttSession({
+        mode: sttSettings.language,
+        onResult: (text, _isFinal, cumulative) => {
+          const freshText = (cumulative || text || "").trim();
+          if (freshText) {
+            setInputText(freshText);
+          }
+        },
+        onStateChange: (active) => {
+          setIsDictating(active);
+        },
+        onError: (err) => {
+          console.warn("[SuperBot Dictation] STT error:", err);
+          setIsDictating(false);
+        },
+      });
+      dictationSessionRef.current = session;
+      session.start();
+      setIsDictating(true);
+    }
+  }, [isDictating, sttSettings.language]);
 
   const [isTranscriptCopied, setIsTranscriptCopied] = useState(false);
 
@@ -2795,16 +2836,36 @@ export function SuperCallAssistantView() {
                 </button>
               )}
 
-              {/* Send Button */}
-              <button
-                type="button"
-                onClick={handleSendNow}
-                disabled={(!inputText.trim() && !attachedFile) || isProcessing}
-                className="p-1 rounded text-zinc-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
-                title="Send Message"
-              >
-                <Send className="size-3.5" />
-              </button>
+              {/* Dynamic Mic Dictation / Send Button (Exact project chat design) */}
+              {isDictating ? (
+                <button
+                  type="button"
+                  onClick={handleToggleDictation}
+                  className="p-1 rounded text-red-400 bg-red-500/15 hover:bg-red-500/25 transition-all cursor-pointer animate-pulse"
+                  title="Stop dictation (Click to finish)"
+                >
+                  <MicOff className="size-3.5 animate-bounce" />
+                </button>
+              ) : inputText.trim().length > 0 || attachedFile ? (
+                <button
+                  type="button"
+                  onClick={handleSendNow}
+                  disabled={isProcessing}
+                  className="p-1 rounded text-zinc-200 hover:text-white hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                  title="Send Message"
+                >
+                  <Send className="size-3.5" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleToggleDictation}
+                  className="p-1 rounded text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
+                  title={`Dictate message (${sttSettings.language.replace("-", " ")})`}
+                >
+                  <Mic className="size-3.5" />
+                </button>
+              )}
             </div>
           </div>
 
