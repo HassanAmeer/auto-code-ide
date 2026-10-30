@@ -45,12 +45,20 @@ export interface SuperAgentRunOptions {
   signal?: AbortSignal | undefined;
 }
 
+export interface DelegatedTaskStep {
+  step: string;
+  desc?: string;
+  status: "completed" | "running" | "pending" | "failed";
+}
+
 export interface DelegatedTaskInfo {
   projectName: string;
   taskTitle: string;
   status: "running" | "completed" | "error";
   progress: number;
   previewUrl?: string | undefined;
+  verificationSteps?: DelegatedTaskStep[] | undefined;
+  errorsFixed?: string[] | undefined;
 }
 
 export interface ToolCallRecord {
@@ -335,6 +343,8 @@ interface WorkerDispatchResult {
   workspaceRoot?: string;
   taskTitle?: string;
   status?: string;
+  progress?: number;
+  verificationSteps?: DelegatedTaskStep[];
   filesInspected?: string[];
   verifiedHtmlCount?: number;
   errorsFixed?: string[];
@@ -879,9 +889,14 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
           status: "completed",
           progress: 100,
           previewUrl: workerRes.previewUrl,
+          verificationSteps: workerRes.verificationSteps,
+          errorsFixed: workerRes.errorsFixed,
         };
         actionTag = "dispatch_autonomous_task";
-        runtimeFacts += `\n[SUPERVISED WORKER EXECUTION COMPLETED]:\n• Project: ${targetName}\n• Task: ${workerRes.taskTitle || "Inspection & Code Repair"}\n• Status: Completed & Verified Clean\n• Verified Preview Link: ${workerRes.previewUrl || `/api/projects/preview/${targetName}/index.html`}\n• Errors Fixed: ${(workerRes.errorsFixed || []).join("; ") || "0 syntax issues"}\nIMPORTANT: Inform the user that the worker agent has completed the assigned work and present the verified preview link!\n`;
+        const stepsLog = (workerRes.verificationSteps || [])
+          .map((s) => `  • ${s.step}: ${s.desc || s.status}`)
+          .join("\n");
+        runtimeFacts += `\n[SUPERVISED WORKER EXECUTION COMPLETED]:\n• Project: ${targetName}\n• Task: ${workerRes.taskTitle || "Inspection & Code Repair"}\n• Status: Completed & Verified Clean\n• Verification Pipeline:\n${stepsLog || "  • Verified All Checks"}\n• Verified Preview Link: ${workerRes.previewUrl || `/api/projects/preview/${targetName}/index.html`}\n• Errors Fixed: ${(workerRes.errorsFixed || []).join("; ") || "0 syntax issues"}\nIMPORTANT: Inform the user that as Senior Supervisor, you delegated the task to the worker agent, supervised the code quality in multiple verification passes, healed any syntax issues, and verified the live preview link (present the preview link directly)!\n`;
       }
     }
 

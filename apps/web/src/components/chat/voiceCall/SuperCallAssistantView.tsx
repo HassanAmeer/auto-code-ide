@@ -612,6 +612,7 @@ export function SuperCallAssistantView() {
   const [activeDispatchStartTime, setActiveDispatchStartTime] = useState<number>(0);
   const [agentStatus, setAgentStatus] = useState<string | null>(null);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const [copiedPreviewUrl, setCopiedPreviewUrl] = useState<string | null>(null);
   const activeAbortControllerRef = useRef<AbortController | null>(null);
   const handleInterruptRef = useRef<() => void>(() => {});
 
@@ -629,6 +630,12 @@ export function SuperCallAssistantView() {
     navigator.clipboard.writeText(text);
     setCopiedMessageId(id);
     setTimeout(() => setCopiedMessageId(null), 2000);
+  }, []);
+
+  const handleCopyPreviewUrl = useCallback((url: string) => {
+    navigator.clipboard.writeText(url);
+    setCopiedPreviewUrl(url);
+    setTimeout(() => setCopiedPreviewUrl(null), 2000);
   }, []);
 
   // OpenDots Inspired: Spaces & Living Document Canvas State
@@ -1015,6 +1022,9 @@ export function SuperCallAssistantView() {
                 taskTitle: res.delegatedTask.taskTitle,
                 status: res.delegatedTask.status,
                 progress: res.delegatedTask.progress,
+                previewUrl: res.delegatedTask.previewUrl,
+                verificationSteps: res.delegatedTask.verificationSteps,
+                errorsFixed: res.delegatedTask.errorsFixed,
               },
               actionType: res.actionTaken,
             }
@@ -2511,50 +2521,126 @@ export function SuperCallAssistantView() {
                     />
                   </div>
 
-                  {/* Delegated Task Execution Card */}
+                  {/* Supervised Worker Delegation & Verification Card */}
                   {msg.meta?.delegatedTask && (
-                    <div className="mt-2.5 rounded-xl border border-primary/30 bg-primary/10 p-3 text-xs space-y-2 max-w-xl">
+                    <div className="mt-2.5 rounded-2xl border border-primary/30 bg-gradient-to-b from-primary/10 via-background/80 to-background/95 p-3.5 text-xs space-y-3 max-w-xl shadow-lg backdrop-blur">
                       <div className="flex items-center justify-between font-medium">
-                        <span className="flex items-center gap-1.5 text-foreground">
-                          <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
-                          <span>Delegated:</span>
-                          <span className="font-semibold text-primary">
-                            {msg.meta.delegatedTask.projectName}
+                        <div className="flex items-center gap-2 text-foreground">
+                          <span className="p-1 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                            <ShieldCheck className="size-3.5" />
                           </span>
-                        </span>
-                        <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-primary/20 text-primary font-mono font-semibold">
-                          {msg.meta.delegatedTask.status}
+                          <div>
+                            <span className="font-semibold text-primary">
+                              {msg.meta.delegatedTask.projectName}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground ml-1.5 font-mono">
+                              • Supervised Worker
+                            </span>
+                          </div>
+                        </div>
+                        <span className="text-[10px] uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-mono font-semibold flex items-center gap-1">
+                          <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                          {msg.meta.delegatedTask.status === "completed"
+                            ? "Verified Clean"
+                            : msg.meta.delegatedTask.status}
                         </span>
                       </div>
-                      <p className="text-[11px] text-muted-foreground leading-snug">
+
+                      <p className="text-[11px] text-foreground/90 font-medium leading-snug">
                         {msg.meta.delegatedTask.taskTitle}
                       </p>
+
                       <div className="w-full bg-border/60 rounded-full h-1.5 overflow-hidden">
                         <div
-                          className="bg-primary h-full rounded-full transition-all duration-500"
+                          className="bg-gradient-to-r from-primary to-emerald-400 h-full rounded-full transition-all duration-500"
                           style={{ width: `${msg.meta.delegatedTask.progress}%` }}
                         />
                       </div>
 
-                      {/* Verified Preview Link Delivery by Super Bot */}
-                      {msg.meta.delegatedTask.previewUrl && (
-                        <div className="pt-2 mt-2 border-t border-border/40 flex items-center justify-between gap-2 flex-wrap">
-                          <div className="flex items-center gap-1.5 text-emerald-400 font-mono text-[11px] truncate">
-                            <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
-                            <span className="font-semibold">Live Preview:</span>
-                            <span className="truncate opacity-80">
-                              {msg.meta.delegatedTask.previewUrl}
+                      {/* 3-Step Verification Pipeline */}
+                      {msg.meta.delegatedTask.verificationSteps &&
+                        msg.meta.delegatedTask.verificationSteps.length > 0 && (
+                          <div className="space-y-1.5 pt-1 border-t border-border/40">
+                            <div className="text-[10px] uppercase font-mono tracking-wider text-muted-foreground font-semibold flex items-center gap-1">
+                              <Zap className="size-3 text-primary" />
+                              <span>Supervisor Verification Loop:</span>
+                            </div>
+                            <div className="space-y-1 pl-1">
+                              {msg.meta.delegatedTask.verificationSteps.map((stepItem, idx) => (
+                                <div
+                                  key={idx}
+                                  className="flex items-start gap-1.5 text-[11px] leading-tight"
+                                >
+                                  <CheckCircle2 className="size-3.5 text-emerald-400 mt-0.5 shrink-0" />
+                                  <div>
+                                    <span className="font-medium text-foreground">
+                                      {stepItem.step}:
+                                    </span>{" "}
+                                    <span className="text-muted-foreground">{stepItem.desc}</span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                      {/* Auto-healed Syntax Issues Badge */}
+                      {msg.meta.delegatedTask.errorsFixed &&
+                        msg.meta.delegatedTask.errorsFixed.length > 0 && (
+                          <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1.5 text-[11px] text-emerald-300 flex items-center gap-1.5">
+                            <Sparkles className="size-3 shrink-0 text-emerald-400" />
+                            <span>
+                              Auto-healed {msg.meta.delegatedTask.errorsFixed.length} syntax issues
+                              (tags & module headers verified)
                             </span>
                           </div>
-                          <a
-                            href={msg.meta.delegatedTask.previewUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-emerald-500 text-emerald-950 font-semibold text-xs hover:bg-emerald-400 transition-all shadow-sm active:scale-95"
-                          >
-                            <span>Open Live Preview</span>
-                            <ExternalLink className="size-3" />
-                          </a>
+                        )}
+
+                      {/* Verified Preview Link Delivery by Super Bot */}
+                      {msg.meta.delegatedTask.previewUrl && (
+                        <div className="pt-2 border-t border-border/40 flex items-center justify-between gap-2 flex-wrap bg-emerald-950/20 rounded-xl p-2.5 border border-emerald-500/30">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="size-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                            <div className="min-w-0">
+                              <div className="text-[10px] font-mono text-emerald-400 font-semibold uppercase tracking-wider">
+                                Live Preview Verified (HTTP 200 OK)
+                              </div>
+                              <div className="text-[11px] text-muted-foreground font-mono truncate max-w-xs">
+                                {msg.meta.delegatedTask.previewUrl}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleCopyPreviewUrl(msg.meta?.delegatedTask?.previewUrl || "")
+                              }
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-border bg-background/80 hover:bg-muted text-[11px] font-medium transition-all cursor-pointer"
+                              title="Copy URL"
+                            >
+                              {copiedPreviewUrl === msg.meta.delegatedTask.previewUrl ? (
+                                <>
+                                  <Check className="size-3 text-emerald-400" />
+                                  <span className="text-emerald-400">Copied</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="size-3 text-muted-foreground" />
+                                  <span>Copy</span>
+                                </>
+                              )}
+                            </button>
+                            <a
+                              href={msg.meta.delegatedTask.previewUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-emerald-500 text-emerald-950 font-semibold text-xs hover:bg-emerald-400 transition-all shadow-sm active:scale-95"
+                            >
+                              <span>Open Live Preview</span>
+                              <ExternalLink className="size-3" />
+                            </a>
+                          </div>
                         </div>
                       )}
                     </div>

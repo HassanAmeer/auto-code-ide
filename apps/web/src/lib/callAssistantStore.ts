@@ -1,6 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
 import { saveServerSetting } from "./serverSettingsSync";
 
+export interface DelegatedTaskStep {
+  step: string;
+  desc?: string;
+  status: "completed" | "running" | "pending" | "failed";
+}
+
 export interface DelegatedTaskMeta {
   projectName: string;
   taskTitle: string;
@@ -8,6 +14,8 @@ export interface DelegatedTaskMeta {
   progress: number;
   threadId?: string;
   previewUrl?: string | undefined;
+  verificationSteps?: DelegatedTaskStep[] | undefined;
+  errorsFixed?: string[] | undefined;
 }
 
 export interface CallAssistantMessage {
