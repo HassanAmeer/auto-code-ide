@@ -503,7 +503,6 @@ import {
   resolveScrollToEndClearance,
 } from "./composerFooterLayout";
 import { ChatHeader } from "./chat/ChatHeader";
-import { WhatsAppHeaderButton } from "./whatsapp/WhatsAppHeaderButton";
 import { MobileProjectThreadTabs } from "./chat/MobileProjectThreadTabs";
 import { useRemoteOpenState } from "~/remoteOpen";
 import { shouldShowOpenInPicker } from "./chat/OpenInPicker.logic";
@@ -12063,9 +12062,6 @@ export default function ChatView(props: ChatViewProps) {
           ) : null}
           {!rightPanelControlsAtRoot && !rightPanelControlsInPanel ? panelLayoutControls : null}
           {inlineRightPanelOwnsTitleBar ? threadPanelHeaderControl : null}
-          <div className="flex items-center shrink-0 mr-2 z-10">
-            <WhatsAppHeaderButton />
-          </div>
           <ChatHeader
             activeThreadEnvironmentId={activeThread.environmentId}
             activeThreadId={activeThread.id}

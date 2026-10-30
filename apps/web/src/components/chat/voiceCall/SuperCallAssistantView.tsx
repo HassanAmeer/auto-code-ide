@@ -2317,7 +2317,7 @@ export function SuperCallAssistantView() {
         {/* Top Header */}
         <header className="h-14 border-b border-border/50 px-3 sm:px-6 flex items-center justify-between shrink-0 bg-background/80 backdrop-blur-md gap-2">
           {/* Left: WhatsApp Gateway & Live Status */}
-          <div className="flex-1 flex items-center gap-2 overflow-hidden pl-10 sm:pl-0">
+          <div className="flex-1 flex items-center gap-2 overflow-visible pl-10 sm:pl-0">
             <WhatsAppHeaderButton />
             {isCallActive ? (
               <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[11px] font-medium shadow-xs">
