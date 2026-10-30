@@ -12063,6 +12063,9 @@ export default function ChatView(props: ChatViewProps) {
           ) : null}
           {!rightPanelControlsAtRoot && !rightPanelControlsInPanel ? panelLayoutControls : null}
           {inlineRightPanelOwnsTitleBar ? threadPanelHeaderControl : null}
+          <div className="flex items-center shrink-0 mr-2 z-10">
+            <WhatsAppHeaderButton />
+          </div>
           <ChatHeader
             activeThreadEnvironmentId={activeThread.environmentId}
             activeThreadId={activeThread.id}
@@ -12077,9 +12080,6 @@ export default function ChatView(props: ChatViewProps) {
               ? { onOpenProjectSettings: handleOpenDraftProjectSettings }
               : {})}
           />
-          <div className="flex items-center gap-1.5 shrink-0 ml-auto z-10 pl-2">
-            <WhatsAppHeaderButton />
-          </div>
         </header>
 
         {/* Project File Explorer & Editor */}
