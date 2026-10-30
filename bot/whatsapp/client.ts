@@ -1,0 +1,492 @@
+import { getWhatsAppSettings, updateWhatsAppSettings } from "./config.ts";
+import { logWhatsAppEvent } from "./logger.ts";
+import type { WhatsAppSession } from "./types.ts";
+
+/**
+ * Normalizes user-input phone number to standard WhatsApp JID format (e.g. 923001234567@c.us)
+ */
+export function normalizeChatId(input: string): string {
+  const trimmed = input.trim();
+  if (trimmed.endsWith("@c.us") || trimmed.endsWith("@g.us") || trimmed.endsWith("@lid")) {
+    return trimmed;
+  }
+
+  // Remove non-digits except +
+  let cleaned = trimmed.replace(/[^\d+]/g, "");
+  if (cleaned.startsWith("+")) {
+    cleaned = cleaned.substring(1);
+  }
+
+  // Pakistani local phone numbers (03001234567 -> 923001234567)
+  if (cleaned.startsWith("03") && cleaned.length === 11) {
+    cleaned = "92" + cleaned.substring(1);
+  }
+
+  return `${cleaned}@c.us`;
+}
+
+function getBaseHeaders(apiKey: string) {
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${apiKey}`,
+  };
+}
+
+export async function listSessions(): Promise<WhatsAppSession[]> {
+  const settings = getWhatsAppSettings();
+  const res = await fetch(`${settings.gatewayUrl}/api/sessions`, {
+    headers: getBaseHeaders(settings.apiKey),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`OpenWA API error (${res.status}): ${text}`);
+  }
+
+  const data = await res.json();
+  const list: WhatsAppSession[] = Array.isArray(data) ? data : data.sessions || [];
+
+  // If no activeSessionId is set or current active session no longer exists, default to first connected session
+  if (list.length > 0) {
+    const active = settings.activeSessionId;
+    const exists = list.some((s) => s.id === active || s.name === active);
+    if (!exists || !active) {
+      const connected = list.find(
+        (s) =>
+          s.status === "CONNECTED" ||
+          s.status === "AUTHENTICATED" ||
+          (s.status as string) === "ready",
+      );
+      const chosen = connected ? connected.id : list[0]!.id;
+      updateWhatsAppSettings({ activeSessionId: chosen });
+    }
+  }
+
+  return list;
+}
+
+export async function getActiveSession(): Promise<WhatsAppSession | null> {
+  const sessions = await listSessions();
+  const settings = getWhatsAppSettings();
+  if (!settings.activeSessionId && sessions.length > 0) {
+    return sessions[0]!;
+  }
+  return (
+    sessions.find(
+      (s) => s.id === settings.activeSessionId || s.name === settings.activeSessionId,
+    ) ||
+    (sessions[0] ?? null)
+  );
+}
+
+export async function createSession(
+  name: string,
+  engine = "whatsapp-web.js",
+): Promise<WhatsAppSession> {
+  const settings = getWhatsAppSettings();
+  const cleanName = name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, "_");
+  const res = await fetch(`${settings.gatewayUrl}/api/sessions`, {
+    method: "POST",
+    headers: getBaseHeaders(settings.apiKey),
+    body: JSON.stringify({ name: cleanName, engine }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Failed to create session (${res.status}): ${text}`);
+  }
+
+  const created = (await res.json()) as WhatsAppSession;
+  // Automatically activate the newly created session
+  updateWhatsAppSettings({ activeSessionId: created.id || cleanName });
+  logWhatsAppEvent({
+    type: "system",
+    sessionId: created.id || cleanName,
+    body: `New session created: ${cleanName} (${engine})`,
+  });
+
+  return created;
+}
+
+export async function deleteSession(sessionId: string): Promise<boolean> {
+  const settings = getWhatsAppSettings();
+  const res = await fetch(`${settings.gatewayUrl}/api/sessions/${sessionId}`, {
+    method: "DELETE",
+    headers: getBaseHeaders(settings.apiKey),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Failed to delete session (${res.status}): ${text}`);
+  }
+
+  if (settings.activeSessionId === sessionId) {
+    updateWhatsAppSettings({ activeSessionId: null });
+  }
+
+  logWhatsAppEvent({
+    type: "system",
+    sessionId,
+    body: `Session deleted: ${sessionId}`,
+  });
+
+  return true;
+}
+
+export async function getSessionQr(sessionId: string): Promise<{ qr?: string; status: string }> {
+  const settings = getWhatsAppSettings();
+  const res = await fetch(`${settings.gatewayUrl}/api/sessions/${sessionId}/qr`, {
+    headers: getBaseHeaders(settings.apiKey),
+  });
+
+  if (res.ok) {
+    const data = await res.json();
+    return data;
+  }
+
+  // Fallback to getting session details
+  const sessionRes = await fetch(`${settings.gatewayUrl}/api/sessions/${sessionId}`, {
+    headers: getBaseHeaders(settings.apiKey),
+  });
+  if (sessionRes.ok) {
+    const sessionData = await sessionRes.json();
+    return { qr: sessionData.qr, status: sessionData.status || "UNKNOWN" };
+  }
+
+  return { status: "FAILED" };
+}
+
+/**
+ * Sends text message via the currently active (or specified) session.
+ */
+export async function sendTextMessage(opts: {
+  to: string;
+  text: string;
+  sessionId?: string;
+  simulateDelay?: boolean;
+}): Promise<{ ok: boolean; messageId?: string; error?: string }> {
+  const settings = getWhatsAppSettings();
+  const sessionId = opts.sessionId || settings.activeSessionId;
+
+  if (!sessionId) {
+    const err = "No active WhatsApp session found. Please enable a session in WhatsApp Settings.";
+    logWhatsAppEvent({
+      type: "error",
+      sessionId: "none",
+      to: opts.to,
+      body: opts.text,
+      error: err,
+    });
+    return { ok: false, error: err };
+  }
+
+  const chatId = normalizeChatId(opts.to);
+
+  // Simulate human typing delay if configured
+  if (opts.simulateDelay !== false && settings.humanDelayMs > 0) {
+    await new Promise((resolve) => setTimeout(resolve, Math.min(settings.humanDelayMs, 3000)));
+  }
+
+  try {
+    const res = await fetch(`${settings.gatewayUrl}/api/sessions/${sessionId}/messages/send-text`, {
+      method: "POST",
+      headers: getBaseHeaders(settings.apiKey),
+      body: JSON.stringify({
+        chatId,
+        text: opts.text,
+      }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      const errorMsg = `OpenWA send failed (${res.status}): ${errText}`;
+      logWhatsAppEvent({
+        type: "error",
+        sessionId,
+        to: chatId,
+        body: opts.text,
+        error: errorMsg,
+      });
+      return { ok: false, error: errorMsg };
+    }
+
+    const data = await res.json();
+    const messageId = data?.id || data?.messageId || `msg_${Date.now()}`;
+
+    logWhatsAppEvent({
+      type: "outbound",
+      sessionId,
+      to: chatId,
+      body: opts.text,
+      messageId,
+      status: "sent",
+      rawPayload: data,
+    });
+
+    return { ok: true, messageId };
+  } catch (err: any) {
+    const errorMsg = err?.message || String(err);
+    logWhatsAppEvent({
+      type: "error",
+      sessionId,
+      to: chatId,
+      body: opts.text,
+      error: errorMsg,
+    });
+    return { ok: false, error: errorMsg };
+  }
+}
+
+/**
+ * Sends Media (Image, Video, Document) via active session.
+ */
+export async function sendMediaMessage(opts: {
+  to: string;
+  mediaUrl: string;
+  caption?: string;
+  filename?: string;
+  mimetype?: string;
+  sessionId?: string;
+}): Promise<{ ok: boolean; messageId?: string; error?: string }> {
+  const settings = getWhatsAppSettings();
+  const sessionId = opts.sessionId || settings.activeSessionId;
+
+  if (!sessionId) {
+    return { ok: false, error: "No active WhatsApp session found." };
+  }
+
+  const chatId = normalizeChatId(opts.to);
+
+  try {
+    const res = await fetch(
+      `${settings.gatewayUrl}/api/sessions/${sessionId}/messages/send-image`,
+      {
+        method: "POST",
+        headers: getBaseHeaders(settings.apiKey),
+        body: JSON.stringify({
+          chatId,
+          media: {
+            url: opts.mediaUrl,
+            caption: opts.caption || "",
+            filename: opts.filename,
+            mimetype: opts.mimetype,
+          },
+        }),
+      },
+    );
+
+    if (!res.ok) {
+      const errText = await res.text();
+      return { ok: false, error: `Media send failed (${res.status}): ${errText}` };
+    }
+
+    const data = await res.json();
+    const messageId = data?.id || data?.messageId;
+
+    logWhatsAppEvent({
+      type: "outbound",
+      sessionId,
+      to: chatId,
+      caption: opts.caption,
+      mediaUrl: opts.mediaUrl,
+      mediaType: opts.mimetype?.startsWith("image") ? "image" : "document",
+      messageId,
+      status: "sent",
+    });
+
+    return { ok: true, messageId };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || String(err) };
+  }
+}
+
+/**
+ * Sends voice note (Audio / PTT)
+ */
+export async function sendVoiceMessage(opts: {
+  to: string;
+  audioUrl: string;
+  sessionId?: string;
+}): Promise<{ ok: boolean; messageId?: string; error?: string }> {
+  const settings = getWhatsAppSettings();
+  const sessionId = opts.sessionId || settings.activeSessionId;
+
+  if (!sessionId) {
+    return { ok: false, error: "No active WhatsApp session found." };
+  }
+
+  const chatId = normalizeChatId(opts.to);
+
+  try {
+    const res = await fetch(
+      `${settings.gatewayUrl}/api/sessions/${sessionId}/messages/send-audio`,
+      {
+        method: "POST",
+        headers: getBaseHeaders(settings.apiKey),
+        body: JSON.stringify({
+          chatId,
+          audio: {
+            url: opts.audioUrl,
+          },
+        }),
+      },
+    );
+
+    if (!res.ok) {
+      const errText = await res.text();
+      return { ok: false, error: `Voice send failed (${res.status}): ${errText}` };
+    }
+
+    const data = await res.json();
+    const messageId = data?.id || data?.messageId;
+
+    logWhatsAppEvent({
+      type: "outbound",
+      sessionId,
+      to: chatId,
+      mediaUrl: opts.audioUrl,
+      mediaType: "voice",
+      messageId,
+      status: "sent",
+    });
+
+    return { ok: true, messageId };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || String(err) };
+  }
+}
+
+/**
+ * Edits previously sent message
+ */
+export async function editMessage(opts: {
+  chatId: string;
+  messageId: string;
+  newText: string;
+  sessionId?: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const settings = getWhatsAppSettings();
+  const sessionId = opts.sessionId || settings.activeSessionId;
+
+  if (!sessionId) {
+    return { ok: false, error: "No active session." };
+  }
+
+  const chatId = normalizeChatId(opts.chatId);
+
+  try {
+    const res = await fetch(`${settings.gatewayUrl}/api/sessions/${sessionId}/messages/edit`, {
+      method: "POST",
+      headers: getBaseHeaders(settings.apiKey),
+      body: JSON.stringify({
+        chatId,
+        messageId: opts.messageId,
+        body: opts.newText,
+      }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      return { ok: false, error: `Edit failed (${res.status}): ${errText}` };
+    }
+
+    logWhatsAppEvent({
+      type: "edit",
+      sessionId,
+      to: chatId,
+      messageId: opts.messageId,
+      body: opts.newText,
+      status: "sent",
+    });
+
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || String(err) };
+  }
+}
+
+/**
+ * Deletes message for everyone
+ */
+export async function deleteMessage(opts: {
+  chatId: string;
+  messageId: string;
+  sessionId?: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const settings = getWhatsAppSettings();
+  const sessionId = opts.sessionId || settings.activeSessionId;
+
+  if (!sessionId) {
+    return { ok: false, error: "No active session." };
+  }
+
+  const chatId = normalizeChatId(opts.chatId);
+
+  try {
+    const res = await fetch(`${settings.gatewayUrl}/api/sessions/${sessionId}/messages/delete`, {
+      method: "POST",
+      headers: getBaseHeaders(settings.apiKey),
+      body: JSON.stringify({
+        chatId,
+        messageId: opts.messageId,
+      }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      return { ok: false, error: `Delete failed (${res.status}): ${errText}` };
+    }
+
+    logWhatsAppEvent({
+      type: "delete",
+      sessionId,
+      to: chatId,
+      messageId: opts.messageId,
+    });
+
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || String(err) };
+  }
+}
+
+/**
+ * Searches recent chats or contacts in the enabled session to find a client by name or phone digits.
+ */
+export async function findClient(
+  query: string,
+  sessionId?: string,
+): Promise<Array<{ id: string; name?: string; phone?: string; unreadCount?: number }>> {
+  const settings = getWhatsAppSettings();
+  const sid = sessionId || settings.activeSessionId;
+  if (!sid) return [];
+
+  try {
+    const res = await fetch(`${settings.gatewayUrl}/api/sessions/${sid}/chats`, {
+      headers: getBaseHeaders(settings.apiKey),
+    });
+    if (!res.ok) return [];
+
+    const data = await res.json();
+    const chats = Array.isArray(data) ? data : data.chats || [];
+    const q = query.trim().toLowerCase();
+
+    return chats
+      .filter((c: any) => {
+        const name = (c.name || c.formattedTitle || "").toLowerCase();
+        const id = (c.id || "").toLowerCase();
+        return name.includes(q) || id.includes(q);
+      })
+      .map((c: any) => ({
+        id: c.id,
+        name: c.name || c.formattedTitle || c.id,
+        phone: c.id?.replace(/@.*$/, ""),
+        unreadCount: c.unreadCount || 0,
+      }));
+  } catch {
+    return [];
+  }
+}

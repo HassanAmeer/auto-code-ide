@@ -90,6 +90,18 @@ import {
   getLiveKitToken,
   getLiveKitRoomInfo,
   geminiKeyRotator,
+  processWhatsAppWebhook,
+  getWhatsAppSessions,
+  createWhatsAppSession,
+  deleteWhatsAppSession,
+  getWhatsAppQr,
+  sendWhatsAppMessage,
+  editWhatsAppMessage,
+  deleteWhatsAppMessage,
+  fetchWhatsAppSettings,
+  saveWhatsAppSettings,
+  fetchWhatsAppLogs,
+  clearAllWhatsAppLogs,
 } from "./botBridge.ts";
 import {
   getServerSessionLedger,
@@ -2066,6 +2078,210 @@ export const layerBotKnowledgeBookmarkRemoveRoute = HttpRouter.add(
 );
 
 // ── End Bot Wishlist & Knowledge API ────────────────────────────────────────
+
+// ── WhatsApp Gateway & Bot Management API ──────────────────────────────────
+export const layerWhatsAppWebhookRoute = HttpRouter.add(
+  "POST",
+  "/api/webhooks/whatsapp",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const body = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as any;
+    const result = yield* Effect.promise(() => processWhatsAppWebhook(body));
+    return HttpServerResponse.jsonUnsafe(result);
+  }),
+);
+
+export const layerWhatsAppSessionsRoute = HttpRouter.add(
+  "GET",
+  "/api/whatsapp/sessions",
+  Effect.gen(function* () {
+    const sessions = yield* Effect.promise(() => getWhatsAppSessions());
+    return HttpServerResponse.jsonUnsafe({ ok: true, sessions });
+  }),
+);
+
+export const layerWhatsAppSessionCreateRoute = HttpRouter.add(
+  "POST",
+  "/api/whatsapp/sessions",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const body = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      name?: string;
+      engine?: string;
+    };
+    if (!body?.name?.trim()) {
+      return HttpServerResponse.jsonUnsafe({ ok: false, error: "Session name is required" });
+    }
+    const result = yield* Effect.promise(() =>
+      createWhatsAppSession(body.name!.trim(), body.engine),
+    );
+    return HttpServerResponse.jsonUnsafe({ ok: true, session: result });
+  }),
+);
+
+export const layerWhatsAppSessionDeleteRoute = HttpRouter.add(
+  "POST",
+  "/api/whatsapp/sessions/delete",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const body = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      sessionId?: string;
+    };
+    if (!body?.sessionId?.trim()) {
+      return HttpServerResponse.jsonUnsafe({ ok: false, error: "sessionId required" });
+    }
+    const result = yield* Effect.promise(() => deleteWhatsAppSession(body.sessionId!));
+    return HttpServerResponse.jsonUnsafe({ ok: true, result });
+  }),
+);
+
+export const layerWhatsAppSessionQrRoute = HttpRouter.add(
+  "GET",
+  "/api/whatsapp/sessions/qr",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const url = HttpServerRequest.toURL(request);
+    const sessionId = Option.isSome(url) ? (url.value.searchParams.get("sessionId") ?? "") : "";
+    if (!sessionId) {
+      return HttpServerResponse.jsonUnsafe({ ok: false, error: "sessionId param required" });
+    }
+    const result = yield* Effect.promise(() => getWhatsAppQr(sessionId));
+    return HttpServerResponse.jsonUnsafe({ ok: true, ...result });
+  }),
+);
+
+export const layerWhatsAppSettingsGetRoute = HttpRouter.add(
+  "GET",
+  "/api/whatsapp/settings",
+  Effect.gen(function* () {
+    const settings = yield* Effect.promise(() => fetchWhatsAppSettings());
+    return HttpServerResponse.jsonUnsafe({ ok: true, settings });
+  }),
+);
+
+export const layerWhatsAppSettingsSaveRoute = HttpRouter.add(
+  "POST",
+  "/api/whatsapp/settings",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const body = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as any;
+    const updated = yield* Effect.promise(() => saveWhatsAppSettings(body));
+    return HttpServerResponse.jsonUnsafe({ ok: true, settings: updated });
+  }),
+);
+
+export const layerWhatsAppSendRoute = HttpRouter.add(
+  "POST",
+  "/api/whatsapp/send",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const body = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      to?: string;
+      text?: string;
+      mediaUrl?: string;
+      caption?: string;
+      mediaType?: "text" | "image" | "voice" | "document";
+      sessionId?: string;
+    };
+    if (!body?.to?.trim()) {
+      return HttpServerResponse.jsonUnsafe({ ok: false, error: "'to' recipient required" });
+    }
+    const result = yield* Effect.promise(() =>
+      sendWhatsAppMessage({
+        to: body.to!.trim(),
+        text: body.text,
+        mediaUrl: body.mediaUrl,
+        caption: body.caption,
+        mediaType: body.mediaType,
+        sessionId: body.sessionId,
+      }),
+    );
+    return HttpServerResponse.jsonUnsafe(result);
+  }),
+);
+
+export const layerWhatsAppEditRoute = HttpRouter.add(
+  "POST",
+  "/api/whatsapp/edit",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const body = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      chatId?: string;
+      messageId?: string;
+      newText?: string;
+      sessionId?: string;
+    };
+    if (!body?.chatId || !body?.messageId || !body?.newText) {
+      return HttpServerResponse.jsonUnsafe({
+        ok: false,
+        error: "chatId, messageId and newText required",
+      });
+    }
+    const result = yield* Effect.promise(() =>
+      editWhatsAppMessage({
+        chatId: body.chatId!,
+        messageId: body.messageId!,
+        newText: body.newText!,
+        sessionId: body.sessionId,
+      }),
+    );
+    return HttpServerResponse.jsonUnsafe(result);
+  }),
+);
+
+export const layerWhatsAppDeleteRoute = HttpRouter.add(
+  "POST",
+  "/api/whatsapp/delete",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const body = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      chatId?: string;
+      messageId?: string;
+      sessionId?: string;
+    };
+    if (!body?.chatId || !body?.messageId) {
+      return HttpServerResponse.jsonUnsafe({
+        ok: false,
+        error: "chatId and messageId required",
+      });
+    }
+    const result = yield* Effect.promise(() =>
+      deleteWhatsAppMessage({
+        chatId: body.chatId!,
+        messageId: body.messageId!,
+        sessionId: body.sessionId,
+      }),
+    );
+    return HttpServerResponse.jsonUnsafe(result);
+  }),
+);
+
+export const layerWhatsAppLogsGetRoute = HttpRouter.add(
+  "GET",
+  "/api/whatsapp/logs",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const url = HttpServerRequest.toURL(request);
+    const type = Option.isSome(url) ? (url.value.searchParams.get("type") ?? undefined) : undefined;
+    const search = Option.isSome(url)
+      ? (url.value.searchParams.get("search") ?? undefined)
+      : undefined;
+    const limit = Option.isSome(url) ? Number(url.value.searchParams.get("limit") || 100) : 100;
+
+    const logs = yield* Effect.promise(() => fetchWhatsAppLogs({ type, search, limit }));
+    return HttpServerResponse.jsonUnsafe({ ok: true, logs });
+  }),
+);
+
+export const layerWhatsAppLogsClearRoute = HttpRouter.add(
+  "POST",
+  "/api/whatsapp/logs/clear",
+  Effect.gen(function* () {
+    yield* Effect.promise(() => clearAllWhatsAppLogs());
+    return HttpServerResponse.jsonUnsafe({ ok: true });
+  }),
+);
+// ── End WhatsApp Gateway & Bot Management API ──────────────────────────────
 
 interface ManagedDevServer {
   projectIdOrName: string;

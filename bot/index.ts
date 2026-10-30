@@ -16,6 +16,7 @@ export * from "./cline/engine.ts";
 export * from "./cline/tools.ts";
 export * from "./watchdog/watchdog.ts";
 export * from "./livekit/index.ts";
+export * from "./whatsapp/index.ts";
 
 export interface BotTurnOptions {
   userText: string;
@@ -166,6 +167,113 @@ export async function processSuperBotTurn(options: BotTurnOptions): Promise<BotT
       spokenReply: text,
       intent: analysis.intent,
       actionTaken: "watchdog_activated",
+      systemPrompt: buildSmartBotSystemPrompt({ intentAnalysis: analysis, language: lang }),
+    };
+  }
+
+  // 7. WhatsApp Action Handler
+  if (analysis.intent === "WHATSAPP_ACTION") {
+    const {
+      sendTextMessage,
+      sendMediaMessage,
+      sendVoiceMessage,
+      editMessage,
+      deleteMessage,
+      findClient,
+      getWhatsAppSettings,
+    } = await import("./whatsapp/index.ts");
+
+    const settings = getWhatsAppSettings();
+    const activeSession = settings.activeSessionId || "default";
+
+    // Extract potential phone number or client identifier
+    const phoneMatch = userText.match(/(?:\+?92|0)?3\d{2}[- ]?\d{7}|\b\d{10,15}\b/);
+    const rawTarget = phoneMatch ? phoneMatch[0].replace(/[- ]/g, "") : "";
+
+    // Clean user message to extract actual text
+    let messageToSend = userText
+      .replace(
+        /(?:whatsapp\s*(?:par|pe|karo)?|client\s*ko|is\s*number\s*ko|ko\s*message\s*(?:bhej|send|karo)?|message\s*send\s*karo|bhej\s*do|send\s*karo)/gi,
+        "",
+      )
+      .replace(new RegExp(rawTarget, "g"), "")
+      .replace(/^[:\-\s]+/, "")
+      .trim();
+
+    if (!messageToSend) {
+      messageToSend = "Assalam-o-Alaikum! AutoJobs Bot ki taraf se message.";
+    }
+
+    // Check if user is asking to EDIT a message
+    if (/\b(edit\s*karo|tabdeel\s*karo|change\s*karo)\b/i.test(userText)) {
+      const reply =
+        lang === "urdu"
+          ? `Main message edit kar sakta hoon! Message edit karne ke liye mujhe Client ka Number/ChatId aur Message ID darkaar hai.\n\n• **Active Session:** \`${activeSession}\`\n• **Action:** Edit Message\n\nAap WhatsApp Sheet ya Tester se direct 1-click edit kar sakte hain.`
+          : `I can edit WhatsApp messages. Please specify the target message ID and the new text for session \`${activeSession}\`.`;
+      return {
+        reply,
+        spokenReply: "Message edit karne ke liye target message ID darkaar hai.",
+        intent: analysis.intent,
+        actionTaken: "whatsapp_edit_prompt",
+        systemPrompt: buildSmartBotSystemPrompt({ intentAnalysis: analysis, language: lang }),
+      };
+    }
+
+    // Check if user is asking to DELETE a message
+    if (/\b(delete\s*karo|hata\s*do|mita\s*do)\b/i.test(userText)) {
+      const reply =
+        lang === "urdu"
+          ? `Message delete (Delete for Everyone) karne ke liye mujhe target Message ID aur Chat Number batayein.\n\n• **Active Session:** \`${activeSession}\`\n• **Action:** Delete Message`
+          : `To delete a message for everyone, please provide the Message ID and Chat Number for session \`${activeSession}\`.`;
+      return {
+        reply,
+        spokenReply: "Message delete karne ke liye target message ID darkaar hai.",
+        intent: analysis.intent,
+        actionTaken: "whatsapp_delete_prompt",
+        systemPrompt: buildSmartBotSystemPrompt({ intentAnalysis: analysis, language: lang }),
+      };
+    }
+
+    // Outbound Send
+    if (rawTarget) {
+      const result = await sendTextMessage({
+        to: rawTarget,
+        text: messageToSend,
+        sessionId: activeSession,
+        simulateDelay: true,
+      });
+
+      const reply = result.ok
+        ? lang === "urdu"
+          ? `✅ **WhatsApp Message Sent!**\n\n• **Recipient:** \`${rawTarget}\`\n• **Session:** \`${activeSession}\`\n• **Message:** "${messageToSend}"\n• **Message ID:** \`${result.messageId || "delivered"}\`\n\nClient ko message deliver ho chuka hai aur record WA Logs mein save ho gaya hai.`
+          : `✅ Message successfully sent to \`${rawTarget}\` via session \`${activeSession}\`!`
+        : lang === "urdu"
+          ? `⚠️ **Message Send Failed:** ${result.error}\n\nMeherbani farma kar check karein ke WhatsApp Sheet mein active session \`${activeSession}\` connected hai ya nahi.`
+          : `⚠️ Failed to send message: ${result.error}`;
+
+      return {
+        reply,
+        spokenReply: result.ok
+          ? `Maine client ${rawTarget} ko WhatsApp message deliver kar diya hai.`
+          : `Message bhejne mein error aaya hai.`,
+        intent: analysis.intent,
+        actionTaken: result.ok ? "whatsapp_message_sent" : "whatsapp_send_failed",
+        systemPrompt: buildSmartBotSystemPrompt({ intentAnalysis: analysis, language: lang }),
+      };
+    }
+
+    // If no target phone number found in query, search recent clients
+    const clients = await findClient(messageToSend.slice(0, 15), activeSession);
+    const reply =
+      lang === "urdu"
+        ? `Aap WhatsApp par message kis number ko bhejna chahte hain? Meherbani farma kar client ka number batayein (jaise: \`03001234567\`).\n\n• **Active Session:** \`${activeSession}\`\n• **Connected Gateway:** \`${settings.gatewayUrl}\`\n\nAap top header mein WhatsApp icon click kar ke direct chats aur sessions bhi manage kar sakte hain.`
+        : `Please specify the recipient phone number (e.g. 03001234567) to send the message via session \`${activeSession}\`.`;
+
+    return {
+      reply,
+      spokenReply: "Aap kis number ko WhatsApp message bhejna chahte hain?",
+      intent: analysis.intent,
+      actionTaken: "whatsapp_recipient_needed",
       systemPrompt: buildSmartBotSystemPrompt({ intentAnalysis: analysis, language: lang }),
     };
   }

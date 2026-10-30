@@ -45,7 +45,7 @@ export function RequestLogsFloatingButton() {
         type="button"
         onClick={() => setIsOpen(true)}
         className={`fixed bottom-[1.5px] right-[1.5px] z-[90] flex scale-[0.66] origin-bottom-right items-center gap-1.5 rounded-full border ${borderClass} px-2 py-1 text-xs font-medium text-zinc-200 shadow-lg backdrop-blur-md transition-all duration-150 hover:scale-[1] hover:bg-zinc-800 hover:border-zinc-500 hover:text-white active:scale-[0.62] cursor-pointer group`}
-        title={`Open Network, AI & Bot Logs (${totalCount} captured)`}
+        title={`Open Network, AI, Bot & WhatsApp Logs (${totalCount} captured)`}
       >
         <ActivityIcon className={`size-3.5 transition-all shrink-0 ${iconColorClass}`} />
 

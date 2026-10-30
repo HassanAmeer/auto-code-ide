@@ -176,3 +176,151 @@ export async function queryGeminiWithRotation(opts: {
   }
   return { ok: false, error: outcome.error, keysAttempted: outcome.keysAttempted };
 }
+
+// ============================================================================
+// WhatsApp Gateway & Bot Bridge Methods
+// ============================================================================
+
+export async function processWhatsAppWebhook(payload: any): Promise<any> {
+  try {
+    const mod = await import("../../../bot/index.ts" as string);
+    return await (mod as any).handleWhatsAppWebhook(payload);
+  } catch (err: any) {
+    return { ok: false, error: err?.message || String(err) };
+  }
+}
+
+export async function getWhatsAppSessions(): Promise<any[]> {
+  try {
+    const mod = await import("../../../bot/index.ts" as string);
+    return await (mod as any).listSessions();
+  } catch {
+    return [];
+  }
+}
+
+export async function createWhatsAppSession(name: string, engine?: string): Promise<any> {
+  try {
+    const mod = await import("../../../bot/index.ts" as string);
+    return await (mod as any).createSession(name, engine);
+  } catch (err: any) {
+    return { ok: false, error: err?.message || String(err) };
+  }
+}
+
+export async function deleteWhatsAppSession(sessionId: string): Promise<any> {
+  try {
+    const mod = await import("../../../bot/index.ts" as string);
+    return await (mod as any).deleteSession(sessionId);
+  } catch (err: any) {
+    return { ok: false, error: err?.message || String(err) };
+  }
+}
+
+export async function getWhatsAppQr(sessionId: string): Promise<any> {
+  try {
+    const mod = await import("../../../bot/index.ts" as string);
+    return await (mod as any).getSessionQr(sessionId);
+  } catch (err: any) {
+    return { status: "FAILED", error: err?.message || String(err) };
+  }
+}
+
+export async function sendWhatsAppMessage(opts: {
+  to: string;
+  text?: string;
+  mediaUrl?: string;
+  caption?: string;
+  mediaType?: "text" | "image" | "voice" | "document";
+  sessionId?: string;
+}): Promise<any> {
+  try {
+    const mod = await import("../../../bot/index.ts" as string);
+    if (opts.mediaType === "voice" && opts.mediaUrl) {
+      return await (mod as any).sendVoiceMessage({
+        to: opts.to,
+        audioUrl: opts.mediaUrl,
+        sessionId: opts.sessionId,
+      });
+    }
+    if (opts.mediaUrl) {
+      return await (mod as any).sendMediaMessage({
+        to: opts.to,
+        mediaUrl: opts.mediaUrl,
+        caption: opts.caption || opts.text,
+        mimetype: opts.mediaType === "image" ? "image/jpeg" : undefined,
+        sessionId: opts.sessionId,
+      });
+    }
+    return await (mod as any).sendTextMessage({
+      to: opts.to,
+      text: opts.text || "",
+      sessionId: opts.sessionId,
+    });
+  } catch (err: any) {
+    return { ok: false, error: err?.message || String(err) };
+  }
+}
+
+export async function editWhatsAppMessage(opts: {
+  chatId: string;
+  messageId: string;
+  newText: string;
+  sessionId?: string;
+}): Promise<any> {
+  try {
+    const mod = await import("../../../bot/index.ts" as string);
+    return await (mod as any).editMessage(opts);
+  } catch (err: any) {
+    return { ok: false, error: err?.message || String(err) };
+  }
+}
+
+export async function deleteWhatsAppMessage(opts: {
+  chatId: string;
+  messageId: string;
+  sessionId?: string;
+}): Promise<any> {
+  try {
+    const mod = await import("../../../bot/index.ts" as string);
+    return await (mod as any).deleteMessage(opts);
+  } catch (err: any) {
+    return { ok: false, error: err?.message || String(err) };
+  }
+}
+
+export async function fetchWhatsAppSettings(): Promise<any> {
+  try {
+    const mod = await import("../../../bot/index.ts" as string);
+    return (mod as any).getWhatsAppSettings();
+  } catch {
+    return {};
+  }
+}
+
+export async function saveWhatsAppSettings(updates: any): Promise<any> {
+  try {
+    const mod = await import("../../../bot/index.ts" as string);
+    return (mod as any).updateWhatsAppSettings(updates);
+  } catch (err: any) {
+    return { ok: false, error: err?.message || String(err) };
+  }
+}
+
+export async function fetchWhatsAppLogs(filter?: any): Promise<any[]> {
+  try {
+    const mod = await import("../../../bot/index.ts" as string);
+    return (mod as any).getWhatsAppLogs(filter);
+  } catch {
+    return [];
+  }
+}
+
+export async function clearAllWhatsAppLogs(): Promise<void> {
+  try {
+    const mod = await import("../../../bot/index.ts" as string);
+    (mod as any).clearWhatsAppLogs();
+  } catch {
+    // ignore
+  }
+}

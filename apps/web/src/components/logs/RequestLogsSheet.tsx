@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import {
   XIcon,
   Trash2Icon,
@@ -21,6 +21,7 @@ import {
   SparklesIcon,
   MicIcon,
   Volume2Icon,
+  MessageCircle,
 } from "lucide-react";
 import {
   networkLogger,
@@ -44,7 +45,50 @@ interface RequestLogsSheetProps {
 }
 
 export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
-  const [mainTab, setMainTab] = useState<"ai" | "network" | "bot">("bot");
+  const [mainTab, setMainTab] = useState<"ai" | "network" | "bot" | "wa">("bot");
+
+  // WhatsApp Logs State
+  const [waLogs, setWaLogs] = useState<any[]>([]);
+  const [waFilter, setWaFilter] = useState<
+    "all" | "inbound" | "outbound" | "edit" | "delete" | "error"
+  >("all");
+  const [waSearchQuery, setWaSearchQuery] = useState("");
+  const [selectedWaLogId, setSelectedWaLogId] = useState<string | null>(null);
+  const [isRefreshingWa, setIsRefreshingWa] = useState(false);
+
+  const fetchWaLogs = useCallback(async () => {
+    try {
+      const res = await fetch("/api/whatsapp/logs?limit=200");
+      if (res.ok) {
+        const data = await res.json();
+        setWaLogs(data.logs || []);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const handleClearWaLogs = async () => {
+    try {
+      await fetch("/api/whatsapp/logs/clear", { method: "POST" });
+      setWaLogs([]);
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleRefreshWa = async () => {
+    setIsRefreshingWa(true);
+    await fetchWaLogs();
+    setTimeout(() => setIsRefreshingWa(false), 500);
+  };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    fetchWaLogs();
+    const interval = setInterval(fetchWaLogs, 3000);
+    return () => clearInterval(interval);
+  }, [isOpen, fetchWaLogs]);
 
   // Bot Logs State
   const botLogs = useVoiceCallLogs();
@@ -390,11 +434,60 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                   {botLogs.length}
                 </span>
               </button>
+
+              <button
+                type="button"
+                onClick={() => setMainTab("wa")}
+                className={`flex items-center gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full text-2xs sm:text-xs font-semibold transition-all cursor-pointer ${
+                  mainTab === "wa"
+                    ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-xs"
+                    : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60"
+                }`}
+              >
+                <MessageCircle className="size-3.5 text-emerald-400 shrink-0" />
+                <span className="hidden sm:inline">WA Logs</span>
+                <span className="inline sm:hidden">WA</span>
+                <span
+                  className={`rounded-full px-1.5 py-0.2 text-[10px] font-mono ${
+                    mainTab === "wa"
+                      ? "bg-emerald-500/30 text-emerald-200 font-bold"
+                      : "bg-zinc-800 text-zinc-400"
+                  }`}
+                >
+                  {waLogs.length}
+                </span>
+              </button>
             </div>
           </div>
 
           <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-            {mainTab === "bot" ? (
+            {mainTab === "wa" ? (
+              <>
+                <Button
+                  size="xs"
+                  variant="outline"
+                  onClick={handleRefreshWa}
+                  disabled={isRefreshingWa}
+                  className="rounded-full bg-zinc-900/80 border-zinc-700/80 hover:bg-zinc-800 text-zinc-300 hover:text-white text-xs h-7 px-2.5 cursor-pointer"
+                >
+                  <RefreshCwIcon
+                    className={`size-3 mr-1 ${isRefreshingWa ? "animate-spin text-emerald-400" : ""}`}
+                  />
+                  <span className="hidden sm:inline">Refresh</span>
+                </Button>
+                <Button
+                  size="xs"
+                  variant="outline"
+                  onClick={handleClearWaLogs}
+                  disabled={waLogs.length === 0}
+                  className="rounded-full bg-zinc-900/80 border-zinc-700/80 hover:bg-zinc-800 text-zinc-400 hover:text-rose-400 text-xs h-7 px-2.5 cursor-pointer"
+                  title="Clear WhatsApp Logs"
+                >
+                  <Trash2Icon className="size-3 mr-1" />
+                  <span className="hidden sm:inline">Clear</span>
+                </Button>
+              </>
+            ) : mainTab === "bot" ? (
               <>
                 <Button
                   size="xs"
@@ -2481,6 +2574,302 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                   LiveKit messages, and full payload details.
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* ── WhatsApp Logs Tab Content ──────────────────────────────────────── */}
+        {mainTab === "wa" && (
+          <div className="flex-1 flex flex-col md:flex-row min-h-0 min-w-0 bg-zinc-950/80">
+            {/* Left Column: Filter Bar + Log Items List */}
+            <div className="w-full md:w-96 flex flex-col border-r border-zinc-800/80 shrink-0 min-h-0 bg-zinc-950/40">
+              {/* Search & Filter Header */}
+              <div className="p-2 sm:p-2.5 border-b border-zinc-800/80 space-y-2">
+                <div className="relative">
+                  <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-zinc-500" />
+                  <input
+                    type="text"
+                    placeholder="Search by text, phone, or ID..."
+                    value={waSearchQuery}
+                    onChange={(e) => setWaSearchQuery(e.target.value)}
+                    className="w-full pl-8 pr-2.5 py-1.5 rounded-xl bg-zinc-900 border border-zinc-800 text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-hidden focus:border-emerald-500"
+                  />
+                  {waSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setWaSearchQuery("")}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                    >
+                      <XIcon className="size-3" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Filter Pills */}
+                <div className="flex items-center gap-1 overflow-x-auto no-scrollbar text-2xs">
+                  {(["all", "inbound", "outbound", "edit", "delete", "error"] as const).map((f) => {
+                    const count =
+                      f === "all" ? waLogs.length : waLogs.filter((l) => l.type === f).length;
+                    return (
+                      <button
+                        key={f}
+                        type="button"
+                        onClick={() => setWaFilter(f)}
+                        className={`px-2 py-0.5 rounded-full capitalize shrink-0 transition-all cursor-pointer ${
+                          waFilter === f
+                            ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-semibold"
+                            : "bg-zinc-900 text-zinc-400 border border-zinc-800 hover:text-zinc-200"
+                        }`}
+                      >
+                        {f} ({count})
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Logs Scrollable List */}
+              <div className="flex-1 overflow-y-auto divide-y divide-zinc-900 min-h-0">
+                {(() => {
+                  let list = waLogs;
+                  if (waFilter !== "all") {
+                    list = list.filter((l) => l.type === waFilter);
+                  }
+                  if (waSearchQuery) {
+                    const q = waSearchQuery.toLowerCase();
+                    list = list.filter(
+                      (l) =>
+                        (l.body && l.body.toLowerCase().includes(q)) ||
+                        (l.from && l.from.toLowerCase().includes(q)) ||
+                        (l.to && l.to.toLowerCase().includes(q)) ||
+                        (l.messageId && l.messageId.toLowerCase().includes(q)),
+                    );
+                  }
+
+                  if (list.length === 0) {
+                    return (
+                      <div className="p-8 text-center text-zinc-600 text-xs space-y-1">
+                        <MessageCircle className="mx-auto size-7 text-zinc-700" />
+                        <p className="font-medium text-zinc-400">No WhatsApp logs captured</p>
+                        <p className="text-3xs text-zinc-600">
+                          Messages sent, received, edited or deleted will appear here live.
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  return list.map((log) => {
+                    const isSelected = selectedWaLogId === log.id;
+                    const isInbound = log.type === "inbound";
+                    const isOutbound = log.type === "outbound";
+                    const isEdit = log.type === "edit";
+                    const isDelete = log.type === "delete";
+                    const isError = log.type === "error";
+
+                    return (
+                      <div
+                        key={log.id}
+                        onClick={() => setSelectedWaLogId(log.id)}
+                        className={`p-2.5 transition-all cursor-pointer text-xs space-y-1 ${
+                          isSelected
+                            ? "bg-emerald-950/30 border-l-2 border-emerald-400"
+                            : "hover:bg-zinc-900/40"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between text-3xs">
+                          <div className="flex items-center gap-1.5 font-medium">
+                            <span
+                              className={`rounded-full px-1.5 py-0.2 uppercase font-bold text-[9px] ${
+                                isInbound
+                                  ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                                  : isOutbound
+                                    ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30"
+                                    : isEdit
+                                      ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                                      : isDelete
+                                        ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
+                                        : "bg-red-500/20 text-red-400 border border-red-500/30"
+                              }`}
+                            >
+                              {log.type}
+                            </span>
+                            <span className="text-zinc-500 font-mono">[{log.sessionId}]</span>
+                          </div>
+                          <span className="text-zinc-500 font-mono text-3xs">
+                            {new Date(log.timestamp).toLocaleTimeString()}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 text-zinc-300 font-medium truncate">
+                          <span>
+                            {isInbound
+                              ? `From: ${log.from}`
+                              : `To: ${log.to || log.from || "Client"}`}
+                          </span>
+                          {log.senderName && (
+                            <span className="text-zinc-500 font-normal">({log.senderName})</span>
+                          )}
+                        </div>
+
+                        <p className="text-zinc-400 text-2xs line-clamp-2 break-all">
+                          {log.body ||
+                            (log.caption
+                              ? `[Media: ${log.caption}]`
+                              : log.error || "Event recorded")}
+                        </p>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            </div>
+
+            {/* Right Column: Selected WhatsApp Event Details */}
+            <div className="flex-1 flex flex-col min-h-0 min-w-0 bg-zinc-950/60 overflow-y-auto">
+              {(() => {
+                const selectedLog = waLogs.find((l) => l.id === selectedWaLogId) || waLogs[0];
+                if (!selectedLog) {
+                  return (
+                    <div className="flex-1 flex items-center justify-center p-8 text-center text-zinc-600 text-xs">
+                      Select any WhatsApp message or event from the left list to inspect details.
+                    </div>
+                  );
+                }
+
+                const isInbound = selectedLog.type === "inbound";
+
+                return (
+                  <div className="p-4 space-y-4">
+                    {/* Header Card */}
+                    <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/60 p-3.5 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-2xs font-bold uppercase tracking-wider ${
+                              isInbound
+                                ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                                : selectedLog.type === "outbound"
+                                  ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40"
+                                  : "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                            }`}
+                          >
+                            {selectedLog.type}
+                          </span>
+                          <span className="text-xs text-zinc-400 font-mono">
+                            Session: <strong className="text-white">{selectedLog.sessionId}</strong>
+                          </span>
+                        </div>
+                        <span className="text-3xs text-zinc-500 font-mono">
+                          {new Date(selectedLog.timestamp).toLocaleString()}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1 border-t border-zinc-800/60">
+                        <div>
+                          <span className="text-zinc-500 text-3xs uppercase tracking-wider block">
+                            Sender / From
+                          </span>
+                          <div className="flex items-center gap-1 font-mono text-zinc-200">
+                            <span>{selectedLog.from || "N/A"}</span>
+                            {selectedLog.from && (
+                              <button
+                                type="button"
+                                onClick={() => copyToClipboard(selectedLog.from!, "copyFrom")}
+                                className="text-zinc-500 hover:text-zinc-300"
+                              >
+                                {copiedKey === "copyFrom" ? (
+                                  <CheckIcon className="size-3 text-emerald-400" />
+                                ) : (
+                                  <CopyIcon className="size-3" />
+                                )}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        <div>
+                          <span className="text-zinc-500 text-3xs uppercase tracking-wider block">
+                            Recipient / To
+                          </span>
+                          <div className="flex items-center gap-1 font-mono text-zinc-200">
+                            <span>{selectedLog.to || "N/A"}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {selectedLog.messageId && (
+                        <div className="text-3xs text-zinc-500 font-mono pt-1">
+                          Message ID: <span className="text-zinc-400">{selectedLog.messageId}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Message Bubble View */}
+                    <div className="space-y-1.5">
+                      <span className="text-3xs font-semibold uppercase tracking-wider text-zinc-500 px-1">
+                        Message Content
+                      </span>
+                      <div
+                        className={`rounded-2xl border p-3.5 space-y-2 ${
+                          isInbound
+                            ? "border-emerald-500/30 bg-emerald-950/20 text-zinc-100"
+                            : "border-zinc-800 bg-zinc-900/80 text-zinc-200"
+                        }`}
+                      >
+                        <p className="text-xs whitespace-pre-wrap leading-relaxed select-text font-sans">
+                          {selectedLog.body || selectedLog.caption || "[No text body]"}
+                        </p>
+
+                        {selectedLog.mediaUrl && (
+                          <div className="pt-2 border-t border-white/10 flex items-center gap-2 text-xs">
+                            <span className="text-zinc-400">Media:</span>
+                            <a
+                              href={selectedLog.mediaUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-emerald-400 hover:underline flex items-center gap-1 font-mono text-2xs truncate"
+                            >
+                              <span>{selectedLog.mediaUrl}</span>
+                              <ExternalLinkIcon className="size-3" />
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Raw Event JSON */}
+                    {selectedLog.rawPayload && (
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between px-1">
+                          <span className="text-3xs font-semibold uppercase tracking-wider text-zinc-500">
+                            Raw Webhook Event Payload
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              copyToClipboard(
+                                JSON.stringify(selectedLog.rawPayload, null, 2),
+                                "copyWaRaw",
+                              )
+                            }
+                            className="text-zinc-400 hover:text-zinc-200 flex items-center gap-1 text-2xs"
+                          >
+                            {copiedKey === "copyWaRaw" ? (
+                              <CheckIcon className="size-3 text-emerald-400" />
+                            ) : (
+                              <CopyIcon className="size-3" />
+                            )}
+                            <span>Copy JSON</span>
+                          </button>
+                        </div>
+                        <pre className="rounded-xl border border-zinc-800 bg-black/50 p-3 text-3xs text-zinc-300 font-mono overflow-x-auto whitespace-pre-wrap">
+                          {JSON.stringify(selectedLog.rawPayload, null, 2)}
+                        </pre>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           </div>
         )}

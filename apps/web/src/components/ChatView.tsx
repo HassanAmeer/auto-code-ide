@@ -503,6 +503,7 @@ import {
   resolveScrollToEndClearance,
 } from "./composerFooterLayout";
 import { ChatHeader } from "./chat/ChatHeader";
+import { WhatsAppHeaderButton } from "./whatsapp/WhatsAppHeaderButton";
 import { MobileProjectThreadTabs } from "./chat/MobileProjectThreadTabs";
 import { useRemoteOpenState } from "~/remoteOpen";
 import { shouldShowOpenInPicker } from "./chat/OpenInPicker.logic";
@@ -12076,6 +12077,9 @@ export default function ChatView(props: ChatViewProps) {
               ? { onOpenProjectSettings: handleOpenDraftProjectSettings }
               : {})}
           />
+          <div className="flex items-center gap-1.5 shrink-0 ml-auto z-10 pl-2">
+            <WhatsAppHeaderButton />
+          </div>
         </header>
 
         {/* Project File Explorer & Editor */}

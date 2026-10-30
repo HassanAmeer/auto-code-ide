@@ -9,6 +9,7 @@ export type UserIntent =
   | "WISHLIST_ADD"
   | "WISHLIST_LIST"
   | "AUTO_HEAL_REQUEST"
+  | "WHATSAPP_ACTION"
   | "GENERAL_WORK";
 
 export interface IntentAnalysis {
@@ -82,6 +83,15 @@ export function classifyIntent(userText: string): IntentAnalysis {
     )
   ) {
     return { intent: "AUTO_HEAL_REQUEST", confidence: 0.95, isUrdu };
+  }
+
+  // 3.1.5 WhatsApp Action Request (e.g. "whatsapp pe message bhejo", "client ko message karo", "whatsapp edit/delete", "voice note send karo")
+  if (
+    /\b(whatsapp|wa\s+message|client\s+ko\s+message|number\s+ko\s+message|message\s+bhej\s*(?:do|o|na)|message\s+send\s*karo|wa\s+send|message\s+edit\s*karo|message\s+delete\s*karo|voice\s*note\s*(?:send|bhej)|image\s*(?:send|bhej).{0,30}?(?:whatsapp|client))\b/i.test(
+      t,
+    )
+  ) {
+    return { intent: "WHATSAPP_ACTION", confidence: 0.95, isUrdu };
   }
 
   // 3.2 Wishlist / Feature Backlog List Request (e.g. "wishlist dikhao", "kya features bole thay", "backlog dikhao")
