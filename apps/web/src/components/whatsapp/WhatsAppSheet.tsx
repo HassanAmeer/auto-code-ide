@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import {
   X,
-  MessageCircle,
   Smartphone,
   QrCode,
   Trash2,
@@ -22,6 +22,7 @@ import {
   Check,
 } from "lucide-react";
 import { Button } from "../ui/button";
+import { WhatsAppIcon } from "./WhatsAppHeaderButton";
 
 interface WhatsAppSession {
   id: string;
@@ -268,27 +269,27 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
 
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 z-[120] flex justify-end">
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex justify-end">
       {/* Blurred Backdrop */}
       <div
-        className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
+        className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
         onClick={onClose}
       />
 
-      {/* Cupertino iOS Slide-over Sheet */}
-      <div className="relative z-10 flex h-full w-full max-w-md flex-col bg-[#0d0f12]/95 border-l border-white/10 shadow-2xl backdrop-blur-2xl text-zinc-100 font-sans animate-in slide-in-from-right duration-250">
+      {/* Cupertino iOS Slide-over Sheet (90% width on mobile) */}
+      <div className="relative z-10 flex h-full w-[90vw] sm:w-[440px] max-w-[90vw] sm:max-w-md flex-col bg-[#0d0f12]/95 border-l border-white/10 shadow-2xl backdrop-blur-2xl text-zinc-100 font-sans animate-in slide-in-from-right duration-250">
         {/* iOS Navigation Header */}
         <div className="flex items-center justify-between border-b border-white/[0.08] px-4 py-3.5 bg-zinc-950/40">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 shadow-sm">
-              <MessageCircle className="size-4.5" />
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#25D366]/15 border border-[#25D366]/30 text-[#25D366] shadow-sm">
+              <WhatsAppIcon className="size-5 text-[#25D366]" />
             </div>
             <div>
               <h2 className="text-sm font-semibold tracking-tight text-white flex items-center gap-1.5">
                 WhatsApp Manager
                 {settings.botEnabled && (
-                  <span className="flex size-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="flex size-2 rounded-full bg-[#25D366] animate-pulse" />
                 )}
               </h2>
               <p className="text-[11px] text-zinc-400">Cupertino Multi-Session Gateway</p>
@@ -980,7 +981,22 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
             </div>
           </div>
         )}
+
+        {/* Floating Bottom-Right Close Icon Button */}
+        <div className="absolute bottom-5 right-5 z-30 pointer-events-auto">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-zinc-900/95 hover:bg-zinc-800 text-zinc-100 border border-white/20 shadow-2xl backdrop-blur-xl active:scale-95 transition-all text-xs font-semibold cursor-pointer"
+            title="Close Sheet"
+            aria-label="Close WhatsApp Sheet"
+          >
+            <X className="size-4 text-zinc-300" />
+            <span className="text-[11px]">Close</span>
+          </button>
+        </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
