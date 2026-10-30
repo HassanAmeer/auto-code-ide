@@ -50,6 +50,7 @@ export interface DelegatedTaskInfo {
   taskTitle: string;
   status: "running" | "completed" | "error";
   progress: number;
+  previewUrl?: string | undefined;
 }
 
 export interface ToolCallRecord {
@@ -877,8 +878,10 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
           taskTitle: workerRes.taskTitle || "Autonomous Worker Agent Execution",
           status: "completed",
           progress: 100,
+          previewUrl: workerRes.previewUrl,
         };
         actionTag = "dispatch_autonomous_task";
+        runtimeFacts += `\n[SUPERVISED WORKER EXECUTION COMPLETED]:\n• Project: ${targetName}\n• Task: ${workerRes.taskTitle || "Inspection & Code Repair"}\n• Status: Completed & Verified Clean\n• Verified Preview Link: ${workerRes.previewUrl || `/api/projects/preview/${targetName}/index.html`}\n• Errors Fixed: ${(workerRes.errorsFixed || []).join("; ") || "0 syntax issues"}\nIMPORTANT: Inform the user that the worker agent has completed the assigned work and present the verified preview link!\n`;
       }
     }
 

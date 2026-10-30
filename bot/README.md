@@ -61,6 +61,7 @@ bot/
 ├── watchdog/                 <-- Away-Mode Watchdog
 │   └── watchdog.ts           <-- Background interval jo user ke peeche errors aur preview health check karta hai
 │
+├── SUPERVISOR_WORKFLOW.md    <-- Core Agentic Supervisor Workflow (Kaam karwane wala AI)
 ├── index.ts                  <-- Master Controller (Single Bridge for UI and Server)
 ├── tsconfig.json             <-- TypeScript config (0 compilation errors)
 └── README.md                 <-- Yeh documentation file

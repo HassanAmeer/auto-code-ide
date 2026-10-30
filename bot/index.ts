@@ -10,6 +10,7 @@ export * from "./supervisor/intentClassifier.ts";
 export * from "./supervisor/prompt.ts";
 export * from "./memory/projectSpecs.ts";
 export * from "./memory/featureBacklog.ts";
+export * from "./memory/spaces.ts";
 export * from "./cline/auto-healer.ts";
 export * from "./cline/engine.ts";
 export * from "./cline/tools.ts";

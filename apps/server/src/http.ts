@@ -1855,6 +1855,66 @@ export const layerBotWishlistUpdateStatusRoute = HttpRouter.add(
   }),
 );
 
+// ── Bot Spaces & Living Document API (OpenDots Inspired) ───────────────────
+
+export const layerBotSpacesGetRoute = HttpRouter.add(
+  "GET",
+  "/api/bot/spaces",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const url = HttpServerRequest.toURL(request);
+    const projectName = Option.isSome(url)
+      ? (url.value.searchParams.get("project") ?? "Workspace")
+      : "Workspace";
+
+    const pages = yield* Effect.promise(async () => {
+      try {
+        const { loadSpacesDocuments } = await import("../../../bot/memory/spaces.ts" as string);
+        return (loadSpacesDocuments as (p: string) => unknown[])(projectName);
+      } catch {
+        return [];
+      }
+    });
+
+    return HttpServerResponse.jsonUnsafe({ ok: true, pages, projectName });
+  }),
+);
+
+export const layerBotSpacesPostRoute = HttpRouter.add(
+  "POST",
+  "/api/bot/spaces",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const body = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      projectName?: string;
+      pages?: any[];
+      page?: any;
+    };
+
+    const projectName = body?.projectName ?? "Workspace";
+
+    const result = yield* Effect.promise(async () => {
+      try {
+        const { saveSpacesDocuments, upsertSpacesDocument } = await import(
+          "../../../bot/memory/spaces.ts" as string
+        );
+        if (body?.page) {
+          return (upsertSpacesDocument as (p: string, doc: any) => any)(projectName, body.page);
+        }
+        if (Array.isArray(body?.pages)) {
+          (saveSpacesDocuments as (p: string, docs: any[]) => void)(projectName, body.pages);
+          return body.pages;
+        }
+        return null;
+      } catch {
+        return null;
+      }
+    });
+
+    return HttpServerResponse.jsonUnsafe({ ok: Boolean(result), result, projectName });
+  }),
+);
+
 // ── Bot Per-Project Knowledge & Rulebook API ────────────────────────────────
 export const layerBotKnowledgeGetRoute = HttpRouter.add(
   "GET",

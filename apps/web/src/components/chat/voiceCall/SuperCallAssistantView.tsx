@@ -61,6 +61,12 @@ import {
 } from "lucide-react";
 import ChatMarkdown from "~/components/ChatMarkdown";
 import { ReadAloudButton } from "~/components/chat/ReadAloudButton";
+import {
+  PageReviewCard,
+  LivingDocumentCanvas,
+  type SpacePage,
+  loadSpacePages,
+} from "~/components/chat/spaces";
 import type { ToolCallRecord } from "./superAgentEngine";
 import {
   loadSessionLedger,
@@ -623,6 +629,10 @@ export function SuperCallAssistantView() {
     setTimeout(() => setCopiedMessageId(null), 2000);
   }, []);
 
+  // OpenDots Inspired: Spaces & Living Document Canvas State
+  const [activeCanvasPage, setActiveCanvasPage] = useState<SpacePage | null>(null);
+  const [isCanvasOpen, setIsCanvasOpen] = useState(false);
+
   // Command Center / Right Sidebar Drawer
   const [isCommandCenterOpen, setIsCommandCenterOpen] = useState(false);
   const [commandCenterTab, setCommandCenterTab] = useState<
@@ -1037,8 +1047,40 @@ export function SuperCallAssistantView() {
         // Auto-detect code diffs in assistant reply
         const diffMatch = res.reply.match(/```(?:diff)?\n([\s\S]*?(?:---|\+\+\+|@@)[\s\S]*?)```/);
         const codeDiff = diffMatch ? diffMatch[1] : undefined;
+
+        // OpenDots Inspired: Auto-detect or parse PageReview draft & Living Document
+        let pageReviewData: SpacePage | undefined = undefined;
+        let cleanReply = res.reply;
+        const pageReviewMatch = res.reply.match(/\[PAGE_REVIEW\]([\s\S]*?)\[\/PAGE_REVIEW\]/);
+        if (pageReviewMatch) {
+          try {
+            const parsed = JSON.parse(pageReviewMatch[1]);
+            pageReviewData = {
+              id: parsed.id || `page_${Date.now().toString(36)}`,
+              title: parsed.title || "Project Specification Draft",
+              spaceName: parsed.spaceName || "Main",
+              category: parsed.category || "spec",
+              status: "review_pending",
+              summaryItems: Array.isArray(parsed.summaryItems)
+                ? parsed.summaryItems
+                : ["Draft specification prepared"],
+              content: parsed.content || "",
+              projectName: activeProjId || "Workspace",
+              replyChips: Array.isArray(parsed.replyChips)
+                ? parsed.replyChips
+                : ["✓ Approve & Save to Space", "✎ View Canvas", "Add Payment Gateway"],
+              createdAt: Date.now(),
+              updatedAt: Date.now(),
+            };
+            cleanReply = res.reply.replace(/\[PAGE_REVIEW\][\s\S]*?\[\/PAGE_REVIEW\]/, "").trim();
+          } catch (e) {
+            console.warn("[PageReview] Failed to parse JSON block:", e);
+          }
+        }
+
         const enrichedMeta = {
           ...meta,
+          ...(pageReviewData ? { pageReview: pageReviewData } : {}),
           ...(res.thought ? { thought: res.thought } : {}),
           ...(res.durationMs ? { durationMs: res.durationMs } : {}),
           ...(res.referencedMemory ? { referencedMemory: res.referencedMemory } : {}),
@@ -1052,7 +1094,7 @@ export function SuperCallAssistantView() {
           return;
         }
 
-        handleAddMessage("assistant", res.reply, enrichedMeta);
+        handleAddMessage("assistant", cleanReply, enrichedMeta);
         const durationMs = Date.now() - dispatchStartTime;
         addVoiceCallLog({
           category: "BOT",
@@ -2190,6 +2232,29 @@ export function SuperCallAssistantView() {
         </div>
       )}
 
+      {/* OpenDots Living Document Canvas (Split-Screen / Drawer Mode) */}
+      {isCanvasOpen && activeCanvasPage && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-xs animate-in fade-in duration-150"
+          onClick={() => setIsCanvasOpen(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-xl sm:max-w-2xl lg:max-w-3xl h-full animate-in slide-in-from-right duration-200"
+          >
+            <LivingDocumentCanvas
+              page={activeCanvasPage}
+              onClose={() => setIsCanvasOpen(false)}
+              onPageUpdate={(updated) => {
+                setActiveCanvasPage(updated);
+              }}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Main Conversation Stream */}
       <div className="flex-1 flex flex-col h-full min-w-0 relative">
         {/* Top Header */}
@@ -2240,6 +2305,40 @@ export function SuperCallAssistantView() {
               <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-amber-500/15 text-amber-400 font-semibold font-mono">
                 {notes.length}
               </span>
+            </button>
+
+            {/* OpenDots Spaces & Living Document Canvas Button */}
+            <button
+              type="button"
+              onClick={() => {
+                const pages = loadSpacePages(activeProjId || "Workspace");
+                if (pages.length > 0) {
+                  setActiveCanvasPage(pages[0]);
+                } else {
+                  setActiveCanvasPage({
+                    id: `page_${Date.now().toString(36)}`,
+                    title: "Workspace Overview & Specs",
+                    spaceName: "Main",
+                    category: "spec",
+                    status: "approved",
+                    summaryItems: [
+                      "Living Document Canvas ready",
+                      "Notion-like collaborative specs space",
+                    ],
+                    content:
+                      "# Workspace Overview & System Specs\n\nWelcome to your Living Document Space! You can draft specs, track architecture, and collaborate with your Super Bot here.\n\n### Project Milestones\n- [x] Initial workspace inspection & auto-healing\n- [ ] Database schema review\n- [ ] LiveKit audio call bridge integration\n- [ ] Multi-channel deploy setup",
+                    projectName: activeProjId || "Workspace",
+                    createdAt: Date.now(),
+                    updatedAt: Date.now(),
+                  });
+                }
+                setIsCanvasOpen(true);
+              }}
+              className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-lg border border-cyan-500/40 bg-cyan-500/10 hover:bg-cyan-500/20 text-xs font-semibold text-cyan-300 transition-all cursor-pointer shadow-xs active:scale-95"
+              title="Open Notion-like Spaces & Living Document Canvas"
+            >
+              <FileText className="size-3.5 text-cyan-400" />
+              <span className="hidden xs:inline">Spaces Canvas</span>
             </button>
 
             {/* Command Center Right-Side Sheet Button */}
@@ -2395,6 +2494,28 @@ export function SuperCallAssistantView() {
                           style={{ width: `${msg.meta.delegatedTask.progress}%` }}
                         />
                       </div>
+
+                      {/* Verified Preview Link Delivery by Super Bot */}
+                      {msg.meta.delegatedTask.previewUrl && (
+                        <div className="pt-2 mt-2 border-t border-border/40 flex items-center justify-between gap-2 flex-wrap">
+                          <div className="flex items-center gap-1.5 text-emerald-400 font-mono text-[11px] truncate">
+                            <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
+                            <span className="font-semibold">Live Preview:</span>
+                            <span className="truncate opacity-80">
+                              {msg.meta.delegatedTask.previewUrl}
+                            </span>
+                          </div>
+                          <a
+                            href={msg.meta.delegatedTask.previewUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-emerald-500 text-emerald-950 font-semibold text-xs hover:bg-emerald-400 transition-all shadow-sm active:scale-95"
+                          >
+                            <span>Open Live Preview</span>
+                            <ExternalLink className="size-3" />
+                          </a>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -2404,6 +2525,25 @@ export function SuperCallAssistantView() {
                       <WishlistCard
                         items={msg.meta.wishlistItems}
                         projectName={msg.meta.wishlistProject ?? "Workspace"}
+                      />
+                    </div>
+                  )}
+
+                  {/* OpenDots: Interactive PageReviewCard */}
+                  {msg.meta?.pageReview && (
+                    <div className="mt-2.5 max-w-xl">
+                      <PageReviewCard
+                        page={msg.meta.pageReview}
+                        onOpenCanvas={(p) => {
+                          setActiveCanvasPage(p);
+                          setIsCanvasOpen(true);
+                        }}
+                        onChipClick={(chip) => {
+                          void handleSuperAgentDispatch(chip);
+                        }}
+                        onStatusChange={(updated) => {
+                          msg.meta = { ...msg.meta, pageReview: updated };
+                        }}
                       />
                     </div>
                   )}

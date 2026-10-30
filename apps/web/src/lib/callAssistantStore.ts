@@ -7,6 +7,7 @@ export interface DelegatedTaskMeta {
   status: "running" | "completed" | "error";
   progress: number;
   threadId?: string;
+  previewUrl?: string | undefined;
 }
 
 export interface CallAssistantMessage {
@@ -21,6 +22,8 @@ export interface CallAssistantMessage {
         details?: unknown;
         wishlistItems?: WishlistItem[] | undefined;
         wishlistProject?: string | undefined;
+        pageReview?: import("./spacesStore").SpacePage | undefined;
+        replyChips?: string[] | undefined;
       }
     | undefined;
 }

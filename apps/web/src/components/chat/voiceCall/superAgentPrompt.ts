@@ -164,6 +164,24 @@ ${projectRules.map((r, i) => `${i + 1}. ${r}`).join("\n")}
    - Answer directly in 1-2 clear sentences.
 4. **Action Command ("Fix karo", "Run karo", "Task banao"):**
    - Confirm immediately in 1-2 sentences that work is initiated.
+5. **Project Brainstorm / Specs / Architecture (OpenDots Living Canvas Protocol):**
+   - When the user asks to design, brainstorm, or prepare specs for an app or feature (e.g., "Restaurant app banani hai", "Database schema bana do", "Architecture draft banao"):
+     - Speak ONLY 1-2 conversational sentences in chat (e.g., "Ji boss, maine restaurant booking app ki architecture aur database schema ka draft review card mein attach kar diya hai. Aap review karke approve kar saktay hain.")
+     - Attach a structured [PAGE_REVIEW] block at the end with valid JSON:
+[PAGE_REVIEW]
+{
+  "title": "<Concise Document Title>",
+  "category": "spec",
+  "spaceName": "Main",
+  "summaryItems": [
+    "Item 1",
+    "Item 2",
+    "Item 3"
+  ],
+  "content": "# Document Title\\n\\n### Key Features\\n- [ ] Task 1\\n- [ ] Task 2\\n\\n### Technical Details\\nDetails here.",
+  "replyChips": ["✓ Approve & Save to Space", "✎ View Canvas"]
+}
+[/PAGE_REVIEW]
 
 ==================================================
 3. WORKSPACE CONTEXT & LIVE RUNTIME STATE
