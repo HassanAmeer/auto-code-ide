@@ -613,6 +613,7 @@ export function SuperCallAssistantView() {
   const [agentStatus, setAgentStatus] = useState<string | null>(null);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [copiedPreviewUrl, setCopiedPreviewUrl] = useState<string | null>(null);
+  const [expandedWorkerLogsId, setExpandedWorkerLogsId] = useState<string | null>(null);
   const activeAbortControllerRef = useRef<AbortController | null>(null);
   const handleInterruptRef = useRef<() => void>(() => {});
 
@@ -1022,9 +1023,13 @@ export function SuperCallAssistantView() {
                 taskTitle: res.delegatedTask.taskTitle,
                 status: res.delegatedTask.status,
                 progress: res.delegatedTask.progress,
+                framework: res.delegatedTask.framework,
                 previewUrl: res.delegatedTask.previewUrl,
+                devServerUrl: res.delegatedTask.devServerUrl,
                 verificationSteps: res.delegatedTask.verificationSteps,
+                reviewLoop: res.delegatedTask.reviewLoop,
                 errorsFixed: res.delegatedTask.errorsFixed,
+                streamingLogs: res.delegatedTask.streamingLogs,
               },
               actionType: res.actionTaken,
             }
@@ -2524,7 +2529,7 @@ export function SuperCallAssistantView() {
                   {/* Supervised Worker Delegation & Verification Card */}
                   {msg.meta?.delegatedTask && (
                     <div className="mt-2.5 rounded-2xl border border-primary/30 bg-gradient-to-b from-primary/10 via-background/80 to-background/95 p-3.5 text-xs space-y-3 max-w-xl shadow-lg backdrop-blur">
-                      <div className="flex items-center justify-between font-medium">
+                      <div className="flex items-center justify-between font-medium flex-wrap gap-2">
                         <div className="flex items-center gap-2 text-foreground">
                           <span className="p-1 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                             <ShieldCheck className="size-3.5" />
@@ -2534,16 +2539,25 @@ export function SuperCallAssistantView() {
                               {msg.meta.delegatedTask.projectName}
                             </span>
                             <span className="text-[10px] text-muted-foreground ml-1.5 font-mono">
-                              • Supervised Worker
+                              • Senior Supervisor AI
                             </span>
                           </div>
                         </div>
-                        <span className="text-[10px] uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-mono font-semibold flex items-center gap-1">
-                          <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                          {msg.meta.delegatedTask.status === "completed"
-                            ? "Verified Clean"
-                            : msg.meta.delegatedTask.status}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          {msg.meta.delegatedTask.framework &&
+                            msg.meta.delegatedTask.framework !== "static" && (
+                              <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 font-mono font-semibold flex items-center gap-1">
+                                <Zap className="size-2.5" />
+                                <span>{msg.meta.delegatedTask.framework}</span>
+                              </span>
+                            )}
+                          <span className="text-[10px] uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-mono font-semibold flex items-center gap-1">
+                            <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                            {msg.meta.delegatedTask.status === "completed"
+                              ? "Verified Clean"
+                              : msg.meta.delegatedTask.status}
+                          </span>
+                        </div>
                       </div>
 
                       <p className="text-[11px] text-foreground/90 font-medium leading-snug">
@@ -2552,10 +2566,62 @@ export function SuperCallAssistantView() {
 
                       <div className="w-full bg-border/60 rounded-full h-1.5 overflow-hidden">
                         <div
-                          className="bg-gradient-to-r from-primary to-emerald-400 h-full rounded-full transition-all duration-500"
+                          className="bg-gradient-to-r from-primary via-cyan-400 to-emerald-400 h-full rounded-full transition-all duration-500"
                           style={{ width: `${msg.meta.delegatedTask.progress}%` }}
                         />
                       </div>
+
+                      {/* 🔄 Worker Double-Check: Multi-Pass Review Loop */}
+                      {msg.meta.delegatedTask.reviewLoop &&
+                        msg.meta.delegatedTask.reviewLoop.length > 0 && (
+                          <div className="rounded-xl border border-border/50 bg-background/50 p-2.5 space-y-1.5">
+                            <div className="text-[10px] uppercase font-mono tracking-wider text-muted-foreground font-semibold flex items-center justify-between">
+                              <span className="flex items-center gap-1">
+                                <RefreshCw className="size-3 text-cyan-400" />
+                                <span>
+                                  Review Loop ({msg.meta.delegatedTask.reviewLoop.length} Rounds):
+                                </span>
+                              </span>
+                              <span className="text-emerald-400 font-semibold lowercase">
+                                {msg.meta.delegatedTask.reviewLoop[
+                                  msg.meta.delegatedTask.reviewLoop.length - 1
+                                ]?.status === "verified_clean"
+                                  ? "✓ 0 errors remaining"
+                                  : "loop complete"}
+                              </span>
+                            </div>
+                            <div className="space-y-1">
+                              {msg.meta.delegatedTask.reviewLoop.map((r, idx) => (
+                                <div
+                                  key={idx}
+                                  className="flex items-center justify-between text-[11px] rounded bg-muted/30 px-2 py-1 font-mono"
+                                >
+                                  <span className="flex items-center gap-1.5 text-foreground/90 truncate">
+                                    {r.status === "verified_clean" ? (
+                                      <CheckCircle2 className="size-3 text-emerald-400 shrink-0" />
+                                    ) : (
+                                      <Sparkles className="size-3 text-amber-400 shrink-0" />
+                                    )}
+                                    <span>
+                                      Round {r.round}: {r.phase}
+                                    </span>
+                                  </span>
+                                  <span
+                                    className={`text-[10px] px-1.5 py-0.2 rounded font-semibold shrink-0 ${
+                                      r.status === "verified_clean"
+                                        ? "text-emerald-400 bg-emerald-500/10"
+                                        : "text-amber-400 bg-amber-500/10"
+                                    }`}
+                                  >
+                                    {r.status === "verified_clean"
+                                      ? "Clean ✓"
+                                      : `Healed ${r.errorsFound}`}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
 
                       {/* 3-Step Verification Pipeline */}
                       {msg.meta.delegatedTask.verificationSteps &&
@@ -2563,7 +2629,7 @@ export function SuperCallAssistantView() {
                           <div className="space-y-1.5 pt-1 border-t border-border/40">
                             <div className="text-[10px] uppercase font-mono tracking-wider text-muted-foreground font-semibold flex items-center gap-1">
                               <Zap className="size-3 text-primary" />
-                              <span>Supervisor Verification Loop:</span>
+                              <span>Supervisor Verification Checklist:</span>
                             </div>
                             <div className="space-y-1 pl-1">
                               {msg.meta.delegatedTask.verificationSteps.map((stepItem, idx) => (
@@ -2584,6 +2650,45 @@ export function SuperCallAssistantView() {
                           </div>
                         )}
 
+                      {/* 💾 Worker Real-Time Streaming Terminal Drawer */}
+                      {msg.meta.delegatedTask.streamingLogs &&
+                        msg.meta.delegatedTask.streamingLogs.length > 0 && (
+                          <div className="rounded-xl border border-border/60 bg-black/70 overflow-hidden">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedWorkerLogsId((prev) => (prev === msg.id ? null : msg.id))
+                              }
+                              className="w-full flex items-center justify-between px-2.5 py-1.5 text-[10px] font-mono text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors cursor-pointer"
+                            >
+                              <span className="flex items-center gap-1.5">
+                                <Terminal className="size-3 text-emerald-400" />
+                                <span>
+                                  Live Worker Execution Stream (
+                                  {msg.meta.delegatedTask.streamingLogs.length} events)
+                                </span>
+                              </span>
+                              {expandedWorkerLogsId === msg.id ? (
+                                <ChevronUp className="size-3" />
+                              ) : (
+                                <ChevronDown className="size-3" />
+                              )}
+                            </button>
+                            {expandedWorkerLogsId === msg.id && (
+                              <div className="p-2.5 pt-0 max-h-48 overflow-y-auto space-y-1 font-mono text-[11px] text-slate-300 border-t border-white/5">
+                                {msg.meta.delegatedTask.streamingLogs.map((logLine, lIdx) => (
+                                  <div
+                                    key={lIdx}
+                                    className="leading-snug break-all border-l-2 border-emerald-500/40 pl-1.5 hover:bg-white/5 rounded-r"
+                                  >
+                                    {logLine}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
                       {/* Auto-healed Syntax Issues Badge */}
                       {msg.meta.delegatedTask.errorsFixed &&
                         msg.meta.delegatedTask.errorsFixed.length > 0 && (
@@ -2591,33 +2696,38 @@ export function SuperCallAssistantView() {
                             <Sparkles className="size-3 shrink-0 text-emerald-400" />
                             <span>
                               Auto-healed {msg.meta.delegatedTask.errorsFixed.length} syntax issues
-                              (tags & module headers verified)
+                              (markup & script imports verified)
                             </span>
                           </div>
                         )}
 
-                      {/* Verified Preview Link Delivery by Super Bot */}
+                      {/* 📁 Verified Preview & Multi-File Dev Server Link */}
                       {msg.meta.delegatedTask.previewUrl && (
                         <div className="pt-2 border-t border-border/40 flex items-center justify-between gap-2 flex-wrap bg-emerald-950/20 rounded-xl p-2.5 border border-emerald-500/30">
                           <div className="flex items-center gap-2 min-w-0">
                             <span className="size-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
                             <div className="min-w-0">
-                              <div className="text-[10px] font-mono text-emerald-400 font-semibold uppercase tracking-wider">
-                                Live Preview Verified (HTTP 200 OK)
+                              <div className="text-[10px] font-mono text-emerald-400 font-semibold uppercase tracking-wider flex items-center gap-1.5">
+                                <span>Live Preview Verified (HTTP 200 OK)</span>
+                                {msg.meta.delegatedTask.devServerUrl && (
+                                  <span className="px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-300 text-[9px]">
+                                    Dev Port Active
+                                  </span>
+                                )}
                               </div>
                               <div className="text-[11px] text-muted-foreground font-mono truncate max-w-xs">
                                 {msg.meta.delegatedTask.previewUrl}
                               </div>
                             </div>
                           </div>
-                          <div className="flex items-center gap-1.5 shrink-0">
+                          <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
                             <button
                               type="button"
                               onClick={() =>
                                 handleCopyPreviewUrl(msg.meta?.delegatedTask?.previewUrl || "")
                               }
                               className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-border bg-background/80 hover:bg-muted text-[11px] font-medium transition-all cursor-pointer"
-                              title="Copy URL"
+                              title="Copy Preview URL"
                             >
                               {copiedPreviewUrl === msg.meta.delegatedTask.previewUrl ? (
                                 <>

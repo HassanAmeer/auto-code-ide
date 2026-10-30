@@ -7,15 +7,27 @@ export interface DelegatedTaskStep {
   status: "completed" | "running" | "pending" | "failed";
 }
 
+export interface ReviewLoopRound {
+  round: number;
+  phase: string;
+  errorsFound: number;
+  fixedIssues: string[];
+  status: "repaired" | "verified_clean" | "retrying";
+}
+
 export interface DelegatedTaskMeta {
   projectName: string;
   taskTitle: string;
   status: "running" | "completed" | "error";
   progress: number;
   threadId?: string;
+  framework?: string | undefined;
   previewUrl?: string | undefined;
+  devServerUrl?: string | undefined;
   verificationSteps?: DelegatedTaskStep[] | undefined;
+  reviewLoop?: ReviewLoopRound[] | undefined;
   errorsFixed?: string[] | undefined;
+  streamingLogs?: string[] | undefined;
 }
 
 export interface CallAssistantMessage {

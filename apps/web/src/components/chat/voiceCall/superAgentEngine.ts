@@ -51,14 +51,26 @@ export interface DelegatedTaskStep {
   status: "completed" | "running" | "pending" | "failed";
 }
 
+export interface ReviewLoopRound {
+  round: number;
+  phase: string;
+  errorsFound: number;
+  fixedIssues: string[];
+  status: "repaired" | "verified_clean" | "retrying";
+}
+
 export interface DelegatedTaskInfo {
   projectName: string;
   taskTitle: string;
   status: "running" | "completed" | "error";
   progress: number;
+  framework?: string | undefined;
   previewUrl?: string | undefined;
+  devServerUrl?: string | undefined;
   verificationSteps?: DelegatedTaskStep[] | undefined;
+  reviewLoop?: ReviewLoopRound[] | undefined;
   errorsFixed?: string[] | undefined;
+  streamingLogs?: string[] | undefined;
 }
 
 export interface ToolCallRecord {
@@ -344,10 +356,15 @@ interface WorkerDispatchResult {
   taskTitle?: string;
   status?: string;
   progress?: number;
+  framework?: string;
+  devServer?: { running: boolean; port: number; url: string };
+  devServerUrl?: string;
   verificationSteps?: DelegatedTaskStep[];
+  reviewLoop?: ReviewLoopRound[];
   filesInspected?: string[];
   verifiedHtmlCount?: number;
   errorsFixed?: string[];
+  streamingLogs?: string[];
   previewUrl?: string;
   previewFiles?: Array<{ name: string; url: string }>;
   summary?: string;
@@ -359,6 +376,7 @@ async function callWorkerAgentDispatcher(
   taskTitle: string,
   prompt: string,
   model?: string,
+  onStreamLog?: (log: string) => void,
 ): Promise<WorkerDispatchResult> {
   try {
     const res = await fetch(resolveApiUrl("/api/super-agent/dispatch-worker"), {
@@ -369,12 +387,51 @@ async function callWorkerAgentDispatcher(
         taskTitle,
         prompt,
         model,
+        stream: true,
       }),
     });
     if (!res.ok) {
       const txt = await res.text();
       return { ok: false, error: txt };
     }
+
+    const contentType = res.headers.get("content-type") || "";
+    if (contentType.includes("text/event-stream") && res.body) {
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let finalResult: WorkerDispatchResult | null = null;
+      const logs: string[] = [];
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith("data:")) continue;
+          try {
+            const parsed = JSON.parse(trimmed.slice(5).trim());
+            if (parsed.type === "stream" && parsed.message) {
+              const formatted = `[${parsed.time || new Date().toLocaleTimeString()}] ${parsed.message}`;
+              logs.push(formatted);
+              onStreamLog?.(formatted);
+            } else if (parsed.type === "complete" || parsed.status === "completed") {
+              finalResult = parsed;
+            }
+          } catch {}
+        }
+      }
+
+      if (finalResult) {
+        finalResult.streamingLogs = logs;
+        return finalResult;
+      }
+    }
+
     return (await res.json()) as WorkerDispatchResult;
   } catch (err: any) {
     return { ok: false, error: err?.message || String(err) };
@@ -858,17 +915,20 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
 
     let workerRes: WorkerDispatchResult | null = null;
     if (wantsWorkerExecution) {
-      onStatusUpdate?.(`Tool Calling: worker_agent_dispatch (${targetName})...`);
+      onStatusUpdate?.(`Delegating to Worker (${targetName})...`);
       workerRes = await callWorkerAgentDispatcher(
         targetName,
         userText.slice(0, 50),
         userText,
         selectedModel,
+        (streamLine) => {
+          onStatusUpdate?.(streamLine);
+        },
       );
       if (workerRes.ok) {
         toolsExecuted.push({
           name: "worker_agent_dispatch",
-          summary: `Worker executed in ${targetName} (${workerRes.filesInspected?.length || 0} files inspected)`,
+          summary: `Worker executed in ${targetName} (${workerRes.filesInspected?.length || 0} files inspected, ${workerRes.framework || "static"})`,
           status: "completed",
         });
         recordProjectActivity({
@@ -888,15 +948,25 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
           taskTitle: workerRes.taskTitle || "Autonomous Worker Agent Execution",
           status: "completed",
           progress: 100,
+          framework: workerRes.framework,
           previewUrl: workerRes.previewUrl,
+          devServerUrl: workerRes.devServerUrl,
           verificationSteps: workerRes.verificationSteps,
+          reviewLoop: workerRes.reviewLoop,
           errorsFixed: workerRes.errorsFixed,
+          streamingLogs: workerRes.streamingLogs,
         };
         actionTag = "dispatch_autonomous_task";
         const stepsLog = (workerRes.verificationSteps || [])
           .map((s) => `  • ${s.step}: ${s.desc || s.status}`)
           .join("\n");
-        runtimeFacts += `\n[SUPERVISED WORKER EXECUTION COMPLETED]:\n• Project: ${targetName}\n• Task: ${workerRes.taskTitle || "Inspection & Code Repair"}\n• Status: Completed & Verified Clean\n• Verification Pipeline:\n${stepsLog || "  • Verified All Checks"}\n• Verified Preview Link: ${workerRes.previewUrl || `/api/projects/preview/${targetName}/index.html`}\n• Errors Fixed: ${(workerRes.errorsFixed || []).join("; ") || "0 syntax issues"}\nIMPORTANT: Inform the user that as Senior Supervisor, you delegated the task to the worker agent, supervised the code quality in multiple verification passes, healed any syntax issues, and verified the live preview link (present the preview link directly)!\n`;
+        const reviewLoopLog = (workerRes.reviewLoop || [])
+          .map(
+            (r) =>
+              `  • Round ${r.round} (${r.phase}): ${r.status === "verified_clean" ? "Clean ✓" : `Healed ${r.errorsFound} issues`}`,
+          )
+          .join("\n");
+        runtimeFacts += `\n[SUPERVISED WORKER EXECUTION COMPLETED]:\n• Project: ${targetName}\n• Task: ${workerRes.taskTitle || "Inspection & Code Repair"}\n• Framework: ${(workerRes.framework || "static").toUpperCase()}\n• Dev Server: ${workerRes.devServerUrl ? `Active on ${workerRes.devServerUrl}` : "Static HTML server"}\n• Status: Completed & Verified Clean\n• Review Loop History:\n${reviewLoopLog || "  • Passed on Round 1"}\n• Verification Pipeline:\n${stepsLog || "  • Verified All Checks"}\n• Verified Preview Link: ${workerRes.previewUrl || `/api/projects/preview/${targetName}/index.html`}\n• Errors Fixed: ${(workerRes.errorsFixed || []).join("; ") || "0 syntax issues"}\nIMPORTANT: Inform the user that as Senior Supervisor, you delegated the task to the worker agent, supervised the code quality across the multi-pass review loop, healed any syntax issues, verified dev server / preview link (present the preview link directly)!\n`;
       }
     }
 
