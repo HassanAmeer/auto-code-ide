@@ -180,36 +180,30 @@ export async function processSuperBotTurn(options: BotTurnOptions): Promise<BotT
       editMessage,
       deleteMessage,
       findClient,
+      listChats,
+      listSessions,
       getWhatsAppSettings,
+      getActivePriorityTarget,
     } = await import("./whatsapp/index.ts");
 
     const settings = getWhatsAppSettings();
     const activeSession = settings.activeSessionId || "default";
 
-    // Extract potential phone number or client identifier
-    const phoneMatch = userText.match(/(?:\+?92|0)?3\d{2}[- ]?\d{7}|\b\d{10,15}\b/);
-    const rawTarget = phoneMatch ? phoneMatch[0].replace(/[- ]/g, "") : "";
-
-    // Clean user message to extract actual text
-    let messageToSend = userText
-      .replace(
-        /(?:whatsapp\s*(?:par|pe|karo)?|client\s*ko|is\s*number\s*ko|ko\s*message\s*(?:bhej|send|karo)?|message\s*send\s*karo|bhej\s*do|send\s*karo)/gi,
-        "",
-      )
-      .replace(new RegExp(rawTarget, "g"), "")
-      .replace(/^[:\-\s]+/, "")
-      .trim();
-
-    if (!messageToSend) {
-      messageToSend = "Assalam-o-Alaikum! AutoJobs Bot ki taraf se message.";
-    }
+    // Resolve active session display name (Name & Phone Number)
+    const sessions = await listSessions().catch(() => []);
+    const activeSessionObj = sessions.find(
+      (s) => s.id === activeSession || s.name === activeSession,
+    );
+    const sessionDisplayName = activeSessionObj
+      ? `${activeSessionObj.name || activeSessionObj.pushName || activeSession} (${activeSessionObj.phone ? `+${activeSessionObj.phone}` : "No Phone"})`
+      : activeSession;
 
     // Check if user is asking to EDIT a message
     if (/\b(edit\s*karo|tabdeel\s*karo|change\s*karo)\b/i.test(userText)) {
       const reply =
         lang === "urdu"
-          ? `Main message edit kar sakta hoon! Message edit karne ke liye mujhe Client ka Number/ChatId aur Message ID darkaar hai.\n\n• **Active Session:** \`${activeSession}\`\n• **Action:** Edit Message\n\nAap WhatsApp Sheet ya Tester se direct 1-click edit kar sakte hain.`
-          : `I can edit WhatsApp messages. Please specify the target message ID and the new text for session \`${activeSession}\`.`;
+          ? `Main message edit kar sakta hoon! Message edit karne ke liye mujhe Client ka Number/ChatId aur Message ID darkaar hai.\n\n• **Active Session:** \`${sessionDisplayName}\`\n• **Action:** Edit Message\n\nAap WhatsApp Sheet ya Tester se direct 1-click edit kar sakte hain.`
+          : `I can edit WhatsApp messages. Please specify the target message ID and the new text for session \`${sessionDisplayName}\`.`;
       return {
         reply,
         spokenReply: "Message edit karne ke liye target message ID darkaar hai.",
@@ -223,8 +217,8 @@ export async function processSuperBotTurn(options: BotTurnOptions): Promise<BotT
     if (/\b(delete\s*karo|hata\s*do|mita\s*do)\b/i.test(userText)) {
       const reply =
         lang === "urdu"
-          ? `Message delete (Delete for Everyone) karne ke liye mujhe target Message ID aur Chat Number batayein.\n\n• **Active Session:** \`${activeSession}\`\n• **Action:** Delete Message`
-          : `To delete a message for everyone, please provide the Message ID and Chat Number for session \`${activeSession}\`.`;
+          ? `Message delete (Delete for Everyone) karne ke liye mujhe target Message ID aur Chat Number batayein.\n\n• **Active Session:** \`${sessionDisplayName}\`\n• **Action:** Delete Message`
+          : `To delete a message for everyone, please provide the Message ID and Chat Number for session \`${sessionDisplayName}\`.`;
       return {
         reply,
         spokenReply: "Message delete karne ke liye target message ID darkaar hai.",
@@ -232,6 +226,58 @@ export async function processSuperBotTurn(options: BotTurnOptions): Promise<BotT
         actionTaken: "whatsapp_delete_prompt",
         systemPrompt: buildSmartBotSystemPrompt({ intentAnalysis: analysis, language: lang }),
       };
+    }
+
+    // Recipient & Priority Resolution
+    const phoneMatch = userText.match(/(?:\+?92|0)?3\d{2}[- ]?\d{7}|\b\d{10,15}\b/);
+    let rawTarget = phoneMatch ? phoneMatch[0].replace(/[- ]/g, "") : "";
+    let targetName = "";
+    let isTargetGroup = false;
+
+    // 1st Priority: If no explicit phone number provided, use Selected Priority Target
+    const priorityTarget = getActivePriorityTarget();
+    if (!rawTarget && priorityTarget) {
+      rawTarget = priorityTarget.jid;
+      targetName = priorityTarget.name;
+      isTargetGroup = priorityTarget.isGroup;
+    }
+
+    // 2nd Priority: Check if user mentioned any contact or group name from chats
+    if (!rawTarget) {
+      const allChats = await listChats(activeSession).catch(() => []);
+      for (const chat of allChats) {
+        if (
+          chat.name &&
+          chat.name.length > 2 &&
+          userText.toLowerCase().includes(chat.name.toLowerCase())
+        ) {
+          rawTarget = chat.id;
+          targetName = chat.name;
+          isTargetGroup = chat.isGroup;
+          break;
+        }
+      }
+    }
+
+    // Clean user message to extract actual text
+    let messageToSend = userText
+      .replace(
+        /(?:whatsapp\s*(?:par|pe|karo)?|client\s*ko|is\s*(?:user|client|group|number)\s*ko|ko\s*message\s*(?:bhej|send|karo)?|message\s*send\s*karo|bhej\s*do|send\s*karo)/gi,
+        "",
+      )
+      .replace(new RegExp(phoneMatch ? phoneMatch[0].replace(/[- ]/g, "") : "", "g"), "")
+      .replace(/^[:\-\s]+/, "")
+      .trim();
+
+    if (targetName) {
+      messageToSend = messageToSend
+        .replace(new RegExp(targetName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), "")
+        .replace(/^[:\-\s]+/, "")
+        .trim();
+    }
+
+    if (!messageToSend) {
+      messageToSend = "Assalam-o-Alaikum! AutoJobs Bot ki taraf se message.";
     }
 
     // Outbound Send
@@ -243,18 +289,22 @@ export async function processSuperBotTurn(options: BotTurnOptions): Promise<BotT
         simulateDelay: true,
       });
 
+      const recipientLabel = targetName
+        ? `${targetName} (${isTargetGroup ? "Group" : "Direct User"})`
+        : `\`${rawTarget}\``;
+
       const reply = result.ok
         ? lang === "urdu"
-          ? `✅ **WhatsApp Message Sent!**\n\n• **Recipient:** \`${rawTarget}\`\n• **Session:** \`${activeSession}\`\n• **Message:** "${messageToSend}"\n• **Message ID:** \`${result.messageId || "delivered"}\`\n\nClient ko message deliver ho chuka hai aur record WA Logs mein save ho gaya hai.`
-          : `✅ Message successfully sent to \`${rawTarget}\` via session \`${activeSession}\`!`
+          ? `✅ **WhatsApp Message Delivered!**\n\n• **Recipient:** ${recipientLabel}\n• **Active Session:** \`${sessionDisplayName}\`\n• **Message:** "${messageToSend}"\n• **Message ID:** \`${result.messageId || "delivered"}\`\n\nClient/Group ko message deliver ho chuka hai aur record WA Logs mein save ho gaya hai.`
+          : `✅ Message successfully sent to ${recipientLabel} via session \`${sessionDisplayName}\`!`
         : lang === "urdu"
-          ? `⚠️ **Message Send Failed:** ${result.error}\n\nMeherbani farma kar check karein ke WhatsApp Sheet mein active session \`${activeSession}\` connected hai ya nahi.`
+          ? `⚠️ **Message Send Failed:** ${result.error}\n\nMeherbani farma kar check karein ke WhatsApp Sheet mein active session \`${sessionDisplayName}\` connected hai ya nahi.`
           : `⚠️ Failed to send message: ${result.error}`;
 
       return {
         reply,
         spokenReply: result.ok
-          ? `Maine client ${rawTarget} ko WhatsApp message deliver kar diya hai.`
+          ? `Maine ${targetName || rawTarget} ko WhatsApp message deliver kar diya hai.`
           : `Message bhejne mein error aaya hai.`,
         intent: analysis.intent,
         actionTaken: result.ok ? "whatsapp_message_sent" : "whatsapp_send_failed",
@@ -262,16 +312,15 @@ export async function processSuperBotTurn(options: BotTurnOptions): Promise<BotT
       };
     }
 
-    // If no target phone number found in query, search recent clients
-    const clients = await findClient(messageToSend.slice(0, 15), activeSession);
+    // If no target phone number and no priority target selected
     const reply =
       lang === "urdu"
-        ? `Aap WhatsApp par message kis number ko bhejna chahte hain? Meherbani farma kar client ka number batayein (jaise: \`03001234567\`).\n\n• **Active Session:** \`${activeSession}\`\n• **Connected Gateway:** \`${settings.gatewayUrl}\`\n\nAap top header mein WhatsApp icon click kar ke direct chats aur sessions bhi manage kar sakte hain.`
-        : `Please specify the recipient phone number (e.g. 03001234567) to send the message via session \`${activeSession}\`.`;
+        ? `Aap WhatsApp par message kis ko bhejna chahte hain?\n\n• **Active Session:** \`${sessionDisplayName}\`\n• **Connected Gateway:** \`${settings.gatewayUrl}\`\n\n💡 **Tip:** WhatsApp Sheet ke **Chats** tab mein ja kar kisi bhi User ya Group par **⭐ Select Priority** click karein. Phir Super Bot hamesha usi ko 1st priority par focus karega!`
+        : `Please select a priority target in the WhatsApp Chats tab or provide a phone number to send via session \`${sessionDisplayName}\`.`;
 
     return {
       reply,
-      spokenReply: "Aap kis number ko WhatsApp message bhejna chahte hain?",
+      spokenReply: "Aap kis number ya group ko WhatsApp message bhejna chahte hain?",
       intent: analysis.intent,
       actionTaken: "whatsapp_recipient_needed",
       systemPrompt: buildSmartBotSystemPrompt({ intentAnalysis: analysis, language: lang }),

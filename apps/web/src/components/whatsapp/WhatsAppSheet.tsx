@@ -20,6 +20,12 @@ import {
   Mic,
   Copy,
   Check,
+  User,
+  Users,
+  Star,
+  Search,
+  Filter,
+  MessageSquare,
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { WhatsAppIcon } from "./WhatsAppHeaderButton";
@@ -27,7 +33,16 @@ import { WhatsAppIcon } from "./WhatsAppHeaderButton";
 interface WhatsAppSession {
   id: string;
   name?: string;
-  status: "CONNECTED" | "STARTING" | "SCAN_QR" | "AUTHENTICATED" | "STOPPED" | "FAILED" | "UNKNOWN";
+  pushName?: string;
+  status:
+    | "CONNECTED"
+    | "STARTING"
+    | "SCAN_QR"
+    | "AUTHENTICATED"
+    | "STOPPED"
+    | "FAILED"
+    | "UNKNOWN"
+    | "ready";
   engine?: string;
   phone?: string | null;
   me?: {
@@ -35,6 +50,26 @@ interface WhatsAppSession {
     name?: string;
     phone?: string;
   };
+}
+
+export interface WhatsAppChat {
+  id: string;
+  name: string;
+  isGroup: boolean;
+  kind?: string;
+  unreadCount?: number;
+  phone?: string;
+  timestamp?: number;
+  lastMessage?: string;
+  lastMessageType?: string;
+}
+
+export interface WhatsAppPriorityTarget {
+  jid: string;
+  name: string;
+  isGroup: boolean;
+  phone?: string;
+  selectedAt?: string;
 }
 
 interface WhatsAppSettingsData {
@@ -46,6 +81,8 @@ interface WhatsAppSettingsData {
   apiKey: string;
   activeSessionId: string | null;
   humanDelayMs: number;
+  priorityTargets?: WhatsAppPriorityTarget[] | undefined;
+  activePriorityJid?: string | null | undefined;
 }
 
 interface WhatsAppSheetProps {
@@ -54,8 +91,14 @@ interface WhatsAppSheetProps {
 }
 
 export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
-  const [activeTab, setActiveTab] = useState<"sessions" | "settings" | "test">("sessions");
+  const [activeTab, setActiveTab] = useState<"sessions" | "chats" | "settings" | "test">(
+    "sessions",
+  );
   const [sessions, setSessions] = useState<WhatsAppSession[]>([]);
+  const [chats, setChats] = useState<WhatsAppChat[]>([]);
+  const [chatsLoading, setChatsLoading] = useState(false);
+  const [chatFilter, setChatFilter] = useState<"all" | "users" | "groups" | "priority">("all");
+  const [chatSearch, setChatSearch] = useState("");
   const [settings, setSettings] = useState<WhatsAppSettingsData>({
     botEnabled: true,
     autoReply: true,
@@ -65,6 +108,8 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
     apiKey: "owa_k1_bd105b7013973116841acdc2fa381a87499a47f09c67fad26fb7cf5a3da2f973",
     activeSessionId: null,
     humanDelayMs: 2500,
+    priorityTargets: [],
+    activePriorityJid: null,
   });
 
   const [loading, setLoading] = useState(false);
@@ -98,6 +143,30 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
 
   const [copiedKey, setCopiedKey] = useState(false);
 
+  // Load Chats for a session
+  const loadChats = useCallback(
+    async (sid?: string) => {
+      const targetSid = sid || settings.activeSessionId;
+      if (!targetSid) {
+        setChats([]);
+        return;
+      }
+      setChatsLoading(true);
+      try {
+        const res = await fetch(`/api/whatsapp/chats?sessionId=${encodeURIComponent(targetSid)}`);
+        if (res.ok) {
+          const data = await res.json();
+          setChats(data.chats || []);
+        }
+      } catch {
+        // ignore
+      } finally {
+        setChatsLoading(false);
+      }
+    },
+    [settings.activeSessionId],
+  );
+
   // Fetch Sessions and Settings
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -114,7 +183,12 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
       }
       if (setRes.ok) {
         const data = await setRes.json();
-        if (data.settings) setSettings(data.settings);
+        if (data.settings) {
+          setSettings(data.settings);
+          if (data.settings.activeSessionId) {
+            loadChats(data.settings.activeSessionId);
+          }
+        }
       }
     } catch (err: any) {
       setErrorMsg("Failed to connect to WhatsApp API: " + (err?.message || String(err)));
@@ -122,7 +196,7 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [loadChats]);
 
   useEffect(() => {
     if (isOpen) {
@@ -133,6 +207,9 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
   const handleRefresh = () => {
     setRefreshing(true);
     fetchData();
+    if (settings.activeSessionId) {
+      loadChats(settings.activeSessionId);
+    }
   };
 
   // Toggle or Enable a specific session (Only one session enabled at a time!)
@@ -149,8 +226,47 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
       });
       setSuccessMsg(nextActive ? `Session '${sessionId}' enabled for Bot` : "Session disabled");
       setTimeout(() => setSuccessMsg(null), 3000);
+      if (nextActive) {
+        loadChats(nextActive);
+      } else {
+        setChats([]);
+      }
     } catch {
       setErrorMsg("Failed to update active session");
+    }
+  };
+
+  // Toggle priority target connection for bot focus
+  const handleTogglePriority = async (chat: WhatsAppChat) => {
+    try {
+      const res = await fetch("/api/whatsapp/priority-target", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jid: chat.id,
+          name: chat.name,
+          isGroup: chat.isGroup,
+          phone: chat.phone,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ok && data.priorityTargets) {
+          setSettings((prev) => ({
+            ...prev,
+            priorityTargets: data.priorityTargets,
+            activePriorityJid: data.isSelected ? chat.id : (prev.activePriorityJid ?? null),
+          }));
+          setSuccessMsg(
+            data.isSelected
+              ? `⭐ Focus set to '${chat.name}' (1st Priority)`
+              : `'${chat.name}' removed from priority`,
+          );
+          setTimeout(() => setSuccessMsg(null), 3000);
+        }
+      }
+    } catch {
+      setErrorMsg("Failed to update priority target");
     }
   };
 
@@ -267,6 +383,38 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
     }
   };
 
+  const activeSessionObj = sessions.find(
+    (s) => s.id === settings.activeSessionId || s.name === settings.activeSessionId,
+  );
+  const activeSessionDisplayName = activeSessionObj
+    ? activeSessionObj.name || activeSessionObj.pushName || activeSessionObj.id
+    : settings.activeSessionId;
+  const activeSessionPhone = activeSessionObj?.phone
+    ? `+${activeSessionObj.phone}`
+    : activeSessionObj?.me?.phone
+      ? `+${activeSessionObj.me.phone}`
+      : null;
+
+  const filteredChats = chats.filter((chat) => {
+    if (chatSearch.trim()) {
+      const q = chatSearch.toLowerCase();
+      const matchesName = chat.name?.toLowerCase().includes(q);
+      const matchesId = chat.id?.toLowerCase().includes(q);
+      const matchesPhone = chat.phone?.includes(q);
+      if (!matchesName && !matchesId && !matchesPhone) return false;
+    }
+    if (chatFilter === "users") {
+      return !chat.isGroup;
+    }
+    if (chatFilter === "groups") {
+      return chat.isGroup;
+    }
+    if (chatFilter === "priority") {
+      return (settings.priorityTargets || []).some((t) => t.jid === chat.id);
+    }
+    return true;
+  });
+
   if (!isOpen) return null;
 
   return createPortal(
@@ -318,13 +466,67 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
           </div>
         </div>
 
-        {/* Cupertino Segmented Control Tab Switcher */}
-        <div className="p-3 border-b border-white/[0.06] bg-zinc-950/20">
-          <div className="flex rounded-xl bg-zinc-900/90 p-0.5 border border-white/[0.08] shadow-inner text-xs font-medium">
+        {/* Active Session Identity Banner */}
+        {activeSessionObj ? (
+          <div className="mx-3 mt-3 rounded-2xl border border-emerald-500/30 bg-gradient-to-r from-emerald-950/40 via-zinc-900/60 to-zinc-900/40 p-3 shadow-sm backdrop-blur-md">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="relative flex size-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/20 text-[#25D366] border border-emerald-500/30">
+                  <WhatsAppIcon className="size-4.5" />
+                  <span className="absolute -bottom-0.5 -right-0.5 flex size-2">
+                    <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex size-2 rounded-full bg-emerald-400" />
+                  </span>
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 truncate">
+                    <span className="text-xs font-bold text-white truncate">
+                      {activeSessionDisplayName}
+                    </span>
+                    {activeSessionObj.pushName &&
+                      activeSessionObj.pushName !== activeSessionDisplayName && (
+                        <span className="text-[10px] text-zinc-400 truncate">
+                          ({activeSessionObj.pushName})
+                        </span>
+                      )}
+                  </div>
+                  <p className="text-[11px] font-mono text-emerald-400 truncate font-medium">
+                    {activeSessionPhone || activeSessionObj.id}
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-col items-end shrink-0 gap-1">
+                <span className="rounded-full bg-emerald-500/20 border border-emerald-500/40 px-2 py-0.5 text-[9px] font-bold text-emerald-300 uppercase tracking-wider">
+                  Active Account
+                </span>
+                {settings.priorityTargets && settings.priorityTargets.length > 0 && (
+                  <span className="text-[10px] text-amber-300 font-medium">
+                    ⭐ {settings.priorityTargets.length} Priority
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="mx-3 mt-3 rounded-2xl border border-amber-500/25 bg-amber-950/20 p-2.5 flex items-center justify-between text-xs text-amber-300">
+            <span className="truncate">No active session selected</span>
             <button
               type="button"
               onClick={() => setActiveTab("sessions")}
-              className={`flex-1 py-1.5 rounded-lg transition-all text-center cursor-pointer ${
+              className="text-[11px] underline font-semibold text-white ml-2 shrink-0 cursor-pointer"
+            >
+              Select Session
+            </button>
+          </div>
+        )}
+
+        {/* Cupertino Segmented Control Tab Switcher */}
+        <div className="p-3 border-b border-white/[0.06] bg-zinc-950/20">
+          <div className="grid grid-cols-4 rounded-xl bg-zinc-900/90 p-0.5 border border-white/[0.08] shadow-inner text-xs font-medium">
+            <button
+              type="button"
+              onClick={() => setActiveTab("sessions")}
+              className={`py-1.5 rounded-lg transition-all text-center cursor-pointer ${
                 activeTab === "sessions"
                   ? "bg-zinc-800 text-white shadow-sm font-semibold border border-white/[0.12]"
                   : "text-zinc-400 hover:text-zinc-200"
@@ -334,19 +536,36 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
             </button>
             <button
               type="button"
+              onClick={() => {
+                setActiveTab("chats");
+                if (chats.length === 0) loadChats();
+              }}
+              className={`py-1.5 rounded-lg transition-all text-center cursor-pointer relative ${
+                activeTab === "chats"
+                  ? "bg-zinc-800 text-white shadow-sm font-semibold border border-white/[0.12]"
+                  : "text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              Chats {chats.length > 0 ? `(${chats.length})` : ""}
+              {settings.priorityTargets && settings.priorityTargets.length > 0 && (
+                <span className="ml-1 inline-flex size-1.5 rounded-full bg-amber-400" />
+              )}
+            </button>
+            <button
+              type="button"
               onClick={() => setActiveTab("settings")}
-              className={`flex-1 py-1.5 rounded-lg transition-all text-center cursor-pointer ${
+              className={`py-1.5 rounded-lg transition-all text-center cursor-pointer ${
                 activeTab === "settings"
                   ? "bg-zinc-800 text-white shadow-sm font-semibold border border-white/[0.12]"
                   : "text-zinc-400 hover:text-zinc-200"
               }`}
             >
-              Bot Settings
+              Settings
             </button>
             <button
               type="button"
               onClick={() => setActiveTab("test")}
-              className={`flex-1 py-1.5 rounded-lg transition-all text-center cursor-pointer ${
+              className={`py-1.5 rounded-lg transition-all text-center cursor-pointer ${
                 activeTab === "test"
                   ? "bg-zinc-800 text-white shadow-sm font-semibold border border-white/[0.12]"
                   : "text-zinc-400 hover:text-zinc-200"
@@ -451,7 +670,7 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
                             <div className="min-w-0">
                               <div className="flex items-center gap-2">
                                 <span className="text-xs font-semibold text-white truncate">
-                                  {sess.id}
+                                  {sess.name || sess.pushName || sess.id}
                                 </span>
                                 {isEnabled && (
                                   <span className="rounded-full bg-emerald-500/20 border border-emerald-500/40 px-1.5 py-0.2 text-[9px] font-bold text-emerald-300 uppercase tracking-wider">
@@ -460,7 +679,14 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
                                 )}
                               </div>
                               <p className="text-[11px] text-zinc-400 truncate">
-                                {sess.phone || sess.me?.phone || sess.engine || "WhatsApp Account"}
+                                {sess.phone
+                                  ? `+${sess.phone}`
+                                  : sess.me?.phone
+                                    ? `+${sess.me.phone}`
+                                    : sess.id}
+                                {sess.pushName && sess.name && sess.pushName !== sess.name
+                                  ? ` • (${sess.pushName})`
+                                  : ""}
                               </p>
                             </div>
                           </div>
@@ -544,6 +770,221 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
                   session par green switch ON hoga, Bot usi ke clients ko handle karega.
                 </p>
               </div>
+            </div>
+          )}
+
+          {activeTab === "chats" && (
+            <div className="space-y-3">
+              {/* Chats header & Controls */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-[11px] font-semibold tracking-wider text-zinc-400 uppercase">
+                    Users & Groups {chats.length > 0 && `(${chats.length})`}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => loadChats()}
+                    disabled={chatsLoading}
+                    className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 transition-colors cursor-pointer"
+                  >
+                    <RefreshCw className={`size-3 ${chatsLoading ? "animate-spin" : ""}`} />
+                    <span>Reload</span>
+                  </button>
+                </div>
+
+                {/* Search Bar */}
+                <div className="relative">
+                  <Search className="absolute left-3 top-2.5 size-3.5 text-zinc-400" />
+                  <input
+                    type="text"
+                    value={chatSearch}
+                    onChange={(e) => setChatSearch(e.target.value)}
+                    placeholder="Search contacts or groups..."
+                    className="w-full rounded-xl border border-white/10 bg-zinc-900/90 pl-9 pr-8 py-2 text-xs text-white placeholder-zinc-500 focus:border-emerald-500/50 focus:outline-hidden"
+                  />
+                  {chatSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setChatSearch("")}
+                      className="absolute right-2.5 top-2.5 text-zinc-400 hover:text-white cursor-pointer"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Filter Pill Buttons (All / Users / Groups / Priority) */}
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setChatFilter("all")}
+                    className={`shrink-0 rounded-lg px-2.5 py-1 text-xs font-medium transition-all cursor-pointer ${
+                      chatFilter === "all"
+                        ? "bg-white/20 text-white font-semibold shadow-xs"
+                        : "bg-zinc-900/80 text-zinc-400 hover:text-zinc-200 border border-white/[0.06]"
+                    }`}
+                  >
+                    All ({chats.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChatFilter("users")}
+                    className={`shrink-0 rounded-lg px-2.5 py-1 text-xs font-medium transition-all cursor-pointer ${
+                      chatFilter === "users"
+                        ? "bg-blue-500/30 text-blue-300 font-semibold border border-blue-500/40"
+                        : "bg-zinc-900/80 text-zinc-400 hover:text-zinc-200 border border-white/[0.06]"
+                    }`}
+                  >
+                    Users ({chats.filter((c) => !c.isGroup).length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChatFilter("groups")}
+                    className={`shrink-0 rounded-lg px-2.5 py-1 text-xs font-medium transition-all cursor-pointer ${
+                      chatFilter === "groups"
+                        ? "bg-purple-500/30 text-purple-300 font-semibold border border-purple-500/40"
+                        : "bg-zinc-900/80 text-zinc-400 hover:text-zinc-200 border border-white/[0.06]"
+                    }`}
+                  >
+                    Groups ({chats.filter((c) => c.isGroup).length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChatFilter("priority")}
+                    className={`shrink-0 rounded-lg px-2.5 py-1 text-xs font-medium transition-all cursor-pointer flex items-center gap-1 ${
+                      chatFilter === "priority"
+                        ? "bg-amber-500/30 text-amber-300 font-semibold border border-amber-500/40"
+                        : "bg-zinc-900/80 text-zinc-400 hover:text-zinc-200 border border-white/[0.06]"
+                    }`}
+                  >
+                    <Star className="size-3 fill-amber-400 text-amber-400" />
+                    <span>Priority ({settings.priorityTargets?.length || 0})</span>
+                  </button>
+                </div>
+
+                {/* Priority instruction helper */}
+                <div className="rounded-xl border border-amber-500/20 bg-amber-950/20 p-2.5 text-[11px] text-amber-200/90 flex items-start gap-2">
+                  <Star className="size-4 text-amber-400 shrink-0 mt-0.5 fill-amber-400" />
+                  <div className="space-y-0.5 min-w-0">
+                    <span className="font-semibold text-amber-300">Super Bot Priority Focus:</span>
+                    <p className="text-zinc-300 text-[10.5px]">
+                      Aap kisi bhi User ya Group ko <strong>Select</strong> kar sakte hain. Super
+                      Bot messages aur focus mein hamesha selected target ko{" "}
+                      <strong>First Priority</strong> par rakhega!
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Chats List */}
+              {chatsLoading && chats.length === 0 ? (
+                <div className="rounded-2xl border border-white/[0.08] p-8 text-center space-y-2 bg-zinc-900/40">
+                  <RefreshCw className="mx-auto size-6 text-emerald-400 animate-spin" />
+                  <p className="text-xs text-zinc-400">Loading chats from active session...</p>
+                </div>
+              ) : filteredChats.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-white/10 p-6 text-center space-y-2 bg-zinc-900/30">
+                  <MessageSquare className="mx-auto size-8 text-zinc-500" />
+                  <p className="text-xs font-medium text-zinc-300">
+                    {chats.length === 0
+                      ? "No chats found in this session"
+                      : "No matching contacts or groups"}
+                  </p>
+                  <p className="text-[11px] text-zinc-500">
+                    {chats.length === 0
+                      ? "Make sure your WhatsApp session is connected and synced."
+                      : "Try switching filter pills or clearing search."}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {filteredChats.map((chat) => {
+                    const isPriority = (settings.priorityTargets || []).some(
+                      (t) => t.jid === chat.id,
+                    );
+                    return (
+                      <div
+                        key={chat.id}
+                        className={`rounded-2xl border p-3 transition-all ${
+                          isPriority
+                            ? "border-amber-500/50 bg-amber-950/25 shadow-md ring-1 ring-amber-500/30"
+                            : "border-white/[0.08] bg-zinc-900/60 hover:border-white/15"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2.5">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div
+                              className={`flex size-9 shrink-0 items-center justify-center rounded-xl border ${
+                                chat.isGroup
+                                  ? "border-purple-500/30 bg-purple-500/15 text-purple-400"
+                                  : "border-blue-500/30 bg-blue-500/15 text-blue-400"
+                              }`}
+                            >
+                              {chat.isGroup ? (
+                                <Users className="size-4.5" />
+                              ) : (
+                                <User className="size-4.5" />
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs font-semibold text-white truncate">
+                                  {chat.name}
+                                </span>
+                                <span
+                                  className={`shrink-0 rounded-full px-1.5 py-0.2 text-[9px] font-bold uppercase tracking-wider ${
+                                    chat.isGroup
+                                      ? "bg-purple-500/20 text-purple-300 border border-purple-500/30"
+                                      : "bg-blue-500/20 text-blue-300 border border-blue-500/30"
+                                  }`}
+                                >
+                                  {chat.isGroup ? "Group" : "User"}
+                                </span>
+                                {isPriority && (
+                                  <span className="shrink-0 rounded-full bg-amber-500/20 border border-amber-500/40 px-1.5 py-0.2 text-[9px] font-bold text-amber-300 uppercase tracking-wider">
+                                    ⭐ Focus
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[11px] text-zinc-400 font-mono truncate">
+                                {chat.phone ? `+${chat.phone}` : chat.id}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Select / Deselect Priority Button */}
+                          <button
+                            type="button"
+                            onClick={() => handleTogglePriority(chat)}
+                            className={`flex items-center gap-1 shrink-0 rounded-xl px-2.5 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+                              isPriority
+                                ? "bg-amber-500 text-black shadow-[0_0_12px_rgba(245,158,11,0.5)] active:scale-95 font-bold"
+                                : "bg-zinc-800 text-zinc-300 border border-white/10 hover:bg-zinc-700 hover:text-white"
+                            }`}
+                            title={
+                              isPriority
+                                ? "Selected for Bot First Priority. Click to remove."
+                                : "Select this User/Group as First Priority for Super Bot"
+                            }
+                          >
+                            <Star
+                              className={`size-3.5 ${isPriority ? "fill-black" : "text-amber-400"}`}
+                            />
+                            <span>{isPriority ? "Selected" : "Select"}</span>
+                          </button>
+                        </div>
+
+                        {chat.lastMessage && (
+                          <div className="mt-2 text-[11px] text-zinc-400 truncate border-t border-white/[0.04] pt-1.5">
+                            <span className="text-zinc-500">Last: </span>
+                            <span>{chat.lastMessage}</span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 

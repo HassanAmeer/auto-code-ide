@@ -1,6 +1,6 @@
 import { getWhatsAppSettings, updateWhatsAppSettings } from "./config.ts";
 import { logWhatsAppEvent } from "./logger.ts";
-import type { WhatsAppSession } from "./types.ts";
+import type { WhatsAppSession, WhatsAppChat, WhatsAppPriorityTarget } from "./types.ts";
 
 /**
  * Normalizes user-input phone number to standard WhatsApp JID format (e.g. 923001234567@c.us)
@@ -29,6 +29,7 @@ function getBaseHeaders(apiKey: string) {
   return {
     "Content-Type": "application/json",
     Authorization: `Bearer ${apiKey}`,
+    "X-Api-Key": apiKey,
   };
 }
 
@@ -489,4 +490,111 @@ export async function findClient(
   } catch {
     return [];
   }
+}
+
+/**
+ * Returns all chats (Users and Groups) for the active or specified session.
+ */
+export async function listChats(sessionId?: string): Promise<WhatsAppChat[]> {
+  const settings = getWhatsAppSettings();
+  const sid = sessionId || settings.activeSessionId;
+  if (!sid) return [];
+
+  try {
+    const res = await fetch(`${settings.gatewayUrl}/api/sessions/${sid}/chats`, {
+      headers: getBaseHeaders(settings.apiKey),
+    });
+    if (!res.ok) return [];
+
+    const data = await res.json();
+    const chats = Array.isArray(data) ? data : data.chats || [];
+
+    return chats.map((c: any): WhatsAppChat => {
+      const id = String(c.id || "");
+      const isGroup = Boolean(c.isGroup || id.endsWith("@g.us") || c.kind === "group");
+      const name = String(c.name || c.formattedTitle || (isGroup ? "WhatsApp Group" : id));
+      const kind = isGroup ? "group" : c.kind || "individual";
+      const unreadCount = Number(c.unreadCount || 0);
+      const phone = !isGroup ? id.replace(/@.*$/, "") : undefined;
+      const lastMessage =
+        typeof c.lastMessage === "string"
+          ? c.lastMessage
+          : c.lastMessage?.body ||
+            (typeof c.lastMessageType === "string" ? `[${c.lastMessageType}]` : "");
+
+      return {
+        id,
+        name,
+        isGroup,
+        kind,
+        unreadCount,
+        phone,
+        timestamp: c.timestamp,
+        lastMessage,
+        lastMessageType: c.lastMessageType,
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Returns list of selected priority targets configured in settings.
+ */
+export function getPriorityTargets(): WhatsAppPriorityTarget[] {
+  const settings = getWhatsAppSettings();
+  return settings.priorityTargets || [];
+}
+
+/**
+ * Gets the first/active priority target for Super Bot execution.
+ */
+export function getActivePriorityTarget(): WhatsAppPriorityTarget | null {
+  const settings = getWhatsAppSettings();
+  const list = settings.priorityTargets || [];
+  if (list.length === 0) return null;
+  if (settings.activePriorityJid) {
+    const found = list.find((t) => t.jid === settings.activePriorityJid);
+    if (found) return found;
+  }
+  return list[0] ?? null;
+}
+
+/**
+ * Toggles a chat/user/group as priority target for the Super Bot.
+ */
+export function togglePriorityTarget(target: {
+  jid: string;
+  name: string;
+  isGroup: boolean;
+  phone?: string;
+}): { priorityTargets: WhatsAppPriorityTarget[]; isSelected: boolean } {
+  const settings = getWhatsAppSettings();
+  const list = [...(settings.priorityTargets || [])];
+  const idx = list.findIndex((t) => t.jid === target.jid);
+  let isSelected = false;
+
+  if (idx >= 0) {
+    // Unselect / remove
+    list.splice(idx, 1);
+    isSelected = false;
+    const newActive =
+      settings.activePriorityJid === target.jid ? list[0]?.jid || null : settings.activePriorityJid;
+    updateWhatsAppSettings({ priorityTargets: list, activePriorityJid: newActive });
+  } else {
+    // Select / add
+    const newTarget: WhatsAppPriorityTarget = {
+      jid: target.jid,
+      name: target.name,
+      isGroup: target.isGroup,
+      phone: target.phone,
+      selectedAt: new Date().toISOString(),
+    };
+    list.unshift(newTarget);
+    isSelected = true;
+    updateWhatsAppSettings({ priorityTargets: list, activePriorityJid: target.jid });
+  }
+
+  return { priorityTargets: list, isSelected };
 }

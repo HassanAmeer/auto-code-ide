@@ -298,6 +298,24 @@ export async function fetchWhatsAppSettings(): Promise<any> {
   }
 }
 
+export async function getWhatsAppChats(sessionId?: string): Promise<any[]> {
+  try {
+    const mod = await import("../../../bot/index.ts" as string);
+    return await (mod as any).listChats(sessionId);
+  } catch {
+    return [];
+  }
+}
+
+export async function toggleWhatsAppPriorityTarget(target: any): Promise<any> {
+  try {
+    const mod = await import("../../../bot/index.ts" as string);
+    return (mod as any).togglePriorityTarget(target);
+  } catch (err: any) {
+    return { ok: false, error: err?.message || String(err) };
+  }
+}
+
 export async function saveWhatsAppSettings(updates: any): Promise<any> {
   try {
     const mod = await import("../../../bot/index.ts" as string);

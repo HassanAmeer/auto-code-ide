@@ -15,6 +15,8 @@ const DEFAULT_SETTINGS: WhatsAppSettings = {
     "owa_k1_bd105b7013973116841acdc2fa381a87499a47f09c67fad26fb7cf5a3da2f973",
   activeSessionId: null,
   humanDelayMs: 2500,
+  priorityTargets: [],
+  activePriorityJid: null,
 };
 
 let cachedSettings: WhatsAppSettings | null = null;

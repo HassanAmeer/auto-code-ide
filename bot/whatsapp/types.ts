@@ -1,7 +1,16 @@
 export interface WhatsAppSession {
   id: string;
   name?: string;
-  status: "CONNECTED" | "STARTING" | "SCAN_QR" | "AUTHENTICATED" | "STOPPED" | "FAILED" | "UNKNOWN";
+  pushName?: string;
+  status:
+    | "CONNECTED"
+    | "STARTING"
+    | "SCAN_QR"
+    | "AUTHENTICATED"
+    | "STOPPED"
+    | "FAILED"
+    | "UNKNOWN"
+    | "ready";
   engine?: string;
   phone?: string | null;
   me?: {
@@ -9,8 +18,30 @@ export interface WhatsAppSession {
     name?: string;
     phone?: string;
   };
+  connectedAt?: string;
+  lastActive?: string;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface WhatsAppChat {
+  id: string;
+  name: string;
+  isGroup: boolean;
+  kind?: "group" | "individual" | "channel" | string;
+  unreadCount?: number;
+  phone?: string;
+  timestamp?: number;
+  lastMessage?: string;
+  lastMessageType?: string;
+}
+
+export interface WhatsAppPriorityTarget {
+  jid: string;
+  name: string;
+  isGroup: boolean;
+  phone?: string;
+  selectedAt?: string;
 }
 
 export interface WhatsAppLogEntry {
@@ -41,4 +72,6 @@ export interface WhatsAppSettings {
   apiKey: string;
   activeSessionId: string | null;
   humanDelayMs: number;
+  priorityTargets?: WhatsAppPriorityTarget[] | undefined;
+  activePriorityJid?: string | null | undefined;
 }

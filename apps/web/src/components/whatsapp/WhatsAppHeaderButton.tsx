@@ -19,6 +19,11 @@ export function WhatsAppIcon({ className = "size-4" }: { className?: string }) {
 export function WhatsAppHeaderButton() {
   const [isOpen, setIsOpen] = useState(false);
   const [activeSession, setActiveSession] = useState<string | null>(null);
+  const [sessionInfo, setSessionInfo] = useState<{
+    name?: string;
+    phone?: string;
+    pushName?: string;
+  } | null>(null);
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
@@ -36,7 +41,16 @@ export function WhatsAppHeaderButton() {
           const activeId = setData.settings?.activeSessionId;
           setActiveSession(activeId);
           const sessions = sessData.sessions || [];
-          const active = sessions.find((s: any) => s.id === activeId);
+          const active = sessions.find((s: any) => s.id === activeId || s.name === activeId);
+          if (active) {
+            setSessionInfo({
+              name: active.name,
+              phone: active.phone,
+              pushName: active.pushName,
+            });
+          } else {
+            setSessionInfo(null);
+          }
           setIsConnected(
             active?.status === "CONNECTED" ||
               active?.status === "AUTHENTICATED" ||
@@ -56,17 +70,19 @@ export function WhatsAppHeaderButton() {
     };
   }, []);
 
+  const tooltipText = sessionInfo?.name
+    ? `WhatsApp: ${sessionInfo.name}${sessionInfo.phone ? ` (+${sessionInfo.phone})` : ""} (${isConnected ? "Connected" : "Offline"})`
+    : activeSession
+      ? `WhatsApp: ${activeSession} (${isConnected ? "Connected" : "Setup needed"})`
+      : "WhatsApp Manager (Tap to open)";
+
   return (
     <>
       <button
         type="button"
         onClick={() => setIsOpen(true)}
         className="group/wa pointer-events-auto relative inline-flex items-center justify-center size-8 sm:size-7 shrink-0 cursor-pointer rounded-lg border border-[#25D366]/40 bg-[#25D366]/15 hover:bg-[#25D366]/25 text-[#25D366] shadow-xs transition-all active:scale-95 focus-visible:outline-hidden"
-        title={
-          activeSession
-            ? `WhatsApp: ${activeSession} (${isConnected ? "Connected" : "Setup needed"})`
-            : "WhatsApp Manager (Tap to open)"
-        }
+        title={tooltipText}
         aria-label="Open WhatsApp Gateway Manager"
       >
         <WhatsAppIcon className="size-4.5 sm:size-4 text-[#25D366] transition-transform group-hover/wa:scale-110 drop-shadow-[0_0_6px_rgba(37,211,102,0.6)]" />

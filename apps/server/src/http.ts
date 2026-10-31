@@ -92,6 +92,8 @@ import {
   geminiKeyRotator,
   processWhatsAppWebhook,
   getWhatsAppSessions,
+  getWhatsAppChats,
+  toggleWhatsAppPriorityTarget,
   createWhatsAppSession,
   deleteWhatsAppSession,
   getWhatsAppQr,
@@ -2097,6 +2099,46 @@ export const layerWhatsAppSessionsRoute = HttpRouter.add(
   Effect.gen(function* () {
     const sessions = yield* Effect.promise(() => getWhatsAppSessions());
     return HttpServerResponse.jsonUnsafe({ ok: true, sessions });
+  }),
+);
+
+export const layerWhatsAppChatsRoute = HttpRouter.add(
+  "GET",
+  "/api/whatsapp/chats",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const url = HttpServerRequest.toURL(request);
+    const sessionId = Option.isSome(url)
+      ? (url.value.searchParams.get("sessionId") ?? undefined)
+      : undefined;
+    const chats = yield* Effect.promise(() => getWhatsAppChats(sessionId));
+    return HttpServerResponse.jsonUnsafe({ ok: true, chats });
+  }),
+);
+
+export const layerWhatsAppPriorityTargetRoute = HttpRouter.add(
+  "POST",
+  "/api/whatsapp/priority-target",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const body = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      jid?: string;
+      name?: string;
+      isGroup?: boolean;
+      phone?: string;
+    };
+    if (!body?.jid?.trim()) {
+      return HttpServerResponse.jsonUnsafe({ ok: false, error: "jid is required" });
+    }
+    const result = yield* Effect.promise(() =>
+      toggleWhatsAppPriorityTarget({
+        jid: body.jid!.trim(),
+        name: body.name || body.jid!,
+        isGroup: Boolean(body.isGroup),
+        phone: body.phone,
+      }),
+    );
+    return HttpServerResponse.jsonUnsafe({ ok: true, ...result });
   }),
 );
 
