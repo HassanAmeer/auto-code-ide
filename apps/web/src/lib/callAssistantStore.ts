@@ -44,6 +44,11 @@ export interface CallAssistantMessage {
         wishlistProject?: string | undefined;
         pageReview?: import("./spacesStore").SpacePage | undefined;
         replyChips?: string[] | undefined;
+        thought?: string | undefined;
+        durationMs?: number | undefined;
+        toolsCalled?: any[] | undefined;
+        timelineEvents?: any[] | undefined;
+        diff?: string | undefined;
       }
     | undefined;
 }

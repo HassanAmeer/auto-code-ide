@@ -84,6 +84,10 @@ export interface ToolCallRecord {
   durationMs?: number;
 }
 
+export type TurnTimelineEvent =
+  | { kind: "tool"; tool: ToolCallRecord }
+  | { kind: "thought"; text: string; durationMs?: number };
+
 export interface SuperAgentResult {
   reply: string;
   spokenReply: string;
@@ -99,6 +103,7 @@ export interface SuperAgentResult {
   toolsCalled?: ToolCallRecord[];
   thought?: string;
   durationMs?: number;
+  timelineEvents?: TurnTimelineEvent[];
   details?: unknown;
 }
 
@@ -165,6 +170,7 @@ export async function querySuperAgentLLM(
   code?: string;
   thought?: string;
   toolsCalled?: ToolCallRecord[];
+  timelineEvents?: TurnTimelineEvent[];
 }> {
   const { model, instanceId, providerConfig, systemPrompt, history = [], signal } = options;
 
@@ -218,6 +224,7 @@ export async function querySuperAgentLLM(
           reply: data.reply.trim(),
           thought: data.thought || undefined,
           toolsCalled: Array.isArray(data.toolsCalled) ? data.toolsCalled : undefined,
+          timelineEvents: Array.isArray(data.timelineEvents) ? data.timelineEvents : undefined,
         };
       }
       if (data.error) {
@@ -528,6 +535,7 @@ export async function executeSuperAgentInstruction(
   let actionTag = "llm_completion";
   let delegatedTaskInfo: DelegatedTaskInfo | undefined;
   const toolsExecuted: ToolCallRecord[] = [];
+  const timelineEvents: TurnTimelineEvent[] = [];
   const recordTool = (record: ToolCallRecord) => {
     const idx = toolsExecuted.findIndex((t) => t.name === record.name);
     if (idx >= 0) {
@@ -535,6 +543,14 @@ export async function executeSuperAgentInstruction(
     } else {
       toolsExecuted.push(record);
     }
+
+    const tIdx = timelineEvents.findIndex((e) => e.kind === "tool" && e.tool.name === record.name);
+    if (tIdx >= 0) {
+      timelineEvents[tIdx] = { kind: "tool", tool: record };
+    } else {
+      timelineEvents.push({ kind: "tool", tool: record });
+    }
+
     options.onToolCall?.(record);
   };
 
@@ -1150,11 +1166,20 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
     let spokenReply = "";
 
     let thoughtText = llmRes.thought || "";
-    if (llmRes.toolsCalled && llmRes.toolsCalled.length > 0) {
+    if (llmRes.timelineEvents && llmRes.timelineEvents.length > 0) {
+      for (const ev of llmRes.timelineEvents) {
+        if (ev.kind === "thought" && ev.text) {
+          timelineEvents.push({ kind: "thought", text: ev.text });
+        } else if (ev.kind === "tool" && ev.tool) {
+          recordTool(ev.tool);
+        }
+      }
+    } else if (llmRes.toolsCalled && llmRes.toolsCalled.length > 0) {
       for (const tc of llmRes.toolsCalled) {
         recordTool(tc);
       }
     }
+
     const thinkMatch = fullReply.match(
       /<(?:think|thought|reasoning)>([\s\S]*?)<\/(?:think|thought|reasoning)>/i,
     );
@@ -1163,6 +1188,14 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
       fullReply = fullReply
         .replace(/<(?:think|thought|reasoning)>[\s\S]*?<\/(?:think|thought|reasoning)>/gi, "")
         .trim();
+    }
+
+    if (thoughtText && !timelineEvents.some((e) => e.kind === "thought")) {
+      timelineEvents.push({
+        kind: "thought",
+        text: thoughtText,
+        durationMs: Date.now() - startTime,
+      });
     }
 
     // Extract [SPOKEN] section if model included it (supports [SPOKEN]:, [SPOKEN], **[SPOKEN]**, etc.)
@@ -1236,6 +1269,7 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
       referencedMemory: referencedMemoryInfo,
       toolsCalled: toolsExecuted,
       thought: thoughtText || undefined,
+      timelineEvents: timelineEvents.length > 0 ? timelineEvents : undefined,
       durationMs: Date.now() - startTime,
     };
   }

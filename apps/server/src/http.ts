@@ -1418,14 +1418,24 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
               }
             }
 
-            // Extract tool calls and reasoning from assistant messages
+            // Extract tool calls and reasoning from assistant messages in chronological order
             const toolsFound: any[] = [];
             let thoughtFound = "";
+            const timelineEvents: Array<
+              { kind: "tool"; tool: any } | { kind: "thought"; text: string }
+            > = [];
+
             for (const m of lastMsgs) {
               if (m.type === "assistant" || m.type === "tool" || m.type === "message") {
                 for (const c of m.content || []) {
+                  if (c.type === "reasoning" || c.type === "thought") {
+                    if (c.text) {
+                      thoughtFound += (thoughtFound ? "\n" : "") + c.text;
+                      timelineEvents.push({ kind: "thought", text: c.text });
+                    }
+                  }
                   if (c.type === "tool" || c.type === "tool_call" || c.type === "call") {
-                    toolsFound.push({
+                    const toolObj = {
                       name: c.toolName || c.name || c.function?.name || "tool_call",
                       summary: c.args
                         ? JSON.stringify(c.args).slice(0, 120)
@@ -1433,10 +1443,9 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
                       args: c.args || undefined,
                       output: typeof c.output === "string" ? c.output.slice(0, 500) : undefined,
                       status: "completed",
-                    });
-                  }
-                  if (c.type === "reasoning" || c.type === "thought") {
-                    if (c.text) thoughtFound += (thoughtFound ? "\n" : "") + c.text;
+                    };
+                    toolsFound.push(toolObj);
+                    timelineEvents.push({ kind: "tool", tool: toolObj });
                   }
                 }
               }
@@ -1449,6 +1458,7 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
                 model: pureModel,
                 toolsCalled: toolsFound,
                 thought: thoughtFound,
+                timelineEvents: timelineEvents.length > 0 ? timelineEvents : undefined,
               };
             }
 
@@ -1700,11 +1710,18 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
         }
 
         if (content) {
+          const fallbackEvents: any[] = [];
+          if (thought) fallbackEvents.push({ kind: "thought", text: thought });
+          if (toolsCalled && toolsCalled.length > 0) {
+            for (const t of toolsCalled) fallbackEvents.push({ kind: "tool", tool: t });
+          }
+
           return {
             ok: true,
             reply: content,
             thought,
             toolsCalled,
+            timelineEvents: fallbackEvents.length > 0 ? fallbackEvents : undefined,
             model: model || "gemini",
           };
         }

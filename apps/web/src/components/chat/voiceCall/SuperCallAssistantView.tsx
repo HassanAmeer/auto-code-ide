@@ -519,52 +519,63 @@ function LiveActivityRow({
   );
 }
 
-function ToolCallItemRow({ tool }: { tool: ToolCallRecord }) {
-  const [detailsOpen, setDetailsOpen] = useState(false);
+function formatToolDisplayLabel(tool: ToolCallRecord): string {
+  let label = (tool.summary || tool.name).trim();
+  label = label.replace(/^\{.*\}$/, tool.name);
+  if (
+    !/^Ran\b/i.test(label) &&
+    !/^Edited\b/i.test(label) &&
+    !/^Running\b/i.test(label) &&
+    !/^Failed\b/i.test(label) &&
+    !/^Checked\b/i.test(label) &&
+    !/^Sent\b/i.test(label) &&
+    !/^Searched\b/i.test(label) &&
+    !/^Read\b/i.test(label)
+  ) {
+    label = `Ran ${label}`;
+  }
+  return label;
+}
+
+function ToolTimelineRow({
+  tool,
+  defaultExpanded = false,
+}: {
+  tool: ToolCallRecord;
+  defaultExpanded?: boolean;
+}) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
   const hasDetails = Boolean(tool.args || tool.output || tool.detail);
+  const label = formatToolDisplayLabel(tool);
+  const icon = getToolCallIcon(tool.name);
 
   return (
     <div className="w-full min-w-0">
       <WorkLogRow
         icon={
-          <span className="flex size-4 items-center justify-center">
-            {getToolCallIcon(tool.name)}
+          <span className="flex size-4 items-center justify-center text-secondary-label">
+            {icon}
           </span>
         }
-        label={
-          <div className="flex items-baseline min-w-0 gap-2">
-            <span className="font-mono text-xs font-medium text-foreground shrink-0">
-              {tool.name}
-            </span>
-            {tool.summary && (
-              <span className="text-xs text-secondary-label truncate font-sans">
-                {tool.summary}
-              </span>
-            )}
-          </div>
-        }
+        label={<span className="text-secondary-label text-sm truncate font-normal">{label}</span>}
         trailing={
           <div className="flex items-center gap-1.5 shrink-0 select-none">
             {tool.status === "calling" ? (
               <Loader2 className="size-3 text-secondary-label animate-spin" />
             ) : tool.status === "error" ? (
               <X className="size-3 text-rose-400" />
-            ) : (
-              <Check className="size-3 text-secondary-label" />
-            )}
-            {hasDetails ? (
-              <ChevronRight
-                className={cn(
-                  "size-3 text-secondary-label transition-transform duration-150",
-                  detailsOpen && "rotate-90",
-                )}
-              />
             ) : null}
+            <ChevronRight
+              className={cn(
+                "size-3 text-secondary-label/70 transition-transform duration-200",
+                expanded && "rotate-90",
+              )}
+            />
           </div>
         }
-        onClick={hasDetails ? () => setDetailsOpen((v) => !v) : undefined}
+        onClick={() => setExpanded(!expanded)}
       />
-      {detailsOpen && hasDetails ? (
+      {expanded ? (
         <WorkLogDetails kind="text">
           {tool.args ? (
             <div className="space-y-1">
@@ -586,97 +597,48 @@ function ToolCallItemRow({ tool }: { tool: ToolCallRecord }) {
               </pre>
             </div>
           ) : null}
+          {!hasDetails && (
+            <div className="text-xs text-secondary-label/70 italic py-0.5">
+              Completed successfully.
+            </div>
+          )}
         </WorkLogDetails>
       ) : null}
     </div>
   );
 }
 
-function LiveProcessingActivityView({
-  agentStatus,
-  selectedModel,
-  dispatchStartTime,
-  liveTools = [],
+function ThoughtTimelineRow({
+  thought,
+  durationMs,
+  defaultExpanded = false,
 }: {
-  agentStatus: string | null;
-  selectedModel: string;
-  dispatchStartTime: number;
-  liveTools?: ToolCallRecord[];
+  thought: string;
+  durationMs?: number;
+  defaultExpanded?: boolean;
 }) {
-  const [expanded, setExpanded] = useState(true);
-  const activeTool = liveTools.find((t) => t.status === "calling");
-
-  const headerLabel = activeTool
-    ? `Calling ${activeTool.name}...`
-    : agentStatus?.startsWith("Tool Calling:")
-      ? agentStatus.replace(/^Tool Calling:\s*/, "")
-      : `Thinking with ${selectedModel}`;
-
-  const headerIcon = activeTool ? (
-    getToolCallIcon(activeTool.name)
-  ) : (
-    <Brain className="size-4 shrink-0 text-secondary-label" />
-  );
-
-  return (
-    <WorkLogBlock layout={expanded && liveTools.length > 0 ? "group-header" : "standalone"}>
-      <WorkLogButton
-        aria-expanded={expanded}
-        onClick={liveTools.length > 0 ? () => setExpanded((v) => !v) : undefined}
-        icon={headerIcon}
-        label={<LiveActivityRow label={headerLabel} active shimmer />}
-        trailing={
-          <div className="flex items-center gap-2 select-none">
-            <LiveWorkingTimer startTime={dispatchStartTime} />
-            {liveTools.length > 0 ? (
-              <ChevronDown
-                className={cn(
-                  "size-3.5 text-secondary-label transition-transform duration-200",
-                  !expanded && "-rotate-90",
-                )}
-              />
-            ) : null}
-          </div>
-        }
-      />
-      {expanded && liveTools.length > 0 ? (
-        <WorkLogList>
-          {liveTools.map((tool, idx) => (
-            <ToolCallItemRow key={idx} tool={tool} />
-          ))}
-        </WorkLogList>
-      ) : null}
-    </WorkLogBlock>
-  );
-}
-
-function ThinkingWorkLogBlock({ thought, durationMs }: { thought?: string; durationMs?: number }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(defaultExpanded);
   if (!thought || !thought.trim()) return null;
 
   const seconds = durationMs ? Math.max(1, Math.round(durationMs / 1000)) : undefined;
   const label = `Thought${seconds ? ` for ${seconds}s` : ""}`;
 
   return (
-    <WorkLogBlock layout={expanded ? "group-header" : "standalone"}>
-      <WorkLogButton
-        aria-expanded={expanded}
-        onClick={() => setExpanded((v) => !v)}
+    <div className="w-full min-w-0">
+      <WorkLogRow
         icon={<Brain className="size-4 shrink-0 text-secondary-label" />}
-        label={<span className="text-secondary-label text-xs font-normal">{label}</span>}
+        label={<span className="text-secondary-label text-sm font-normal">{label}</span>}
         trailing={
-          <div className="flex items-center gap-1.5 select-none">
-            {seconds ? (
-              <span className="text-xs text-secondary-label font-mono">{seconds}s</span>
-            ) : null}
-            <ChevronDown
+          <div className="flex items-center gap-1.5 shrink-0 select-none">
+            <ChevronRight
               className={cn(
-                "size-3.5 text-secondary-label transition-transform duration-200",
-                !expanded && "-rotate-90",
+                "size-3 text-secondary-label/70 transition-transform duration-200",
+                expanded && "rotate-90",
               )}
             />
           </div>
         }
+        onClick={() => setExpanded(!expanded)}
       />
       {expanded ? (
         <WorkLogDetails kind="text">
@@ -685,43 +647,123 @@ function ThinkingWorkLogBlock({ thought, durationMs }: { thought?: string; durat
           </div>
         </WorkLogDetails>
       ) : null}
+    </div>
+  );
+}
+
+function MessageExecutionTimeline({
+  meta,
+}: {
+  meta?: {
+    thought?: string;
+    durationMs?: number;
+    toolsCalled?: ToolCallRecord[];
+    timelineEvents?: Array<
+      | { kind: "tool"; tool: ToolCallRecord }
+      | { kind: "thought"; text: string; durationMs?: number }
+    >;
+  };
+}) {
+  if (!meta) return null;
+
+  const events: Array<
+    { kind: "tool"; tool: ToolCallRecord } | { kind: "thought"; text: string; durationMs?: number }
+  > = [];
+
+  if (meta.timelineEvents && meta.timelineEvents.length > 0) {
+    events.push(...meta.timelineEvents);
+  } else {
+    if (meta.toolsCalled && meta.toolsCalled.length > 0) {
+      for (const t of meta.toolsCalled) {
+        events.push({ kind: "tool", tool: t });
+      }
+    }
+    if (meta.thought && meta.thought.trim()) {
+      events.push({ kind: "thought", text: meta.thought, durationMs: meta.durationMs });
+    }
+  }
+
+  if (events.length === 0) return null;
+
+  return (
+    <WorkLogBlock layout="standalone">
+      <WorkLogList>
+        {events.map((evt, idx) =>
+          evt.kind === "tool" && evt.tool ? (
+            <ToolTimelineRow key={`tool-${idx}-${evt.tool.name}`} tool={evt.tool} />
+          ) : evt.text ? (
+            <ThoughtTimelineRow
+              key={`thought-${idx}`}
+              thought={evt.text}
+              durationMs={evt.durationMs}
+            />
+          ) : null,
+        )}
+      </WorkLogList>
     </WorkLogBlock>
   );
 }
 
-function ToolsWorkLogBlock({ tools }: { tools?: ToolCallRecord[] }) {
-  const [expanded, setExpanded] = useState(false);
-  if (!tools || tools.length === 0) return null;
+function LiveProcessingActivityView({
+  agentStatus,
+  selectedModel: _selectedModel,
+  dispatchStartTime,
+  liveTools = [],
+}: {
+  agentStatus: string | null;
+  selectedModel: string;
+  dispatchStartTime: number;
+  liveTools?: ToolCallRecord[];
+}) {
+  const activeTool = liveTools.find((t) => t.status === "calling");
 
-  const label = `Used ${tools.length} ${tools.length === 1 ? "tool" : "tools"}`;
+  const workingLabel = activeTool
+    ? `Running ${activeTool.summary || activeTool.name}...`
+    : agentStatus?.startsWith("Tool Calling:")
+      ? agentStatus.replace(/^Tool Calling:\s*/, "")
+      : "Working";
 
   return (
-    <WorkLogBlock layout={expanded ? "group-header" : "standalone"}>
-      <WorkLogButton
-        aria-expanded={expanded}
-        onClick={() => setExpanded((v) => !v)}
-        icon={<Terminal className="size-4 shrink-0 text-secondary-label" />}
-        label={<span className="text-secondary-label text-xs font-normal">{label}</span>}
-        trailing={
-          <div className="flex items-center gap-1.5 select-none">
-            <span className="text-xs text-secondary-label font-mono">{tools.length}</span>
-            <ChevronDown
-              className={cn(
-                "size-3.5 text-secondary-label transition-transform duration-200",
-                !expanded && "-rotate-90",
-              )}
-            />
-          </div>
-        }
-      />
-      {expanded ? (
-        <WorkLogList>
-          {tools.map((tool, idx) => (
-            <ToolCallItemRow key={idx} tool={tool} />
-          ))}
-        </WorkLogList>
-      ) : null}
-    </WorkLogBlock>
+    <div className="flex flex-col items-start w-full py-1 group">
+      <div className="text-left w-full max-w-[95%]">
+        <WorkLogBlock layout="standalone">
+          <WorkLogList>
+            {/* 1. All completed tools in chronological order */}
+            {liveTools
+              .filter((t) => t.status !== "calling")
+              .map((tool, idx) => (
+                <ToolTimelineRow key={`live-done-${idx}`} tool={tool} />
+              ))}
+
+            {/* 2. Currently calling tool if any */}
+            {activeTool && (
+              <ToolTimelineRow
+                key={`live-calling-${activeTool.name}`}
+                tool={activeTool}
+                defaultExpanded={false}
+              />
+            )}
+
+            {/* 3. The Working activity line at the bottom with live timer and shimmer */}
+            <div className="w-full min-w-0">
+              <WorkLogRow
+                icon={
+                  <span className="flex size-4 items-center justify-center">
+                    <Loader2 className="size-3.5 text-secondary-label animate-spin" />
+                  </span>
+                }
+                label={<LiveActivityRow label={workingLabel} active shimmer />}
+                trailing={
+                  <div className="flex items-center gap-2 select-none">
+                    <LiveWorkingTimer startTime={dispatchStartTime} />
+                  </div>
+                }
+              />
+            </div>
+          </WorkLogList>
+        </WorkLogBlock>
+      </div>
+    </div>
   );
 }
 
@@ -1260,6 +1302,9 @@ export function SuperCallAssistantView() {
           ...(res.referencedMemory ? { referencedMemory: res.referencedMemory } : {}),
           ...(res.toolsCalled && res.toolsCalled.length > 0
             ? { toolsCalled: res.toolsCalled }
+            : {}),
+          ...(res.timelineEvents && res.timelineEvents.length > 0
+            ? { timelineEvents: res.timelineEvents }
             : {}),
           ...(codeDiff ? { diff: codeDiff } : {}),
         };
@@ -2739,14 +2784,8 @@ export function SuperCallAssistantView() {
             return (
               <div key={msg.id} className="flex flex-col items-start w-full py-2.5 group">
                 <div className="text-left w-full max-w-[95%]">
-                  {/* Thinking WorkLog Row (Exact project chat design) */}
-                  <ThinkingWorkLogBlock
-                    thought={msg.meta?.thought}
-                    durationMs={msg.meta?.durationMs}
-                  />
-
-                  {/* Tools WorkLog Row (Exact project chat design) */}
-                  <ToolsWorkLogBlock tools={msg.meta?.toolsCalled} />
+                  {/* Chronological Execution Timeline (Exact project chat design: tools, thinking, edits in sequential order) */}
+                  <MessageExecutionTimeline meta={msg.meta} />
 
                   <div className="text-sm sm:text-base font-normal text-zinc-200 leading-relaxed select-text my-1">
                     <ChatMarkdown
