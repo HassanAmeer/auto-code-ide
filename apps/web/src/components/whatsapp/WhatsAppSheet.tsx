@@ -99,6 +99,12 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
   const [chatsLoading, setChatsLoading] = useState(false);
   const [chatFilter, setChatFilter] = useState<"all" | "users" | "groups" | "priority">("all");
   const [chatSearch, setChatSearch] = useState("");
+  const [showPriorityHint, setShowPriorityHint] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("wa_hide_priority_hint") !== "true";
+    }
+    return true;
+  });
   const [settings, setSettings] = useState<WhatsAppSettingsData>({
     botEnabled: true,
     autoReply: true,
@@ -863,17 +869,38 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
                 </div>
 
                 {/* Priority instruction helper */}
-                <div className="rounded-xl border border-amber-500/20 bg-amber-950/20 p-2.5 text-[11px] text-amber-200/90 flex items-start gap-2">
-                  <Star className="size-4 text-amber-400 shrink-0 mt-0.5 fill-amber-400" />
-                  <div className="space-y-0.5 min-w-0">
-                    <span className="font-semibold text-amber-300">Super Bot Priority Focus:</span>
-                    <p className="text-zinc-300 text-[10.5px]">
-                      Aap kisi bhi User ya Group ko <strong>Select</strong> kar sakte hain. Super
-                      Bot messages aur focus mein hamesha selected target ko{" "}
-                      <strong>First Priority</strong> par rakhega!
-                    </p>
+                {showPriorityHint && (
+                  <div className="rounded-xl border border-amber-500/25 bg-amber-950/25 p-2.5 text-[11px] text-amber-200/90 flex items-start justify-between gap-2 transition-all">
+                    <div className="flex items-start gap-2 min-w-0">
+                      <Star className="size-4 text-amber-400 shrink-0 mt-0.5 fill-amber-400" />
+                      <div className="space-y-0.5 min-w-0">
+                        <span className="font-semibold text-amber-300">
+                          Super Bot Priority Focus:
+                        </span>
+                        <p className="text-zinc-300 text-[10.5px]">
+                          Aap kisi bhi User ya Group ko <strong>Select</strong> kar sakte hain.
+                          Super Bot messages aur focus mein hamesha selected target ko{" "}
+                          <strong>First Priority</strong> par rakhega!
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowPriorityHint(false);
+                        try {
+                          localStorage.setItem("wa_hide_priority_hint", "true");
+                        } catch {
+                          // ignore
+                        }
+                      }}
+                      className="text-amber-400/70 hover:text-amber-200 hover:bg-amber-500/20 rounded-lg p-1 shrink-0 transition-colors cursor-pointer"
+                      title="Hide notification"
+                    >
+                      <X className="size-3.5" />
+                    </button>
                   </div>
-                </div>
+                )}
               </div>
 
               {/* Chats List */}
