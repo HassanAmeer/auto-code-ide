@@ -85,9 +85,15 @@ export function classifyIntent(userText: string): IntentAnalysis {
     return { intent: "AUTO_HEAL_REQUEST", confidence: 0.95, isUrdu };
   }
 
-  // 3.1.5 WhatsApp Action Request (e.g. "whatsapp pe message bhejo", "client ko message karo", "whatsapp edit/delete", "voice note send karo")
+  // 3.1.5 WhatsApp Action Request (e.g. "whatsapp pe message bhejo", "client ko message karo", "whatsapp edit/delete", "voice note send karo", "dobara bhejo", "chat dikhao", Urdu script)
   if (
-    /\b(whatsapp|wa\s+message|client\s+ko\s+message|number\s+ko\s+message|message\s+bhej\s*(?:do|o|na)|message\s+send\s*karo|wa\s+send|message\s+edit\s*karo|message\s+delete\s*karo|voice\s*note\s*(?:send|bhej)|image\s*(?:send|bhej).{0,30}?(?:whatsapp|client))\b/i.test(
+    /\b(whatsapp|wa\s+message|client\s+ko\s+message|customer\s+ko\s+message|number\s+ko\s+message|message\s+bhej\s*(?:do|o|na|en|ein)?|message\s+send\s*karo|wa\s+send|message\s+edit\s*karo|message\s+delete\s*karo|voice\s*note\s*(?:send|bhej)|image\s*(?:send|bhej).{0,30}?(?:whatsapp|client))\b/i.test(
+      t,
+    ) ||
+    /\b(dobara\s*bhej|phir\s*se\s*bhej|resend|ek\s*dafa\s*aur\s*bhej|10\s*dafa\s*bhej|chat\s*dikhao|messages?\s*dikhao|media\s*file|voice\s*note|wa\s*logs?)\b/i.test(
+      t,
+    ) ||
+    /(واٹس\s*ایپ|میسج\s*(?:بھیجو|سینڈ|دکھاؤ|ایڈٹ|ڈیلیٹ|کرو)|کسٹمر\s*کو\s*میسج|دوبارہ\s*بھیجو|نمبر\s*کو\s*میسج|میڈیا\s*فائل|وائس\s*نوٹ|چیٹ\s*دکھاؤ|میسجز\s*دکھاؤ)/.test(
       t,
     )
   ) {

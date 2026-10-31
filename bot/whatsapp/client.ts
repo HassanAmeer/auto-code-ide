@@ -33,6 +33,24 @@ function getBaseHeaders(apiKey: string) {
   };
 }
 
+export interface LastSentState {
+  to: string;
+  chatId: string;
+  text: string;
+  messageId?: string;
+  timestamp: number;
+}
+
+let lastSentState: LastSentState | null = null;
+
+export function getLastSentState(): LastSentState | null {
+  return lastSentState;
+}
+
+export function setLastSentState(state: LastSentState | null): void {
+  lastSentState = state;
+}
+
 export async function listSessions(): Promise<WhatsAppSession[]> {
   const settings = getWhatsAppSettings();
   const res = await fetch(`${settings.gatewayUrl}/api/sessions`, {
@@ -216,6 +234,15 @@ export async function sendTextMessage(opts: {
 
     const data = await res.json();
     const messageId = data?.id || data?.messageId || `msg_${Date.now()}`;
+
+    // Record last sent state so repeat / resend / edit requests work smoothly
+    lastSentState = {
+      to: opts.to,
+      chatId,
+      text: opts.text,
+      messageId,
+      timestamp: Date.now(),
+    };
 
     logWhatsAppEvent({
       type: "outbound",
@@ -451,6 +478,108 @@ export async function deleteMessage(opts: {
     return { ok: true };
   } catch (err: any) {
     return { ok: false, error: err?.message || String(err) };
+  }
+}
+
+/**
+ * Forwards a message to another contact or group.
+ */
+export async function forwardMessage(opts: {
+  chatId: string;
+  messageId: string;
+  to: string;
+  sessionId?: string;
+}): Promise<{ ok: boolean; messageId?: string; error?: string }> {
+  const settings = getWhatsAppSettings();
+  const sessionId = opts.sessionId || settings.activeSessionId;
+  if (!sessionId) return { ok: false, error: "No active session." };
+
+  const toChatId = normalizeChatId(opts.to);
+  const fromChatId = normalizeChatId(opts.chatId);
+
+  try {
+    const res = await fetch(`${settings.gatewayUrl}/api/sessions/${sessionId}/messages/forward`, {
+      method: "POST",
+      headers: getBaseHeaders(settings.apiKey),
+      body: JSON.stringify({
+        chatId: fromChatId,
+        messageId: opts.messageId,
+        to: toChatId,
+      }),
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      return { ok: false, error: `Forward failed (${res.status}): ${errText}` };
+    }
+    const data = await res.json();
+    return { ok: true, messageId: data?.id || data?.messageId };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || String(err) };
+  }
+}
+
+export interface WhatsAppMessageRecord {
+  id: string;
+  waMessageId?: string;
+  chatId: string;
+  chatName?: string;
+  from?: string;
+  to?: string;
+  body: string;
+  type: string;
+  direction: "incoming" | "outgoing";
+  timestamp: number;
+  media?: any;
+  mediaPath?: string;
+  status?: string;
+}
+
+/**
+ * Fetches recent messages from OpenWA (optionally filtered by chatId, limit, type).
+ */
+export async function getChatMessages(opts?: {
+  chatId?: string;
+  limit?: number;
+  sessionId?: string;
+  type?: string;
+}): Promise<WhatsAppMessageRecord[]> {
+  const settings = getWhatsAppSettings();
+  const sid = opts?.sessionId || settings.activeSessionId;
+  if (!sid) return [];
+
+  const params = new URLSearchParams();
+  if (opts?.limit) params.set("limit", String(opts.limit));
+  else params.set("limit", "15");
+  if (opts?.chatId) params.set("chatId", normalizeChatId(opts.chatId));
+  if (opts?.type) params.set("type", opts.type);
+
+  try {
+    const url = `${settings.gatewayUrl}/api/sessions/${sid}/messages?${params.toString()}`;
+    const res = await fetch(url, {
+      headers: getBaseHeaders(settings.apiKey),
+    });
+    if (!res.ok) return [];
+
+    const data = await res.json();
+    const rawList = Array.isArray(data) ? data : data.messages || [];
+
+    return rawList.map((m: any): WhatsAppMessageRecord => ({
+      id: m.id,
+      waMessageId: m.waMessageId,
+      chatId: m.chatId,
+      chatName: m.chatName,
+      from: m.from,
+      to: m.to,
+      body: m.body || "",
+      type: m.type || "text",
+      direction: m.direction || "incoming",
+      timestamp: m.timestamp || Math.floor(Date.now() / 1000),
+      media: m.metadata?.media,
+      mediaPath: m.mediaPath,
+      status: m.status,
+    }));
+  } catch {
+    return [];
   }
 }
 

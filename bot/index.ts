@@ -171,7 +171,7 @@ export async function processSuperBotTurn(options: BotTurnOptions): Promise<BotT
     };
   }
 
-  // 7. WhatsApp Action Handler
+  // 7. WhatsApp Action Handler - Powered by AI Thinking & Zero-Refusal Obedience
   if (analysis.intent === "WHATSAPP_ACTION") {
     const {
       sendTextMessage,
@@ -179,11 +179,15 @@ export async function processSuperBotTurn(options: BotTurnOptions): Promise<BotT
       sendVoiceMessage,
       editMessage,
       deleteMessage,
+      forwardMessage,
+      getChatMessages,
+      getLastSentState,
       findClient,
       listChats,
       listSessions,
       getWhatsAppSettings,
       getActivePriorityTarget,
+      parseWhatsAppInstructionWithThinking,
     } = await import("./whatsapp/index.ts");
 
     const settings = getWhatsAppSettings();
@@ -198,131 +202,273 @@ export async function processSuperBotTurn(options: BotTurnOptions): Promise<BotT
       ? `${activeSessionObj.name || activeSessionObj.pushName || activeSession} (${activeSessionObj.phone ? `+${activeSessionObj.phone}` : "No Phone"})`
       : activeSession;
 
-    // Check if user is asking to EDIT a message
-    if (/\b(edit\s*karo|tabdeel\s*karo|change\s*karo)\b/i.test(userText)) {
-      const reply =
-        lang === "urdu"
-          ? `Main message edit kar sakta hoon! Message edit karne ke liye mujhe Client ka Number/ChatId aur Message ID darkaar hai.\n\n• **Active Session:** \`${sessionDisplayName}\`\n• **Action:** Edit Message\n\nAap WhatsApp Sheet ya Tester se direct 1-click edit kar sakte hain.`
-          : `I can edit WhatsApp messages. Please specify the target message ID and the new text for session \`${sessionDisplayName}\`.`;
-      return {
-        reply,
-        spokenReply: "Message edit karne ke liye target message ID darkaar hai.",
-        intent: analysis.intent,
-        actionTaken: "whatsapp_edit_prompt",
-        systemPrompt: buildSmartBotSystemPrompt({ intentAnalysis: analysis, language: lang }),
-      };
-    }
-
-    // Check if user is asking to DELETE a message
-    if (/\b(delete\s*karo|hata\s*do|mita\s*do)\b/i.test(userText)) {
-      const reply =
-        lang === "urdu"
-          ? `Message delete (Delete for Everyone) karne ke liye mujhe target Message ID aur Chat Number batayein.\n\n• **Active Session:** \`${sessionDisplayName}\`\n• **Action:** Delete Message`
-          : `To delete a message for everyone, please provide the Message ID and Chat Number for session \`${sessionDisplayName}\`.`;
-      return {
-        reply,
-        spokenReply: "Message delete karne ke liye target message ID darkaar hai.",
-        intent: analysis.intent,
-        actionTaken: "whatsapp_delete_prompt",
-        systemPrompt: buildSmartBotSystemPrompt({ intentAnalysis: analysis, language: lang }),
-      };
-    }
-
-    // Recipient & Priority Resolution
-    const phoneMatch = userText.match(/(?:\+?92|0)?3\d{2}[- ]?\d{7}|\b\d{10,15}\b/);
-    let rawTarget = phoneMatch ? phoneMatch[0].replace(/[- ]/g, "") : "";
-    let targetName = "";
-    let isTargetGroup = false;
-
-    // 1st Priority: If no explicit phone number provided, use Selected Priority Target
+    const allChats = await listChats(activeSession).catch(() => []);
     const priorityTarget = getActivePriorityTarget();
-    if (!rawTarget && priorityTarget) {
-      rawTarget = priorityTarget.jid;
-      targetName = priorityTarget.name;
-      isTargetGroup = priorityTarget.isGroup;
+    const lastSent = getLastSentState();
+
+    // Run AI Thinking & Intent Extraction
+    const parsed = await parseWhatsAppInstructionWithThinking(userText, {
+      activeSessionDisplayName: sessionDisplayName,
+      activeSessionPhone: activeSessionObj?.phone,
+      priorityTarget,
+      knownChats: allChats,
+      lastSentState: lastSent,
+    });
+
+    const recipientLabel = parsed.recipientName
+      ? `${parsed.recipientName} (${parsed.isGroup ? "Group" : "Direct User"})`
+      : parsed.recipient
+        ? `\`${parsed.recipient}\``
+        : "";
+
+    // ── CASE A: ASK CLARIFICATION (User gave an instruction without the message content) ──
+    if (parsed.action === "ASK_CLARIFICATION") {
+      const targetHint = recipientLabel
+        ? `\n• **Target:** ${recipientLabel}`
+        : priorityTarget
+          ? `\n• **Target:** ${priorityTarget.name} (⭐ Priority Target)`
+          : "";
+
+      const reply =
+        lang === "urdu"
+          ? `Aap customer ko kya message bhejna chahte hain? Meherbani farma kar message ya topic batayein (jaise Deal confirmation, Order dispatch status, Greeting, ya koi specific message), taake main professional customer-facing message draft karke bhej sakoon.${targetHint}\n• **Active Session:** \`${sessionDisplayName}\``
+          : `What message would you like to send to the customer? Please provide the message content or topic so I can draft and send a professional message.${targetHint}\n• **Active Session:** \`${sessionDisplayName}\``;
+
+      return {
+        reply,
+        spokenReply:
+          "Aap customer ko kya message bhejna chahte hain? Meherbani karke message batayein.",
+        intent: analysis.intent,
+        actionTaken: "whatsapp_clarification_needed",
+        systemPrompt: buildSmartBotSystemPrompt({ intentAnalysis: analysis, language: lang }),
+      };
     }
 
-    // 2nd Priority: Check if user mentioned any contact or group name from chats
-    if (!rawTarget) {
-      const allChats = await listChats(activeSession).catch(() => []);
-      for (const chat of allChats) {
-        if (
-          chat.name &&
-          chat.name.length > 2 &&
-          userText.toLowerCase().includes(chat.name.toLowerCase())
-        ) {
-          rawTarget = chat.id;
-          targetName = chat.name;
-          isTargetGroup = chat.isGroup;
-          break;
+    // ── CASE B: LIST MESSAGES / VIEW RECENT CHAT HISTORY ──
+    if (parsed.action === "LIST_MESSAGES") {
+      const messages = await getChatMessages({
+        chatId: parsed.recipient || priorityTarget?.jid || undefined,
+        limit: 10,
+        sessionId: activeSession,
+      });
+
+      let reply = "";
+      if (messages.length === 0) {
+        reply =
+          lang === "urdu"
+            ? `Koi messages nahi mile ya chat history abhi sync nahi hui.\n\n• **Active Session:** \`${sessionDisplayName}\`\n• **Target:** ${recipientLabel || "All Chats"}`
+            : `No recent messages found for ${recipientLabel || "active session"}.`;
+      } else {
+        const targetTitle = recipientLabel || "Recent WhatsApp Messages";
+        reply = `### 💬 ${targetTitle} (Last ${messages.length})\n\n`;
+        for (const m of messages.slice(0, 10)) {
+          const dir = m.direction === "outgoing" ? "📤 Sent" : "📥 Received";
+          const time = new Date(m.timestamp * 1000).toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+          const sender = m.chatName || m.from || "Contact";
+          const body = m.body || (m.type !== "text" ? `[Media: ${m.type}]` : "");
+          reply += `• **[${time}] ${dir} (${sender}):** ${body}\n`;
+        }
+        reply += `\n*Session:* \`${sessionDisplayName}\``;
+      }
+
+      return {
+        reply,
+        spokenReply: `Maine recent ${messages.length} messages ki list nikal li hai.`,
+        intent: analysis.intent,
+        actionTaken: "whatsapp_messages_listed",
+        systemPrompt: buildSmartBotSystemPrompt({ intentAnalysis: analysis, language: lang }),
+      };
+    }
+
+    // ── CASE C: EXTRACT / VIEW MEDIA FILES ──
+    if (parsed.action === "EXTRACT_MEDIA") {
+      const messages = await getChatMessages({
+        chatId: parsed.recipient || priorityTarget?.jid || undefined,
+        limit: 30,
+        sessionId: activeSession,
+      });
+
+      const mediaItems = messages.filter((m) => m.type !== "text" || m.media || m.mediaPath);
+
+      let reply = "";
+      if (mediaItems.length === 0) {
+        reply =
+          lang === "urdu"
+            ? `Is chat mein koi media files (photos, audio, docs) nahi mili hain.\n\n• **Active Session:** \`${sessionDisplayName}\``
+            : `No media files found in this chat for session \`${sessionDisplayName}\`.`;
+      } else {
+        reply = `### 📸 WhatsApp Media Files (${mediaItems.length} Found)\n\n`;
+        for (const [idx, item] of mediaItems.slice(0, 10).entries()) {
+          const time = new Date(item.timestamp * 1000).toLocaleString();
+          reply += `**${idx + 1}. [${item.type.toUpperCase()}]** - ${time}\n`;
+          if (item.media?.mimetype) {
+            reply += `• Type: \`${item.media.mimetype}\`\n`;
+          }
+          if (item.body) {
+            reply += `• Caption/Text: "${item.body}"\n`;
+          }
+          if (item.media?.data) {
+            reply += `• Base64 Data: Available (${Math.round(item.media.data.length / 1024)} KB)\n`;
+          }
+          reply += "\n";
         }
       }
+
+      return {
+        reply,
+        spokenReply: `Maine ${mediaItems.length} media files extract kar li hain.`,
+        intent: analysis.intent,
+        actionTaken: "whatsapp_media_extracted",
+        systemPrompt: buildSmartBotSystemPrompt({ intentAnalysis: analysis, language: lang }),
+      };
     }
 
-    // Clean user message to extract actual text
-    let messageToSend = userText
-      .replace(
-        /(?:whatsapp\s*(?:par|pe|karo)?|client\s*ko|is\s*(?:user|client|group|number)\s*ko|ko\s*message\s*(?:bhej|send|karo)?|message\s*send\s*karo|bhej\s*do|send\s*karo)/gi,
-        "",
-      )
-      .replace(new RegExp(phoneMatch ? phoneMatch[0].replace(/[- ]/g, "") : "", "g"), "")
-      .replace(/^[:\-\s]+/, "")
-      .trim();
+    // ── CASE D: DELETE MESSAGE ──
+    if (parsed.action === "DELETE") {
+      const targetId = parsed.targetMessageId || lastSent?.messageId;
+      const targetChat = parsed.recipient || lastSent?.chatId;
 
-    if (targetName) {
-      messageToSend = messageToSend
-        .replace(new RegExp(targetName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), "")
-        .replace(/^[:\-\s]+/, "")
-        .trim();
+      if (!targetId || !targetChat) {
+        const reply =
+          lang === "urdu"
+            ? `Message delete karne ke liye Message ID darkaar hai. Aap WhatsApp Sheet ke logs se message ID dekh sakte hain ya mujhe batayein.`
+            : `Please provide the Message ID to delete.`;
+        return {
+          reply,
+          spokenReply: "Message delete karne ke liye message ID darkaar hai.",
+          intent: analysis.intent,
+          actionTaken: "whatsapp_delete_prompt",
+          systemPrompt: buildSmartBotSystemPrompt({ intentAnalysis: analysis, language: lang }),
+        };
+      }
+
+      const delRes = await deleteMessage({
+        chatId: targetChat,
+        messageId: targetId,
+        sessionId: activeSession,
+      });
+
+      const reply = delRes.ok
+        ? lang === "urdu"
+          ? `🗑️ **Message Successfully Deleted (For Everyone)!**\n\n• **Chat:** \`${targetChat}\`\n• **Message ID:** \`${targetId}\`\n• **Active Session:** \`${sessionDisplayName}\``
+          : `🗑️ Message \`${targetId}\` successfully deleted for everyone.`
+        : `⚠️ Failed to delete message: ${delRes.error}`;
+
+      return {
+        reply,
+        spokenReply: delRes.ok
+          ? "Message delete kar diya gaya hai."
+          : "Message delete nahi ho saka.",
+        intent: analysis.intent,
+        actionTaken: "whatsapp_message_deleted",
+        systemPrompt: buildSmartBotSystemPrompt({ intentAnalysis: analysis, language: lang }),
+      };
+    }
+
+    // ── CASE E: EDIT MESSAGE ──
+    if (parsed.action === "EDIT") {
+      const targetId = parsed.targetMessageId || lastSent?.messageId;
+      const targetChat = parsed.recipient || lastSent?.chatId;
+      const newText = parsed.messageToSend;
+
+      if (!targetId || !targetChat || !newText) {
+        const reply =
+          lang === "urdu"
+            ? `Message edit karne ke liye naya text batayein. E.g. "message edit karke yeh kardo: Kal meeting 4 baje hogi".\n\n• **Active Session:** \`${sessionDisplayName}\``
+            : `Please provide the new message text to update for session \`${sessionDisplayName}\`.`;
+        return {
+          reply,
+          spokenReply: "Message edit karne ke liye naya text batayein.",
+          intent: analysis.intent,
+          actionTaken: "whatsapp_edit_prompt",
+          systemPrompt: buildSmartBotSystemPrompt({ intentAnalysis: analysis, language: lang }),
+        };
+      }
+
+      const editRes = await editMessage({
+        chatId: targetChat,
+        messageId: targetId,
+        newText,
+        sessionId: activeSession,
+      });
+
+      const reply = editRes.ok
+        ? lang === "urdu"
+          ? `✏️ **Message Successfully Edited!**\n\n• **Chat:** \`${targetChat}\`\n• **Updated Text:** "${newText}"\n• **Message ID:** \`${targetId}\`\n• **Active Session:** \`${sessionDisplayName}\``
+          : `✏️ Message updated to: "${newText}"`
+        : `⚠️ Failed to edit message: ${editRes.error}`;
+
+      return {
+        reply,
+        spokenReply: editRes.ok ? "Message edit kar diya gaya hai." : "Message edit nahi ho saka.",
+        intent: analysis.intent,
+        actionTaken: "whatsapp_message_edited",
+        systemPrompt: buildSmartBotSystemPrompt({ intentAnalysis: analysis, language: lang }),
+      };
+    }
+
+    // ── CASE F: SEND OR RESEND (Zero Refusal, Repeat up to 10+ times) ──
+    const targetRecipient = parsed.recipient || lastSent?.to || priorityTarget?.jid;
+    const messageToSend = parsed.messageToSend || lastSent?.text;
+
+    if (!targetRecipient) {
+      const reply =
+        lang === "urdu"
+          ? `Aap WhatsApp par message kis ko bhejna chahte hain?\n\n• **Active Session:** \`${sessionDisplayName}\`\n• **Connected Gateway:** \`${settings.gatewayUrl}\`\n\n💡 **Tip:** WhatsApp Sheet ke **Chats** tab mein ja kar kisi bhi User ya Group par **⭐ Select Priority** click karein. Phir Super Bot hamesha usi ko 1st priority par focus karega!`
+          : `Please specify a phone number or select a priority target in the WhatsApp Chats tab to send via session \`${sessionDisplayName}\`.`;
+
+      return {
+        reply,
+        spokenReply: "Aap kis number ya group ko WhatsApp message bhejna chahte hain?",
+        intent: analysis.intent,
+        actionTaken: "whatsapp_recipient_needed",
+        systemPrompt: buildSmartBotSystemPrompt({ intentAnalysis: analysis, language: lang }),
+      };
     }
 
     if (!messageToSend) {
-      messageToSend = "Assalam-o-Alaikum! AutoJobs Bot ki taraf se message.";
-    }
-
-    // Outbound Send
-    if (rawTarget) {
-      const result = await sendTextMessage({
-        to: rawTarget,
-        text: messageToSend,
-        sessionId: activeSession,
-        simulateDelay: true,
-      });
-
-      const recipientLabel = targetName
-        ? `${targetName} (${isTargetGroup ? "Group" : "Direct User"})`
-        : `\`${rawTarget}\``;
-
-      const reply = result.ok
-        ? lang === "urdu"
-          ? `✅ **WhatsApp Message Delivered!**\n\n• **Recipient:** ${recipientLabel}\n• **Active Session:** \`${sessionDisplayName}\`\n• **Message:** "${messageToSend}"\n• **Message ID:** \`${result.messageId || "delivered"}\`\n\nClient/Group ko message deliver ho chuka hai aur record WA Logs mein save ho gaya hai.`
-          : `✅ Message successfully sent to ${recipientLabel} via session \`${sessionDisplayName}\`!`
-        : lang === "urdu"
-          ? `⚠️ **Message Send Failed:** ${result.error}\n\nMeherbani farma kar check karein ke WhatsApp Sheet mein active session \`${sessionDisplayName}\` connected hai ya nahi.`
-          : `⚠️ Failed to send message: ${result.error}`;
-
+      const reply =
+        lang === "urdu"
+          ? `Aap ${recipientLabel || targetRecipient} ko kya message bhejna chahte hain? Meherbani karke message batayein taake main send kar sakoon.`
+          : `Please specify the message text to send to ${recipientLabel || targetRecipient}.`;
       return {
         reply,
-        spokenReply: result.ok
-          ? `Maine ${targetName || rawTarget} ko WhatsApp message deliver kar diya hai.`
-          : `Message bhejne mein error aaya hai.`,
+        spokenReply: "Aap kya message bhejna chahte hain?",
         intent: analysis.intent,
-        actionTaken: result.ok ? "whatsapp_message_sent" : "whatsapp_send_failed",
+        actionTaken: "whatsapp_clarification_needed",
         systemPrompt: buildSmartBotSystemPrompt({ intentAnalysis: analysis, language: lang }),
       };
     }
 
-    // If no target phone number and no priority target selected
-    const reply =
-      lang === "urdu"
-        ? `Aap WhatsApp par message kis ko bhejna chahte hain?\n\n• **Active Session:** \`${sessionDisplayName}\`\n• **Connected Gateway:** \`${settings.gatewayUrl}\`\n\n💡 **Tip:** WhatsApp Sheet ke **Chats** tab mein ja kar kisi bhi User ya Group par **⭐ Select Priority** click karein. Phir Super Bot hamesha usi ko 1st priority par focus karega!`
-        : `Please select a priority target in the WhatsApp Chats tab or provide a phone number to send via session \`${sessionDisplayName}\`.`;
+    // Execute Outbound Send (Every single time requested, zero refusal!)
+    const sendResult = await sendTextMessage({
+      to: targetRecipient,
+      text: messageToSend,
+      sessionId: activeSession,
+      simulateDelay: true,
+    });
+
+    const isResend = parsed.action === "RESEND" || parsed.isRepeatRequest;
+    const actionTitle = isResend ? "Dobara (Resend)" : "";
+
+    const reply = sendResult.ok
+      ? lang === "urdu"
+        ? `✅ **WhatsApp Message ${actionTitle} Delivered!**\n\n• **Recipient:** ${recipientLabel || `\`${targetRecipient}\``}\n• **Active Session:** \`${sessionDisplayName}\`\n• **Delivered Message:** "${messageToSend}"\n• **Message ID:** \`${sendResult.messageId || "delivered"}\`\n\nClient ko message deliver ho chuka hai aur record WA Logs mein save ho gaya hai.`
+        : `✅ Message ${actionTitle} successfully sent to ${recipientLabel || targetRecipient} via session \`${sessionDisplayName}\`!`
+      : lang === "urdu"
+        ? `⚠️ **Message Send Failed:** ${sendResult.error}\n\nMeherbani farma kar check karein ke WhatsApp Sheet mein active session \`${sessionDisplayName}\` connected hai ya nahi.`
+        : `⚠️ Failed to send message: ${sendResult.error}`;
 
     return {
       reply,
-      spokenReply: "Aap kis number ya group ko WhatsApp message bhejna chahte hain?",
+      spokenReply: sendResult.ok
+        ? `Maine ${recipientLabel || targetRecipient} ko WhatsApp message ${isResend ? "dobara " : ""}deliver kar diya hai.`
+        : `Message bhejne mein error aaya hai.`,
       intent: analysis.intent,
-      actionTaken: "whatsapp_recipient_needed",
+      actionTaken: sendResult.ok ? "whatsapp_message_sent" : "whatsapp_send_failed",
       systemPrompt: buildSmartBotSystemPrompt({ intentAnalysis: analysis, language: lang }),
     };
   }

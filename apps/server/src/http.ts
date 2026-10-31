@@ -1135,18 +1135,19 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
       );
     } catch {}
 
-    // Only return directly if a physical tool executed (e.g. wishlist add/list, auto-heal trigger, watchdog)
+    // Only return directly if a physical tool executed (e.g. wishlist add/list, auto-heal trigger, watchdog, whatsapp action)
     // NEVER short-circuit conversational turns, greetings, questions, or general discussion with static strings!
     const isSpecialAction =
       botResult &&
       botResult.actionTaken &&
-      [
+      ([
         "wishlist_item_added",
         "wishlist_listed",
         "auto_heal_triggered",
         "watchdog_started",
         "watchdog_status",
-      ].includes(botResult.actionTaken);
+      ].includes(botResult.actionTaken) ||
+        botResult.actionTaken.startsWith("whatsapp_"));
 
     if (isSpecialAction && botResult.reply) {
       return HttpServerResponse.jsonUnsafe({
