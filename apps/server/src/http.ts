@@ -1360,6 +1360,7 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
             let gotSuccess = false;
             let successReply = "";
             let hitRateLimit = false;
+            let lastMsgs: any[] = [];
 
             const pollStart = Date.now();
             while (Date.now() - pollStart < 22000) {
@@ -1371,6 +1372,7 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
               if (!mRes.ok) continue;
               const mData = (await mRes.json()) as any;
               const msgs = mData?.data || [];
+              lastMsgs = msgs;
 
               // Check for errors across any assistant message
               for (const m of msgs) {
@@ -1419,7 +1421,7 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
             // Extract tool calls and reasoning from assistant messages
             const toolsFound: any[] = [];
             let thoughtFound = "";
-            for (const m of msgs) {
+            for (const m of lastMsgs) {
               if (m.type === "assistant" || m.type === "tool" || m.type === "message") {
                 for (const c of m.content || []) {
                   if (c.type === "tool" || c.type === "tool_call" || c.type === "call") {
@@ -1589,11 +1591,19 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
           enrichedMessages.unshift({ role: "system", content: sys });
         }
 
+        const effectiveFallbackModel =
+          model.toLowerCase().startsWith("opencode/") ||
+          OPENCODE_FREE_MODELS.includes(model.toLowerCase())
+            ? chatUrl.includes("openrouter")
+              ? "google/gemini-2.0-flash-exp:free"
+              : model.replace(/^opencode\//i, "")
+            : model;
+
         const response = await fetch(chatUrl, {
           method: "POST",
           headers: reqHeaders,
           body: JSON.stringify({
-            model,
+            model: effectiveFallbackModel,
             messages: enrichedMessages,
             temperature: bodyJson?.temperature ?? 0.7,
             max_tokens: bodyJson?.maxTokens ?? 1500,
