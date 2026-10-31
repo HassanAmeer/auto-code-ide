@@ -24,6 +24,7 @@ export interface BotTurnOptions {
   projectRoot?: string | undefined;
   selectedModel?: string | undefined;
   language?: "urdu" | "english" | undefined;
+  messages?: Array<{ role: string; content: string }> | undefined;
 }
 
 export interface BotTurnResult {
@@ -206,13 +207,14 @@ export async function processSuperBotTurn(options: BotTurnOptions): Promise<BotT
     const priorityTarget = getActivePriorityTarget();
     const lastSent = getLastSentState();
 
-    // Run AI Thinking & Intent Extraction
+    // Run AI Thinking & Intent Extraction with full conversation history
     const parsed = await parseWhatsAppInstructionWithThinking(userText, {
       activeSessionDisplayName: sessionDisplayName,
       activeSessionPhone: activeSessionObj?.phone,
       priorityTarget,
       knownChats: allChats,
       lastSentState: lastSent,
+      conversationHistory: options.messages,
     });
 
     const recipientLabel = parsed.recipientName
@@ -410,7 +412,52 @@ export async function processSuperBotTurn(options: BotTurnOptions): Promise<BotT
       };
     }
 
-    // ── CASE F: SEND OR RESEND (Zero Refusal, Repeat up to 10+ times) ──
+    // ── CASE F: SCHEDULE MESSAGE ──
+    if (parsed.action === "SCHEDULE") {
+      const { createScheduledWhatsAppTask } = await import("./whatsapp/index.ts");
+      const schedMsg = messageToSend || "Assalam-o-Alaikum! Scheduled message from AutoJobs.";
+      const target = targetRecipient;
+
+      if (!target) {
+        const reply =
+          lang === "urdu"
+            ? `Aap kis number ya group ke liye message schedule karna chahte hain? Meherbani karke recipient batayein.`
+            : `Please specify the recipient for this scheduled message.`;
+        return {
+          reply,
+          spokenReply: "Aap kis recipient ke liye message schedule karna chahte hain?",
+          intent: analysis.intent,
+          actionTaken: "whatsapp_recipient_needed",
+          systemPrompt: buildSmartBotSystemPrompt({ intentAnalysis: analysis, language: lang }),
+        };
+      }
+
+      const task = createScheduledWhatsAppTask({
+        recipient: target,
+        recipientName: parsed.recipientName,
+        isGroup: parsed.isGroup,
+        messageType: "text",
+        messageText: schedMsg,
+        scheduledTime: parsed.scheduledTime || "Tomorrow 10:00 AM",
+        scheduledTimestamp: parsed.scheduledTimestamp || Date.now() + 3600 * 1000 * 12,
+        sessionId: activeSession,
+      });
+
+      const reply =
+        lang === "urdu"
+          ? `📅 **WhatsApp Message Scheduled Successfully!**\n\n• **Recipient:** ${recipientLabel || `\`${target}\``}\n• **Scheduled Delivery Time:** **${task.scheduledTime}**\n• **Message:** "${task.messageText}"\n• **Task ID:** \`${task.id}\`\n\nYeh scheduled message right-side sheet ke **Tasks** tab mein list ho gaya hai. Muqarrara waqt par bot isey khud ba khud deliver kar dega.`
+          : `📅 **WhatsApp Message Scheduled Successfully!**\n\n• **Recipient:** ${recipientLabel || target}\n• **Scheduled Time:** **${task.scheduledTime}**\n• **Message:** "${task.messageText}"\n• **Task ID:** \`${task.id}\`\n\nViewable under the Tasks tab in the right-side sheet.`;
+
+      return {
+        reply,
+        spokenReply: `Maine ${recipientLabel || target} ke liye message schedule kar diya hai.`,
+        intent: analysis.intent,
+        actionTaken: "whatsapp_message_scheduled",
+        systemPrompt: buildSmartBotSystemPrompt({ intentAnalysis: analysis, language: lang }),
+      };
+    }
+
+    // ── CASE G: SEND OR RESEND (Zero Refusal, Repeat up to 10+ times) ──
     const targetRecipient = parsed.recipient || lastSent?.to || priorityTarget?.jid;
     const messageToSend = parsed.messageToSend || lastSent?.text;
 

@@ -81,15 +81,25 @@ export function WhatsAppHeaderButton() {
       <button
         type="button"
         onClick={() => setIsOpen(true)}
-        className="group/wa pointer-events-auto relative inline-flex items-center justify-center size-8 sm:size-7 shrink-0 cursor-pointer rounded-lg border border-[#25D366]/40 bg-[#25D366]/15 hover:bg-[#25D366]/25 text-[#25D366] shadow-xs transition-all active:scale-95 focus-visible:outline-hidden"
+        className="group/wa pointer-events-auto relative inline-flex items-center justify-center size-6 sm:size-6.5 shrink-0 cursor-pointer rounded-md p-1 hover:bg-white/5 transition-all active:scale-90 focus-visible:outline-hidden"
         title={tooltipText}
         aria-label="Open WhatsApp Gateway Manager"
       >
-        <WhatsAppIcon className="size-4.5 sm:size-4 text-[#25D366] transition-transform group-hover/wa:scale-110 drop-shadow-[0_0_6px_rgba(37,211,102,0.6)]" />
-        {isConnected && (
-          <span className="absolute -top-0.5 -right-0.5 flex size-2.5">
-            <span className="absolute inline-flex size-full animate-ping rounded-full bg-[#25D366] opacity-75" />
-            <span className="relative inline-flex size-2.5 rounded-full bg-[#25D366] border border-black" />
+        <WhatsAppIcon
+          className={`size-3.5 sm:size-4 transition-all duration-200 group-hover/wa:scale-110 ${
+            isConnected
+              ? "text-[#25D366] drop-shadow-[0_0_6px_rgba(37,211,102,0.7)]"
+              : "text-zinc-500 hover:text-zinc-300"
+          }`}
+        />
+        {isConnected ? (
+          <span className="absolute top-0 right-0 flex size-1.5">
+            <span className="absolute inline-flex size-full animate-ping rounded-full bg-[#25D366] opacity-80" />
+            <span className="relative inline-flex size-1.5 rounded-full bg-[#25D366]" />
+          </span>
+        ) : (
+          <span className="absolute top-0 right-0 flex size-1.5">
+            <span className="inline-flex size-1.5 rounded-full bg-zinc-600" />
           </span>
         )}
       </button>

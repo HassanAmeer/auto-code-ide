@@ -445,38 +445,6 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
           </div>
 
           <div className="flex items-center gap-1">
-            {/* WhatsApp Bare Icon on Right Side (50% smaller, no background, no outline, no border) */}
-            <div
-              className="relative inline-flex items-center justify-center mr-0.5"
-              title={
-                activeSessionObj?.status === "CONNECTED" ||
-                activeSessionObj?.status === "AUTHENTICATED" ||
-                activeSessionObj?.status === "ready"
-                  ? "WhatsApp Connected"
-                  : "WhatsApp Offline / Disconnected"
-              }
-            >
-              <WhatsAppIcon
-                className={`size-3.5 transition-colors ${
-                  activeSessionObj?.status === "CONNECTED" ||
-                  activeSessionObj?.status === "AUTHENTICATED" ||
-                  activeSessionObj?.status === "ready"
-                    ? "text-[#25D366] drop-shadow-[0_0_6px_rgba(37,211,102,0.8)]"
-                    : "text-zinc-500"
-                }`}
-              />
-              {activeSessionObj?.status === "CONNECTED" ||
-              activeSessionObj?.status === "AUTHENTICATED" ||
-              activeSessionObj?.status === "ready" ? (
-                <span className="absolute -top-0.5 -right-0.5 flex size-1.5">
-                  <span className="absolute inline-flex size-full animate-ping rounded-full bg-[#25D366] opacity-80" />
-                  <span className="relative inline-flex size-1.5 rounded-full bg-[#25D366]" />
-                </span>
-              ) : (
-                <span className="absolute -top-0.5 -right-0.5 size-1.5 rounded-full bg-zinc-600" />
-              )}
-            </div>
-
             <button
               type="button"
               onClick={handleRefresh}

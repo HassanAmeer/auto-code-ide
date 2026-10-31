@@ -104,6 +104,10 @@ import {
   saveWhatsAppSettings,
   fetchWhatsAppLogs,
   clearAllWhatsAppLogs,
+  fetchScheduledWhatsAppTasks,
+  addScheduledWhatsAppTask,
+  cancelScheduledWhatsAppTaskById,
+  runScheduledWhatsAppTaskNowById,
 } from "./botBridge.ts";
 import {
   getServerSessionLedger,
@@ -1131,23 +1135,29 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
           projectRoot: "/root/autojobs",
           selectedModel: bodyJson?.model || "gemini-2.5-flash",
           language: "urdu",
+          messages,
         }),
       );
     } catch {}
 
-    // Only return directly if a physical tool executed (e.g. wishlist add/list, auto-heal trigger, watchdog, whatsapp action)
-    // NEVER short-circuit conversational turns, greetings, questions, or general discussion with static strings!
+    // Only return directly if a physical tool executed (e.g. wishlist add/list, auto-heal trigger, watchdog, whatsapp executed actions)
+    // NEVER short-circuit conversational turns, greetings, questions, or clarification with static strings!
     const isSpecialAction =
       botResult &&
       botResult.actionTaken &&
-      ([
+      [
         "wishlist_item_added",
         "wishlist_listed",
         "auto_heal_triggered",
         "watchdog_started",
         "watchdog_status",
-      ].includes(botResult.actionTaken) ||
-        botResult.actionTaken.startsWith("whatsapp_"));
+        "whatsapp_message_sent",
+        "whatsapp_message_scheduled",
+        "whatsapp_message_edited",
+        "whatsapp_message_deleted",
+        "whatsapp_messages_listed",
+        "whatsapp_media_extracted",
+      ].includes(botResult.actionTaken);
 
     if (isSpecialAction && botResult.reply) {
       return HttpServerResponse.jsonUnsafe({
@@ -2322,6 +2332,52 @@ export const layerWhatsAppLogsClearRoute = HttpRouter.add(
   Effect.gen(function* () {
     yield* Effect.promise(() => clearAllWhatsAppLogs());
     return HttpServerResponse.jsonUnsafe({ ok: true });
+  }),
+);
+
+export const layerWhatsAppScheduledTasksGetRoute = HttpRouter.add(
+  "GET",
+  "/api/whatsapp/scheduled-tasks",
+  Effect.gen(function* () {
+    const tasks = yield* Effect.promise(() => fetchScheduledWhatsAppTasks());
+    return HttpServerResponse.jsonUnsafe({ ok: true, tasks });
+  }),
+);
+
+export const layerWhatsAppScheduledTaskCreateRoute = HttpRouter.add(
+  "POST",
+  "/api/whatsapp/scheduled-tasks",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const body = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as any;
+    const task = yield* Effect.promise(() => addScheduledWhatsAppTask(body));
+    return HttpServerResponse.jsonUnsafe({ ok: true, task });
+  }),
+);
+
+export const layerWhatsAppScheduledTaskCancelRoute = HttpRouter.add(
+  "POST",
+  "/api/whatsapp/scheduled-tasks/cancel",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const body = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      taskId?: string;
+    };
+    const success = yield* Effect.promise(() => cancelScheduledWhatsAppTaskById(body.taskId || ""));
+    return HttpServerResponse.jsonUnsafe({ ok: success });
+  }),
+);
+
+export const layerWhatsAppScheduledTaskRunNowRoute = HttpRouter.add(
+  "POST",
+  "/api/whatsapp/scheduled-tasks/run-now",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const body = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      taskId?: string;
+    };
+    const result = yield* Effect.promise(() => runScheduledWhatsAppTaskNowById(body.taskId || ""));
+    return HttpServerResponse.jsonUnsafe(result);
   }),
 );
 // ── End WhatsApp Gateway & Bot Management API ──────────────────────────────

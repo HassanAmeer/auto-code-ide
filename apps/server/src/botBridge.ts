@@ -23,6 +23,7 @@ export async function runSuperBotTurn(opts: {
   projectRoot: string;
   selectedModel: string;
   language: "urdu" | "english";
+  messages?: any[] | undefined;
 }): Promise<BotTurnResult | null> {
   try {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
@@ -340,5 +341,43 @@ export async function clearAllWhatsAppLogs(): Promise<void> {
     (mod as any).clearWhatsAppLogs();
   } catch {
     // ignore
+  }
+}
+
+export async function fetchScheduledWhatsAppTasks(): Promise<any[]> {
+  try {
+    const mod = await import("../../../bot/index.ts" as string);
+    (mod as any).startWhatsAppSchedulerDaemon?.();
+    return (mod as any).listScheduledWhatsAppTasks();
+  } catch {
+    return [];
+  }
+}
+
+export async function addScheduledWhatsAppTask(task: any): Promise<any> {
+  try {
+    const mod = await import("../../../bot/index.ts" as string);
+    (mod as any).startWhatsAppSchedulerDaemon?.();
+    return (mod as any).createScheduledWhatsAppTask(task);
+  } catch (err: any) {
+    return { ok: false, error: err?.message || String(err) };
+  }
+}
+
+export async function cancelScheduledWhatsAppTaskById(taskId: string): Promise<boolean> {
+  try {
+    const mod = await import("../../../bot/index.ts" as string);
+    return (mod as any).cancelScheduledWhatsAppTask(taskId);
+  } catch {
+    return false;
+  }
+}
+
+export async function runScheduledWhatsAppTaskNowById(taskId: string): Promise<any> {
+  try {
+    const mod = await import("../../../bot/index.ts" as string);
+    return await (mod as any).runScheduledWhatsAppTaskNow(taskId);
+  } catch (err: any) {
+    return { ok: false, error: err?.message || String(err) };
   }
 }

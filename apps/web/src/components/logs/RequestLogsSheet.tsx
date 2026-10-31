@@ -22,6 +22,12 @@ import {
   MicIcon,
   Volume2Icon,
   MessageCircle,
+  CalendarIcon,
+  SendIcon,
+  PlayIcon,
+  UserIcon,
+  UsersIcon,
+  MessageSquare,
 } from "lucide-react";
 import {
   networkLogger,
@@ -45,7 +51,84 @@ interface RequestLogsSheetProps {
 }
 
 export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
-  const [mainTab, setMainTab] = useState<"ai" | "network" | "bot" | "wa">("bot");
+  const [mainTab, setMainTab] = useState<"ai" | "network" | "bot" | "wa" | "tasks">("bot");
+
+  // Scheduled Tasks State
+  const [scheduledTasks, setScheduledTasks] = useState<any[]>([]);
+  const [isRefreshingTasks, setIsRefreshingTasks] = useState(false);
+  const [taskFilter, setTaskFilter] = useState<"all" | "scheduled" | "delivered" | "failed">("all");
+  const [taskSearchQuery, setTaskSearchQuery] = useState("");
+
+  const fetchScheduledTasks = useCallback(async () => {
+    try {
+      const res = await fetch("/api/whatsapp/scheduled-tasks");
+      if (res.ok) {
+        const data = await res.json();
+        setScheduledTasks(data.tasks || []);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const handleRefreshTasks = async () => {
+    setIsRefreshingTasks(true);
+    await fetchScheduledTasks();
+    setTimeout(() => setIsRefreshingTasks(false), 500);
+  };
+
+  const handleCancelTask = async (taskId: string) => {
+    try {
+      await fetch("/api/whatsapp/scheduled-tasks/cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ taskId }),
+      });
+      await fetchScheduledTasks();
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleRunTaskNow = async (taskId: string) => {
+    try {
+      await fetch("/api/whatsapp/scheduled-tasks/run-now", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ taskId }),
+      });
+      await fetchScheduledTasks();
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    fetchScheduledTasks();
+    const interval = setInterval(fetchScheduledTasks, 4000);
+    return () => clearInterval(interval);
+  }, [isOpen, fetchScheduledTasks]);
+
+  // Filtered Scheduled Tasks
+  const filteredScheduledTasks = useMemo(() => {
+    return scheduledTasks.filter((task) => {
+      if (taskFilter !== "all" && task.status !== taskFilter) {
+        return false;
+      }
+      if (taskSearchQuery.trim()) {
+        const q = taskSearchQuery.toLowerCase();
+        const matchTo = task.to ? String(task.to).toLowerCase().includes(q) : false;
+        const matchName = task.recipientName
+          ? String(task.recipientName).toLowerCase().includes(q)
+          : false;
+        const matchBody = task.message ? String(task.message).toLowerCase().includes(q) : false;
+        const matchType = task.type ? String(task.type).toLowerCase().includes(q) : false;
+        return matchTo || matchName || matchBody || matchType;
+      }
+      return true;
+    });
+  }, [scheduledTasks, taskFilter, taskSearchQuery]);
 
   // WhatsApp Logs State
   const [waLogs, setWaLogs] = useState<any[]>([]);
@@ -457,11 +540,47 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                   {waLogs.length}
                 </span>
               </button>
+
+              <button
+                type="button"
+                onClick={() => setMainTab("tasks")}
+                className={`flex items-center gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full text-2xs sm:text-xs font-semibold transition-all cursor-pointer ${
+                  mainTab === "tasks"
+                    ? "bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-xs"
+                    : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60"
+                }`}
+              >
+                <CalendarIcon className="size-3.5 text-amber-400 shrink-0" />
+                <span className="hidden sm:inline">Tasks</span>
+                <span className="inline sm:hidden">Tasks</span>
+                <span
+                  className={`rounded-full px-1.5 py-0.2 text-[10px] font-mono ${
+                    mainTab === "tasks"
+                      ? "bg-amber-500/30 text-amber-200 font-bold"
+                      : "bg-zinc-800 text-zinc-400"
+                  }`}
+                >
+                  {scheduledTasks.length}
+                </span>
+              </button>
             </div>
           </div>
 
           <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-            {mainTab === "wa" ? (
+            {mainTab === "tasks" ? (
+              <Button
+                size="xs"
+                variant="outline"
+                onClick={handleRefreshTasks}
+                disabled={isRefreshingTasks}
+                className="rounded-full bg-zinc-900/80 border-zinc-700/80 hover:bg-zinc-800 text-zinc-300 hover:text-white text-xs h-7 px-2.5 cursor-pointer"
+              >
+                <RefreshCwIcon
+                  className={`size-3 mr-1 ${isRefreshingTasks ? "animate-spin text-amber-400" : ""}`}
+                />
+                <span className="hidden sm:inline">Refresh</span>
+              </Button>
+            ) : mainTab === "wa" ? (
               <>
                 <Button
                   size="xs"
@@ -2870,6 +2989,253 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                   </div>
                 );
               })()}
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================= */}
+        {/* TAB 5: SCHEDULED WHATSAPP TASKS                           */}
+        {/* ========================================================= */}
+        {mainTab === "tasks" && (
+          <div className="flex-1 flex flex-col min-h-0 bg-black/40">
+            {/* Search and Filter Bar */}
+            <div className="shrink-0 p-3 sm:p-3.5 border-b border-zinc-800/80 bg-zinc-900/60 backdrop-blur-xs flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center justify-between">
+              {/* Search Bar */}
+              <div className="relative flex-1">
+                <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-zinc-500" />
+                <input
+                  type="text"
+                  value={taskSearchQuery}
+                  onChange={(e) => setTaskSearchQuery(e.target.value)}
+                  placeholder="Search by contact name, phone, message text..."
+                  className="w-full bg-zinc-950/70 border border-zinc-800 rounded-full pl-8 pr-3 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-hidden focus:border-amber-500/50 transition-colors"
+                />
+                {taskSearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setTaskSearchQuery("")}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 text-xs"
+                  >
+                    &times;
+                  </button>
+                )}
+              </div>
+
+              {/* Status Filter Badges */}
+              <div className="flex items-center gap-1 overflow-x-auto no-scrollbar shrink-0">
+                {(["all", "scheduled", "delivered", "failed"] as const).map((tab) => {
+                  const count =
+                    tab === "all"
+                      ? scheduledTasks.length
+                      : scheduledTasks.filter((t) => t.status === tab).length;
+                  const isActive = taskFilter === tab;
+                  return (
+                    <button
+                      key={tab}
+                      type="button"
+                      onClick={() => setTaskFilter(tab)}
+                      className={`px-2.5 py-1 rounded-full text-2xs font-medium capitalize transition-all cursor-pointer whitespace-nowrap flex items-center gap-1 ${
+                        isActive
+                          ? tab === "scheduled"
+                            ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                            : tab === "delivered"
+                              ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                              : tab === "failed"
+                                ? "bg-rose-500/20 text-rose-300 border border-rose-500/40"
+                                : "bg-zinc-800 text-white border border-zinc-700"
+                          : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 border border-transparent"
+                      }`}
+                    >
+                      <span>{tab}</span>
+                      <span className="font-mono text-[10px] opacity-75">({count})</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Tasks List */}
+            <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-2.5">
+              {filteredScheduledTasks.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-3">
+                  <div className="size-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shadow-inner">
+                    <CalendarIcon className="size-6" />
+                  </div>
+                  <div className="space-y-1 max-w-sm">
+                    <p className="text-xs font-semibold text-zinc-300">
+                      {taskSearchQuery
+                        ? "No matching scheduled tasks found"
+                        : "No Scheduled WhatsApp Tasks"}
+                    </p>
+                    <p className="text-2xs text-zinc-500 leading-relaxed">
+                      AI Super Bot ko chat mein batayein WhatsApp message schedule karne ke liye
+                      (maslan: &ldquo;kal subah 10 baje is number ko message bhejna&rdquo;). Wo
+                      yahan register ho kar apne time par deliver hoga.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                filteredScheduledTasks.map((task) => {
+                  const isScheduled = task.status === "scheduled";
+                  const isDelivered = task.status === "delivered";
+                  const isFailed = task.status === "failed";
+                  const isCancelled = task.status === "cancelled";
+
+                  return (
+                    <div
+                      key={task.id}
+                      className="group rounded-2xl border border-zinc-800/90 bg-zinc-900/70 hover:bg-zinc-900 hover:border-zinc-700/80 p-3 sm:p-3.5 transition-all shadow-xs space-y-2.5"
+                    >
+                      {/* Top Header Row: Recipient & Status Badge */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div
+                            className={`size-8 rounded-full flex items-center justify-center shrink-0 border ${
+                              task.isGroup
+                                ? "bg-purple-950/40 border-purple-500/30 text-purple-400"
+                                : "bg-emerald-950/40 border-emerald-500/30 text-emerald-400"
+                            }`}
+                          >
+                            {task.isGroup ? (
+                              <UsersIcon className="size-4" />
+                            ) : (
+                              <UserIcon className="size-4" />
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-xs font-bold text-zinc-100 truncate">
+                                {task.recipientName ||
+                                  (task.isGroup ? "WhatsApp Group" : "Recipient")}
+                              </span>
+                              {task.isGroup && (
+                                <span className="text-[10px] font-semibold bg-purple-500/20 text-purple-300 px-1.5 py-0.2 rounded-full border border-purple-500/30">
+                                  Group
+                                </span>
+                              )}
+                              <span className="text-[10px] font-semibold uppercase bg-zinc-800/80 text-zinc-400 px-1.5 py-0.2 rounded-full border border-zinc-700/60 flex items-center gap-1">
+                                <MessageSquare className="size-2.5" />
+                                {task.type || "text"}
+                              </span>
+                            </div>
+                            <p className="text-2xs font-mono text-zinc-400 truncate">{task.to}</p>
+                          </div>
+                        </div>
+
+                        {/* Status Badge */}
+                        <div className="shrink-0 flex items-center">
+                          {isScheduled && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-semibold bg-amber-500/15 border border-amber-500/30 text-amber-300">
+                              <span className="size-1.5 rounded-full bg-amber-400 animate-pulse" />
+                              Scheduled
+                            </span>
+                          )}
+                          {isDelivered && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-semibold bg-emerald-500/15 border border-emerald-500/30 text-emerald-300">
+                              <CheckCircle2Icon className="size-3 text-emerald-400" />
+                              Delivered
+                            </span>
+                          )}
+                          {isFailed && (
+                            <span
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-semibold bg-rose-500/15 border border-rose-500/30 text-rose-300"
+                              title={task.error}
+                            >
+                              <AlertTriangleIcon className="size-3 text-rose-400" />
+                              Failed
+                            </span>
+                          )}
+                          {isCancelled && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-semibold bg-zinc-800/80 border border-zinc-700 text-zinc-400">
+                              Cancelled
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Scheduled Time Banner */}
+                      <div className="flex items-center gap-1.5 text-2xs text-amber-300/90 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1.5 rounded-xl">
+                        <ClockIcon className="size-3 text-amber-400 shrink-0" />
+                        <span className="font-medium">Scheduled for:</span>
+                        <span className="font-semibold text-zinc-200">
+                          {task.scheduledTime ||
+                            (task.scheduledTimestamp
+                              ? new Date(task.scheduledTimestamp).toLocaleString()
+                              : "Pending")}
+                        </span>
+                        {task.scheduledTimestamp && (
+                          <span className="font-mono text-[10px] text-zinc-400 ml-auto hidden sm:inline">
+                            (
+                            {new Date(task.scheduledTimestamp).toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                            )
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Message Body Content Preview */}
+                      <div className="rounded-xl bg-zinc-950/60 border border-zinc-800/80 p-2.5 text-xs text-zinc-200 whitespace-pre-wrap select-text leading-relaxed font-sans">
+                        {task.message || task.caption || "[No text message]"}
+                        {task.mediaUrl && (
+                          <div className="mt-2 pt-2 border-t border-zinc-800 flex items-center gap-2 text-2xs text-zinc-400">
+                            <span>Media:</span>
+                            <span className="font-mono text-cyan-400 truncate">
+                              {task.mediaUrl}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Error Banner if Failed */}
+                      {isFailed && task.error && (
+                        <div className="rounded-xl bg-rose-950/30 border border-rose-500/30 p-2 text-2xs text-rose-300 font-mono">
+                          Error: {task.error}
+                        </div>
+                      )}
+
+                      {/* Actions Footer */}
+                      <div className="flex items-center justify-between pt-1 border-t border-zinc-800/50 text-2xs text-zinc-500">
+                        <span className="font-mono text-[10px]">
+                          Created:{" "}
+                          {new Date(task.createdAt).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                          {task.sentAt &&
+                            ` • Sent: ${new Date(task.sentAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}
+                        </span>
+
+                        {isScheduled && (
+                          <div className="flex items-center gap-1.5">
+                            <Button
+                              size="xs"
+                              variant="outline"
+                              onClick={() => handleRunTaskNow(task.id)}
+                              className="h-6 text-2xs gap-1 rounded-full bg-emerald-500/10 border-emerald-500/30 hover:bg-emerald-500/20 text-emerald-300 hover:text-emerald-200 cursor-pointer"
+                              title="Send this scheduled message immediately"
+                            >
+                              <PlayIcon className="size-2.5 fill-current" />
+                              <span>Run Now</span>
+                            </Button>
+                            <Button
+                              size="xs"
+                              variant="outline"
+                              onClick={() => handleCancelTask(task.id)}
+                              className="h-6 text-2xs gap-1 rounded-full bg-rose-500/10 border-rose-500/30 hover:bg-rose-500/20 text-rose-300 hover:text-rose-200 cursor-pointer"
+                              title="Cancel scheduled delivery"
+                            >
+                              <Trash2Icon className="size-2.5" />
+                              <span>Cancel</span>
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
         )}

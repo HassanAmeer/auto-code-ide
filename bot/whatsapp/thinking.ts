@@ -4,6 +4,7 @@ import { normalizeChatId } from "./client.ts";
 export type WhatsAppActionType =
   | "SEND"
   | "RESEND"
+  | "SCHEDULE"
   | "ASK_CLARIFICATION"
   | "EDIT"
   | "DELETE"
@@ -24,6 +25,7 @@ export interface WhatsAppThinkingContext {
       }
     | null
     | undefined;
+  conversationHistory?: Array<{ role: string; content: string }> | undefined;
 }
 
 export interface WhatsAppThinkingResult {
@@ -33,6 +35,8 @@ export interface WhatsAppThinkingResult {
   isGroup: boolean;
   messageToSend?: string | undefined;
   clarificationQuestion?: string | undefined;
+  scheduledTime?: string | undefined;
+  scheduledTimestamp?: number | undefined;
   targetMessageId?: string | undefined;
   forwardTo?: string | undefined;
   isRepeatRequest: boolean;
@@ -40,12 +44,12 @@ export interface WhatsAppThinkingResult {
 }
 
 /**
- * Analyzes the user's WhatsApp instruction using Thinking & Intent Refinement:
- * 1. Distinguishes meta-instructions (e.g. "is number ko customer ka message bhejo") from actual customer message content.
- * 2. If the user only gave an instruction without the message, asks for clarification.
+ * Analyzes the user's WhatsApp instruction using Thinking & Dynamic AI Refinement:
+ * 1. Inspects the conversation history so user answers from previous turns are remembered.
+ * 2. Distinguishes meta-instructions (e.g. "is number ko customer ka message bhejo") from actual customer message content.
  * 3. Never sends raw user prompts to customers. Polishes informal notes into polite customer messages.
  * 4. Never refuses repeat requests ("dobara bhejo", "resend karo", 10 dafa, etc.).
- * 5. Handles delete, edit, list messages, and media extraction.
+ * 5. Handles schedule message ("kal subah 10 baje bhejna", "at 5 PM"), delete, edit, list messages, and media extraction.
  */
 export async function parseWhatsAppInstructionWithThinking(
   userText: string,
@@ -60,7 +64,18 @@ export async function parseWhatsAppInstructionWithThinking(
   let recipientName = "";
   let isGroup = false;
 
-  // Match chat names from known chats if no raw phone in prompt
+  // If no recipient in current text, check recent conversation history
+  if (!recipient && context.conversationHistory && context.conversationHistory.length > 0) {
+    for (const msg of [...context.conversationHistory].reverse()) {
+      const histPhone = msg.content?.match(/(?:\+?92|0)?3\d{2}[- ]?\d{7}|\b\d{10,15}\b/);
+      if (histPhone) {
+        recipient = histPhone[0].replace(/[- ]/g, "");
+        break;
+      }
+    }
+  }
+
+  // Match chat names from known chats if no raw phone
   if (!recipient && context.knownChats && context.knownChats.length > 0) {
     for (const chat of context.knownChats) {
       if (chat.name && chat.name.length > 2 && lower.includes(chat.name.toLowerCase())) {
@@ -182,24 +197,13 @@ export async function parseWhatsAppInstructionWithThinking(
     /(?:bolo\s+ke|kaho\s+ke|keh\s*do\s+ke|بولو\s*کہ|کہو\s*کہ|کہہ\s*دو\s*کہ|[:"“]|(?:^|[\s,])ke\s+|(?:^|[\s,])کہ\s+)(.+)$/i,
   );
 
-  if (!contentMarker || !contentMarker[1] || contentMarker[1].trim().length < 4) {
-    return {
-      action: "ASK_CLARIFICATION",
-      recipient,
-      recipientName,
-      isGroup,
-      clarificationQuestion:
-        "Aap customer ko kya message bhejna chahte hain? Meherbani farma kar message ya topic batayein (jaise Deal confirmation, Order dispatch status, Greeting, ya koi specific message), taake main professional customer-facing message draft karke bhejoon.",
-      isRepeatRequest: false,
-      explanation:
-        "User gave an instruction to send a message but did not specify what message to send.",
-    };
+  let body = "";
+  if (contentMarker && contentMarker[1]) {
+    body = contentMarker[1]
+      .replace(/["”]/g, "")
+      .replace(/[,\s]+(?:theek hai|theek he|theek hay|ok|please|پلیز|ٹھیک ہے)[?!\s]*$/i, "")
+      .trim();
   }
-
-  let body = contentMarker[1]
-    .replace(/["”]/g, "")
-    .replace(/[,\s]+(?:theek hai|theek he|theek hay|ok|please|پلیز|ٹھیک ہے)[?!\s]*$/i, "")
-    .trim();
 
   // If the extracted body is still just a meta-instruction telling to send a message
   const isMeta =
@@ -207,20 +211,75 @@ export async function parseWhatsAppInstructionWithThinking(
       body,
     );
 
-  if (
-    isMeta ||
-    /^(?:theek hai|theek he|ok|please|پلیز|ٹھیک ہے)[?!\s]*$/i.test(body) ||
-    body.length < 4
-  ) {
+  if (isMeta || /^(?:theek hai|theek he|ok|please|پلیز|ٹھیک ہے)[?!\s]*$/i.test(body)) {
+    body = "";
+  }
+
+  // 8. Check for SCHEDULE (e.g. "kal subah 10 baje bhejna", "schedule karo", "5 baje bhejo")
+  const isSchedule =
+    /\b(schedule|skedule|time\s*par\s*bhej|is\s*waqt\s*bhej|kal\s*subah|kal\s*shaam|\d+\s*baje\s*bhej|baje\s*(?:message|bhejna)|kal\s*bhejna)\b/i.test(
+      lower,
+    ) || /(سکیجول|اس\s*ٹائم\s*پر|کل\s*صبح|کل\s*شام|بجے\s*(?:بھیج|سینڈ)|شیڈول)/.test(t);
+
+  if (isSchedule) {
+    let timeLabel = "Tomorrow 10:00 AM";
+    let targetTimestamp = Date.now() + 3600 * 1000 * 14;
+
+    const hourMatch = lower.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm|baje)/i);
+    const isTomorrow = /\b(kal|tomorrow|اگلے\s*روز|کل)\b/i.test(lower);
+    if (hourMatch) {
+      let hour = parseInt(hourMatch[1] || "10", 10);
+      const isPm =
+        hourMatch[3]?.toLowerCase() === "pm" || /shaam|dopahar|raat|evening|night/.test(lower);
+      if (isPm && hour < 12) hour += 12;
+      const targetDate = new Date();
+      if (isTomorrow) targetDate.setDate(targetDate.getDate() + 1);
+      targetDate.setHours(hour, parseInt(hourMatch[2] || "0", 10), 0, 0);
+      targetTimestamp = targetDate.getTime();
+      timeLabel = `${isTomorrow ? "Kal " : "Aaj "}${hourMatch[1]}:${hourMatch[2] || "00"} ${isPm ? "PM" : "AM"}`;
+    } else if (isTomorrow) {
+      const targetDate = new Date();
+      targetDate.setDate(targetDate.getDate() + 1);
+      targetDate.setHours(10, 0, 0, 0);
+      targetTimestamp = targetDate.getTime();
+      timeLabel = "Kal subah 10:00 AM";
+    }
+
+    const scheduledMsg =
+      body || context.lastSentState?.text || "Assalam-o-Alaikum! Scheduled message from AutoJobs.";
+
+    return {
+      action: "SCHEDULE",
+      recipient,
+      recipientName,
+      isGroup,
+      messageToSend: scheduledMsg,
+      scheduledTime: timeLabel,
+      scheduledTimestamp: targetTimestamp,
+      isRepeatRequest: false,
+      explanation: "User requested to schedule message for future delivery.",
+    };
+  }
+
+  // 9. If no body in current text, check if previous user message was already providing the body!
+  if (!body && context.conversationHistory && context.conversationHistory.length >= 2) {
+    const lastUserTurn = context.conversationHistory[context.conversationHistory.length - 2];
+    if (lastUserTurn && lastUserTurn.role === "user" && lastUserTurn.content.length > 5) {
+      body = lastUserTurn.content.trim();
+    }
+  }
+
+  if (!body || body.length < 4) {
     return {
       action: "ASK_CLARIFICATION",
       recipient,
       recipientName,
       isGroup,
       clarificationQuestion:
-        "Aap customer ko kya message bhejna chahte hain? Meherbani farma kar message ya topic batayein (jaise Deal confirmation, Order dispatch status, Greeting, ya koi specific message), taake main professional customer-facing message draft karke bhejoon.",
+        "Aap customer ko kya message bhejna chahte hain? Meherbani farma kar message ya topic batayein, taake main professional customer-facing message draft karke bhejoon.",
       isRepeatRequest: false,
-      explanation: "No actual customer content found; prompt consisted only of meta instructions.",
+      explanation:
+        "User gave an instruction to send a message but did not specify what message to send.",
     };
   }
 

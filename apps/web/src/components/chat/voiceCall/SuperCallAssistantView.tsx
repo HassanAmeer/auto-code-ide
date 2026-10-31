@@ -2314,53 +2314,55 @@ export function SuperCallAssistantView() {
 
       {/* Main Conversation Stream */}
       <div className="flex-1 flex flex-col h-full min-w-0 relative">
-        {/* Top Header */}
-        <header className="h-14 border-b border-border/50 px-3 sm:px-6 flex items-center justify-between shrink-0 bg-background/80 backdrop-blur-md gap-2">
-          {/* Left: WhatsApp Gateway & Live Status */}
-          <div className="flex-1 flex items-center gap-2 overflow-visible pl-10 sm:pl-0">
-            <WhatsAppHeaderButton />
+        {/* Top Header - Compact Sleek Strip */}
+        <header className="h-9 sm:h-10 border-b border-border/40 px-2 sm:px-3 flex items-center justify-between shrink-0 bg-background/90 backdrop-blur-md gap-1.5">
+          {/* Left: Live Status */}
+          <div className="flex-1 flex items-center gap-1.5 overflow-visible pl-8 sm:pl-0">
             {isCallActive ? (
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[11px] font-medium shadow-xs">
-                <span className="relative flex h-2 w-2">
+              <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-medium shadow-xs">
+                <span className="relative flex h-1.5 w-1.5">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
                 </span>
                 <span className="font-semibold">Direct Voice Stream</span>
-                <span className="hidden sm:inline text-emerald-500/80 font-mono text-[10px]">
+                <span className="hidden sm:inline text-emerald-500/80 font-mono text-[9px]">
                   Full-Duplex
                 </span>
               </div>
             ) : null}
           </div>
 
-          {/* Right: Copy Transcript, Notes & Command Center Sheet Button */}
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          {/* Right: WhatsApp Bare Icon, Copy Transcript, Notes & Command Center Sheet Button */}
+          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+            {/* WhatsApp Gateway Header Button (Moved to Right, Bare Icon, Compact) */}
+            <WhatsAppHeaderButton />
+
             {/* Quick Copy Transcript Button */}
             <button
               type="button"
               onClick={handleCopyTranscript}
               disabled={!activeSession?.messages.length}
-              className="flex items-center gap-1 px-2 py-1.5 rounded-lg border border-border/60 hover:border-border hover:bg-muted/50 text-xs font-medium transition-colors disabled:opacity-30 cursor-pointer"
+              className="flex items-center gap-1 px-1.5 sm:px-2 py-1 rounded-md border border-border/60 hover:border-border hover:bg-muted/50 text-[11px] font-medium transition-colors disabled:opacity-30 cursor-pointer"
               title="Copy entire conversation to clipboard"
             >
               {isTranscriptCopied ? (
-                <Check className="size-3.5 text-emerald-400" />
+                <Check className="size-3 text-emerald-400" />
               ) : (
-                <Copy className="size-3.5 text-muted-foreground" />
+                <Copy className="size-3 text-muted-foreground" />
               )}
-              <span className="hidden md:inline text-[11px]">Copy</span>
+              <span className="hidden md:inline text-[10px]">Copy</span>
             </button>
 
             {/* Notes Button */}
             <button
               type="button"
               onClick={() => openNotesSheet()}
-              className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-lg border border-border/70 hover:border-border hover:bg-muted/50 text-xs font-medium transition-colors cursor-pointer"
+              className="flex items-center gap-1 px-1.5 sm:px-2 py-1 rounded-md border border-border/70 hover:border-border hover:bg-muted/50 text-[11px] font-medium transition-colors cursor-pointer"
               title="Workspace Notes & Reminders"
             >
-              <StickyNote className="size-3.5 text-amber-400" />
-              <span className="hidden xs:inline">Notes</span>
-              <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-amber-500/15 text-amber-400 font-semibold font-mono">
+              <StickyNote className="size-3 text-amber-400" />
+              <span className="hidden xs:inline text-[10px]">Notes</span>
+              <span className="px-1 py-0.2 rounded-full text-[9px] bg-amber-500/15 text-amber-400 font-semibold font-mono">
                 {notes.length}
               </span>
             </button>
@@ -2392,23 +2394,23 @@ export function SuperCallAssistantView() {
                 }
                 setIsCanvasOpen(true);
               }}
-              className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-lg border border-cyan-500/40 bg-cyan-500/10 hover:bg-cyan-500/20 text-xs font-semibold text-cyan-300 transition-all cursor-pointer shadow-xs active:scale-95"
+              className="flex items-center gap-1 px-1.5 sm:px-2 py-1 rounded-md border border-cyan-500/40 bg-cyan-500/10 hover:bg-cyan-500/20 text-[11px] font-semibold text-cyan-300 transition-all cursor-pointer shadow-xs active:scale-95"
               title="Open Notion-like Spaces & Living Document Canvas"
             >
-              <FileText className="size-3.5 text-cyan-400" />
-              <span className="hidden xs:inline">Spaces Canvas</span>
+              <FileText className="size-3 text-cyan-400" />
+              <span className="hidden xs:inline text-[10px]">Spaces Canvas</span>
             </button>
 
             {/* Command Center Right-Side Sheet Button */}
             <button
               type="button"
               onClick={() => setIsCommandCenterOpen(true)}
-              className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-lg border border-primary/40 bg-primary/10 hover:bg-primary/20 text-xs font-semibold text-primary transition-all cursor-pointer shadow-xs active:scale-95"
+              className="flex items-center gap-1 px-2 py-1 rounded-md border border-primary/40 bg-primary/10 hover:bg-primary/20 text-[11px] font-semibold text-primary transition-all cursor-pointer shadow-xs active:scale-95"
               title="Open Command Center (Memory, Tasks & Persona)"
             >
-              <Sparkles className="size-3.5" />
-              <span className="hidden xs:inline">Command Center</span>
-              <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-primary text-primary-foreground font-mono font-bold">
+              <Sparkles className="size-3" />
+              <span className="hidden xs:inline text-[10px]">Command Center</span>
+              <span className="px-1 py-0.2 rounded-full text-[9px] bg-primary text-primary-foreground font-mono font-bold">
                 {scheduledTasks.length}
               </span>
             </button>
