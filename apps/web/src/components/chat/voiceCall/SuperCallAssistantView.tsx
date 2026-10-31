@@ -405,10 +405,10 @@ function CodeDiffCard({ diffText }: { diffText: string }) {
 function getToolCallIcon(name: string) {
   const lower = name.toLowerCase();
   if (lower.includes("whatsapp") || lower.includes("wa_") || lower.includes("message")) {
-    return <MessageSquare className="size-3.5 text-emerald-400 shrink-0" />;
+    return <MessageSquare className="size-3.5 text-secondary-label shrink-0" />;
   }
   if (lower.includes("search") || lower.includes("inspect") || lower.includes("file")) {
-    return <Search className="size-3.5 text-sky-400 shrink-0" />;
+    return <Search className="size-3.5 text-secondary-label shrink-0" />;
   }
   if (
     lower.includes("media") ||
@@ -416,30 +416,30 @@ function getToolCallIcon(name: string) {
     lower.includes("link") ||
     lower.includes("web")
   ) {
-    return <Globe className="size-3.5 text-emerald-400 shrink-0" />;
+    return <Globe className="size-3.5 text-secondary-label shrink-0" />;
   }
   if (lower.includes("note")) {
-    return <FileText className="size-3.5 text-amber-400 shrink-0" />;
+    return <FileText className="size-3.5 text-secondary-label shrink-0" />;
   }
   if (lower.includes("memory")) {
-    return <Brain className="size-3.5 text-purple-400 shrink-0" />;
+    return <Brain className="size-3.5 text-secondary-label shrink-0" />;
   }
   if (lower.includes("ledger") || lower.includes("history")) {
-    return <History className="size-3.5 text-cyan-400 shrink-0" />;
+    return <History className="size-3.5 text-secondary-label shrink-0" />;
   }
   if (lower.includes("schedule") || lower.includes("task") || lower.includes("shift")) {
-    return <Calendar className="size-3.5 text-indigo-400 shrink-0" />;
+    return <Calendar className="size-3.5 text-secondary-label shrink-0" />;
   }
   if (lower.includes("git")) {
-    return <GitBranch className="size-3.5 text-teal-400 shrink-0" />;
+    return <GitBranch className="size-3.5 text-secondary-label shrink-0" />;
   }
   if (lower.includes("radar") || lower.includes("health") || lower.includes("scan")) {
-    return <Activity className="size-3.5 text-rose-400 shrink-0" />;
+    return <Activity className="size-3.5 text-secondary-label shrink-0" />;
   }
   if (lower.includes("worker") || lower.includes("agent") || lower.includes("dispatch")) {
-    return <Terminal className="size-3.5 text-purple-400 shrink-0" />;
+    return <Terminal className="size-3.5 text-secondary-label shrink-0" />;
   }
-  return <Wrench className="size-3.5 text-zinc-400 shrink-0" />;
+  return <Terminal className="size-3.5 text-secondary-label shrink-0" />;
 }
 
 function LiveWorkingTimer({ startTime }: { startTime: number }) {
@@ -546,11 +546,11 @@ function ToolCallItemRow({ tool }: { tool: ToolCallRecord }) {
         trailing={
           <div className="flex items-center gap-1.5 shrink-0 select-none">
             {tool.status === "calling" ? (
-              <Loader2 className="size-3 text-cyan-400 animate-spin" />
+              <Loader2 className="size-3 text-secondary-label animate-spin" />
             ) : tool.status === "error" ? (
               <X className="size-3 text-rose-400" />
             ) : (
-              <Check className="size-3 text-icon-muted" />
+              <Check className="size-3 text-secondary-label" />
             )}
             {hasDetails ? (
               <ChevronRight
@@ -571,7 +571,7 @@ function ToolCallItemRow({ tool }: { tool: ToolCallRecord }) {
               <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
                 Arguments
               </span>
-              <pre className="font-mono text-[11px] text-zinc-300 bg-zinc-950/40 p-2 rounded border border-border/40 whitespace-pre-wrap">
+              <pre className="font-mono text-[11px] text-secondary-label bg-muted/20 p-2 rounded border border-border/40 whitespace-pre-wrap">
                 {typeof tool.args === "string" ? tool.args : JSON.stringify(tool.args, null, 2)}
               </pre>
             </div>
@@ -581,7 +581,7 @@ function ToolCallItemRow({ tool }: { tool: ToolCallRecord }) {
               <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
                 Output
               </span>
-              <pre className="font-mono text-[11px] text-zinc-300 bg-zinc-950/40 p-2 rounded border border-border/40 whitespace-pre-wrap max-h-48 overflow-y-auto">
+              <pre className="font-mono text-[11px] text-secondary-label bg-muted/20 p-2 rounded border border-border/40 whitespace-pre-wrap max-h-48 overflow-y-auto">
                 {tool.output || tool.detail}
               </pre>
             </div>
@@ -612,16 +612,63 @@ function LiveProcessingActivityView({
       ? agentStatus.replace(/^Tool Calling:\s*/, "")
       : `Thinking with ${selectedModel}`;
 
+  const headerIcon = activeTool ? (
+    getToolCallIcon(activeTool.name)
+  ) : (
+    <Brain className="size-4 shrink-0 text-secondary-label" />
+  );
+
+  return (
+    <WorkLogBlock layout={expanded && liveTools.length > 0 ? "group-header" : "standalone"}>
+      <WorkLogButton
+        aria-expanded={expanded}
+        onClick={liveTools.length > 0 ? () => setExpanded((v) => !v) : undefined}
+        icon={headerIcon}
+        label={<LiveActivityRow label={headerLabel} active shimmer />}
+        trailing={
+          <div className="flex items-center gap-2 select-none">
+            <LiveWorkingTimer startTime={dispatchStartTime} />
+            {liveTools.length > 0 ? (
+              <ChevronDown
+                className={cn(
+                  "size-3.5 text-secondary-label transition-transform duration-200",
+                  !expanded && "-rotate-90",
+                )}
+              />
+            ) : null}
+          </div>
+        }
+      />
+      {expanded && liveTools.length > 0 ? (
+        <WorkLogList>
+          {liveTools.map((tool, idx) => (
+            <ToolCallItemRow key={idx} tool={tool} />
+          ))}
+        </WorkLogList>
+      ) : null}
+    </WorkLogBlock>
+  );
+}
+
+function ThinkingWorkLogBlock({ thought, durationMs }: { thought?: string; durationMs?: number }) {
+  const [expanded, setExpanded] = useState(false);
+  if (!thought || !thought.trim()) return null;
+
+  const seconds = durationMs ? Math.max(1, Math.round(durationMs / 1000)) : undefined;
+  const label = `Thought${seconds ? ` for ${seconds}s` : ""}`;
+
   return (
     <WorkLogBlock layout={expanded ? "group-header" : "standalone"}>
       <WorkLogButton
         aria-expanded={expanded}
         onClick={() => setExpanded((v) => !v)}
-        icon={<Brain className="size-4 shrink-0 text-purple-400/90" />}
-        label={<LiveActivityRow label={headerLabel} active shimmer />}
+        icon={<Brain className="size-4 shrink-0 text-secondary-label" />}
+        label={<span className="text-secondary-label text-xs font-normal">{label}</span>}
         trailing={
-          <div className="flex items-center gap-2 select-none">
-            <LiveWorkingTimer startTime={dispatchStartTime} />
+          <div className="flex items-center gap-1.5 select-none">
+            {seconds ? (
+              <span className="text-xs text-secondary-label font-mono">{seconds}s</span>
+            ) : null}
             <ChevronDown
               className={cn(
                 "size-3.5 text-secondary-label transition-transform duration-200",
@@ -632,69 +679,32 @@ function LiveProcessingActivityView({
         }
       />
       {expanded ? (
-        <WorkLogList>
-          {liveTools.length > 0 ? (
-            liveTools.map((tool, idx) => <ToolCallItemRow key={idx} tool={tool} />)
-          ) : (
-            <WorkLogRow
-              icon={
-                <span className="flex size-4 items-center justify-center">
-                  <Terminal className="size-3.5 text-secondary-label animate-pulse" />
-                </span>
-              }
-              label={
-                <span className="text-xs text-secondary-label italic">
-                  Analyzing prompt and workspace context...
-                </span>
-              }
-            />
-          )}
-        </WorkLogList>
+        <WorkLogDetails kind="text">
+          <div className="text-xs text-secondary-label font-mono whitespace-pre-wrap leading-relaxed select-text p-1">
+            {thought}
+          </div>
+        </WorkLogDetails>
       ) : null}
     </WorkLogBlock>
   );
 }
 
-function MessageWorkLogSection({
-  thought,
-  tools = [],
-  durationMs,
-}: {
-  thought?: string;
-  tools?: ToolCallRecord[];
-  durationMs?: number;
-}) {
+function ToolsWorkLogBlock({ tools }: { tools?: ToolCallRecord[] }) {
   const [expanded, setExpanded] = useState(false);
-  const hasTools = tools && tools.length > 0;
-  const hasThought = Boolean(thought && thought.trim());
+  if (!tools || tools.length === 0) return null;
 
-  if (!hasTools && !hasThought) return null;
-
-  const seconds = durationMs ? Math.max(1, Math.round(durationMs / 1000)) : undefined;
-  const label = hasTools
-    ? hasTools && hasThought
-      ? `Used ${tools.length} ${tools.length === 1 ? "tool" : "tools"} • Thought${seconds ? ` for ${seconds}s` : ""}`
-      : `Used ${tools.length} ${tools.length === 1 ? "tool" : "tools"}`
-    : `Thought${seconds ? ` for ${seconds}s` : ""}`;
+  const label = `Used ${tools.length} ${tools.length === 1 ? "tool" : "tools"}`;
 
   return (
     <WorkLogBlock layout={expanded ? "group-header" : "standalone"}>
       <WorkLogButton
         aria-expanded={expanded}
         onClick={() => setExpanded((v) => !v)}
-        icon={
-          hasTools ? (
-            <Terminal className="size-4 shrink-0 text-secondary-label" />
-          ) : (
-            <Brain className="size-4 shrink-0 text-secondary-label" />
-          )
-        }
+        icon={<Terminal className="size-4 shrink-0 text-secondary-label" />}
         label={<span className="text-secondary-label text-xs font-normal">{label}</span>}
         trailing={
           <div className="flex items-center gap-1.5 select-none">
-            {seconds && !hasTools ? (
-              <span className="text-xs text-secondary-label font-mono">{seconds}s</span>
-            ) : null}
+            <span className="text-xs text-secondary-label font-mono">{tools.length}</span>
             <ChevronDown
               className={cn(
                 "size-3.5 text-secondary-label transition-transform duration-200",
@@ -709,25 +719,6 @@ function MessageWorkLogSection({
           {tools.map((tool, idx) => (
             <ToolCallItemRow key={idx} tool={tool} />
           ))}
-          {hasThought ? (
-            <div className="w-full min-w-0">
-              <WorkLogRow
-                icon={
-                  <span className="flex size-4 items-center justify-center">
-                    <Brain className="size-3.5 text-secondary-label" />
-                  </span>
-                }
-                label={
-                  <span className="text-xs text-secondary-label font-medium">Thought process</span>
-                }
-              />
-              <WorkLogDetails kind="text">
-                <div className="text-xs text-secondary-label font-mono whitespace-pre-wrap leading-relaxed select-text p-1">
-                  {thought}
-                </div>
-              </WorkLogDetails>
-            </div>
-          ) : null}
         </WorkLogList>
       ) : null}
     </WorkLogBlock>
@@ -2748,12 +2739,14 @@ export function SuperCallAssistantView() {
             return (
               <div key={msg.id} className="flex flex-col items-start w-full py-2.5 group">
                 <div className="text-left w-full max-w-[95%]">
-                  {/* WorkLog Section (Thinking + Tools called, exact Project Chat design) */}
-                  <MessageWorkLogSection
+                  {/* Thinking WorkLog Row (Exact project chat design) */}
+                  <ThinkingWorkLogBlock
                     thought={msg.meta?.thought}
-                    tools={msg.meta?.toolsCalled}
                     durationMs={msg.meta?.durationMs}
                   />
+
+                  {/* Tools WorkLog Row (Exact project chat design) */}
+                  <ToolsWorkLogBlock tools={msg.meta?.toolsCalled} />
 
                   <div className="text-sm sm:text-base font-normal text-zinc-200 leading-relaxed select-text my-1">
                     <ChatMarkdown

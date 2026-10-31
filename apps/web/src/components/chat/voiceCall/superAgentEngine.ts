@@ -538,13 +538,6 @@ export async function executeSuperAgentInstruction(
     options.onToolCall?.(record);
   };
 
-  recordTool({
-    name: "inspect_workspace",
-    summary: `Inspected workspace (${targetName}) & prompt`,
-    detail: `Project: ${targetName} (${projectCwd}) | Model: ${selectedModel}`,
-    status: "completed",
-  });
-
   // 2. Intelligent Latency-Masking Conversational Spoken Fillers (Live phone call experience)
   const isGitFeaturesReq =
     /\b(feature|features|commits?|git\s*history|recent\s*changes)\b/i.test(userText) &&
