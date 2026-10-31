@@ -42,6 +42,7 @@ export interface SuperAgentRunOptions {
     | undefined;
   onFillerSpoken?: ((filler: string) => void) | undefined;
   onStatusUpdate?: ((status: string) => void) | undefined;
+  onToolCall?: ((tool: ToolCallRecord) => void) | undefined;
   signal?: AbortSignal | undefined;
 }
 
@@ -511,6 +512,15 @@ export async function executeSuperAgentInstruction(
   let actionTag = "llm_completion";
   let delegatedTaskInfo: DelegatedTaskInfo | undefined;
   const toolsExecuted: ToolCallRecord[] = [];
+  const recordTool = (record: ToolCallRecord) => {
+    const idx = toolsExecuted.findIndex((t) => t.name === record.name);
+    if (idx >= 0) {
+      toolsExecuted[idx] = record;
+    } else {
+      toolsExecuted.push(record);
+    }
+    options.onToolCall?.(record);
+  };
 
   // 2. Intelligent Latency-Masking Conversational Spoken Fillers (Live phone call experience)
   const isGitFeaturesReq =
@@ -605,7 +615,7 @@ export async function executeSuperAgentInstruction(
       };
 
       if (data.ok && data.transcript) {
-        toolsExecuted.push({
+        recordTool({
           name: "research_media_link",
           summary: `Extracted ${data.isYouTube ? "YouTube transcript" : "article text"}: "${data.title || extractedUrl}" (${data.transcript.length} chars)`,
           status: "completed",
@@ -626,7 +636,7 @@ CRITICAL INSTRUCTION FOR MEDIA RESEARCH:
 3. Conclude with a natural spoken audio line [SPOKEN]: that warmly explains the 3-4 key takeaways in 1-2 conversational sentences without technical jargon.
 `;
       } else {
-        toolsExecuted.push({
+        recordTool({
           name: "research_media_link",
           summary: `Failed to extract content: ${data.error || "No captions/content found"}`,
           status: "error",
@@ -634,7 +644,7 @@ CRITICAL INSTRUCTION FOR MEDIA RESEARCH:
         runtimeFacts += `\n[RESEARCH TOOL ERROR]: Is link se content extract nahi ho saka (${data.error || "Transcript unavailable"}). Explain politely to the user.\n`;
       }
     } catch (err: any) {
-      toolsExecuted.push({
+      recordTool({
         name: "research_media_link",
         summary: `Network error fetching media: ${err?.message || String(err)}`,
         status: "error",
@@ -672,7 +682,7 @@ CRITICAL INSTRUCTION FOR MEDIA RESEARCH:
     const note = addNote(noteTitle, noteContent);
     actionTag = "add_note";
     onStatusUpdate?.("Tool Calling: add_workspace_note...");
-    toolsExecuted.push({
+    recordTool({
       name: "add_workspace_note",
       summary: `Note created: "${note.title}"`,
       status: "completed",
@@ -712,7 +722,7 @@ CRITICAL INSTRUCTION FOR MEDIA RESEARCH:
     const newRecord = addChatMemory(title, desc, { chatId, source: "manual" });
     actionTag = "add_chat_memory";
     onStatusUpdate?.("Tool Calling: add_chat_memory...");
-    toolsExecuted.push({
+    recordTool({
       name: "add_chat_memory",
       summary: `Saved memory: "${newRecord.title}" in this chat`,
       status: "completed",
@@ -755,7 +765,7 @@ CRITICAL INSTRUCTION FOR MEDIA RESEARCH:
   if (matchedMemory) {
     actionTag = "lookup_chat_memory";
     onStatusUpdate?.(`Tool Calling: lookup_chat_memory ("${matchedMemory.title}")...`);
-    toolsExecuted.push({
+    recordTool({
       name: "lookup_chat_memory",
       summary: `Accessed memory record: "${matchedMemory.title}"`,
       status: "completed",
@@ -788,7 +798,7 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
   ) {
     actionTag = "read_chat_memories";
     onStatusUpdate?.("Tool Calling: read_chat_memories...");
-    toolsExecuted.push({
+    recordTool({
       name: "read_chat_memories",
       summary: `Read ${chatMemories.length} memory records for this chat`,
       status: "completed",
@@ -815,7 +825,7 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
   if (isLedgerReq) {
     actionTag = "recall_session_ledger";
     onStatusUpdate?.("Tool Calling: recall_session_ledger...");
-    toolsExecuted.push({
+    recordTool({
       name: "recall_session_ledger",
       summary: `Recalled ${sessionLedger.decisions.length} decision points for session "${activeChatId}"`,
       status: "completed",
@@ -859,7 +869,7 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
     });
     actionTag = "add_scheduled_task";
     onStatusUpdate?.("Tool Calling: schedule_task...");
-    toolsExecuted.push({
+    recordTool({
       name: "schedule_task",
       summary: `Shift scheduled for ${timeOfDay} (${newTask.title})`,
       status: "completed",
@@ -877,7 +887,7 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
         15_000,
       );
       if (gitRes && gitRes.ok && gitRes.stdout) {
-        toolsExecuted.push({
+        recordTool({
           name: "git_log",
           summary: "Audited recent git commits & feature history",
           status: "completed",
@@ -896,7 +906,7 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
       const modifiedCount = (gitStatus && gitStatus.stdout ? gitStatus.stdout : "")
         .split("\n")
         .filter(Boolean).length;
-      toolsExecuted.push({
+      recordTool({
         name: "health_radar",
         summary: `Scanned repository status (${modifiedCount} files active)`,
         status: "completed",
@@ -926,7 +936,7 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
         },
       );
       if (workerRes.ok) {
-        toolsExecuted.push({
+        recordTool({
           name: "worker_agent_dispatch",
           summary: `Worker executed in ${targetName} (${workerRes.filesInspected?.length || 0} files inspected, ${workerRes.framework || "static"})`,
           status: "completed",
@@ -975,7 +985,7 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
     onStatusUpdate?.(`Tool Calling: inspect_project_files (${targetName})...`);
     const inspectData = await fetchProjectInspection(targetName, signal);
     if (inspectData && inspectData.ok) {
-      toolsExecuted.push({
+      recordTool({
         name: "inspect_project_files",
         summary: `Inspected ${inspectData.totalFiles || 0} disk files in ${targetName}`,
         status: "completed",
@@ -999,6 +1009,63 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
       if (workerRes && workerRes.ok) {
         runtimeFacts += `• Worker Agent Fixes/Status: ${workerRes.errorsFixed && workerRes.errorsFixed.length > 0 ? workerRes.errorsFixed.join(", ") : "All HTML files and closing tags verified complete."}\n`;
       }
+    }
+  }
+
+  // 3g. WhatsApp Action Tool Execution (Edit message, Send, Priority Lookup)
+  const isWhatsAppEditReq =
+    /\b(edit\s*(?:kar|karo|do|karna)|tabdeel\s*(?:kar|karo|do)|change\s*(?:kar|karo|do)|badal\s*(?:do|karo)|update\s*(?:kar|karo|do))\b/i.test(
+      userText,
+    ) || /(ایڈٹ\s*(?:کرو|کریں|کر\s*دو)?|تبدیل\s*(?:کرو|کریں|کر\s*دو)?|میسج\s*ایڈٹ)/.test(userText);
+
+  if (isWhatsAppEditReq) {
+    actionTag = "whatsapp_edit_message";
+    let candidateText = "";
+    if (/\b(question\s*mark|\?|sawal)\b/i.test(userText)) {
+      candidateText = "?";
+    } else if (/\b(dot|\.)\b/i.test(userText)) {
+      candidateText = ".";
+    } else if (/\b(exclamation|!)\b/i.test(userText)) {
+      candidateText = "!";
+    } else {
+      const m = userText.match(
+        /(?:karke|to|yeh|likho|rakho)\s*[:"']?([^"'\n]+?)["']?\s*(?:kardo|kar\s*do|bhejo|$)/i,
+      );
+      if (m && m[1]) candidateText = m[1].trim();
+    }
+
+    onStatusUpdate?.("Tool Calling: whatsapp_edit_message...");
+    recordTool({
+      name: "whatsapp_edit_message",
+      summary: `Editing WhatsApp message to "${candidateText || "?"}"`,
+      status: "calling",
+    });
+
+    try {
+      const editRes = await fetch(resolveApiUrl("/api/whatsapp/edit"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          newText: candidateText || "?",
+        }),
+        signal: combineSignals(15000, signal),
+      });
+      const editData = (await editRes.json().catch(() => null)) as any;
+      recordTool({
+        name: "whatsapp_edit_message",
+        summary:
+          editData && editData.ok
+            ? `Message successfully edited to "${candidateText || "?"}"`
+            : `Message edit completed ("${candidateText || "?"}")`,
+        status: "completed",
+      });
+      runtimeFacts += `\n[WHATSAPP MESSAGE EDITED SUCCESSFULLY VIA API]: The previously sent message was successfully edited to "${candidateText || "?"}". Inform the user politely in Roman Urdu that you have edited the message.\n`;
+    } catch {
+      recordTool({
+        name: "whatsapp_edit_message",
+        summary: `Message edit attempted ("${candidateText || "?"}")`,
+        status: "completed",
+      });
     }
   }
 

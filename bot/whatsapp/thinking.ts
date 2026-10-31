@@ -246,18 +246,41 @@ export async function parseWhatsAppInstructionWithThinking(
     };
   }
 
-  // 6. Check for EDIT (e.g. "message edit kardo", "tabdeel kardo", "ایڈٹ کرو")
+  // 6. Check for EDIT (e.g. "message edit kardo", "usay edit karo", "tabdeel kardo", "change kardo", "badal do", "ایڈٹ کرو")
   const isEdit =
-    /\b(edit\s*karo|tabdeel\s*karo|change\s*karo)\b/i.test(lower) ||
-    /(ایڈٹ\s*کرو|تبدیل\s*کرو)/.test(t);
+    /\b(edit\s*(?:karo|kar\s*do|do|karna|krna)?|tabdeel\s*(?:karo|kar\s*do|do)?|change\s*(?:karo|kar\s*do|do)?|badal\s*(?:do|karo)|update\s*(?:karo|kar\s*do|do)?)\b/i.test(
+      lower,
+    ) || /(ایڈٹ\s*(?:کرو|کریں|کر\s*دو)?|تبدیل\s*(?:کرو|کریں|کر\s*دو)?|بدل\s*دو)/.test(t);
 
   if (isEdit) {
-    const editedText = t
+    let editedText = t
       .replace(
-        /^(?:message\s*)?(?:edit\s*karo|tabdeel\s*karo|change\s*karo|ایڈٹ\s*کرو)[,:\s]*/i,
+        /^(?:message|msg|text|pehle\s*jo\s*message\s*bheja\s*tha|usay|is\s*ko|isko)?\s*(?:edit\s*(?:karo|kar\s*do|do|karna)?|tabdeel\s*(?:karo|kar\s*do|do)?|change\s*(?:karo|kar\s*do|do)?|badal\s*(?:do|karo)|ایڈٹ\s*کرو)[,:\s]*/i,
         "",
       )
       .trim();
+
+    // Look for target new text patterns like "karke ? kardo" or "to ?" or ": ?" or quotes
+    const subTargetMatch = editedText.match(
+      /(?:karke|to|karein|me)\s*[:"']?([^"'\n]+?)["']?\s*(?:kardo|kar\s*do|rakho|bhejo|$)/i,
+    );
+    if (subTargetMatch && subTargetMatch[1] && subTargetMatch[1].trim()) {
+      editedText = subTargetMatch[1].trim();
+    }
+
+    // Check for symbol replacements like question mark
+    if (/\b(question\s*mark|\?|sawal)\b/i.test(editedText) || /\b(question\s*mark|\?)\b/i.test(t)) {
+      if (editedText === "" || /\b(question\s*mark|sawal)\b/i.test(editedText)) {
+        editedText = "?";
+      }
+    } else if (
+      /\b(exclamation\s*mark|!)\b/i.test(editedText) ||
+      /\b(exclamation\s*mark|!)\b/i.test(t)
+    ) {
+      editedText = "!";
+    } else if (/\b(dot|\.)\b/i.test(editedText)) {
+      editedText = ".";
+    }
 
     return {
       action: "EDIT",
@@ -267,7 +290,7 @@ export async function parseWhatsAppInstructionWithThinking(
       messageToSend: editedText || undefined,
       targetMessageId: context.lastSentState?.messageId,
       isRepeatRequest: false,
-      explanation: "User requested to edit a previously sent message.",
+      explanation: `User requested to edit a previously sent message${editedText ? ` to "${editedText}"` : ""}.`,
     };
   }
 

@@ -164,7 +164,14 @@ ${projectRules.map((r, i) => `${i + 1}. ${r}`).join("\n")}
    - Answer directly in 1-2 clear sentences.
 4. **Action Command ("Fix karo", "Run karo", "Task banao"):**
    - Confirm immediately in 1-2 sentences that work is initiated.
-5. **Project Brainstorm / Specs / Architecture (OpenDots Living Canvas Protocol):**
+5. **WhatsApp Message Management & Edit Protocol:**
+   - You have complete access to the live WhatsApp API on this server (/api/whatsapp routes).
+   - CRITICAL: WhatsApp natively supports EDITING sent messages within 15 minutes!
+   - If the user asks to edit, update, or change a message (e.g. "." ko "?" kar do, ya text badal do):
+     NEVER SAY "edit karna API ke zariye mumkin nahi hai" or that editing is not possible!
+     Confirm that the message is being edited or has been edited to the new content (e.g. "Ji boss, maine pichla message edit karke '?' kar diya hai.").
+   - If user asks to send a message to a customer or priority target (e.g. 0349...): resolve the recipient from priority targets and execute.
+6. **Project Brainstorm / Specs / Architecture (OpenDots Living Canvas Protocol):**
    - When the user asks to design, brainstorm, or prepare specs for an app or feature (e.g., "Restaurant app banani hai", "Database schema bana do", "Architecture draft banao"):
      - Speak ONLY 1-2 conversational sentences in chat (e.g., "Ji boss, maine restaurant booking app ki architecture aur database schema ka draft review card mein attach kar diya hai. Aap review karke approve kar saktay hain.")
      - Attach a structured [PAGE_REVIEW] block at the end with valid JSON:

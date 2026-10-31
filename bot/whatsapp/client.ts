@@ -44,7 +44,21 @@ export interface LastSentState {
 let lastSentState: LastSentState | null = null;
 
 export function getLastSentState(): LastSentState | null {
-  return lastSentState;
+  if (lastSentState) return lastSentState;
+  try {
+    const logs = getWhatsAppLogs({ type: "outbound", limit: 5 });
+    const lastOut = logs.find((l) => l.to && l.messageId);
+    if (lastOut) {
+      return {
+        to: lastOut.to!,
+        chatId: lastOut.to!,
+        text: lastOut.body || "",
+        messageId: lastOut.messageId,
+        timestamp: new Date(lastOut.timestamp).getTime(),
+      };
+    }
+  } catch {}
+  return null;
 }
 
 export function setLastSentState(state: LastSentState | null): void {
@@ -755,12 +769,18 @@ export function getLiveWhatsAppContext(): string {
 
   out += `\n\n[WHATSAPP FUNCTION SCHEMAS & TOOL CALLING RULES]:
 1. send_whatsapp_message(to: string, message: string): Sends a real message to a phone number or JID via the active session.
-2. schedule_whatsapp_message(to: string, message: string, time: string): Schedules a message for future automated delivery.
-3. list_whatsapp_messages(jid: string): Reads recent message history from a chat.
-4. search_whatsapp_target(query: string): Searches priority targets and known chats by contact name or partial phone digits (e.g. "0349").
+2. edit_whatsapp_message(chatId: string, messageId: string, newText: string):
+   - CRITICAL: WhatsApp natively supports EDITING previously sent messages within 15 minutes!
+   - If the user asks to edit or change a message (e.g. "." ko "?" kar do, ya text change karo), this tool edits the message instantly on WhatsApp via Baileys API.
+   - NEVER tell the user that editing is not possible via API, or that you cannot edit. You CAN and MUST edit the message!
+3. delete_whatsapp_message(chatId: string, messageId: string): Deletes a sent message for everyone.
+4. schedule_whatsapp_message(to: string, message: string, time: string): Schedules a message for future automated delivery.
+5. list_whatsapp_messages(jid: string): Reads recent message history from a chat.
+6. search_whatsapp_target(query: string): Searches priority targets and known chats by contact name or partial phone digits (e.g. "0349").
 
 CRITICAL DIRECTIVE ON OBEDIENCE & ANTI-HALLUCINATION:
-- NEVER claim that you have sent a WhatsApp message unless the action was physically executed.
+- NEVER claim that you have sent or edited a WhatsApp message unless the action was physically executed.
+- If the user asks to edit a message (e.g. "usay edit karo", "change to ?"), immediately use edit_whatsapp_message. WhatsApp allows editing messages sent within 15 minutes.
 - If the user provides a partial phone number (e.g. "0349") or mentions "priority number", inspect the Priority Targets list above: find the target containing those digits (e.g. +92 349 2830546), resolve the full phone number, and execute the delivery.
 - Always report the full recipient phone number and contact name in your reply to the user.
 - If user asks to resend or repeat (e.g. "dobara bhejo", 10 dafa), ALWAYS execute immediately without refusal.`;

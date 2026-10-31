@@ -108,6 +108,7 @@ import {
   addScheduledWhatsAppTask,
   cancelScheduledWhatsAppTaskById,
   runScheduledWhatsAppTaskNowById,
+  getLiveWhatsAppContext,
 } from "./botBridge.ts";
 import {
   getServerSessionLedger,
@@ -1157,6 +1158,10 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
         "whatsapp_message_deleted",
         "whatsapp_messages_listed",
         "whatsapp_media_extracted",
+        "whatsapp_clarification_needed",
+        "whatsapp_edit_prompt",
+        "whatsapp_delete_prompt",
+        "whatsapp_recipient_needed",
       ].includes(botResult.actionTaken);
 
     if (isSpecialAction && botResult.reply) {
@@ -1530,8 +1535,7 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
 
         let liveWhatsAppContext = "";
         try {
-          const { getLiveWhatsAppContext } = await import("@t3tools/whatsapp");
-          liveWhatsAppContext = getLiveWhatsAppContext();
+          liveWhatsAppContext = await getLiveWhatsAppContext();
         } catch {}
 
         const enrichedMessages = messages.map((m) => {

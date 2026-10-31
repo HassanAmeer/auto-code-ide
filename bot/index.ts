@@ -380,14 +380,37 @@ export async function processSuperBotTurn(options: BotTurnOptions): Promise<BotT
 
     // ── CASE E: EDIT MESSAGE ──
     if (parsed.action === "EDIT") {
-      const targetId = parsed.targetMessageId || lastSent?.messageId;
-      const targetChat = parsed.recipient || lastSent?.chatId;
-      const newText = parsed.messageToSend;
+      let targetId = parsed.targetMessageId || lastSent?.messageId;
+      let targetChat = parsed.recipient || lastSent?.chatId || lastSent?.to;
+      let newText = parsed.messageToSend;
+
+      if (!targetId || !targetChat) {
+        const { getWhatsAppLogs } = await import("./whatsapp/index.ts");
+        const logs = getWhatsAppLogs({ type: "outbound", limit: 5 });
+        const lastOut = logs.find((l) => l.messageId && l.to);
+        if (lastOut) {
+          targetId = targetId || lastOut.messageId;
+          targetChat = targetChat || lastOut.to;
+        }
+      }
+
+      if (!targetChat && priorityTarget?.jid) {
+        targetChat = priorityTarget.jid;
+      }
+
+      if (!newText) {
+        const match = userText.match(
+          /(?:karke|to|yeh|likho|kar\s*do|bhejo)\s*[:"']?([^"'\n]+?)["']?\s*(?:kar\s*do|kardo|$)/i,
+        );
+        if (match && match[1]) {
+          newText = match[1].trim();
+        }
+      }
 
       if (!targetId || !targetChat || !newText) {
         const reply =
           lang === "urdu"
-            ? `Message edit karne ke liye naya text batayein. E.g. "message edit karke yeh kardo: Kal meeting 4 baje hogi".\n\n• **Active Session:** \`${sessionDisplayName}\``
+            ? `Message edit karne ke liye naya text batayein (misal ke taur par "?" ya koi naya jumla).\n\n• **Active Session:** \`${sessionDisplayName}\``
             : `Please provide the new message text to update for session \`${sessionDisplayName}\`.`;
         return {
           reply,

@@ -30,6 +30,7 @@ import {
   FileText,
   UserCheck,
   CheckCircle2,
+  MessageSquare,
   Zap,
   Image as ImageIcon,
   Paperclip,
@@ -396,6 +397,9 @@ function CodeDiffCard({ diffText }: { diffText: string }) {
 }
 function getToolCallIcon(name: string) {
   const lower = name.toLowerCase();
+  if (lower.includes("whatsapp") || lower.includes("wa_") || lower.includes("message")) {
+    return <MessageSquare className="size-3.5 text-emerald-400 shrink-0" />;
+  }
   if (lower.includes("search") || lower.includes("inspect") || lower.includes("file")) {
     return <Search className="size-3.5 text-sky-400 shrink-0" />;
   }
@@ -549,42 +553,66 @@ function ToolCallingGroupDisclosure({ tools }: { tools: ToolCallRecord[] }) {
   );
 }
 
-function LiveProcessingActivityRow({
+function LiveProcessingActivityView({
   agentStatus,
   selectedModel,
   dispatchStartTime,
+  liveTools = [],
 }: {
   agentStatus: string | null;
   selectedModel: string;
   dispatchStartTime: number;
+  liveTools?: ToolCallRecord[];
 }) {
   const isTool = agentStatus?.startsWith("Tool Calling:");
-  const toolName = isTool ? agentStatus?.replace(/^Tool Calling:\s*/, "") : null;
+  const statusToolName = isTool ? agentStatus?.replace(/^Tool Calling:\s*/, "") : null;
 
   return (
-    <div className="flex items-center gap-2 py-1.5 px-2.5 rounded-md bg-zinc-900/50 border border-zinc-800/60 text-xs w-fit max-w-full my-2 animate-in fade-in duration-150">
-      {isTool ? (
-        <span className="flex size-4 items-center justify-center">
-          <Terminal className="size-3.5 text-purple-400 animate-pulse" />
-        </span>
-      ) : (
-        <span className="flex size-4 items-center justify-center">
-          <Brain className="size-3.5 text-purple-400 animate-pulse" />
-        </span>
-      )}
+    <div className="flex flex-col gap-1.5 py-1 text-sm select-none my-1.5 animate-in fade-in duration-150">
+      {/* 1. Thinking Row (Exact project chat design: no badge, no outline, no background border) */}
+      <div className="flex items-center gap-2 text-sm leading-relaxed text-zinc-300 select-none">
+        <Brain className="size-4 text-purple-400 shrink-0 animate-pulse" />
+        <span className="live-tool-shine font-normal text-zinc-200">Thinking</span>
+        <span className="text-xs text-zinc-500 font-mono">with {selectedModel}</span>
+        <LiveWorkingTimer startTime={dispatchStartTime} />
+      </div>
 
-      <span className="live-tool-shine font-medium text-foreground truncate max-w-[280px] sm:max-w-md">
-        {isTool ? (
-          <>
-            <span className="text-zinc-500 font-mono">Calling tool: </span>
-            <span className="text-purple-300 font-mono">{toolName}</span>
-          </>
-        ) : (
-          agentStatus || `Thinking with ${selectedModel}...`
-        )}
-      </span>
-
-      <LiveWorkingTimer startTime={dispatchStartTime} />
+      {/* 2. Live Tools Executed / In-Progress (List of schemas and functions called) */}
+      {liveTools.length > 0 ? (
+        liveTools.map((tool, idx) => (
+          <div
+            key={idx}
+            className="flex items-center gap-2 text-xs leading-relaxed text-zinc-400 ps-1 animate-in fade-in duration-100"
+          >
+            <span className="flex size-3.5 shrink-0 items-center justify-center">
+              {getToolCallIcon(tool.name)}
+            </span>
+            <span className="font-mono font-medium text-zinc-200">{tool.name}</span>
+            {tool.summary && (
+              <span className="text-[11px] text-zinc-400 truncate max-w-xs sm:max-w-md font-sans">
+                — {tool.summary}
+              </span>
+            )}
+            <span className="ms-auto flex items-center gap-1 shrink-0">
+              {tool.status === "calling" ? (
+                <Loader2 className="size-3 text-cyan-400 animate-spin" />
+              ) : (
+                <CheckCircle2 className="size-3 text-emerald-400" />
+              )}
+            </span>
+          </div>
+        ))
+      ) : statusToolName ? (
+        <div className="flex items-center gap-2 text-xs leading-relaxed text-zinc-400 ps-1 animate-in fade-in duration-100">
+          <span className="flex size-3.5 shrink-0 items-center justify-center">
+            {getToolCallIcon(statusToolName)}
+          </span>
+          <span className="font-mono font-medium text-purple-300">{statusToolName}</span>
+          <span className="ms-auto flex items-center gap-1 shrink-0">
+            <Loader2 className="size-3 text-cyan-400 animate-spin" />
+          </span>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -615,6 +643,7 @@ export function SuperCallAssistantView() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [activeDispatchStartTime, setActiveDispatchStartTime] = useState<number>(0);
   const [agentStatus, setAgentStatus] = useState<string | null>(null);
+  const [liveTools, setLiveTools] = useState<ToolCallRecord[]>([]);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [copiedPreviewUrl, setCopiedPreviewUrl] = useState<string | null>(null);
   const [expandedWorkerLogsId, setExpandedWorkerLogsId] = useState<string | null>(null);
@@ -947,6 +976,7 @@ export function SuperCallAssistantView() {
       setIsProcessing(true);
       setActiveDispatchStartTime(dispatchStartTime);
       setAgentStatus("Analyzing request...");
+      setLiveTools([]);
 
       void livekitRef.current?.sendDataMessage({
         type: "user_turn",
@@ -1011,6 +1041,19 @@ export function SuperCallAssistantView() {
           onFillerSpoken: (fillerText) => {
             if (!controller.signal.aborted) {
               setAgentStatus(fillerText);
+            }
+          },
+          onToolCall: (tool) => {
+            if (!controller.signal.aborted) {
+              setLiveTools((prev) => {
+                const idx = prev.findIndex((t) => t.name === tool.name);
+                if (idx >= 0) {
+                  const next = [...prev];
+                  next[idx] = tool;
+                  return next;
+                }
+                return [...prev, tool];
+              });
             }
           },
         });
@@ -1184,6 +1227,7 @@ export function SuperCallAssistantView() {
           setIsProcessing(false);
           setActiveDispatchStartTime(0);
           setAgentStatus(null);
+          setLiveTools([]);
         }
       }
     },
@@ -1248,6 +1292,7 @@ export function SuperCallAssistantView() {
     setIsProcessing(false);
     setActiveDispatchStartTime(0);
     setAgentStatus(null);
+    setLiveTools([]);
     stopSpeaking();
     addVoiceCallLog({
       category: "SYSTEM",
@@ -2963,10 +3008,11 @@ export function SuperCallAssistantView() {
 
           {/* Live Processing & Tool Calling Indicator (Collapsible matching project chats) */}
           {isProcessing && (
-            <LiveProcessingActivityRow
+            <LiveProcessingActivityView
               agentStatus={agentStatus}
               selectedModel={groqSettings.enabled ? groqSettings.model || "Groq" : effectiveModel}
               dispatchStartTime={activeDispatchStartTime || Date.now()}
+              liveTools={liveTools}
             />
           )}
 

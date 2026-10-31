@@ -381,3 +381,12 @@ export async function runScheduledWhatsAppTaskNowById(taskId: string): Promise<a
     return { ok: false, error: err?.message || String(err) };
   }
 }
+
+export async function getLiveWhatsAppContext(): Promise<string> {
+  try {
+    const mod = await import("../../../bot/whatsapp/client.ts" as string);
+    return (mod as any).getLiveWhatsAppContext?.() || "";
+  } catch {
+    return "";
+  }
+}
