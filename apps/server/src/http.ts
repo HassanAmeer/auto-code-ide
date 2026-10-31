@@ -1360,7 +1360,7 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
             let lastMsgs: any[] = [];
 
             const pollStart = Date.now();
-            while (Date.now() - pollStart < 22000) {
+            while (Date.now() - pollStart < 60000) {
               await new Promise((r) => setTimeout(r, 800));
               const mRes = await fetch(`${activeBase}/session/${sessionId}/message`, {
                 headers: { Authorization: activeAuth },
@@ -1406,7 +1406,15 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
                   const isFinished =
                     assistantWithText.finish === "stop" ||
                     msgs.some((m: any) => m.type === "idle" && m.outcome === "succeeded");
-                  if (isFinished || Date.now() - pollStart > 7000) {
+                  const hasRunningTools = msgs.some(
+                    (m: any) =>
+                      m.type === "assistant" &&
+                      m.finish === "tool-calls" &&
+                      (m.content || []).some(
+                        (c: any) => c.type === "tool" && c.state?.status === "running",
+                      ),
+                  );
+                  if (isFinished || (!hasRunningTools && Date.now() - pollStart > 14000)) {
                     gotSuccess = true;
                     successReply = textParts.join("\n\n").trim();
                     break;
@@ -1422,7 +1430,8 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
               { kind: "tool"; tool: any } | { kind: "thought"; text: string }
             > = [];
 
-            for (const m of lastMsgs) {
+            const chronologicalMsgs = [...lastMsgs].reverse();
+            for (const m of chronologicalMsgs) {
               if (m.type === "assistant" || m.type === "tool" || m.type === "message") {
                 for (const c of m.content || []) {
                   if (c.type === "reasoning" || c.type === "thought") {
@@ -1432,14 +1441,29 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
                     }
                   }
                   if (c.type === "tool" || c.type === "tool_call" || c.type === "call") {
+                    const toolName = c.name || c.toolName || c.function?.name || "tool_call";
+                    const toolInput = c.state?.input || c.input || c.args;
+                    let cmdSummary = "";
+                    if (toolInput?.command) {
+                      cmdSummary = String(toolInput.command);
+                    } else if (typeof toolInput === "string") {
+                      cmdSummary = toolInput;
+                    } else if (toolInput && typeof toolInput === "object") {
+                      cmdSummary = JSON.stringify(toolInput);
+                    }
+                    const toolOutput =
+                      (Array.isArray(c.state?.content)
+                        ? c.state.content.map((x: any) => x.text || "").join("\n")
+                        : undefined) ||
+                      (typeof c.output === "string" ? c.output : undefined) ||
+                      (c.state?.content?.[0]?.text ? String(c.state.content[0].text) : undefined);
+
                     const toolObj = {
-                      name: c.toolName || c.name || c.function?.name || "tool_call",
-                      summary: c.args
-                        ? JSON.stringify(c.args).slice(0, 120)
-                        : c.summary || c.output?.slice?.(0, 120) || "Executed",
-                      args: c.args || undefined,
-                      output: typeof c.output === "string" ? c.output.slice(0, 500) : undefined,
-                      status: "completed",
+                      name: toolName,
+                      summary: cmdSummary.slice(0, 150) || c.summary || "Tool call executed",
+                      args: toolInput || undefined,
+                      output: toolOutput ? toolOutput.slice(0, 1000) : undefined,
+                      status: c.state?.status || "completed",
                     };
                     toolsFound.push(toolObj);
                     timelineEvents.push({ kind: "tool", tool: toolObj });
@@ -1602,7 +1626,7 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
           model.toLowerCase().startsWith("opencode/") ||
           OPENCODE_FREE_MODELS.includes(model.toLowerCase())
             ? chatUrl.includes("openrouter")
-              ? "meta-llama/llama-3.3-70b-instruct:free"
+              ? "liquid/lfm-2.5-2.6b:free"
               : model.replace(/^opencode\//i, "")
             : model;
 

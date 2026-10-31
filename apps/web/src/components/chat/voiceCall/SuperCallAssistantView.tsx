@@ -93,7 +93,11 @@ import { useAtomValue } from "@effect/atom-react";
 import { cn } from "~/lib/utils";
 import { useProjects } from "~/state/entities";
 import { useNotes, openNotesSheet, addNote, type NoteItem } from "~/lib/notesStore";
-import { useChatMemories, type MemoryRecord } from "~/lib/memoryStore";
+import {
+  useChatMemories,
+  pruneChatMemoriesAfterTimestamp,
+  type MemoryRecord,
+} from "~/lib/memoryStore";
 import { ChatMemorySection } from "~/components/memory/MemorySheet";
 import { useScheduledTasks } from "~/lib/scheduledTasksStore";
 import { useProjectActivities } from "~/lib/projectActivityLedger";
@@ -1590,6 +1594,7 @@ export function SuperCallAssistantView() {
           }, 50);
         }
         pruneDecisionsAfterTimestamp(activeSessionId || "default", msg.timestamp - 1);
+        pruneChatMemoriesAfterTimestamp(activeSessionId || "default", msg.timestamp - 1);
       }
     },
     [activeSessionId, handleRevertToMessage, isProcessing, adjustTextareaHeight],
@@ -1610,6 +1615,7 @@ export function SuperCallAssistantView() {
 
       handleRevertToMessage(priorUserMsg.id, "keep");
       pruneDecisionsAfterTimestamp(activeSessionId || "default", priorUserMsg.timestamp);
+      pruneChatMemoriesAfterTimestamp(activeSessionId || "default", priorUserMsg.timestamp);
 
       void handleSuperAgentDispatch(priorUserMsg.text, { isRetry: true });
     },
@@ -1631,6 +1637,10 @@ export function SuperCallAssistantView() {
         }, 50);
       }
       pruneDecisionsAfterTimestamp(
+        activeSessionId || "default",
+        res.revertedUserMessage.timestamp - 1,
+      );
+      pruneChatMemoriesAfterTimestamp(
         activeSessionId || "default",
         res.revertedUserMessage.timestamp - 1,
       );

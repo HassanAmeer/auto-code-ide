@@ -152,6 +152,15 @@ export function findMemoryByTitle(query: string, chatId?: string): MemoryRecord 
   return partial;
 }
 
+/** Prune chat memories created after a specific timestamp (used when reverting messages) */
+export function pruneChatMemoriesAfterTimestamp(chatId: string, timestamp: number): void {
+  const current = loadAllMemories();
+  const filtered = current.filter((m) => !(m.chatId === chatId && m.createdAt > timestamp));
+  if (filtered.length !== current.length) {
+    saveAllMemories(filtered);
+  }
+}
+
 /** Hook to access memories for the active (or explicit) chat */
 export function useChatMemories(explicitChatId?: string): {
   memories: MemoryRecord[];
