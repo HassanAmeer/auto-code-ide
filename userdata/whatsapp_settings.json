@@ -1,0 +1,12 @@
+{
+  "botEnabled": true,
+  "autoReply": true,
+  "mediaEnabled": true,
+  "voiceNotesEnabled": true,
+  "gatewayUrl": "https://w.tokendeal.cloud",
+  "apiKey": "owa_k1_bd105b7013973116841acdc2fa381a87499a47f09c67fad26fb7cf5a3da2f973",
+  "activeSessionId": "7c9e3135-81ee-4155-b477-63eacb099c80",
+  "humanDelayMs": 2500,
+  "priorityTargets": [],
+  "activePriorityJid": null
+}

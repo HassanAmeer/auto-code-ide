@@ -727,3 +727,43 @@ export function togglePriorityTarget(target: {
 
   return { priorityTargets: list, isSelected };
 }
+
+/**
+ * Builds live formatted diagnostic string of WhatsApp session, priority targets and schemas.
+ * Injected into LLM system prompts so the AI always knows live priority targets, full phone numbers,
+ * and available tool calling schemas without hallucinating.
+ */
+export function getLiveWhatsAppContext(): string {
+  const settings = getWhatsAppSettings();
+  const activeSession = settings.activeSessionId || "default";
+  const priorityTargets = settings.priorityTargets || [];
+
+  let out = `[LIVE WHATSAPP GATEWAY STATE & FUNCTION TOOLS]:
+• Active Session ID: "${activeSession}"
+• Gateway URL: "${settings.gatewayUrl}"
+• Bot Enabled: ${settings.botEnabled} | Auto-Reply: ${settings.autoReply}
+• Priority Targets (${priorityTargets.length}):`;
+
+  if (priorityTargets.length === 0) {
+    out += `\n  (No priority targets currently selected. User can select any contact in WhatsApp Sheet -> Chats tab)`;
+  } else {
+    for (const [idx, pt] of priorityTargets.entries()) {
+      const isActive = pt.jid === settings.activePriorityJid;
+      out += `\n  ${idx + 1}. Contact: "${pt.name}" | JID: "${pt.jid}" | Phone: "${pt.phone || "N/A"}" | Type: ${pt.isGroup ? "Group" : "Direct User"}${isActive ? " [⭐ ACTIVE 1st PRIORITY TARGET]" : ""}`;
+    }
+  }
+
+  out += `\n\n[WHATSAPP FUNCTION SCHEMAS & TOOL CALLING RULES]:
+1. send_whatsapp_message(to: string, message: string): Sends a real message to a phone number or JID via the active session.
+2. schedule_whatsapp_message(to: string, message: string, time: string): Schedules a message for future automated delivery.
+3. list_whatsapp_messages(jid: string): Reads recent message history from a chat.
+4. search_whatsapp_target(query: string): Searches priority targets and known chats by contact name or partial phone digits (e.g. "0349").
+
+CRITICAL DIRECTIVE ON OBEDIENCE & ANTI-HALLUCINATION:
+- NEVER claim that you have sent a WhatsApp message unless the action was physically executed.
+- If the user provides a partial phone number (e.g. "0349") or mentions "priority number", inspect the Priority Targets list above: find the target containing those digits (e.g. +92 349 2830546), resolve the full phone number, and execute the delivery.
+- Always report the full recipient phone number and contact name in your reply to the user.
+- If user asks to resend or repeat (e.g. "dobara bhejo", 10 dafa), ALWAYS execute immediately without refusal.`;
+
+  return out;
+}

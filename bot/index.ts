@@ -188,6 +188,7 @@ export async function processSuperBotTurn(options: BotTurnOptions): Promise<BotT
       listSessions,
       getWhatsAppSettings,
       getActivePriorityTarget,
+      getPriorityTargets,
       parseWhatsAppInstructionWithThinking,
     } = await import("./whatsapp/index.ts");
 
@@ -205,6 +206,7 @@ export async function processSuperBotTurn(options: BotTurnOptions): Promise<BotT
 
     const allChats = await listChats(activeSession).catch(() => []);
     const priorityTarget = getActivePriorityTarget();
+    const priorityTargets = getPriorityTargets();
     const lastSent = getLastSentState();
 
     // Run AI Thinking & Intent Extraction with full conversation history
@@ -212,16 +214,22 @@ export async function processSuperBotTurn(options: BotTurnOptions): Promise<BotT
       activeSessionDisplayName: sessionDisplayName,
       activeSessionPhone: activeSessionObj?.phone,
       priorityTarget,
+      priorityTargets,
       knownChats: allChats,
       lastSentState: lastSent,
       conversationHistory: options.messages,
     });
 
+    const targetRecipient = parsed.recipient || lastSent?.to || priorityTarget?.jid;
+    const messageToSend = parsed.messageToSend || lastSent?.text;
+
     const recipientLabel = parsed.recipientName
       ? `${parsed.recipientName} (${parsed.isGroup ? "Group" : "Direct User"})`
       : parsed.recipient
         ? `\`${parsed.recipient}\``
-        : "";
+        : priorityTarget
+          ? `${priorityTarget.name} (⭐ Priority Target)`
+          : "";
 
     // ── CASE A: ASK CLARIFICATION (User gave an instruction without the message content) ──
     if (parsed.action === "ASK_CLARIFICATION") {
@@ -458,9 +466,6 @@ export async function processSuperBotTurn(options: BotTurnOptions): Promise<BotT
     }
 
     // ── CASE G: SEND OR RESEND (Zero Refusal, Repeat up to 10+ times) ──
-    const targetRecipient = parsed.recipient || lastSent?.to || priorityTarget?.jid;
-    const messageToSend = parsed.messageToSend || lastSent?.text;
-
     if (!targetRecipient) {
       const reply =
         lang === "urdu"

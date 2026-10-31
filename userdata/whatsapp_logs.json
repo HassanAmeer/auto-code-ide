@@ -1,0 +1,16 @@
+[
+  {
+    "id": "wa_1793453194459_9bj1f",
+    "timestamp": "2026-10-31T13:26:34.459Z",
+    "type": "outbound",
+    "sessionId": "7c9e3135-81ee-4155-b477-63eacb099c80",
+    "to": "219013804245039@lid",
+    "body": ".",
+    "messageId": "true_219013804245039@lid_3EB037B7B7D7AF5AED3DE2",
+    "status": "sent",
+    "rawPayload": {
+      "messageId": "true_219013804245039@lid_3EB037B7B7D7AF5AED3DE2",
+      "timestamp": 1793453194
+    }
+  }
+]

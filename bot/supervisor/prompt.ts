@@ -1,4 +1,5 @@
 import type { IntentAnalysis } from "./intentClassifier.ts";
+import { getLiveWhatsAppContext } from "../whatsapp/client.ts";
 
 export interface BotSupervisorPromptOptions {
   intentAnalysis: IntentAnalysis;
@@ -18,6 +19,16 @@ export function buildSmartBotSystemPrompt(options: BotSupervisorPromptOptions): 
     whatsAppContext,
     language,
   } = options;
+
+  const resolvedWhatsAppContext =
+    whatsAppContext ||
+    (() => {
+      try {
+        return getLiveWhatsAppContext();
+      } catch {
+        return "";
+      }
+    })();
 
   return `
 You are **Super Bot** — the Senior AI Tech Lead, Autonomous Supervisor, and Intelligent WhatsApp Controller of this development workspace.
@@ -48,7 +59,7 @@ You communicate dynamically in natural, conversational ${language === "urdu" ? "
    - At the very end of your response, on a new line, always provide:
    [SPOKEN]: <Short 1-2 sentence conversational spoken reply in Roman Urdu without markdown or asterisks>
 
-${whatsAppContext ? `\n[WHATSAPP & MESSAGING CONTEXT]:\n${whatsAppContext}\n` : ""}
+${resolvedWhatsAppContext ? `\n${resolvedWhatsAppContext}\n` : ""}
 ${projectMemorySpec ? `\n[PROJECT MEMORY]:\n${projectMemorySpec}\n` : ""}
 ${liveFacts ? `\n[LIVE WORKSPACE FACTS]:\n${liveFacts}\n` : ""}
 `.trim();

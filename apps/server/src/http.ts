@@ -1528,12 +1528,34 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 60_000);
 
+        let liveWhatsAppContext = "";
+        try {
+          const { getLiveWhatsAppContext } = await import("@t3tools/whatsapp");
+          liveWhatsAppContext = getLiveWhatsAppContext();
+        } catch {}
+
         const enrichedMessages = messages.map((m) => {
-          if (m.role === "system" && liveProjectContext) {
-            return { ...m, content: m.content + "\n" + liveProjectContext };
+          if (m.role === "system") {
+            let sys = botResult?.systemPrompt || m.content;
+            if (liveProjectContext) sys += "\n\n" + liveProjectContext;
+            if (liveWhatsAppContext && !sys.includes("[LIVE WHATSAPP GATEWAY STATE")) {
+              sys += "\n\n" + liveWhatsAppContext;
+            }
+            return { ...m, content: sys };
           }
           return m;
         });
+
+        if (!enrichedMessages.some((m) => m.role === "system")) {
+          let sys =
+            botResult?.systemPrompt ||
+            "[You are Super Bot, conversational Roman Urdu tech lead and WhatsApp controller]";
+          if (liveProjectContext) sys += "\n\n" + liveProjectContext;
+          if (liveWhatsAppContext && !sys.includes("[LIVE WHATSAPP GATEWAY STATE")) {
+            sys += "\n\n" + liveWhatsAppContext;
+          }
+          enrichedMessages.unshift({ role: "system", content: sys });
+        }
 
         const response = await fetch(chatUrl, {
           method: "POST",

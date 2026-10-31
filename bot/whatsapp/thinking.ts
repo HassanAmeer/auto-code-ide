@@ -16,6 +16,7 @@ export interface WhatsAppThinkingContext {
   activeSessionDisplayName: string;
   activeSessionPhone?: string | undefined;
   priorityTarget?: WhatsAppPriorityTarget | null | undefined;
+  priorityTargets?: WhatsAppPriorityTarget[] | undefined;
   knownChats?: WhatsAppChat[] | undefined;
   lastSentState?:
     | {
@@ -46,10 +47,12 @@ export interface WhatsAppThinkingResult {
 /**
  * Analyzes the user's WhatsApp instruction using Thinking & Dynamic AI Refinement:
  * 1. Inspects the conversation history so user answers from previous turns are remembered.
- * 2. Distinguishes meta-instructions (e.g. "is number ko customer ka message bhejo") from actual customer message content.
- * 3. Never sends raw user prompts to customers. Polishes informal notes into polite customer messages.
- * 4. Never refuses repeat requests ("dobara bhejo", "resend karo", 10 dafa, etc.).
- * 5. Handles schedule message ("kal subah 10 baje bhejna", "at 5 PM"), delete, edit, list messages, and media extraction.
+ * 2. Matches partial numbers/prefixes (e.g. 0349, 0300) against Priority Targets and Known Chats.
+ * 3. Distinguishes meta-instructions (e.g. "is number ko customer ka message bhejo") from actual customer message content.
+ * 4. Extracts explicit message instructions (e.g. dot '.', short text, numbers) without rejecting.
+ * 5. Never sends raw user prompts to customers. Polishes informal notes into polite customer messages.
+ * 6. Never refuses repeat requests ("dobara bhejo", "resend karo", 10 dafa, etc.).
+ * 7. Handles schedule message ("kal subah 10 baje bhejna", "at 5 PM"), delete, edit, list messages, and media extraction.
  */
 export async function parseWhatsAppInstructionWithThinking(
   userText: string,
@@ -58,24 +61,89 @@ export async function parseWhatsAppInstructionWithThinking(
   const t = userText.trim();
   const lower = t.toLowerCase();
 
-  // 1. Recipient extraction (Phone number from text, chat name match, or Priority Target)
-  const phoneMatch = t.match(/(?:\+?92|0)?3\d{2}[- ]?\d{7}|\b\d{10,15}\b/);
-  let recipient = phoneMatch ? phoneMatch[0].replace(/[- ]/g, "") : "";
+  // 1. Recipient extraction (Phone number from text, partial digits match against Priority Targets / Known Chats)
+  const allPriorityTargets =
+    context.priorityTargets || (context.priorityTarget ? [context.priorityTarget] : []);
+
+  // Extract all digit clusters from text (e.g. "0349", "349", "03492830546", etc.)
+  const digitClusters = t.match(/\d{3,15}/g) || [];
+
+  let recipient = "";
   let recipientName = "";
   let isGroup = false;
 
-  // If no recipient in current text, check recent conversation history
-  if (!recipient && context.conversationHistory && context.conversationHistory.length > 0) {
-    for (const msg of [...context.conversationHistory].reverse()) {
-      const histPhone = msg.content?.match(/(?:\+?92|0)?3\d{2}[- ]?\d{7}|\b\d{10,15}\b/);
-      if (histPhone) {
-        recipient = histPhone[0].replace(/[- ]/g, "");
+  // Check if user specifically mentioned priority / پریورٹی
+  const isPriorityMentioned =
+    /\b(priority|prority|tarjeeh|selected\s*(?:number|user|target|chat))\b/i.test(lower) ||
+    /(پریورٹی|ترجیح|سلیکٹڈ)/.test(t);
+
+  // A. Search inside Priority Targets first (Match against digits e.g. 0349 matching +92 349 2830546)
+  for (const digit of digitClusters) {
+    const cleanDigit = digit.replace(/^0/, ""); // e.g. "0349" -> "349"
+    const matched = allPriorityTargets.find((pt) => {
+      const cleanPhone = (pt.phone || "").replace(/\D/g, "");
+      const cleanName = (pt.name || "").replace(/\D/g, "");
+      const cleanJid = (pt.jid || "").replace(/\D/g, "");
+      return (
+        cleanPhone.includes(cleanDigit) ||
+        cleanPhone.includes(digit) ||
+        cleanName.includes(cleanDigit) ||
+        cleanName.includes(digit) ||
+        cleanJid.includes(cleanDigit) ||
+        cleanJid.includes(digit)
+      );
+    });
+
+    if (matched) {
+      recipient = matched.jid;
+      recipientName = matched.name;
+      isGroup = matched.isGroup;
+      break;
+    }
+  }
+
+  // B. If user mentioned "priority" and didn't specify digits or digits didn't match:
+  if (!recipient && isPriorityMentioned && allPriorityTargets.length > 0) {
+    const activeOrFirst =
+      allPriorityTargets.find((pt) => pt.jid === context.priorityTarget?.jid) ||
+      allPriorityTargets[0];
+    if (activeOrFirst) {
+      recipient = activeOrFirst.jid;
+      recipientName = activeOrFirst.name;
+      isGroup = activeOrFirst.isGroup;
+    }
+  }
+
+  // C. Full standard phone number match from text (e.g. 03491234567, +923491234567)
+  const fullPhoneMatch = t.match(/(?:\+?92|0)?3\d{2}[- ]?\d{7}|\b\d{10,15}\b/);
+  if (!recipient && fullPhoneMatch) {
+    recipient = fullPhoneMatch[0].replace(/[- ]/g, "");
+  }
+
+  // D. Search in knownChats by digit clusters (e.g. 0349 in known chat numbers or names)
+  if (!recipient && context.knownChats && context.knownChats.length > 0) {
+    for (const digit of digitClusters) {
+      const cleanDigit = digit.replace(/^0/, "");
+      const matchedChat = context.knownChats.find((c) => {
+        const cleanId = (c.id || "").replace(/\D/g, "");
+        const cleanNameDigits = (c.name || "").replace(/\D/g, "");
+        return (
+          cleanId.includes(cleanDigit) ||
+          cleanId.includes(digit) ||
+          cleanNameDigits.includes(cleanDigit) ||
+          cleanNameDigits.includes(digit)
+        );
+      });
+      if (matchedChat) {
+        recipient = matchedChat.id;
+        recipientName = matchedChat.name;
+        isGroup = matchedChat.isGroup;
         break;
       }
     }
   }
 
-  // Match chat names from known chats if no raw phone
+  // E. Search in knownChats by name string
   if (!recipient && context.knownChats && context.knownChats.length > 0) {
     for (const chat of context.knownChats) {
       if (chat.name && chat.name.length > 2 && lower.includes(chat.name.toLowerCase())) {
@@ -87,7 +155,18 @@ export async function parseWhatsAppInstructionWithThinking(
     }
   }
 
-  // Fallback to active priority target if no target specified in text
+  // F. Fallback to conversation history if still no recipient
+  if (!recipient && context.conversationHistory && context.conversationHistory.length > 0) {
+    for (const msg of [...context.conversationHistory].reverse()) {
+      const histPhone = msg.content?.match(/(?:\+?92|0)?3\d{2}[- ]?\d{7}|\b\d{10,15}\b/);
+      if (histPhone) {
+        recipient = histPhone[0].replace(/[- ]/g, "");
+        break;
+      }
+    }
+  }
+
+  // G. Ultimate fallback to active priority target
   if (!recipient && context.priorityTarget) {
     recipient = context.priorityTarget.jid;
     recipientName = context.priorityTarget.name;
@@ -192,17 +271,41 @@ export async function parseWhatsAppInstructionWithThinking(
     };
   }
 
-  // 7. Look for message content indicators (e.g. bolo ke / kaho ke / کہ / ke / quotes / colon)
-  const contentMarker = t.match(
-    /(?:bolo\s+ke|kaho\s+ke|keh\s*do\s+ke|بولو\s*کہ|کہو\s*کہ|کہہ\s*دو\s*کہ|[:"“]|(?:^|[\s,])ke\s+|(?:^|[\s,])کہ\s+)(.+)$/i,
-  );
+  // 6.5 Explicit Dot or Single Symbol Message Check (e.g. "dot ka just dot likh kar send kar do", "sirf dot bhejo", "just .")
+  const isDotMessage =
+    /\b(just\s*dot|sirf\s*dot|dot\s*ka\s*just\s*dot|dot\s*likh|sirf\s*ek\s*dot|only\s*dot|\bdot\b)\b/i.test(
+      lower,
+    ) || /(جسٹ\s*ڈاٹ|صرف\s*ڈاٹ|ڈاٹ\s*کا\s*جسٹ\s*ڈاٹ|ڈاٹ\s*لکھ|صرف\s*ایک\s*ڈاٹ|ڈاٹ)/.test(t);
 
   let body = "";
-  if (contentMarker && contentMarker[1]) {
-    body = contentMarker[1]
-      .replace(/["”]/g, "")
-      .replace(/[,\s]+(?:theek hai|theek he|theek hay|ok|please|پلیز|ٹھیک ہے)[?!\s]*$/i, "")
-      .trim();
+  if (isDotMessage) {
+    body = ".";
+  }
+
+  // 7. Look for message content indicators (e.g. bolo ke / kaho ke / کہ / ke / quotes / colon)
+  if (!body) {
+    const directShortMatch = t.match(
+      /(?:likh\s*kar|likh\s*ke|type\s*karke|ye\s*bhejo|message\s*bhejo)\s*[:"']?([a-zA-Z0-9\s!.,?-]{1,50})[:"']?\s*(?:send|bhej)/i,
+    );
+    if (directShortMatch && directShortMatch[1]) {
+      const candidate = directShortMatch[1].trim();
+      if (!/(?:number|client|customer|user|priority|prority)/i.test(candidate)) {
+        body = candidate;
+      }
+    }
+  }
+
+  if (!body) {
+    const contentMarker = t.match(
+      /(?:bolo\s+ke|kaho\s+ke|keh\s*do\s+ke|بولو\s*کہ|کہو\s*کہ|کہہ\s*دو\s*کہ|[:"“]|(?:^|[\s,])ke\s+|(?:^|[\s,])کہ\s+)(.+)$/i,
+    );
+
+    if (contentMarker && contentMarker[1]) {
+      body = contentMarker[1]
+        .replace(/["”]/g, "")
+        .replace(/[,\s]+(?:theek hai|theek he|theek hay|ok|please|پلیز|ٹھیک ہے)[?!\s]*$/i, "")
+        .trim();
+    }
   }
 
   // If the extracted body is still just a meta-instruction telling to send a message
@@ -269,7 +372,7 @@ export async function parseWhatsAppInstructionWithThinking(
     }
   }
 
-  if (!body || body.length < 4) {
+  if (!body || body.trim().length === 0) {
     return {
       action: "ASK_CLARIFICATION",
       recipient,
@@ -283,16 +386,16 @@ export async function parseWhatsAppInstructionWithThinking(
     };
   }
 
-  // Remove phone digits from the body if present
-  if (phoneMatch) {
-    body = body
-      .replace(phoneMatch[0], "")
-      .replace(/^[:\-\s]+/, "")
-      .trim();
+  // Remove phone digits from the body if present (except single dot messages)
+  if (body !== ".") {
+    for (const digit of digitClusters) {
+      body = body.replace(digit, "").trim();
+    }
+    body = body.replace(/^[:\-\s]+/, "").trim();
   }
 
-  // Polish the customer-facing message
-  if (!/^(assalam|salam|hello|hi|dear|respected|السلام)/i.test(body)) {
+  // Polish the customer-facing message (only if not an explicit dot or short symbol)
+  if (body !== "." && !/^(assalam|salam|hello|hi|dear|respected|السلام)/i.test(body)) {
     body = `Assalam-o-Alaikum! ${body}`;
   }
 
