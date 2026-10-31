@@ -74,6 +74,7 @@ import {
   addDecisionPoint,
   clearSessionLedger,
   formatLedgerAsBulletSummary,
+  pruneDecisionsAfterTimestamp,
   type SessionLedgerData,
 } from "~/lib/speech/multiTurnSessionLedger";
 import { useGroqSettings, GROQ_MODEL_OPTIONS, fetchGroqLiveModels } from "~/lib/groqVoiceSettings";
@@ -602,6 +603,8 @@ export function SuperCallAssistantView() {
     handleDeleteSession,
     handleClearHistory,
     handleAddMessage,
+    handleRevertToMessage,
+    handleRevertLastTurn,
   } = useCallSessions();
   const { memories: chatMemories } = useChatMemories(activeSessionId);
 
@@ -1370,6 +1373,69 @@ export function SuperCallAssistantView() {
       void handleSuperAgentDispatch(inputText);
     }
   }, [handleSuperAgentDispatch, inputText]);
+
+  // Revert / Rewind conversation to a specific message
+  const handleRevertMessage = useCallback(
+    (msg: CallAssistantMessage) => {
+      if (isProcessing) return;
+      const res = handleRevertToMessage(msg.id, "before");
+      if (res) {
+        if (msg.role === "user" && msg.text) {
+          setInputText(msg.text);
+          setTimeout(() => {
+            if (inputRef.current) {
+              adjustTextareaHeight(inputRef.current);
+              inputRef.current.focus();
+            }
+          }, 50);
+        }
+        pruneDecisionsAfterTimestamp(activeSessionId || "default", msg.timestamp - 1);
+      }
+    },
+    [activeSessionId, handleRevertToMessage, isProcessing, adjustTextareaHeight],
+  );
+
+  // Retry / Regenerate an assistant response
+  const handleRetryAssistantMessage = useCallback(
+    (msg: CallAssistantMessage) => {
+      if (isProcessing || !activeSession) return;
+      const mIdx = activeSession.messages.findIndex((m) => m.id === msg.id);
+      if (mIdx === -1) return;
+
+      const priorUserMsg = [...activeSession.messages.slice(0, mIdx)]
+        .reverse()
+        .find((m) => m.role === "user");
+
+      if (!priorUserMsg) return;
+
+      handleRevertToMessage(priorUserMsg.id, "keep");
+      pruneDecisionsAfterTimestamp(activeSessionId || "default", priorUserMsg.timestamp);
+
+      void handleSuperAgentDispatch(priorUserMsg.text);
+    },
+    [activeSession, activeSessionId, handleRevertToMessage, handleSuperAgentDispatch, isProcessing],
+  );
+
+  // Bottom toolbar Revert Last Message / Undo Turn
+  const handleRevertLastAction = useCallback(() => {
+    if (isProcessing || !activeSession?.messages?.length) return;
+    const res = handleRevertLastTurn();
+    if (res?.revertedUserMessage) {
+      if (res.revertedUserMessage.text) {
+        setInputText(res.revertedUserMessage.text);
+        setTimeout(() => {
+          if (inputRef.current) {
+            adjustTextareaHeight(inputRef.current);
+            inputRef.current.focus();
+          }
+        }, 50);
+      }
+      pruneDecisionsAfterTimestamp(
+        activeSessionId || "default",
+        res.revertedUserMessage.timestamp - 1,
+      );
+    }
+  }, [activeSession, activeSessionId, handleRevertLastTurn, isProcessing, adjustTextareaHeight]);
 
   // Barge-in / Stop Speaking Helper
   const handleStopSpeaking = useCallback(() => {
@@ -2479,8 +2545,8 @@ export function SuperCallAssistantView() {
                       </div>
                     )}
 
-                    {/* User Metadata & Copy */}
-                    <div className="flex items-center justify-end gap-2.5 mt-1.5 text-[11px] text-zinc-500 font-mono">
+                    {/* User Metadata, Copy & Revert */}
+                    <div className="flex items-center justify-end gap-2 mt-1.5 text-[11px] text-zinc-500 font-mono">
                       <span>
                         {new Date(msg.timestamp).toLocaleTimeString([], {
                           hour: "2-digit",
@@ -2498,6 +2564,15 @@ export function SuperCallAssistantView() {
                         ) : (
                           <Copy className="size-3" />
                         )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleRevertMessage(msg)}
+                        disabled={isProcessing}
+                        className="opacity-50 hover:opacity-100 transition-opacity p-0.5 rounded hover:text-amber-400 cursor-pointer disabled:opacity-20"
+                        title="Revert from this message (Rewinds conversation & puts text back in input)"
+                      >
+                        <RotateCcw className="size-3" />
                       </button>
                     </div>
                   </div>
@@ -2831,13 +2906,35 @@ export function SuperCallAssistantView() {
                   )}
 
                   {/* Assistant Actions Toolbar & Timestamp */}
-                  <div className="flex items-center gap-2.5 mt-2 text-[11px] text-zinc-500 font-sans">
+                  <div className="flex items-center gap-2 mt-2 text-[11px] text-zinc-500 font-sans">
                     <span className="font-mono">
                       {new Date(msg.timestamp).toLocaleTimeString([], {
                         hour: "2-digit",
                         minute: "2-digit",
                       })}
                     </span>
+
+                    {/* Retry / Regenerate Response */}
+                    <button
+                      type="button"
+                      onClick={() => handleRetryAssistantMessage(msg)}
+                      disabled={isProcessing}
+                      className="opacity-60 hover:opacity-100 transition-opacity p-0.5 rounded text-zinc-400 hover:text-cyan-400 cursor-pointer disabled:opacity-20"
+                      title="Retry / Regenerate this response (ری ٹرائی کریں)"
+                    >
+                      <RefreshCw className="size-3" />
+                    </button>
+
+                    {/* Revert / Rewind to before this message */}
+                    <button
+                      type="button"
+                      onClick={() => handleRevertMessage(msg)}
+                      disabled={isProcessing}
+                      className="opacity-60 hover:opacity-100 transition-opacity p-0.5 rounded text-zinc-400 hover:text-rose-400 cursor-pointer disabled:opacity-20"
+                      title="Revert to before this response (ریورٹ کریں)"
+                    >
+                      <RotateCcw className="size-3" />
+                    </button>
 
                     <button
                       type="button"
@@ -2980,7 +3077,7 @@ export function SuperCallAssistantView() {
               />
             </div>
 
-            {/* Gray Action Buttons: Paperclip Attachment, Sparkles/ArrowLeft (on focus/tap), Stop, and Send */}
+            {/* Gray Action Buttons: Paperclip Attachment, Revert Last Turn, Sparkles/ArrowLeft (on focus/tap), Stop, and Send */}
             <div className="flex items-center gap-1 shrink-0 pb-0.5">
               {/* Universal Attachment Button (Paperclip) */}
               <button
@@ -2993,6 +3090,17 @@ export function SuperCallAssistantView() {
                 title="Attach File, Code or Screenshot (فائل یا اسکرین شاٹ لگائیں)"
               >
                 <Paperclip className="size-3.5 text-zinc-400" />
+              </button>
+
+              {/* Revert Last Message Button (Bare icon, no background, no outline, no border) */}
+              <button
+                type="button"
+                onClick={handleRevertLastAction}
+                disabled={!activeSession?.messages?.length || isProcessing}
+                className="p-1 rounded text-zinc-400 hover:text-amber-400 disabled:opacity-20 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                title="Revert last message / Undo turn (پچھلا میسج ریورٹ کریں)"
+              >
+                <RotateCcw className="size-3.5" />
               </button>
 
               {/* Sparkles / Undo Transliteration (Only visible when focused, tapped or user is editing text) */}

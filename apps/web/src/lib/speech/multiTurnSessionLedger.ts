@@ -157,6 +157,22 @@ export function clearSessionLedger(sessionId: string): void {
 }
 
 /**
+ * Prunes decisions that occurred after a given timestamp (used on Revert / Undo).
+ */
+export function pruneDecisionsAfterTimestamp(sessionId: string, cutoffTimestamp: number): void {
+  const targetId = sessionId || "default";
+  const ledger = loadSessionLedger(targetId);
+  const filtered = (ledger.decisions || []).filter((d) => d.timestamp <= cutoffTimestamp);
+  const updatedLedger: SessionLedgerData = {
+    ...ledger,
+    decisions: filtered,
+    lastSummary: formatLedgerAsBulletSummary({ ...ledger, decisions: filtered }),
+    updatedAt: Date.now(),
+  };
+  saveSessionLedger(targetId, updatedLedger);
+}
+
+/**
  * Format the decisions in the standard bullet-point style:
  * Point 1: LiveKit VPS setup barkarar rakhna hai.
  * Point 2: Edge-TTS Asad Neural voice use hogi.

@@ -203,6 +203,71 @@ export function addMessageToSession(
   saveCallSessions(updated);
 }
 
+export function revertSessionToMessage(
+  sessionId: string,
+  messageId: string,
+  mode: "before" | "keep" = "before",
+): { revertedMessage?: CallAssistantMessage; remainingMessages: CallAssistantMessage[] } {
+  const current = loadCallSessions();
+  const idx = current.findIndex((s) => s.id === sessionId);
+  if (idx === -1) return { remainingMessages: [] };
+
+  const session = current[idx]!;
+  const mIdx = session.messages.findIndex((m) => m.id === messageId);
+  if (mIdx === -1) return { remainingMessages: session.messages };
+
+  const targetMsg = session.messages[mIdx];
+  const cutoff = mode === "before" ? mIdx : mIdx + 1;
+  const remaining = session.messages.slice(0, cutoff);
+
+  const updatedSession: CallAssistantSession = {
+    ...session,
+    updatedAt: Date.now(),
+    messages: remaining,
+  };
+
+  const updated = [...current];
+  updated[idx] = updatedSession;
+  saveCallSessions(updated);
+
+  return { revertedMessage: targetMsg, remainingMessages: remaining };
+}
+
+export function revertLastTurn(sessionId: string): {
+  revertedUserMessage?: CallAssistantMessage;
+  remainingMessages: CallAssistantMessage[];
+} {
+  const current = loadCallSessions();
+  const idx = current.findIndex((s) => s.id === sessionId);
+  if (idx === -1) return { remainingMessages: [] };
+
+  const session = current[idx]!;
+  let lastUserIdx = -1;
+  for (let i = session.messages.length - 1; i >= 0; i--) {
+    if (session.messages[i]?.role === "user") {
+      lastUserIdx = i;
+      break;
+    }
+  }
+
+  if (lastUserIdx === -1) return { remainingMessages: session.messages };
+
+  const targetMsg = session.messages[lastUserIdx];
+  const remaining = session.messages.slice(0, lastUserIdx);
+
+  const updatedSession: CallAssistantSession = {
+    ...session,
+    updatedAt: Date.now(),
+    messages: remaining,
+  };
+
+  const updated = [...current];
+  updated[idx] = updatedSession;
+  saveCallSessions(updated);
+
+  return { revertedUserMessage: targetMsg, remainingMessages: remaining };
+}
+
 export function useCallSessions() {
   const [sessions, setSessions] = useState<CallAssistantSession[]>(() => {
     const initial = loadCallSessions();
@@ -291,6 +356,19 @@ export function useCallSessions() {
     [activeSession, setActiveSessionId],
   );
 
+  const handleRevertToMessage = useCallback(
+    (messageId: string, mode: "before" | "keep" = "before") => {
+      if (!activeSession) return null;
+      return revertSessionToMessage(activeSession.id, messageId, mode);
+    },
+    [activeSession],
+  );
+
+  const handleRevertLastTurn = useCallback(() => {
+    if (!activeSession) return null;
+    return revertLastTurn(activeSession.id);
+  }, [activeSession]);
+
   return {
     sessions,
     activeSession,
@@ -301,5 +379,7 @@ export function useCallSessions() {
     handleUpdateSessionTitle,
     handleClearHistory,
     handleAddMessage,
+    handleRevertToMessage,
+    handleRevertLastTurn,
   };
 }
