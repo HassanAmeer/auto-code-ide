@@ -301,8 +301,21 @@ export async function fetchWhatsAppSettings(): Promise<any> {
 
 export async function getWhatsAppChats(sessionId?: string): Promise<any[]> {
   try {
-    const mod = await import("../../../bot/index.ts" as string);
+    const mod = await import("../../../bot/whatsapp/client.ts" as string);
     return await (mod as any).listChats(sessionId);
+  } catch {
+    return [];
+  }
+}
+
+export async function getWhatsAppMessages(opts?: {
+  chatId?: string;
+  limit?: number;
+  sessionId?: string;
+}): Promise<any[]> {
+  try {
+    const mod = await import("../../../bot/whatsapp/client.ts" as string);
+    return await (mod as any).getChatMessages(opts);
   } catch {
     return [];
   }

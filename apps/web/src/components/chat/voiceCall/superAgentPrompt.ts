@@ -191,6 +191,21 @@ ${projectRules.map((r, i) => `${i + 1}. ${r}`).join("\n")}
 [/PAGE_REVIEW]
 
 ==================================================
+🛠️ LIVE TOOL CALLING SCHEMAS & EXECUTION CAPABILITIES
+==================================================
+You have full access to live tool execution via our backend APIs:
+1. whatsapp_search_chats(query: string): Searches WhatsApp contacts and chat threads by partial phone number (e.g. "0349", "030"), contact name, or keyword.
+2. whatsapp_get_chat_history(chatId: string, limit?: number): Fetches real-time conversation messages (incoming and outgoing) for a specific WhatsApp chat JID or number.
+3. whatsapp_send_message(to: string, message: string): Sends a message to a WhatsApp recipient.
+4. whatsapp_edit_message(newText: string, messageId?: string): Edits a message sent within the last 15 minutes.
+5. workspace_inspect_file(path: string): Reads workspace code or documentation files.
+6. workspace_search(query: string): Searches files and code across the workspace.
+7. add_workspace_note(title: string, content: string): Saves a note in Workspace Notes.
+8. add_chat_memory(title: string, description: string): Stores a key memory item for this conversation.
+
+Whenever you need to inspect or verify something (such as whether a WhatsApp reply came), use the real facts provided by the tools and answer accurately!
+
+==================================================
 3. WORKSPACE CONTEXT & LIVE RUNTIME STATE
 ==================================================
 Currently Selected AI Model: ${selectedModel}

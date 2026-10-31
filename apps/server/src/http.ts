@@ -93,6 +93,7 @@ import {
   processWhatsAppWebhook,
   getWhatsAppSessions,
   getWhatsAppChats,
+  getWhatsAppMessages,
   toggleWhatsAppPriorityTarget,
   createWhatsAppSession,
   deleteWhatsAppSession,
@@ -1158,10 +1159,6 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
         "whatsapp_message_deleted",
         "whatsapp_messages_listed",
         "whatsapp_media_extracted",
-        "whatsapp_clarification_needed",
-        "whatsapp_edit_prompt",
-        "whatsapp_delete_prompt",
-        "whatsapp_recipient_needed",
       ].includes(botResult.actionTaken);
 
     if (isSpecialAction && botResult.reply) {
@@ -1322,7 +1319,7 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
               signal: AbortSignal.timeout(10000),
             });
             const sData = (await sRes.json()) as any;
-            sessionId = sData?.data?.id;
+            sessionId = sData?.data?.id || sData?.id;
             if (!sessionId) {
               if (attempt < maxAttempts) {
                 await new Promise((r) => setTimeout(r, 1000));
@@ -1605,7 +1602,7 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
           model.toLowerCase().startsWith("opencode/") ||
           OPENCODE_FREE_MODELS.includes(model.toLowerCase())
             ? chatUrl.includes("openrouter")
-              ? "google/gemini-2.0-flash-exp:free"
+              ? "meta-llama/llama-3.3-70b-instruct:free"
               : model.replace(/^opencode\//i, "")
             : model;
 
@@ -2229,6 +2226,24 @@ export const layerWhatsAppChatsRoute = HttpRouter.add(
       : undefined;
     const chats = yield* Effect.promise(() => getWhatsAppChats(sessionId));
     return HttpServerResponse.jsonUnsafe({ ok: true, chats });
+  }),
+);
+
+export const layerWhatsAppMessagesRoute = HttpRouter.add(
+  "GET",
+  "/api/whatsapp/messages",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const url = HttpServerRequest.toURL(request);
+    const chatId = Option.isSome(url)
+      ? (url.value.searchParams.get("chatId") ?? undefined)
+      : undefined;
+    const limit = Option.isSome(url) ? Number(url.value.searchParams.get("limit") || 10) : 10;
+    const sessionId = Option.isSome(url)
+      ? (url.value.searchParams.get("sessionId") ?? undefined)
+      : undefined;
+    const messages = yield* Effect.promise(() => getWhatsAppMessages({ chatId, limit, sessionId }));
+    return HttpServerResponse.jsonUnsafe({ ok: true, messages });
   }),
 );
 

@@ -1101,6 +1101,109 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
     }
   }
 
+  // 3b-5. Dynamic WhatsApp Chat Inspection & Message History Tool
+  const isWhatsAppCheckReq =
+    /\b(check|dekh|dekho|parh|parho|batao|history|reply|last\s*message|aakhri\s*message|messages?|chat)\b/i.test(
+      userText,
+    ) && /\b(whatsapp|wa|message|mgs|msg|sms|03\d{2,9}|349|\+?92\d{9,10})\b/i.test(userText);
+
+  if (isWhatsAppCheckReq) {
+    const numMatch = userText.match(/(?:03\d{1,9}|349|\+?92\d{9,10})/);
+    const searchDigits = numMatch ? numMatch[0] : "349";
+    actionTag = "whatsapp_check_history";
+    onStatusUpdate?.(`Tool Calling: whatsapp_search_chats ("${searchDigits}")...`);
+    recordTool({
+      name: "whatsapp_search_chats",
+      summary: `Searching WhatsApp chats for "${searchDigits}"`,
+      status: "calling",
+    });
+
+    try {
+      const chatsRes = await fetch(resolveApiUrl("/api/whatsapp/chats"), {
+        signal: combineSignals(12000, signal),
+      });
+      const chatsData = (await chatsRes.json().catch(() => null)) as any;
+      const chatsList: any[] = Array.isArray(chatsData?.chats) ? chatsData.chats : [];
+
+      // Match target chat by digits or name
+      const matched = chatsList.find(
+        (c: any) =>
+          (c.id && c.id.includes(searchDigits)) ||
+          (c.name && c.name.toLowerCase().includes(searchDigits.toLowerCase())),
+      );
+
+      const targetJid = matched?.id || (searchDigits.length > 5 ? `${searchDigits}@c.us` : null);
+      const targetDisplayName =
+        matched?.name || (matched?.id ? `+${matched.id.split("@")[0]}` : searchDigits);
+
+      recordTool({
+        name: "whatsapp_search_chats",
+        summary: matched
+          ? `Found WhatsApp chat for "${searchDigits}": ${targetDisplayName}`
+          : `Searched WhatsApp chats for "${searchDigits}" (${chatsList.length} chats scanned)`,
+        status: "completed",
+        output: matched
+          ? `Matched Chat JID: ${matched.id}\nName: ${matched.name || "Direct Contact"}\nUnread: ${matched.unreadCount || 0}`
+          : `No exact chat found for "${searchDigits}". Scanned ${chatsList.length} chats.`,
+      });
+
+      if (targetJid) {
+        onStatusUpdate?.(`Tool Calling: whatsapp_get_chat_history (${targetDisplayName})...`);
+        recordTool({
+          name: "whatsapp_get_chat_history",
+          summary: `Fetching recent messages for ${targetDisplayName}`,
+          status: "calling",
+        });
+
+        const msgsRes = await fetch(
+          resolveApiUrl(`/api/whatsapp/messages?chatId=${encodeURIComponent(targetJid)}&limit=10`),
+          { signal: combineSignals(12000, signal) },
+        );
+        const msgsData = (await msgsRes.json().catch(() => null)) as any;
+        const msgsList: any[] = Array.isArray(msgsData?.messages) ? msgsData.messages : [];
+
+        recordTool({
+          name: "whatsapp_get_chat_history",
+          summary: `Retrieved ${msgsList.length} recent messages for ${targetDisplayName}`,
+          status: "completed",
+          output:
+            msgsList.length > 0
+              ? msgsList
+                  .map(
+                    (m) =>
+                      `[${m.direction === "outgoing" ? "You -> Them" : "Them -> You"}] "${m.body || m.type}" (${new Date(m.timestamp * 1000).toLocaleTimeString()})`,
+                  )
+                  .join("\n")
+              : "No recent messages found in this chat thread.",
+        });
+
+        runtimeFacts += `\n[REAL-TIME WHATSAPP CHAT HISTORY FOUND VIA API]:
+• Contact: ${targetDisplayName} (${targetJid})
+• Total Recent Messages: ${msgsList.length}
+• Chronological Conversation Log:
+${
+  msgsList.length > 0
+    ? msgsList
+        .slice(-8)
+        .map(
+          (m) =>
+            `  • [${m.direction === "outgoing" ? "SENT BY USER" : "RECEIVED FROM CONTACT"}]: "${m.body || m.type}" (Time: ${new Date(m.timestamp * 1000).toLocaleTimeString()}, Status: ${m.status || "delivered"})`,
+        )
+        .join("\n")
+    : "  (Chat is currently empty or no messages recorded)"
+}
+
+CRITICAL INSTRUCTIONS FOR THIS WHATSAPP INQUIRY:
+1. Explain to the user directly whether a reply was received after their last sent message, and what that last message or reply was.
+2. Clearly mention the full contact name/number (${targetDisplayName}) and the time/details.
+3. Be conversational and helpful in Roman Urdu. End with a friendly [SPOKEN]: line.
+`;
+      }
+    } catch (err: any) {
+      console.warn("WhatsApp check tool error:", err);
+    }
+  }
+
   // 4. Standup / History / Pending Ingestion
   if (/\b(standup|briefing|summary|status\s*report)\b/i.test(userText)) {
     actionTag = "standup_briefing";

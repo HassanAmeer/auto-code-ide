@@ -706,6 +706,7 @@ const layerMakeRoutes = Layer.mergeAll(
     ServerHttp.layerWhatsAppWebhookRoute,
     ServerHttp.layerWhatsAppSessionsRoute,
     ServerHttp.layerWhatsAppChatsRoute,
+    ServerHttp.layerWhatsAppMessagesRoute,
     ServerHttp.layerWhatsAppPriorityTargetRoute,
     ServerHttp.layerWhatsAppSessionCreateRoute,
     ServerHttp.layerWhatsAppSessionDeleteRoute,
