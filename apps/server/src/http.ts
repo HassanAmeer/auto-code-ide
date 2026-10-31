@@ -1362,7 +1362,7 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
             let hitRateLimit = false;
 
             const pollStart = Date.now();
-            while (Date.now() - pollStart < 60000) {
+            while (Date.now() - pollStart < 22000) {
               await new Promise((r) => setTimeout(r, 800));
               const mRes = await fetch(`${activeBase}/session/${sessionId}/message`, {
                 headers: { Authorization: activeAuth },
@@ -1416,8 +1416,38 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
               }
             }
 
+            // Extract tool calls and reasoning from assistant messages
+            const toolsFound: any[] = [];
+            let thoughtFound = "";
+            for (const m of msgs) {
+              if (m.type === "assistant" || m.type === "tool" || m.type === "message") {
+                for (const c of m.content || []) {
+                  if (c.type === "tool" || c.type === "tool_call" || c.type === "call") {
+                    toolsFound.push({
+                      name: c.toolName || c.name || c.function?.name || "tool_call",
+                      summary: c.args
+                        ? JSON.stringify(c.args).slice(0, 120)
+                        : c.summary || c.output?.slice?.(0, 120) || "Executed",
+                      args: c.args || undefined,
+                      output: typeof c.output === "string" ? c.output.slice(0, 500) : undefined,
+                      status: "completed",
+                    });
+                  }
+                  if (c.type === "reasoning" || c.type === "thought") {
+                    if (c.text) thoughtFound += (thoughtFound ? "\n" : "") + c.text;
+                  }
+                }
+              }
+            }
+
             if (gotSuccess && successReply) {
-              return { ok: true, reply: successReply, model: pureModel };
+              return {
+                ok: true,
+                reply: successReply,
+                model: pureModel,
+                toolsCalled: toolsFound,
+                thought: thoughtFound,
+              };
             }
 
             if (hitRateLimit) {
@@ -1425,19 +1455,16 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
                 await new Promise((r) => setTimeout(r, 1200));
                 continue;
               }
-              return {
-                ok: false,
-                error: `Model "${pureModel}" free quota reached. IP automatically rotated; please send your message again.`,
-                code: "RATE_LIMIT",
-              };
+              break;
             }
 
             if (attempt === maxAttempts) {
-              return { ok: false, error: "Model timed out generating response.", code: "TIMEOUT" };
+              break;
             }
           } catch (err: any) {
+            console.warn("[SuperAgent] OpenCode attempt failed:", err);
             if (attempt === maxAttempts) {
-              return { ok: false, error: err?.message || String(err), code: "NETWORK_ERROR" };
+              break;
             }
           } finally {
             if (sessionId) {
@@ -1448,6 +1475,7 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
             }
           }
         }
+        console.warn(`[SuperAgent] Falling back to standard provider / Gemini key rotator...`);
       }
 
       // Custom Provider or OpenRouter fallback
@@ -1643,8 +1671,32 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
           data?.candidates?.[0]?.content?.parts?.[0]?.text ||
           "";
 
+        const thought =
+          data?.choices?.[0]?.message?.reasoning_content ||
+          data?.candidates?.[0]?.content?.parts?.find?.((p: any) => p.thought)?.text ||
+          undefined;
+
+        const toolsCalled = Array.isArray(data?.choices?.[0]?.message?.tool_calls)
+          ? data.choices[0].message.tool_calls.map((tc: any) => ({
+              name: tc.function?.name || tc.name || "tool_call",
+              summary: tc.function?.arguments?.slice?.(0, 100) || "Executed",
+              args: tc.function?.arguments || undefined,
+              status: "completed",
+            }))
+          : undefined;
+
         if (!content && typeof data === "string") {
           return { ok: true, reply: data };
+        }
+
+        if (content) {
+          return {
+            ok: true,
+            reply: content,
+            thought,
+            toolsCalled,
+            model: model || "gemini",
+          };
         }
 
         if (!content) {

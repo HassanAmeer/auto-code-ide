@@ -70,6 +70,13 @@ import {
 } from "~/components/chat/spaces";
 import type { ToolCallRecord } from "./superAgentEngine";
 import {
+  WorkLogBlock,
+  WorkLogButton,
+  WorkLogDetails,
+  WorkLogList,
+  WorkLogRow,
+} from "~/components/chat/WorkLog";
+import {
   loadSessionLedger,
   subscribeSessionLedger,
   addDecisionPoint,
@@ -450,105 +457,137 @@ function LiveWorkingTimer({ startTime }: { startTime: number }) {
   return <span className="tabular-nums font-mono text-[11px] text-zinc-500">{seconds}s</span>;
 }
 
-function ThinkingDisclosure({ thought, durationMs }: { thought: string; durationMs?: number }) {
-  const [expanded, setExpanded] = useState(false);
-
+function ActivityShimmerOverlay({ children }: { children: React.ReactNode }) {
   return (
-    <div className="w-full max-w-xl my-1.5">
-      <button
-        type="button"
-        onClick={() => setExpanded((prev) => !prev)}
-        className="group/thinking flex items-center gap-1.5 py-1 px-2 rounded-md text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40 transition-colors cursor-pointer select-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/50"
-      >
-        <Brain className="size-3.5 text-purple-400 shrink-0" />
-        <span className="font-medium text-zinc-300">
-          Thought {durationMs ? `for ${Math.max(1, Math.round(durationMs / 1000))}s` : ""}
-        </span>
-        <ChevronRight
-          className={cn(
-            "size-3 text-zinc-500 transition-transform duration-200 group-hover/thinking:text-zinc-300",
-            expanded && "rotate-90",
-          )}
-        />
-      </button>
+    <span
+      aria-hidden
+      className="live-activity-focus pointer-events-none absolute inset-y-0 select-none"
+    >
+      <span className="live-activity-focus-counter block">
+        <span className="live-activity-focus-aligned block text-foreground">{children}</span>
+      </span>
+    </span>
+  );
+}
 
-      {expanded && (
-        <div className="ms-5 mt-1 p-3 rounded-lg bg-zinc-950/70 border border-zinc-800/80 text-[11px] text-zinc-300 font-mono whitespace-pre-wrap leading-relaxed select-text max-h-60 overflow-y-auto shadow-inner">
-          {thought}
+function LiveActivityRow({
+  label,
+  icon,
+  active = false,
+  shimmer = false,
+  failed = false,
+  trailing,
+}: {
+  label: React.ReactNode;
+  icon?: React.ReactNode;
+  active?: boolean;
+  shimmer?: boolean;
+  failed?: boolean;
+  trailing?: React.ReactNode;
+}) {
+  const animated = active && !failed;
+  const showShimmer = animated && shimmer;
+  return (
+    <div className="relative min-h-6 w-fit max-w-full min-w-0 overflow-hidden rounded-md text-sm leading-relaxed">
+      <div className="flex min-h-6 min-w-0 items-center gap-1.5 text-sm leading-relaxed select-none">
+        {icon ? (
+          <span className="relative flex size-6 shrink-0 items-center justify-center text-secondary-label">
+            {icon}
+          </span>
+        ) : null}
+        <div className="min-w-0 flex-1 truncate text-secondary-label">
+          <span className={cn("block truncate", active && !failed && "live-tool-shine")}>
+            {label}
+          </span>
         </div>
-      )}
+        {trailing}
+      </div>
+      {showShimmer ? (
+        <ActivityShimmerOverlay>
+          <div className="flex min-h-6 min-w-0 items-center gap-1.5 text-sm leading-relaxed select-none">
+            {icon ? (
+              <span className="relative flex size-6 shrink-0 items-center justify-center text-foreground">
+                {icon}
+              </span>
+            ) : null}
+            <div className="min-w-0 flex-1 truncate text-foreground font-normal">{label}</div>
+            {trailing}
+          </div>
+        </ActivityShimmerOverlay>
+      ) : null}
     </div>
   );
 }
 
-function ToolCallingGroupDisclosure({ tools }: { tools: ToolCallRecord[] }) {
-  const [expanded, setExpanded] = useState(false);
-  if (!tools || tools.length === 0) return null;
-
-  const isSingle = tools.length === 1;
-  const singleTool = tools[0]!;
+function ToolCallItemRow({ tool }: { tool: ToolCallRecord }) {
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const hasDetails = Boolean(tool.args || tool.output || tool.detail);
 
   return (
-    <div className="w-full max-w-xl my-1.5">
-      <button
-        type="button"
-        onClick={() => setExpanded((prev) => !prev)}
-        className="group/tool flex items-center gap-2 py-1 px-2 rounded-md text-xs text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800/40 transition-colors cursor-pointer select-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/50"
-      >
-        {isSingle ? (
-          getToolCallIcon(singleTool.name)
-        ) : (
-          <Terminal className="size-3.5 text-purple-400 shrink-0" />
-        )}
-
-        <span className="font-mono text-zinc-200 font-medium">
-          {isSingle ? singleTool.name : `Used ${tools.length} tools`}
-        </span>
-
-        {isSingle && singleTool.summary && (
-          <span className="text-[11px] text-zinc-400 truncate max-w-[260px] sm:max-w-xs font-sans">
-            — {singleTool.summary}
+    <div className="w-full min-w-0">
+      <WorkLogRow
+        icon={
+          <span className="flex size-4 items-center justify-center">
+            {getToolCallIcon(tool.name)}
           </span>
-        )}
-
-        <span className="ms-auto flex items-center gap-1.5 shrink-0">
-          <span className="text-[10px] text-emerald-400 font-sans flex items-center gap-1">
-            <CheckCircle2 className="size-3 text-emerald-400" />
-            <span className="hidden sm:inline">Executed</span>
-          </span>
-          <ChevronRight
-            className={cn(
-              "size-3 text-zinc-500 transition-transform duration-200 group-hover/tool:text-zinc-300",
-              expanded && "rotate-90",
+        }
+        label={
+          <div className="flex items-baseline min-w-0 gap-2">
+            <span className="font-mono text-xs font-medium text-foreground shrink-0">
+              {tool.name}
+            </span>
+            {tool.summary && (
+              <span className="text-xs text-secondary-label truncate font-sans">
+                {tool.summary}
+              </span>
             )}
-          />
-        </span>
-      </button>
-
-      {expanded && (
-        <div className="ms-5 mt-1.5 space-y-2.5 p-3 rounded-lg bg-zinc-950/70 border border-zinc-800/80 max-h-72 overflow-y-auto shadow-inner">
-          {tools.map((tool, idx) => (
-            <div
-              key={idx}
-              className="space-y-1 pb-2 border-b border-zinc-800/60 last:border-0 last:pb-0"
-            >
-              <div className="flex items-center gap-2 text-xs">
-                {getToolCallIcon(tool.name)}
-                <span className="font-mono font-semibold text-purple-300">{tool.name}</span>
-                <span className="ms-auto text-[10px] text-emerald-400 flex items-center gap-1 font-sans">
-                  <CheckCircle2 className="size-2.5 text-emerald-400" />
-                  <span>Completed</span>
-                </span>
-              </div>
-              {tool.summary && (
-                <p className="text-[11px] text-zinc-400 leading-relaxed font-sans ps-5">
-                  {tool.summary}
-                </p>
-              )}
+          </div>
+        }
+        trailing={
+          <div className="flex items-center gap-1.5 shrink-0 select-none">
+            {tool.status === "calling" ? (
+              <Loader2 className="size-3 text-cyan-400 animate-spin" />
+            ) : tool.status === "error" ? (
+              <X className="size-3 text-rose-400" />
+            ) : (
+              <Check className="size-3 text-icon-muted" />
+            )}
+            {hasDetails ? (
+              <ChevronRight
+                className={cn(
+                  "size-3 text-secondary-label transition-transform duration-150",
+                  detailsOpen && "rotate-90",
+                )}
+              />
+            ) : null}
+          </div>
+        }
+        onClick={hasDetails ? () => setDetailsOpen((v) => !v) : undefined}
+      />
+      {detailsOpen && hasDetails ? (
+        <WorkLogDetails kind="text">
+          {tool.args ? (
+            <div className="space-y-1">
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                Arguments
+              </span>
+              <pre className="font-mono text-[11px] text-zinc-300 bg-zinc-950/40 p-2 rounded border border-border/40 whitespace-pre-wrap">
+                {typeof tool.args === "string" ? tool.args : JSON.stringify(tool.args, null, 2)}
+              </pre>
             </div>
-          ))}
-        </div>
-      )}
+          ) : null}
+          {tool.output || tool.detail ? (
+            <div className="space-y-1">
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                Output
+              </span>
+              <pre className="font-mono text-[11px] text-zinc-300 bg-zinc-950/40 p-2 rounded border border-border/40 whitespace-pre-wrap max-h-48 overflow-y-auto">
+                {tool.output || tool.detail}
+              </pre>
+            </div>
+          ) : null}
+        </WorkLogDetails>
+      ) : null}
     </div>
   );
 }
@@ -564,56 +603,134 @@ function LiveProcessingActivityView({
   dispatchStartTime: number;
   liveTools?: ToolCallRecord[];
 }) {
-  const isTool = agentStatus?.startsWith("Tool Calling:");
-  const statusToolName = isTool ? agentStatus?.replace(/^Tool Calling:\s*/, "") : null;
+  const [expanded, setExpanded] = useState(true);
+  const activeTool = liveTools.find((t) => t.status === "calling");
+
+  const headerLabel = activeTool
+    ? `Calling ${activeTool.name}...`
+    : agentStatus?.startsWith("Tool Calling:")
+      ? agentStatus.replace(/^Tool Calling:\s*/, "")
+      : `Thinking with ${selectedModel}`;
 
   return (
-    <div className="flex flex-col gap-1.5 py-1 text-sm select-none my-1.5 animate-in fade-in duration-150">
-      {/* 1. Thinking Row (Exact project chat design: no badge, no outline, no background border) */}
-      <div className="flex items-center gap-2 text-sm leading-relaxed text-zinc-300 select-none">
-        <Brain className="size-4 text-purple-400 shrink-0 animate-pulse" />
-        <span className="live-tool-shine font-normal text-zinc-200">Thinking</span>
-        <span className="text-xs text-zinc-500 font-mono">with {selectedModel}</span>
-        <LiveWorkingTimer startTime={dispatchStartTime} />
-      </div>
-
-      {/* 2. Live Tools Executed / In-Progress (List of schemas and functions called) */}
-      {liveTools.length > 0 ? (
-        liveTools.map((tool, idx) => (
-          <div
-            key={idx}
-            className="flex items-center gap-2 text-xs leading-relaxed text-zinc-400 ps-1 animate-in fade-in duration-100"
-          >
-            <span className="flex size-3.5 shrink-0 items-center justify-center">
-              {getToolCallIcon(tool.name)}
-            </span>
-            <span className="font-mono font-medium text-zinc-200">{tool.name}</span>
-            {tool.summary && (
-              <span className="text-[11px] text-zinc-400 truncate max-w-xs sm:max-w-md font-sans">
-                — {tool.summary}
-              </span>
-            )}
-            <span className="ms-auto flex items-center gap-1 shrink-0">
-              {tool.status === "calling" ? (
-                <Loader2 className="size-3 text-cyan-400 animate-spin" />
-              ) : (
-                <CheckCircle2 className="size-3 text-emerald-400" />
+    <WorkLogBlock layout={expanded ? "group-header" : "standalone"}>
+      <WorkLogButton
+        aria-expanded={expanded}
+        onClick={() => setExpanded((v) => !v)}
+        icon={<Brain className="size-4 shrink-0 text-purple-400/90" />}
+        label={<LiveActivityRow label={headerLabel} active shimmer />}
+        trailing={
+          <div className="flex items-center gap-2 select-none">
+            <LiveWorkingTimer startTime={dispatchStartTime} />
+            <ChevronDown
+              className={cn(
+                "size-3.5 text-secondary-label transition-transform duration-200",
+                !expanded && "-rotate-90",
               )}
-            </span>
+            />
           </div>
-        ))
-      ) : statusToolName ? (
-        <div className="flex items-center gap-2 text-xs leading-relaxed text-zinc-400 ps-1 animate-in fade-in duration-100">
-          <span className="flex size-3.5 shrink-0 items-center justify-center">
-            {getToolCallIcon(statusToolName)}
-          </span>
-          <span className="font-mono font-medium text-purple-300">{statusToolName}</span>
-          <span className="ms-auto flex items-center gap-1 shrink-0">
-            <Loader2 className="size-3 text-cyan-400 animate-spin" />
-          </span>
-        </div>
+        }
+      />
+      {expanded ? (
+        <WorkLogList>
+          {liveTools.length > 0 ? (
+            liveTools.map((tool, idx) => <ToolCallItemRow key={idx} tool={tool} />)
+          ) : (
+            <WorkLogRow
+              icon={
+                <span className="flex size-4 items-center justify-center">
+                  <Terminal className="size-3.5 text-secondary-label animate-pulse" />
+                </span>
+              }
+              label={
+                <span className="text-xs text-secondary-label italic">
+                  Analyzing prompt and workspace context...
+                </span>
+              }
+            />
+          )}
+        </WorkLogList>
       ) : null}
-    </div>
+    </WorkLogBlock>
+  );
+}
+
+function MessageWorkLogSection({
+  thought,
+  tools = [],
+  durationMs,
+}: {
+  thought?: string;
+  tools?: ToolCallRecord[];
+  durationMs?: number;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const hasTools = tools && tools.length > 0;
+  const hasThought = Boolean(thought && thought.trim());
+
+  if (!hasTools && !hasThought) return null;
+
+  const seconds = durationMs ? Math.max(1, Math.round(durationMs / 1000)) : undefined;
+  const label = hasTools
+    ? hasTools && hasThought
+      ? `Used ${tools.length} ${tools.length === 1 ? "tool" : "tools"} • Thought${seconds ? ` for ${seconds}s` : ""}`
+      : `Used ${tools.length} ${tools.length === 1 ? "tool" : "tools"}`
+    : `Thought${seconds ? ` for ${seconds}s` : ""}`;
+
+  return (
+    <WorkLogBlock layout={expanded ? "group-header" : "standalone"}>
+      <WorkLogButton
+        aria-expanded={expanded}
+        onClick={() => setExpanded((v) => !v)}
+        icon={
+          hasTools ? (
+            <Terminal className="size-4 shrink-0 text-secondary-label" />
+          ) : (
+            <Brain className="size-4 shrink-0 text-secondary-label" />
+          )
+        }
+        label={<span className="text-secondary-label text-xs font-normal">{label}</span>}
+        trailing={
+          <div className="flex items-center gap-1.5 select-none">
+            {seconds && !hasTools ? (
+              <span className="text-xs text-secondary-label font-mono">{seconds}s</span>
+            ) : null}
+            <ChevronDown
+              className={cn(
+                "size-3.5 text-secondary-label transition-transform duration-200",
+                !expanded && "-rotate-90",
+              )}
+            />
+          </div>
+        }
+      />
+      {expanded ? (
+        <WorkLogList>
+          {tools.map((tool, idx) => (
+            <ToolCallItemRow key={idx} tool={tool} />
+          ))}
+          {hasThought ? (
+            <div className="w-full min-w-0">
+              <WorkLogRow
+                icon={
+                  <span className="flex size-4 items-center justify-center">
+                    <Brain className="size-3.5 text-secondary-label" />
+                  </span>
+                }
+                label={
+                  <span className="text-xs text-secondary-label font-medium">Thought process</span>
+                }
+              />
+              <WorkLogDetails kind="text">
+                <div className="text-xs text-secondary-label font-mono whitespace-pre-wrap leading-relaxed select-text p-1">
+                  {thought}
+                </div>
+              </WorkLogDetails>
+            </div>
+          ) : null}
+        </WorkLogList>
+      ) : null}
+    </WorkLogBlock>
   );
 }
 
@@ -937,7 +1054,7 @@ export function SuperCallAssistantView() {
   }, [inputText, adjustTextareaHeight]);
 
   const handleSuperAgentDispatch = useCallback(
-    async (rawUserText: string) => {
+    async (rawUserText: string, options?: { isRetry?: boolean }) => {
       const userText = rawUserText.trim();
       if (!userText || isProcessing) return;
 
@@ -953,18 +1070,20 @@ export function SuperCallAssistantView() {
         ? `${userText}\n[Attached ${currentFile.isImage ? "Image/Screenshot" : "File"}: ${currentFile.name}${currentFile.size ? ` (${currentFile.size})` : ""}]`
         : userText;
 
-      handleAddMessage(
-        "user",
-        userText,
-        currentFile
-          ? ({
-              file: currentFile.dataUrl,
-              fileName: currentFile.name,
-              fileSize: currentFile.size,
-              isImage: currentFile.isImage,
-            } as any)
-          : undefined,
-      );
+      if (!options?.isRetry) {
+        handleAddMessage(
+          "user",
+          userText,
+          currentFile
+            ? ({
+                file: currentFile.dataUrl,
+                fileName: currentFile.name,
+                fileSize: currentFile.size,
+                isImage: currentFile.isImage,
+              } as any)
+            : undefined,
+        );
+      }
       if (activeAbortControllerRef.current) {
         activeAbortControllerRef.current.abort();
         activeAbortControllerRef.current = null;
@@ -1456,7 +1575,7 @@ export function SuperCallAssistantView() {
       handleRevertToMessage(priorUserMsg.id, "keep");
       pruneDecisionsAfterTimestamp(activeSessionId || "default", priorUserMsg.timestamp);
 
-      void handleSuperAgentDispatch(priorUserMsg.text);
+      void handleSuperAgentDispatch(priorUserMsg.text, { isRetry: true });
     },
     [activeSession, activeSessionId, handleRevertToMessage, handleSuperAgentDispatch, isProcessing],
   );
@@ -2629,18 +2748,12 @@ export function SuperCallAssistantView() {
             return (
               <div key={msg.id} className="flex flex-col items-start w-full py-2.5 group">
                 <div className="text-left w-full max-w-[95%]">
-                  {/* Thinking Disclosure (Collapsible, exact project chat design) */}
-                  {msg.meta?.thought && (
-                    <ThinkingDisclosure
-                      thought={msg.meta.thought}
-                      durationMs={msg.meta.durationMs}
-                    />
-                  )}
-
-                  {/* Tool Calling Badges / Group Disclosure (Collapsible, exact project chat design) */}
-                  {msg.meta?.toolsCalled && msg.meta.toolsCalled.length > 0 && (
-                    <ToolCallingGroupDisclosure tools={msg.meta.toolsCalled} />
-                  )}
+                  {/* WorkLog Section (Thinking + Tools called, exact Project Chat design) */}
+                  <MessageWorkLogSection
+                    thought={msg.meta?.thought}
+                    tools={msg.meta?.toolsCalled}
+                    durationMs={msg.meta?.durationMs}
+                  />
 
                   <div className="text-sm sm:text-base font-normal text-zinc-200 leading-relaxed select-text my-1">
                     <ChatMarkdown

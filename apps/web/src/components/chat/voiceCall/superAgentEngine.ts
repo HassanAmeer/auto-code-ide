@@ -77,7 +77,11 @@ export interface DelegatedTaskInfo {
 export interface ToolCallRecord {
   name: string;
   summary?: string;
+  detail?: string;
+  args?: Record<string, any> | string | undefined;
+  output?: string | undefined;
   status: "calling" | "completed" | "error";
+  durationMs?: number;
 }
 
 export interface SuperAgentResult {
@@ -154,7 +158,14 @@ export async function querySuperAgentLLM(
     history?: Array<{ role: "user" | "assistant"; text: string }>;
     signal?: AbortSignal;
   },
-): Promise<{ ok: boolean; reply?: string; error?: string; code?: string }> {
+): Promise<{
+  ok: boolean;
+  reply?: string;
+  error?: string;
+  code?: string;
+  thought?: string;
+  toolsCalled?: ToolCallRecord[];
+}> {
   const { model, instanceId, providerConfig, systemPrompt, history = [], signal } = options;
 
   if (signal?.aborted) {
@@ -202,7 +213,12 @@ export async function querySuperAgentLLM(
 
     if (data) {
       if (data.ok && data.reply && data.reply.trim()) {
-        return { ok: true, reply: data.reply.trim() };
+        return {
+          ok: true,
+          reply: data.reply.trim(),
+          thought: data.thought || undefined,
+          toolsCalled: Array.isArray(data.toolsCalled) ? data.toolsCalled : undefined,
+        };
       }
       if (data.error) {
         return {
@@ -521,6 +537,13 @@ export async function executeSuperAgentInstruction(
     }
     options.onToolCall?.(record);
   };
+
+  recordTool({
+    name: "inspect_workspace",
+    summary: `Inspected workspace (${targetName}) & prompt`,
+    detail: `Project: ${targetName} (${projectCwd}) | Model: ${selectedModel}`,
+    status: "completed",
+  });
 
   // 2. Intelligent Latency-Masking Conversational Spoken Fillers (Live phone call experience)
   const isGitFeaturesReq =
@@ -1133,12 +1156,17 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
     let fullReply = llmRes.reply.trim();
     let spokenReply = "";
 
-    let thoughtText = "";
+    let thoughtText = llmRes.thought || "";
+    if (llmRes.toolsCalled && llmRes.toolsCalled.length > 0) {
+      for (const tc of llmRes.toolsCalled) {
+        recordTool(tc);
+      }
+    }
     const thinkMatch = fullReply.match(
       /<(?:think|thought|reasoning)>([\s\S]*?)<\/(?:think|thought|reasoning)>/i,
     );
     if (thinkMatch && thinkMatch[1]) {
-      thoughtText = thinkMatch[1].trim();
+      thoughtText = (thoughtText ? thoughtText + "\n\n" : "") + thinkMatch[1].trim();
       fullReply = fullReply
         .replace(/<(?:think|thought|reasoning)>[\s\S]*?<\/(?:think|thought|reasoning)>/gi, "")
         .trim();
