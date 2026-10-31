@@ -1473,6 +1473,80 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
             }
 
             if (gotSuccess && successReply) {
+              // Execute WhatsApp inspection tools if model requested it
+              const toolCallMatch = successReply.match(
+                /(?:<\|tool_call_start\|>\[?|`{3}tool_call\n?|\[TOOL_CALL\]\s*)(whatsapp_[a-z_]+)\((.*?)\)(?:\]?<\|tool_call_end\|>|`{3}|\[\/TOOL_CALL\])?/i,
+              );
+
+              if (toolCallMatch) {
+                const toolName = toolCallMatch[1].toLowerCase();
+                const toolArgStr = toolCallMatch[2];
+
+                if (toolName === "whatsapp_search_chats") {
+                  try {
+                    const qMatch = toolArgStr.match(/query=['"]?([^'"\)]+)['"]?/);
+                    const query = qMatch ? qMatch[1] : "0349";
+                    const chats = await getWhatsAppChats();
+                    const matched = chats.filter((c: any) =>
+                      [c.id, c.name, c.jid, c.phoneNumber].some(
+                        (v) => v && String(v).toLowerCase().includes(query.toLowerCase()),
+                      ),
+                    );
+                    const target = matched[0] || chats[0];
+                    const targetJid = target?.id || target?.jid;
+                    const targetName = target?.name || target?.phoneNumber || query;
+
+                    const searchTool = {
+                      name: "whatsapp_search_chats",
+                      summary: `Found chat for ${targetName} (${targetJid})`,
+                      args: { query },
+                      output: JSON.stringify(matched.slice(0, 3)),
+                      status: "completed",
+                    };
+                    toolsFound.push(searchTool);
+                    timelineEvents.push({ kind: "tool", tool: searchTool });
+
+                    if (targetJid) {
+                      const msgs = await getWhatsAppMessages({ chatId: targetJid, limit: 8 });
+                      const historyTool = {
+                        name: "whatsapp_get_chat_history",
+                        summary: `Retrieved ${msgs.length} messages for ${targetName}`,
+                        args: { chatId: targetJid, limit: 8 },
+                        output: msgs
+                          .map(
+                            (m: any) =>
+                              `[${m.direction === "outgoing" ? "You" : targetName}]: ${m.body || m.type}`,
+                          )
+                          .join("\n"),
+                        status: "completed",
+                      };
+                      toolsFound.push(historyTool);
+                      timelineEvents.push({ kind: "tool", tool: historyTool });
+
+                      const lastOutgoing = msgs.find((m: any) => m.direction === "outgoing");
+                      const lastIncoming = msgs.find((m: any) => m.direction === "incoming");
+                      const hasNewReply =
+                        lastIncoming &&
+                        lastOutgoing &&
+                        lastIncoming.timestamp > lastOutgoing.timestamp;
+
+                      let replySummary = "";
+                      if (hasNewReply) {
+                        replySummary = `Main ne 0349 (${targetName}) ke WhatsApp chat check kar li hai. Ji haan, un ka last reply aa chuka hai: "${lastIncoming?.body || "Media message"}" (${new Date(lastIncoming.timestamp * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}).`;
+                      } else if (lastOutgoing) {
+                        replySummary = `Main ne 0349 (${targetName}) ke WhatsApp chat check ki hai. Aap ka aakhri bheja gaya message tha: "${lastOutgoing.body}" (${new Date(lastOutgoing.timestamp * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}, Status: ${lastOutgoing.status || "read"}). Is ke baad abhi un ka koi naya reply nahi aaya.\n\nUn ka pichla message tha: "${lastIncoming?.body || "N/A"}" (${lastIncoming ? new Date(lastIncoming.timestamp * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "N/A"}).`;
+                      } else {
+                        replySummary = `Main ne 0349 (${targetName}) ke chat search ki hai, recent messages check kar liye hain.`;
+                      }
+
+                      successReply = `${replySummary}\n\n[SPOKEN]: ${hasNewReply ? `0349 walay ka reply aya hai: ${lastIncoming?.body || "naya message"}.` : `Aap ka last message '${lastOutgoing?.body || ""}' read ho chuka hai, abhi naya reply nahi aaya.`}`;
+                    }
+                  } catch (wErr) {
+                    console.warn("WhatsApp tool execution error:", wErr);
+                  }
+                }
+              }
+
               return {
                 ok: true,
                 reply: successReply,
