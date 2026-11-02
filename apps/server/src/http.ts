@@ -1,4 +1,4 @@
-// @effect-diagnostics globalDateInEffect:off globalRandomInEffect:off nodeBuiltinImport:off globalTimers:off globalTimersInEffect:off preferSchemaOverJson:off globalDate:off globalFetchInEffect:off
+// @effect-diagnostics globalDateInEffect:off globalRandomInEffect:off nodeBuiltinImport:off globalTimers:off globalTimersInEffect:off preferSchemaOverJson:off globalDate:off globalFetchInEffect:off globalConsoleInEffect:off
 import * as NodeOS from "node:os";
 import * as NodeFS from "node:fs";
 import * as NodeChildProcess from "node:child_process";
@@ -117,7 +117,7 @@ import {
   clearServerSessionLedger,
   formatServerLedgerBulletSummary,
 } from "./multiTurnSessionLedger.ts";
-import { runAutonomousHarnessWorkflow } from "./harness/index.ts";
+import { runAutonomousHarnessWorkflow } from "./dsh/index.ts";
 
 const OTLP_TRACES_PROXY_PATH = "/api/observability/v1/traces";
 const LOOPBACK_HOSTNAMES = new Set(["127.0.0.1", "::1", "localhost"]);
@@ -3120,7 +3120,7 @@ export const layerProjectInspectRoute = HttpRouter.add(
     } else if (publicHtml) {
       defaultPreviewUrl = `/api/projects/preview/${project.projectName}/public/index.html`;
     } else if (htmlFiles.length > 0) {
-      defaultPreviewUrl = `/api/projects/preview/${project.projectName}/${htmlFiles[0].name}`;
+      defaultPreviewUrl = `/api/projects/preview/${project.projectName}/${htmlFiles[0]?.name || "index.html"}`;
     }
 
     return HttpServerResponse.jsonUnsafe({
@@ -3148,6 +3148,7 @@ export const layerSuperAgentDispatchWorkerRoute = HttpRouter.add(
       prompt?: string;
       model?: string;
       stream?: boolean;
+      clientNotificationTarget?: string;
     };
 
     const targetName = bodyJson?.projectIdOrName?.trim() || "op";

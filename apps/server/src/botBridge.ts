@@ -229,11 +229,11 @@ export async function getWhatsAppQr(sessionId: string): Promise<any> {
 
 export async function sendWhatsAppMessage(opts: {
   to: string;
-  text?: string;
-  mediaUrl?: string;
-  caption?: string;
-  mediaType?: "text" | "image" | "voice" | "document";
-  sessionId?: string;
+  text?: string | undefined;
+  mediaUrl?: string | undefined;
+  caption?: string | undefined;
+  mediaType?: "text" | "image" | "voice" | "document" | undefined;
+  sessionId?: string | undefined;
 }): Promise<any> {
   try {
     const mod = await import("../../../bot/index.ts" as string);
@@ -267,7 +267,7 @@ export async function editWhatsAppMessage(opts: {
   chatId: string;
   messageId: string;
   newText: string;
-  sessionId?: string;
+  sessionId?: string | undefined;
 }): Promise<any> {
   try {
     const mod = await import("../../../bot/index.ts" as string);
@@ -280,7 +280,7 @@ export async function editWhatsAppMessage(opts: {
 export async function deleteWhatsAppMessage(opts: {
   chatId: string;
   messageId: string;
-  sessionId?: string;
+  sessionId?: string | undefined;
 }): Promise<any> {
   try {
     const mod = await import("../../../bot/index.ts" as string);
@@ -309,9 +309,9 @@ export async function getWhatsAppChats(sessionId?: string): Promise<any[]> {
 }
 
 export async function getWhatsAppMessages(opts?: {
-  chatId?: string;
-  limit?: number;
-  sessionId?: string;
+  chatId?: string | undefined;
+  limit?: number | undefined;
+  sessionId?: string | undefined;
 }): Promise<any[]> {
   try {
     const mod = await import("../../../bot/whatsapp/client.ts" as string);

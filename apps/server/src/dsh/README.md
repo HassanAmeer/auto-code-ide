@@ -1,6 +1,6 @@
 # AUTONOMOUS AGENT HARNESS & DEEPSEEK WORKER MODULES
 
-Yeh directory (`apps/server/src/harness/`) **DeepSeek Router-Worker Prototype** aur **Autonomous Execution Engine** ka isolated, modular core hai.
+Yeh directory (`apps/server/src/dsh/`) **DeepSeek Router-Worker Prototype (DSH)** aur **Autonomous Execution Engine** ka isolated, modular core hai.
 
 ---
 
