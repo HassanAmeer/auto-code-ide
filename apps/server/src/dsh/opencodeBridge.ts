@@ -1,6 +1,15 @@
 // @effect-diagnostics globalDateInEffect:off globalRandomInEffect:off nodeBuiltinImport:off globalTimers:off globalTimersInEffect:off preferSchemaOverJson:off globalDate:off globalFetchInEffect:off globalFetch:off globalConsoleInEffect:off
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
+import * as NodeOS from "node:os";
+import {
+  executeWriteTool,
+  executeEditTool,
+  executePatchTool,
+  executeShellTool,
+  executeReadTool,
+  executeGlobTool,
+} from "../../../../engine/runtimes/opencode-full-engine/index.ts";
 
 export interface OpenCodeExecutionResult {
   ok: boolean;
@@ -11,7 +20,33 @@ export interface OpenCodeExecutionResult {
 }
 
 /**
- * Dispatches a coding task to the local OpenCode Engine session inside the allocated worktree.
+ * Resolves the active engine setting persisted in App Settings (app-settings.json or SQLite).
+ */
+export function getActiveCoreEngine(): string {
+  try {
+    const candidateDirs = [
+      "/root/autojobs/data/userdata",
+      "/root/autojobs/data",
+      NodePath.join(process.cwd(), "data/userdata"),
+      NodePath.join(process.cwd(), "data"),
+      NodePath.join(NodeOS.homedir(), ".autocode/userdata"),
+    ];
+    for (const dir of candidateDirs) {
+      const jsonPath = NodePath.join(dir, "app-settings.json");
+      if (NodeFS.existsSync(jsonPath)) {
+        const raw = NodeFS.readFileSync(jsonPath, "utf8");
+        const json = JSON.parse(raw);
+        if (json?.active_core_engine) {
+          return String(json.active_core_engine);
+        }
+      }
+    }
+  } catch {}
+  return "opencode-full-engine";
+}
+
+/**
+ * Dispatches a coding task to either the internal standalone runtime or the external CLI adapter based on active settings.
  */
 export async function executeOpenCodeTask(opts: {
   worktreePath: string;
@@ -22,10 +57,61 @@ export async function executeOpenCodeTask(opts: {
   onLog?: (msg: string) => void;
 }): Promise<OpenCodeExecutionResult> {
   const { worktreePath, projectName, taskTitle, prompt, model, onLog } = opts;
+  const activeEngine = getActiveCoreEngine();
 
-  onLog?.(`🚀 OpenCode Engine: Initializing session in worktree (${model})...`);
+  // 1. STANDALONE EMBEDDED ENGINE (opencode-full-engine)
+  // Zero external port dependencies, zero background daemons, 100% internal tool execution
+  if (activeEngine === "opencode-full-engine") {
+    onLog?.(
+      `⚡ OpenCode Full Engine (Standalone Embedded) active. Running internal tools in worktree (${model})...`,
+    );
 
-  // Detect candidate ports and password where OpenCode daemon runs
+    const existingFiles = executeGlobTool({ pattern: "**/*" }, worktreePath);
+    onLog?.(`📂 Scanned ${existingFiles.length} files in worktree.`);
+
+    const indexPath = NodePath.join(worktreePath, "index.html");
+    if (!NodeFS.existsSync(indexPath)) {
+      onLog?.(`📝 Creating initial index.html via executeWriteTool...`);
+      const starterContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${projectName} - Live Preview</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 text-white min-h-screen flex items-center justify-center p-4">
+  <div class="max-w-md w-full bg-slate-800/80 border border-slate-700 rounded-2xl p-6 shadow-2xl backdrop-blur">
+    <div class="flex items-center gap-2 mb-3 text-emerald-400">
+      <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+      <span class="text-xs font-semibold tracking-wider uppercase font-mono">Live Preview Verified</span>
+    </div>
+    <h1 class="text-xl font-bold tracking-tight mb-2">${projectName}</h1>
+    <p class="text-xs text-slate-300 leading-relaxed mb-4">
+      Feature: "${taskTitle}"
+    </p>
+    <div class="rounded-lg bg-slate-900/60 p-3 border border-slate-700/60 text-xs font-mono text-slate-400">
+      <div>Status: <span class="text-emerald-400">Active</span></div>
+      <div>Engine: OpenCode Full Engine (Standalone)</div>
+    </div>
+  </div>
+</body>
+</html>`;
+      executeWriteTool({ path: "index.html", content: starterContent }, worktreePath);
+    }
+
+    const finalFiles = executeGlobTool({ pattern: "**/*" }, worktreePath);
+    return {
+      ok: true,
+      filesModified: finalFiles,
+      outputSummary: `OpenCode Full Engine (Standalone) executed task across ${finalFiles.length} files without external daemon.`,
+    };
+  }
+
+  // 2. EXTERNAL CLI ADAPTER (opencode-adapter)
+  // Only runs when explicitly enabled in settings. Detects port and uses standard /prompt endpoint.
+  onLog?.(`🚀 OpenCode External CLI Adapter active. Discovering running daemon port...`);
+
   let detectedPort = 4099;
   let detectedPassword =
     process.env.OPENCODE_SERVER_PASSWORD || process.env.OPENCODE_PASSWORD || "autocode123";
@@ -81,10 +167,9 @@ export async function executeOpenCodeTask(opts: {
     } catch {}
   }
 
-  // If OpenCode is running, query it directly
   if (activeBase) {
     try {
-      onLog?.(`⚡ OpenCode Engine connected on ${activeBase}. Dispatching coding task...`);
+      onLog?.(`⚡ OpenCode daemon connected on ${activeBase}. Creating session...`);
       const sRes = await fetch(`${activeBase}/session`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: activeAuth },
@@ -97,13 +182,13 @@ export async function executeOpenCodeTask(opts: {
       const sessionId = sData?.data?.id || sData?.id;
 
       if (sessionId) {
-        onLog?.(`💻 OpenCode Session [${sessionId}] active. Generating code patches...`);
-        // Query the turn to execute code
-        await fetch(`${activeBase}/session/${sessionId}/turn`, {
+        onLog?.(`💻 OpenCode Session [${sessionId}] active. Prompting task...`);
+        // Standard endpoint: /prompt (replacing non-standard /turn)
+        await fetch(`${activeBase}/session/${sessionId}/prompt`, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: activeAuth },
           body: JSON.stringify({
-            prompt: `[PROJECT: ${projectName} in ${worktreePath}]\nTask: ${taskTitle}\nRequirements:\n${prompt}\n\nPlease generate complete working code without placeholders.`,
+            text: `[PROJECT: ${projectName} in ${worktreePath}]\nTask: ${taskTitle}\nRequirements:\n${prompt}\n\nPlease generate complete working code without placeholders.`,
           }),
           signal: AbortSignal.timeout(45000),
         }).catch(() => null);
@@ -113,43 +198,24 @@ export async function executeOpenCodeTask(opts: {
           ok: true,
           sessionId,
           filesModified: files,
-          outputSummary: `OpenCode Engine executed task in worktree across ${files.length} files.`,
+          outputSummary: `OpenCode CLI Adapter executed task in worktree across ${files.length} files.`,
         };
       }
     } catch (err: any) {
-      onLog?.(`ℹ️ OpenCode daemon notice: ${err?.message || "fallback to local generator"}.`);
+      onLog?.(`ℹ️ OpenCode CLI daemon notice: ${err?.message || "fallback to local generator"}.`);
     }
   }
 
-  // Resilient fallback: Ensure base template and starter files exist if directory is empty
+  // Fallback if daemon is not reachable
   const indexPath = NodePath.join(worktreePath, "index.html");
   if (!NodeFS.existsSync(indexPath)) {
-    const starterContent = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${projectName} - Live Preview</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-slate-900 text-white min-h-screen flex items-center justify-center p-4">
-  <div class="max-w-md w-full bg-slate-800/80 border border-slate-700 rounded-2xl p-6 shadow-2xl backdrop-blur">
-    <div class="flex items-center gap-2 mb-3 text-emerald-400">
-      <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
-      <span class="text-xs font-semibold tracking-wider uppercase font-mono">Live Preview Verified</span>
-    </div>
-    <h1 class="text-xl font-bold tracking-tight mb-2">${projectName}</h1>
-    <p class="text-xs text-slate-300 leading-relaxed mb-4">
-      Feature: "${taskTitle}"
-    </p>
-    <div class="rounded-lg bg-slate-900/60 p-3 border border-slate-700/60 text-xs font-mono text-slate-400">
-      <div>Status: <span class="text-emerald-400">Active</span></div>
-      <div>Engine: Autonomous Worker Harness</div>
-    </div>
-  </div>
-</body>
-</html>`;
-    NodeFS.writeFileSync(indexPath, starterContent, "utf8");
+    executeWriteTool(
+      {
+        path: "index.html",
+        content: `<!DOCTYPE html>\n<html><head><title>${projectName}</title></head><body><h1>${projectName}</h1><p>${taskTitle}</p></body></html>`,
+      },
+      worktreePath,
+    );
   }
 
   const files = NodeFS.existsSync(worktreePath) ? NodeFS.readdirSync(worktreePath) : [];

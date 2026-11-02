@@ -90,6 +90,7 @@ import {
   getLiveKitToken,
   getLiveKitRoomInfo,
   geminiKeyRotator,
+  queryGeminiWithRotation,
   processWhatsAppWebhook,
   getWhatsAppSessions,
   getWhatsAppChats,
@@ -1208,15 +1209,21 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
       "code-free",
     ];
 
-    const isOpenCode =
-      bodyJson?.instanceId === "opencodebypasssetup" ||
-      bodyJson?.instanceId === "opencode" ||
-      model.toLowerCase().startsWith("opencode/") ||
-      OPENCODE_FREE_MODELS.includes(model.toLowerCase());
+    const appSettings = getAllAppSettings(config.dbPath);
+    const activeCoreEngine = String(appSettings?.active_core_engine || "opencode-full-engine");
+
+    // Architectural Rule: External CLI & Port discovery ONLY run when opencode-adapter is explicitly selected.
+    // When opencode-full-engine (standalone) is active, bypass external ports and process via internal engine.
+    const isOpenCodeAdapter =
+      activeCoreEngine === "opencode-adapter" &&
+      (bodyJson?.instanceId === "opencodebypasssetup" ||
+        bodyJson?.instanceId === "opencode" ||
+        model.toLowerCase().startsWith("opencode/") ||
+        OPENCODE_FREE_MODELS.includes(model.toLowerCase()));
 
     const result = yield* Effect.promise(async () => {
-      if (isOpenCode) {
-        // Run turn via OpenCode Local Runtime
+      if (isOpenCodeAdapter) {
+        // Run turn via OpenCode External CLI Adapter daemon
         let port = 4099;
         let pid: number | undefined;
         try {
@@ -1880,6 +1887,38 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
             sys += "\n\n" + liveWhatsAppContext;
           }
           enrichedMessages.unshift({ role: "system", content: sys });
+        }
+
+        // Standalone engine / Gemini fallback: If no explicit custom provider API key is provided and Gemini keys are active
+        if (
+          (!apiKey || model.toLowerCase().includes("gemini")) &&
+          geminiKeyRotator.getActiveKey()
+        ) {
+          const userPromptParts = enrichedMessages
+            .filter((m) => m.role !== "system")
+            .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
+            .join("\n\n");
+          const systemContent = enrichedMessages.find((m) => m.role === "system")?.content || "";
+          const effectiveGeminiModel = model.toLowerCase().includes("gemini")
+            ? model
+            : "gemini-2.5-flash";
+
+          const geminiRes = await queryGeminiWithRotation({
+            model: effectiveGeminiModel,
+            prompt: userPromptParts || "Hello",
+            systemInstruction: systemContent,
+            temperature: bodyJson?.temperature ?? 0.7,
+          });
+
+          if (geminiRes.ok && geminiRes.reply) {
+            clearTimeout(timeoutId);
+            return {
+              ok: true,
+              reply: geminiRes.reply,
+              model: effectiveGeminiModel,
+              intent: botResult?.intent || "chat",
+            };
+          }
         }
 
         const effectiveFallbackModel =
