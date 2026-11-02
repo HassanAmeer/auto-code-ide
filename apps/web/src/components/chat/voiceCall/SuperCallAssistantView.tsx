@@ -826,6 +826,38 @@ export function SuperCallAssistantView() {
     setTimeout(() => setCopiedPreviewUrl(null), 2000);
   }, []);
 
+  const [sendingWhatsAppPreviewId, setSendingWhatsAppPreviewId] = useState<string | null>(null);
+  const [sentWhatsAppPreviewId, setSentWhatsAppPreviewId] = useState<string | null>(null);
+
+  const handleSendPreviewToWhatsApp = useCallback(
+    async (taskTitle: string, previewUrl: string, msgId: string) => {
+      setSendingWhatsAppPreviewId(msgId);
+      try {
+        const fullUrl = previewUrl.startsWith("http")
+          ? previewUrl
+          : `${window.location.origin}${previewUrl}`;
+        const res = await fetch("/api/whatsapp/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            to: "0349",
+            text: `Assalam-o-Alaikum! Project update: "${taskTitle}" mukammal ho chuka hai aur 100% test pass hai.\n\nLive Preview: ${fullUrl}`,
+          }),
+        });
+        const data = await res.json().catch(() => null);
+        if (data?.ok) {
+          setSentWhatsAppPreviewId(msgId);
+          setTimeout(() => setSentWhatsAppPreviewId(null), 4000);
+        }
+      } catch (err) {
+        console.warn("Failed to send WhatsApp preview:", err);
+      } finally {
+        setSendingWhatsAppPreviewId(null);
+      }
+    },
+    [],
+  );
+
   // OpenDots Inspired: Spaces & Living Document Canvas State
   const [activeCanvasPage, setActiveCanvasPage] = useState<SpacePage | null>(null);
   const [isCanvasOpen, setIsCanvasOpen] = useState(false);
@@ -3029,6 +3061,29 @@ export function SuperCallAssistantView() {
                               <span>Open Live Preview</span>
                               <ExternalLink className="size-3" />
                             </a>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleSendPreviewToWhatsApp(
+                                  msg.meta.delegatedTask.taskTitle,
+                                  msg.meta.delegatedTask.previewUrl,
+                                  msg.id,
+                                )
+                              }
+                              disabled={sendingWhatsAppPreviewId === msg.id}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-xs font-medium hover:bg-emerald-500/25 transition-all shadow-sm active:scale-95 disabled:opacity-50"
+                            >
+                              {sentWhatsAppPreviewId === msg.id ? (
+                                <>
+                                  <Check className="size-3 text-emerald-400" />
+                                  <span>Sent to 0349!</span>
+                                </>
+                              ) : sendingWhatsAppPreviewId === msg.id ? (
+                                <span>Sending...</span>
+                              ) : (
+                                <span>📱 Send to 0349</span>
+                              )}
+                            </button>
                           </div>
                         </div>
                       )}
