@@ -145,8 +145,8 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
   const isOpen = store.isFileExplorerOpen;
   const projects = useProjects();
 
-  const prevIsOpenRef = useRef(false);
-  const prevProjectIdRef = useRef<string | null>(null);
+  const isInitializedRef = useRef(false);
+  const prevProjectIdRef = useRef<string | null | undefined>(undefined);
 
   // Root directory selection
   const initialRoot = store.selectedProjectId
@@ -262,32 +262,44 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
 
   // Navigate Up one directory level
   const handleNavigateUp = useCallback(() => {
-    if (rootPath === "/" || !rootPath) return;
-    const parts = rootPath.split("/").filter(Boolean);
+    const current = (rootPath || inputPath || "").trim();
+    if (!current || current === "/") return;
+    const normalized =
+      current.length > 1 && current.endsWith("/") ? current.replace(/\/+$/, "") : current;
+    const parts = normalized.split("/").filter(Boolean);
+    if (parts.length <= 1) {
+      handleNavigatePath("/");
+      return;
+    }
     parts.pop();
     const parent = "/" + parts.join("/");
-    const dest = parent === "" ? "/" : parent;
-    handleNavigatePath(dest);
-  }, [rootPath, handleNavigatePath]);
+    handleNavigatePath(parent);
+  }, [rootPath, inputPath, handleNavigatePath]);
 
-  // Update root when explorer is opened or selected project switches
+  // Initialize root only when explorer first opens or selected project actually switches
   useEffect(() => {
-    const justOpened = isOpen && !prevIsOpenRef.current;
-    const projectChanged = isOpen && store.selectedProjectId !== prevProjectIdRef.current;
-    prevIsOpenRef.current = isOpen;
-    prevProjectIdRef.current = store.selectedProjectId ?? null;
+    if (!isOpen) {
+      isInitializedRef.current = false;
+      return;
+    }
 
-    if (justOpened || projectChanged) {
+    const projectChanged =
+      prevProjectIdRef.current !== undefined &&
+      store.selectedProjectId !== prevProjectIdRef.current;
+    prevProjectIdRef.current = store.selectedProjectId;
+
+    if (!isInitializedRef.current || projectChanged) {
+      isInitializedRef.current = true;
       const activeProj = projects.find((p) => p.id === store.selectedProjectId);
       const targetRoot = store.selectedProjectId
         ? activeProj?.workspaceRoot || store.activeCwd || "/"
         : store.activeCwd || "/";
-      if (targetRoot && targetRoot !== rootPath) {
+      if (targetRoot) {
         setRootPath(targetRoot);
         setInputPath(targetRoot);
       }
     }
-  }, [isOpen, store.selectedProjectId, store.activeCwd, projects, rootPath]);
+  }, [isOpen, store.selectedProjectId, store.activeCwd, projects]);
 
   // When rootPath changes, reload root
   useEffect(() => {
@@ -967,7 +979,37 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
   // Recursive tree renderer
   const renderTree = (dirPath: string, depth = 0) => {
     const node = nodes.get(dirPath);
-    if (!node) return null;
+    if (!node) {
+      if (depth === 0) {
+        return (
+          <div className="py-8 flex flex-col items-center justify-center gap-2 text-zinc-500 text-xs">
+            <RotateCw className="size-4 animate-spin text-sky-400" />
+            <span>Loading directory...</span>
+          </div>
+        );
+      }
+      return null;
+    }
+
+    if (depth === 0 && node.isLoading && node.directories.length === 0 && node.files.length === 0) {
+      return (
+        <div className="py-8 flex flex-col items-center justify-center gap-2 text-zinc-500 text-xs">
+          <RotateCw className="size-4 animate-spin text-sky-400" />
+          <span>Loading directory...</span>
+        </div>
+      );
+    }
+
+    if (
+      depth === 0 &&
+      !node.isLoading &&
+      node.directories.length === 0 &&
+      node.files.length === 0
+    ) {
+      return (
+        <div className="py-8 text-center text-zinc-500 text-xs font-sans">Folder is empty</div>
+      );
+    }
 
     return (
       <div key={dirPath} className="space-y-0.5">
@@ -993,6 +1035,10 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                   "flex items-center justify-between py-1 px-1.5 rounded-[5px] hover:bg-zinc-800/60 text-zinc-300 transition-colors group cursor-pointer text-xs select-none",
                 )}
                 onClick={() => toggleFolder(subPath)}
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  handleNavigatePath(subPath);
+                }}
               >
                 <div className="flex items-center gap-1.5 min-w-0 flex-1">
                   {isExpanded ? (
@@ -1009,7 +1055,8 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                 </div>
 
                 {/* Folder action buttons */}
-                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 ml-1">
+                  {/* Ask AI Button */}
                   <button
                     type="button"
                     onClick={(e) => {
@@ -1017,25 +1064,13 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                       handleAskAiAboutPath(subPath, dirName, "folder");
                     }}
                     title={`Ask AI Bot about "${dirName}" folder`}
-                    className="p-1 rounded-[3px] text-purple-400 hover:text-purple-300 hover:bg-purple-950/60"
+                    className="flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-purple-500/20 hover:bg-purple-500/35 text-purple-300 hover:text-purple-200 border border-purple-500/30 text-3xs font-medium transition-all cursor-pointer"
                   >
-                    <Sparkles className="size-3" />
+                    <Sparkles className="size-2.5 text-purple-400" />
+                    <span>Ask AI</span>
                   </button>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDownloadFolderZip(subPath, dirName);
-                    }}
-                    title={`Download "${dirName}" as ZIP`}
-                    className="p-1 rounded-[3px] text-zinc-400 hover:text-amber-300 hover:bg-zinc-700/60"
-                  >
-                    {downloadingZipPath === subPath ? (
-                      <RotateCw className="size-3 animate-spin text-amber-400" />
-                    ) : (
-                      <Download className="size-3" />
-                    )}
-                  </button>
+
+                  {/* Open folder as root */}
                   <button
                     type="button"
                     onClick={(e) => {
@@ -1043,10 +1078,29 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                       handleNavigatePath(subPath);
                     }}
                     title="Open this folder as root"
-                    className="p-1 rounded-[3px] text-zinc-400 hover:text-sky-300 hover:bg-zinc-700/60"
+                    className="p-1 rounded-[3px] text-zinc-400 hover:text-sky-300 hover:bg-zinc-700/60 transition-colors"
                   >
                     <FolderOpen className="size-3" />
                   </button>
+
+                  {/* Download ZIP */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDownloadFolderZip(subPath, dirName);
+                    }}
+                    title={`Download "${dirName}" as ZIP`}
+                    className="p-1 rounded-[3px] text-zinc-400 hover:text-amber-300 hover:bg-zinc-700/60 transition-colors"
+                  >
+                    {downloadingZipPath === subPath ? (
+                      <RotateCw className="size-3 animate-spin text-amber-400" />
+                    ) : (
+                      <Download className="size-3" />
+                    )}
+                  </button>
+
+                  {/* Add file */}
                   <button
                     type="button"
                     onClick={(e) => {
@@ -1054,20 +1108,22 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                       setCreateModal({ parentPath: subPath, type: "file" });
                     }}
                     title="Add file inside this folder"
-                    className="p-1 rounded-[3px] text-zinc-400 hover:text-emerald-400 hover:bg-zinc-700/60"
+                    className="p-1 rounded-[3px] text-zinc-400 hover:text-emerald-400 hover:bg-zinc-700/60 transition-colors"
                   >
                     <Plus className="size-3" />
                   </button>
+
+                  {/* Delete folder button */}
                   <button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       setDeleteTarget({ path: subPath, name: dirName, isDir: true });
                     }}
-                    title="Delete folder"
-                    className="p-1 rounded-[3px] text-zinc-400 hover:text-rose-400 hover:bg-zinc-700/60"
+                    title={`Delete folder "${dirName}"`}
+                    className="p-1 rounded-[4px] bg-rose-500/15 hover:bg-rose-500/30 text-rose-300 hover:text-rose-200 border border-rose-500/30 transition-all cursor-pointer"
                   >
-                    <Trash2 className="size-3" />
+                    <Trash2 className="size-3 text-rose-400" />
                   </button>
                 </div>
               </div>
@@ -1109,7 +1165,8 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                 </span>
               </div>
 
-              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 ml-1">
+                {/* Ask AI Button */}
                 <button
                   type="button"
                   onClick={(e) => {
@@ -1117,9 +1174,10 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                     handleAskAiAboutPath(filePath, file.name, "file");
                   }}
                   title={`Ask AI Bot about "${file.name}"`}
-                  className="p-1 rounded-[3px] text-purple-400 hover:text-purple-300 hover:bg-purple-950/60"
+                  className="flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-purple-500/20 hover:bg-purple-500/35 text-purple-300 hover:text-purple-200 border border-purple-500/30 text-3xs font-medium transition-all cursor-pointer"
                 >
-                  <Sparkles className="size-3" />
+                  <Sparkles className="size-2.5 text-purple-400" />
+                  <span>Ask AI</span>
                 </button>
                 {file.name.toLowerCase().endsWith(".zip") && (
                   <button
@@ -1129,7 +1187,7 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                       void handleExtractExistingZip(filePath, file.name);
                     }}
                     title={`Unzip into ${file.name.replace(/\.zip$/i, "")}/ folder`}
-                    className="p-1 rounded-[3px] text-amber-400 hover:text-amber-300 hover:bg-zinc-700/60"
+                    className="p-1 rounded-[3px] text-amber-400 hover:text-amber-300 hover:bg-zinc-700/60 transition-colors"
                   >
                     <FileArchive className="size-3" />
                   </button>
@@ -1141,20 +1199,21 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                     handleDownload(filePath, file.name);
                   }}
                   title="Download file"
-                  className="p-1 rounded-[3px] text-zinc-400 hover:text-sky-300 hover:bg-zinc-700/60"
+                  className="p-1 rounded-[3px] text-zinc-400 hover:text-sky-300 hover:bg-zinc-700/60 transition-colors"
                 >
                   <Download className="size-3" />
                 </button>
+                {/* Delete file button */}
                 <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
                     setDeleteTarget({ path: filePath, name: file.name, isDir: false });
                   }}
-                  title="Delete file"
-                  className="p-1 rounded-[3px] text-zinc-400 hover:text-rose-400 hover:bg-zinc-700/60"
+                  title={`Delete "${file.name}"`}
+                  className="p-1 rounded-[4px] bg-rose-500/15 hover:bg-rose-500/30 text-rose-300 hover:text-rose-200 border border-rose-500/30 transition-all cursor-pointer"
                 >
-                  <Trash2 className="size-3" />
+                  <Trash2 className="size-3 text-rose-400" />
                 </button>
               </div>
             </div>
@@ -1203,12 +1262,12 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
               <button
                 type="button"
                 onClick={handleNavigateUp}
-                disabled={rootPath === "/"}
+                disabled={!rootPath || rootPath === "/" || rootPath.trim() === ""}
                 title="Up to parent folder"
                 className={cn(
                   "p-1.5 rounded-[5px] border transition-colors cursor-pointer",
-                  rootPath === "/"
-                    ? "border-zinc-800 text-zinc-600 cursor-not-allowed"
+                  !rootPath || rootPath === "/" || rootPath.trim() === ""
+                    ? "border-zinc-800 text-zinc-600 cursor-not-allowed opacity-40"
                     : "border-zinc-700/80 text-zinc-300 hover:text-white hover:bg-zinc-800 bg-zinc-900",
                 )}
               >
