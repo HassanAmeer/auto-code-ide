@@ -1,5 +1,6 @@
 import { useAutoRetrySettings } from "~/lib/autoRetrySettings";
 import { useShowLogFloatingButton } from "~/lib/floatingLogButtonSettings";
+import { isPlanModeButtonEnabled, savePlanModeButtonEnabled } from "~/lib/planModeSettings";
 import { useBackgroundModeStore } from "~/lib/backgroundModeStore";
 import { useBackgroundModeServerState } from "~/lib/backgroundModeServer";
 import { useComposerDraftStore } from "../../composerDraftStore";
@@ -2767,6 +2768,34 @@ export function GeneralSettingsPanel() {
                 updateSettings({ showSkillsInSlashMenu: Boolean(checked) })
               }
               aria-label="Show skills in slash menu"
+            />
+          }
+        />
+
+        <SettingsRow
+          {...searchableSetting("show-build-plan-mode-button")}
+          title="Show Build / Plan Mode Button"
+          description="Chat composer ke andar Build/Plan toggle button show karein. OFF karne par button hide ho jayega aur chat hamesha permanent Build mode par chalegi."
+          resetAction={
+            settings.planModeEnabled !== DEFAULT_UNIFIED_SETTINGS.planModeEnabled ? (
+              <SettingResetButton
+                label="build / plan mode button"
+                onClick={() => {
+                  savePlanModeButtonEnabled(false);
+                  updateSettings({ planModeEnabled: false });
+                }}
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={isPlanModeButtonEnabled(settings.planModeEnabled)}
+              onCheckedChange={(checked) => {
+                const isEnabled = Boolean(checked);
+                savePlanModeButtonEnabled(isEnabled);
+                updateSettings({ planModeEnabled: isEnabled });
+              }}
+              aria-label="Show Build / Plan Mode Button"
             />
           }
         />

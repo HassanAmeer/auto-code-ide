@@ -520,6 +520,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["logs traces processes resource history failures spans cpu memory"],
   },
   {
+    id: "show-build-plan-mode-button",
+    title: "Show Build / Plan Mode Button",
+    to: "/settings/general",
+    searchTerms: ["build plan mode button toggle composer chat permanent switch"],
+  },
+  {
     id: "legacy-plan-mode",
     title: "Plan mode (legacy)",
     to: "/settings/general",

@@ -329,6 +329,7 @@ import {
   submitComposerDraft,
 } from "./composerSubmission";
 import { ComposerPromptLengthValidation } from "./ComposerPromptLengthValidation";
+import { isPlanModeButtonEnabled } from "~/lib/planModeSettings";
 import { PierreEntryIcon } from "./PierreEntryIcon";
 import { pendingDraftWork } from "./pendingDraftWork";
 import { isTimelineScrollTarget } from "./timelineScrollTarget";
@@ -2371,8 +2372,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
 
   const selectedPromptEffort = composerProviderState.promptEffort;
   const selectedModelOptionsForDispatch = composerProviderState.modelOptionsForDispatch;
+  const isPlanModeActive = isPlanModeButtonEnabled(settings.planModeEnabled);
   const { enabled: planModeUiEnabled, interactionMode } = resolveComposerInteractionMode({
-    planModeEnabled: settings.planModeEnabled,
+    planModeEnabled: isPlanModeActive,
     provider: selectedProviderStatus,
     interactionMode: requestedInteractionMode,
   });

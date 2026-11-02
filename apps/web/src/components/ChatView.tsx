@@ -650,6 +650,7 @@ import {
 } from "./ui/alert-dialog";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import { ServerUpdateAction } from "./ServerUpdateAction";
+import { isPlanModeButtonEnabled } from "~/lib/planModeSettings";
 import { useAutoBalanceUpdateBanner } from "./chat/useAutoBalanceUpdateBanner";
 import {
   ComposerServerUpdateIcon,
@@ -3460,7 +3461,7 @@ export default function ChatView(props: ChatViewProps) {
   const activeProviderInstanceId = selectedProviderEntry?.instanceId ?? null;
   const activeProviderStatus = selectedProviderEntry?.snapshot ?? null;
   const { enabled: interactionModeEnabled, interactionMode } = resolveComposerInteractionMode({
-    planModeEnabled: settings.planModeEnabled,
+    planModeEnabled: isPlanModeButtonEnabled(settings.planModeEnabled),
     provider: activeProviderStatus,
     interactionMode:
       composerInteractionMode ?? activeThread?.interactionMode ?? DEFAULT_INTERACTION_MODE,
@@ -9742,7 +9743,7 @@ export default function ChatView(props: ChatViewProps) {
         ),
         text,
         interactionMode: resolveComposerInteractionMode({
-          planModeEnabled: settings.planModeEnabled,
+          planModeEnabled: isPlanModeButtonEnabled(settings.planModeEnabled),
           provider: provider.snapshot,
           interactionMode: sendInteractionMode,
         }).interactionMode,
