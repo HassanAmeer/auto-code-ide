@@ -21,6 +21,8 @@ import * as NodeChildProcess from "node:child_process";
 import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
+import { executeAutonomousReviewLoop } from "../../dsh/selfReviewLoop.ts";
+import { sendWhatsAppMessage } from "../../botBridge.ts";
 import {
   executeEngineTool,
   executeWriteTool,

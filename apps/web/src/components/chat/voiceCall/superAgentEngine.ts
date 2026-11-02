@@ -576,7 +576,7 @@ export async function executeSuperAgentInstruction(
     ) && !/\b(fix|theek\s*karo|solve|sort)\b/i.test(userText);
 
   const isInspectionOrWork =
-    /\b(project\s+files?|preview\s+check|syntax\s+error|worker\s*agent|prompt\s*de|inspect\s+files?|kaam\s*karwa)\b/i.test(
+    /\b(project\s+files?|preview\s+check|syntax\s+error|worker\s*agent|prompt\s*de|inspect\s+files?|kaam\s*karwa|kaam\s*karo|fix\s*karo|theek\s*karo|code\s*karo|banao|create|build|repair|dsh|harness|superagent|autonomous|review|feature)\b/i.test(
       userText,
     );
 
@@ -962,7 +962,7 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
   // 3f. Project Files Inspection & Worker Execution
   if (isInspectionOrWork) {
     const wantsWorkerExecution =
-      /\b(prompt\s*de|kaam\s*karwa|fix\s*karo|complete|repair|shuru\s*karo|bhejo|execute|proceed|go\s*ahead)\b/i.test(
+      /\b(prompt\s*de|kaam\s*karwa|kaam\s*karo|fix\s*karo|theek\s*karo|banao|create|build|complete|repair|shuru\s*karo|bhejo|execute|proceed|go\s*ahead|dsh|harness|run|dispatch)\b/i.test(
         userText,
       );
 
