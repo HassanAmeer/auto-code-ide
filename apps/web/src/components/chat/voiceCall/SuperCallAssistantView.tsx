@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import {
   Trash2,
+  Folder,
   FolderGit2,
+  FileCode,
   Send,
   Sparkles,
   Bot,
@@ -91,6 +93,12 @@ import { Link } from "@tanstack/react-router";
 import { type ProviderInstanceId } from "@t3tools/contracts";
 import { useAtomValue } from "@effect/atom-react";
 import { cn } from "~/lib/utils";
+import {
+  getBotAttachment,
+  setBotAttachment,
+  subscribeBotAttachment,
+  type BotAttachment,
+} from "../../../lib/botAttachmentStore";
 import { useProjects } from "~/state/entities";
 import { useNotes, openNotesSheet, addNote, type NoteItem } from "~/lib/notesStore";
 import {
@@ -933,6 +941,19 @@ export function SuperCallAssistantView() {
     }
   }, [groqApiKeyInput, updateGroqSettings, handleFetchLiveGroqModels]);
 
+  // Bot Attachment from File Manager / Ask AI (Folder or File)
+  const [botAttachment, setLocalBotAttachment] = useState<BotAttachment | null>(() =>
+    getBotAttachment(),
+  );
+
+  useEffect(() => {
+    setLocalBotAttachment(getBotAttachment());
+    const unsub = subscribeBotAttachment((att) => {
+      setLocalBotAttachment(att);
+    });
+    return unsub;
+  }, []);
+
   // Universal Attachment State (Images, Code files, Logs, PDFs, etc.)
   const [attachedFile, setAttachedFile] = useState<{
     dataUrl: string;
@@ -1135,14 +1156,20 @@ export function SuperCallAssistantView() {
       isUserEditingRef.current = false;
       setIsUserEditing(false);
 
-      const effectiveUserPrompt = currentFile
-        ? `${userText}\n[Attached ${currentFile.isImage ? "Image/Screenshot" : "File"}: ${currentFile.name}${currentFile.size ? ` (${currentFile.size})` : ""}]`
-        : userText;
+      let effectiveUserPrompt = userText;
+      if (botAttachment) {
+        effectiveUserPrompt = `${userText}\n\n[Attached Context: ${botAttachment.type === "folder" ? "Folder" : "File"} "${botAttachment.name}" at absolute filesystem path: "${botAttachment.path}". When analyzing, browsing, searching, or editing files, treat this path as the primary target.]${botAttachment.content ? `\n\nFile Content:\n\`\`\`\n${botAttachment.content.slice(0, 10000)}\n\`\`\`` : ""}`;
+      }
+      if (currentFile) {
+        effectiveUserPrompt += `\n[Attached ${currentFile.isImage ? "Image/Screenshot" : "File"}: ${currentFile.name}${currentFile.size ? ` (${currentFile.size})` : ""}]`;
+      }
 
       if (!options?.isRetry) {
         handleAddMessage(
           "user",
-          userText,
+          botAttachment
+            ? `${userText}\n\n📁 Attached ${botAttachment.type === "folder" ? "Folder" : "File"}: \`${botAttachment.name}\` (${botAttachment.path})`
+            : userText,
           currentFile
             ? ({
                 file: currentFile.dataUrl,
@@ -1430,6 +1457,7 @@ export function SuperCallAssistantView() {
       effectiveInstanceId,
       customProvidersList,
       activeSession?.messages,
+      botAttachment,
     ],
   );
 
@@ -3231,6 +3259,46 @@ export function SuperCallAssistantView() {
 
         {/* Unified Bottom Area: Input Field on Top, with Attached Floating Waves Divider directly below */}
         <div className="w-full max-w-2xl sm:max-w-3xl mx-auto px-2 sm:px-4 pb-[max(env(safe-area-inset-bottom),0.95rem)] pt-1 shrink-0 bg-background/95 backdrop-blur-xs">
+          {/* Attached Folder or File from File Manager / Ask AI */}
+          {botAttachment && (
+            <div className="flex items-center gap-2 mb-1.5 px-3 py-1.5 rounded-xl bg-purple-950/40 border border-purple-500/30 w-fit max-w-full animate-in fade-in duration-150">
+              <div className="size-6 rounded-md bg-purple-900/60 text-purple-300 flex items-center justify-center shrink-0">
+                {botAttachment.type === "folder" ? (
+                  <Folder className="size-3.5 text-amber-400" />
+                ) : (
+                  <FileCode className="size-3.5 text-sky-400" />
+                )}
+              </div>
+              <div className="min-w-0 max-w-[280px] xs:max-w-[360px] sm:max-w-md">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] text-zinc-100 font-semibold truncate">
+                    {botAttachment.name}
+                  </span>
+                  <span className="text-[9px] px-1 py-0.2 rounded bg-purple-800/50 text-purple-300 uppercase font-mono tracking-wider">
+                    {botAttachment.type}
+                  </span>
+                </div>
+                <span
+                  className="text-[9.5px] text-zinc-400 font-mono truncate block"
+                  title={botAttachment.path}
+                >
+                  {botAttachment.path}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setBotAttachment(null);
+                  setLocalBotAttachment(null);
+                }}
+                className="p-1 rounded-full hover:bg-purple-900/60 text-zinc-400 hover:text-zinc-200 cursor-pointer shrink-0 ml-1"
+                title={`Remove ${botAttachment.type} attachment`}
+              >
+                <X className="size-3" />
+              </button>
+            </div>
+          )}
+
           {/* Attached File or Screenshot Preview Badge */}
           {attachedFile && (
             <div className="flex items-center gap-2 mb-1.5 px-3 py-1 rounded-xl bg-zinc-900/80 border border-zinc-700/60 w-fit max-w-full animate-in fade-in duration-150">
@@ -3324,9 +3392,13 @@ export function SuperCallAssistantView() {
                   }
                 }}
                 placeholder={
-                  attachedFile
-                    ? `Add instructions for ${attachedFile.name}...`
-                    : "Type a message or speak..."
+                  botAttachment
+                    ? botAttachment.type === "folder"
+                      ? `Ask anything about folder "${botAttachment.name}"...`
+                      : `Ask anything about "${botAttachment.name}"...`
+                    : attachedFile
+                      ? `Add instructions for ${attachedFile.name}...`
+                      : "Type a message or speak..."
                 }
                 className="w-full bg-transparent border-0 outline-none focus:outline-none focus:ring-0 p-0 text-sm text-zinc-200 placeholder:text-zinc-500 resize-none max-h-[56px] min-h-[26px] leading-snug overflow-y-auto tracking-normal font-normal shadow-none"
                 aria-label="Message Input"
@@ -3410,7 +3482,7 @@ export function SuperCallAssistantView() {
                 >
                   <MicOff className="size-3.5 animate-bounce" />
                 </button>
-              ) : inputText.trim().length > 0 || attachedFile ? (
+              ) : inputText.trim().length > 0 || attachedFile || botAttachment ? (
                 <button
                   type="button"
                   onClick={handleSendNow}

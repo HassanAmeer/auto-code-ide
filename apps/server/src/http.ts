@@ -3284,6 +3284,15 @@ export const layerSuperAgentDispatchWorkerRoute = HttpRouter.add(
     );
 
     const verificationSteps = [
+      ...(harnessResult.subtasks && harnessResult.subtasks.length > 1
+        ? [
+            {
+              step: "Supervisor Task Decomposition",
+              desc: `Decomposed into ${harnessResult.subtasks.length} milestones: ${harnessResult.subtasks.map((st) => st.title).join(" → ")}.`,
+              status: "completed",
+            },
+          ]
+        : []),
       {
         step: "Worker Worktree Allocation & Discovery",
         desc: `Allocated isolated worktree for "${taskTitle}". Loaded project files (${framework.toUpperCase()}).`,
@@ -3317,6 +3326,7 @@ export const layerSuperAgentDispatchWorkerRoute = HttpRouter.add(
       progress: 100,
       framework,
       verificationSteps,
+      subtasks: harnessResult.subtasks,
       reviewLoop: harnessResult.reviewLoop,
       checklist: harnessResult.checklist,
       errorsFixed: harnessResult.errorsFixed,

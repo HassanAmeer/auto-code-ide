@@ -1,5 +1,6 @@
 import { memo, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
+import { useNavigate } from "@tanstack/react-router";
 import {
   Folder,
   FolderOpen,
@@ -33,6 +34,7 @@ import { useTerminalStore, terminalStore } from "./terminalStore";
 import { useProjects } from "../../../state/entities";
 import { toastManager } from "../../ui/toast";
 import { cn } from "../../../lib/utils";
+import { setBotAttachment } from "../../../lib/botAttachmentStore";
 
 interface FileEntry {
   name: string;
@@ -138,9 +140,13 @@ interface SelectedFileState {
 }
 
 export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
+  const navigate = useNavigate();
   const store = useTerminalStore();
   const isOpen = store.isFileExplorerOpen;
   const projects = useProjects();
+
+  const prevIsOpenRef = useRef(false);
+  const prevProjectIdRef = useRef<string | null>(null);
 
   // Root directory selection
   const initialRoot = store.selectedProjectId
@@ -241,8 +247,11 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
   const handleNavigatePath = useCallback(
     (target?: string) => {
       const raw = target !== undefined ? target : inputPath;
-      const dest = raw.trim();
+      let dest = raw.trim();
       if (!dest) return;
+      if (dest.length > 1 && dest.endsWith("/")) {
+        dest = dest.replace(/\/+$/, "") || "/";
+      }
       setRootPath(dest);
       setInputPath(dest);
       terminalStore.setActiveCwd(dest);
@@ -261,19 +270,24 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
     handleNavigatePath(dest);
   }, [rootPath, handleNavigatePath]);
 
-  // Update root when activeCwd changes or opened
+  // Update root when explorer is opened or selected project switches
   useEffect(() => {
-    if (isOpen) {
+    const justOpened = isOpen && !prevIsOpenRef.current;
+    const projectChanged = isOpen && store.selectedProjectId !== prevProjectIdRef.current;
+    prevIsOpenRef.current = isOpen;
+    prevProjectIdRef.current = store.selectedProjectId ?? null;
+
+    if (justOpened || projectChanged) {
       const activeProj = projects.find((p) => p.id === store.selectedProjectId);
       const targetRoot = store.selectedProjectId
         ? activeProj?.workspaceRoot || store.activeCwd || "/"
-        : "/";
+        : store.activeCwd || "/";
       if (targetRoot && targetRoot !== rootPath) {
         setRootPath(targetRoot);
         setInputPath(targetRoot);
       }
     }
-  }, [isOpen, store.selectedProjectId, store.activeCwd, projects]);
+  }, [isOpen, store.selectedProjectId, store.activeCwd, projects, rootPath]);
 
   // When rootPath changes, reload root
   useEffect(() => {
@@ -613,17 +627,29 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
     }
   };
 
-  const handleAskAiAboutFile = () => {
+  const handleAskAiAboutPath = useCallback(
+    (targetPath: string, name: string, type: "file" | "folder", content?: string) => {
+      setBotAttachment({
+        type,
+        name,
+        path: targetPath,
+        content,
+      });
+      terminalStore.setFileExplorerOpen(false);
+      void navigate({ to: "/bot" });
+      toastManager.add({
+        type: "success",
+        title: `Attached ${type === "folder" ? "Folder" : "File"} to AI Bot`,
+        description: `Attached "${name}" to Bot section. You can now ask any question about it.`,
+      });
+    },
+    [navigate],
+  );
+
+  const handleAskAiAboutFile = useCallback(() => {
     if (!selectedFile) return;
-    const prompt = `Please review and explain this file:\nPath: \`${selectedFile.path}\`\nName: \`${selectedFile.name}\`\n\nCould you analyze this code, explain its logic, and suggest improvements or fixes?`;
-    window.dispatchEvent(new CustomEvent("t3:insert-speech-text", { detail: { text: prompt } }));
-    terminalStore.setFileExplorerOpen(false);
-    toastManager.add({
-      type: "info",
-      title: "Sent to AI Chat",
-      description: `Added "${selectedFile.name}" review prompt to composer.`,
-    });
-  };
+    handleAskAiAboutPath(selectedFile.path, selectedFile.name, "file", selectedFile.content);
+  }, [selectedFile, handleAskAiAboutPath]);
 
   // 1. Extract existing ZIP archive on server disk into a project folder named after the zip
   const handleExtractExistingZip = async (zipFilePath: string, zipFileName: string) => {
@@ -988,6 +1014,17 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
+                      handleAskAiAboutPath(subPath, dirName, "folder");
+                    }}
+                    title={`Ask AI Bot about "${dirName}" folder`}
+                    className="p-1 rounded-[3px] text-purple-400 hover:text-purple-300 hover:bg-purple-950/60"
+                  >
+                    <Sparkles className="size-3" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
                       handleDownloadFolderZip(subPath, dirName);
                     }}
                     title={`Download "${dirName}" as ZIP`}
@@ -1073,6 +1110,17 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
               </div>
 
               <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleAskAiAboutPath(filePath, file.name, "file");
+                  }}
+                  title={`Ask AI Bot about "${file.name}"`}
+                  className="p-1 rounded-[3px] text-purple-400 hover:text-purple-300 hover:bg-purple-950/60"
+                >
+                  <Sparkles className="size-3" />
+                </button>
                 {file.name.toLowerCase().endsWith(".zip") && (
                   <button
                     type="button"
@@ -1334,7 +1382,23 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
 
               {/* Action buttons on root */}
               <div className="flex items-center justify-between text-3xs text-zinc-400 px-1">
-                <span>FILES & FOLDERS</span>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="font-semibold tracking-wider text-zinc-400">
+                    FILES & FOLDERS
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const folderName = rootPath.split("/").filter(Boolean).pop() || "root";
+                      handleAskAiAboutPath(rootPath, folderName, "folder");
+                    }}
+                    title={`Ask AI Bot about current folder (${rootPath})`}
+                    className="flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-purple-900/30 hover:bg-purple-800/50 text-purple-300 border border-purple-600/30 transition-colors cursor-pointer"
+                  >
+                    <Sparkles className="size-2.5 text-purple-400" />
+                    <span>Ask AI</span>
+                  </button>
+                </div>
                 <div className="flex items-center gap-1">
                   <input
                     type="file"

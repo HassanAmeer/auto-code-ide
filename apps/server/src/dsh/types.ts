@@ -22,6 +22,15 @@ export interface ChecklistItem {
   evidence?: string | undefined;
 }
 
+export interface SubtaskPlanItem {
+  id: string;
+  order: number;
+  title: string;
+  description: string;
+  category: "architecture_schema" | "core_logic_api" | "frontend_ui" | "integration_polish";
+  status: "pending" | "in_progress" | "completed" | "failed";
+}
+
 export interface ReviewRoundResult {
   round: number;
   phase: string;

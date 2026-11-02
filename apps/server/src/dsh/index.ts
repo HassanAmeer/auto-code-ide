@@ -1,5 +1,5 @@
 // @effect-diagnostics globalDateInEffect:off globalRandomInEffect:off nodeBuiltinImport:off globalTimers:off globalTimersInEffect:off preferSchemaOverJson:off globalDate:off globalFetchInEffect:off globalFetch:off globalConsoleInEffect:off
-import type { WorkerDispatchParams } from "./types.ts";
+import type { WorkerDispatchParams, SubtaskPlanItem } from "./types.ts";
 import {
   createWorkerWorktree,
   mergeWorkerWorktree,
@@ -7,12 +7,14 @@ import {
 } from "./worktreeRunner.ts";
 import { executeOpenCodeTask } from "./opencodeBridge.ts";
 import { executeAutonomousReviewLoop } from "./selfReviewLoop.ts";
+import { decomposeTask } from "./taskDecomposer.ts";
 import { sendWhatsAppMessage, fetchWhatsAppSettings } from "../botBridge.ts";
 
 export * from "./types.ts";
 export * from "./worktreeRunner.ts";
 export * from "./selfReviewLoop.ts";
 export * from "./opencodeBridge.ts";
+export * from "./taskDecomposer.ts";
 
 export interface HarnessExecutionResult {
   ok: boolean;
@@ -24,6 +26,7 @@ export interface HarnessExecutionResult {
   progress: number;
   previewUrl: string;
   checklist: any[];
+  subtasks: SubtaskPlanItem[];
   reviewLoop: any[];
   errorsFixed: string[];
   streamingLogs: string[];
@@ -72,7 +75,21 @@ export async function runAutonomousHarnessWorkflow(
     `🚀 Autonomous Harness Worker [worker-${taskId}] started for "${taskTitle}" (${model}).`,
   );
 
-  // 1. Spawn isolated Git Worktree
+  // 1. Supervisor Task Decomposition (Bara Kaam Chotay Tukron Mein Baantna)
+  const subtasks = decomposeTask(taskTitle, prompt);
+  if (subtasks.length > 1) {
+    logStep(
+      "plan",
+      `📋 Supervisor decomposed composite task into ${subtasks.length} milestones:\n` +
+        subtasks
+          .map((st) => `   • [Milestone ${st.order}/${subtasks.length}] ${st.title}`)
+          .join("\n"),
+    );
+  } else {
+    logStep("plan", `📋 Task confirmed as single atomic milestone: "${taskTitle}".`);
+  }
+
+  // 2. Spawn isolated Git Worktree
   logStep("worktree", `🌿 Spawning isolated Git Worktree for safe execution...`);
   const allocation = createWorkerWorktree(projectRoot, taskId);
   logStep(
@@ -82,19 +99,45 @@ export async function runAutonomousHarnessWorkflow(
       : `ℹ️ Running directly in project root (${allocation.error || "standard mode"}).`,
   );
 
-  // 2. Execute OpenCode Coding Task
-  logStep("opencode", `💻 Initiating OpenCode coding engine...`);
-  const openCodeRes = await executeOpenCodeTask({
-    worktreePath: allocation.worktreePath,
-    projectName,
-    taskTitle,
-    prompt,
-    model,
-    onLog: (m) => logStep("opencode", m),
-  });
+  // 3. Sequential Subtask Execution via OpenCode Engine
+  const filesModifiedSet = new Set<string>();
+  for (let i = 0; i < subtasks.length; i++) {
+    const st = subtasks[i]!;
+    st.status = "in_progress";
+    logStep("subtask", `⚙️ [Milestone ${st.order}/${subtasks.length}] Executing: "${st.title}"...`);
 
-  // 3. Autonomous 3-Level Review & Auto-Heal Loop
-  logStep("review", `🔍 Beginning 3-Level Autonomous Review Loop...`);
+    const subtaskPrompt =
+      subtasks.length > 1
+        ? `[MILESTONE ${st.order}/${subtasks.length} FOR PROJECT: ${projectName}]\nTask: ${st.title}\nRequirements:\n${st.description}\n\nFull Objective Context:\n${prompt}`
+        : prompt;
+
+    const subtaskRes = await executeOpenCodeTask({
+      worktreePath: allocation.worktreePath,
+      projectName,
+      taskTitle: st.title,
+      prompt: subtaskPrompt,
+      model,
+      onLog: (m) => logStep(`worker-${st.order}`, m),
+    });
+
+    if (subtaskRes.ok) {
+      st.status = "completed";
+      subtaskRes.filesModified.forEach((f) => filesModifiedSet.add(f));
+      logStep(
+        "subtask",
+        `✓ [Milestone ${st.order}/${subtasks.length}] "${st.title}" completed (${subtaskRes.filesModified.length} files).`,
+      );
+    } else {
+      st.status = "failed";
+      logStep(
+        "subtask",
+        `⚠️ [Milestone ${st.order}/${subtasks.length}] warning: continuing to next milestone.`,
+      );
+    }
+  }
+
+  // 4. Autonomous 3-Level Review & Auto-Heal Loop
+  logStep("review", `🔍 Beginning 3-Level Autonomous Review Loop across all files...`);
   const reviewResult = await executeAutonomousReviewLoop({
     worktreePath: allocation.worktreePath,
     projectName,
@@ -104,7 +147,7 @@ export async function runAutonomousHarnessWorkflow(
     onLog: (m) => logStep("review", m),
   });
 
-  // 4. Safe Local Git Merge
+  // 5. Safe Local Git Merge
   if (allocation.isIsolated) {
     logStep("merge", `🔀 Safely merging verified code into main branch...`);
     const mergeRes = mergeWorkerWorktree(
@@ -121,7 +164,7 @@ export async function runAutonomousHarnessWorkflow(
     }
   }
 
-  // 5. Optional Auto WhatsApp Notification to Priority Client (e.g. 0349)
+  // 6. Optional Auto WhatsApp Notification to Priority Client (e.g. 0349)
   let clientNotified = false;
   const targetRecipient = clientNotificationTarget || "0349";
   try {
@@ -168,6 +211,7 @@ export async function runAutonomousHarnessWorkflow(
     progress: 100,
     previewUrl: reviewResult.previewUrl,
     checklist: reviewResult.checklist,
+    subtasks,
     reviewLoop: reviewResult.rounds,
     errorsFixed: reviewResult.allFixedIssues,
     streamingLogs: logs,
