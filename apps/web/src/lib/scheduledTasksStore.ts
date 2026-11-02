@@ -51,11 +51,11 @@ export function saveScheduledTasks(tasks: ScheduledTaskItem[]): void {
 export function addScheduledTask(input: {
   title: string;
   prompt: string;
-  projectId?: string;
-  projectName?: string;
-  scheduleType?: "fixed_time" | "interval";
-  timeOfDay?: string;
-  intervalMinutes?: number;
+  projectId?: string | undefined;
+  projectName?: string | undefined;
+  scheduleType?: "fixed_time" | "interval" | undefined;
+  timeOfDay?: string | undefined;
+  intervalMinutes?: number | undefined;
 }): ScheduledTaskItem {
   const current = loadScheduledTasks();
   const now = Date.now();

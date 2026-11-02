@@ -7,13 +7,15 @@ import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 export interface SuperAgentPromptContext {
   projects: ReadonlyArray<EnvironmentProject>;
   notes: NoteItem[];
-  chatMemories?: MemoryRecord[];
+  chatMemories?: MemoryRecord[] | undefined;
+  scheduledTasks?: ScheduledTaskItem[] | undefined;
+  activities?: ProjectActivityItem[] | undefined;
   language: "urdu" | "english";
   selectedModel: string;
-  activeProjectName?: string;
-  runtimeFacts?: string;
-  projectRules?: string[];
-  sessionLedgerSummary?: string;
+  activeProjectName?: string | undefined;
+  runtimeFacts?: string | undefined;
+  projectRules?: string[] | undefined;
+  sessionLedgerSummary?: string | undefined;
 }
 
 /**

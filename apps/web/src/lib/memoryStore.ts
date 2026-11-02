@@ -54,12 +54,14 @@ export function loadChatMemories(chatId?: string): MemoryRecord[] {
 export function addMemory(
   title: string,
   description: string = "",
-  options?: {
-    chatId?: string;
-    source?: "manual" | "imported_from_notes";
-    sourceNoteId?: string;
-    sourceNoteTitle?: string;
-  },
+  options?:
+    | {
+        chatId?: string | undefined;
+        source?: "manual" | "imported_from_notes" | undefined;
+        sourceNoteId?: string | undefined;
+        sourceNoteTitle?: string | undefined;
+      }
+    | undefined,
 ): MemoryRecord {
   const current = loadAllMemories();
   const now = Date.now();

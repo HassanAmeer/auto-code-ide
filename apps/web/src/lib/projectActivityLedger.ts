@@ -3,15 +3,15 @@ import { saveServerSetting } from "./serverSettingsSync";
 
 export interface ProjectActivityItem {
   id: string;
-  projectId?: string;
+  projectId?: string | undefined;
   projectName: string;
   taskTitle: string;
   description: string;
   status: "pending" | "running" | "completed" | "error";
   actionType: "bug_fix" | "feature_dispatch" | "scheduled_shift" | "audit";
   createdAt: number;
-  completedAt?: number;
-  resultSummary?: string;
+  completedAt?: number | undefined;
+  resultSummary?: string | undefined;
 }
 
 const STORAGE_KEY = "t3code:project-activity-ledger:v1";
