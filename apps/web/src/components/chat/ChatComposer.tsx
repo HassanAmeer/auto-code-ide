@@ -328,7 +328,6 @@ import {
   getComposerSubmissionValidationMessage,
   submitComposerDraft,
 } from "./composerSubmission";
-import { useVoiceCallAssistant, VoiceCallButton } from "./voiceCall";
 import { ComposerPromptLengthValidation } from "./ComposerPromptLengthValidation";
 import { PierreEntryIcon } from "./PierreEntryIcon";
 import { pendingDraftWork } from "./pendingDraftWork";
@@ -4586,50 +4585,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     phase,
   ]);
 
-  const {
-    isCallActive,
-    callStatus,
-    analyserNode,
-    toggleCall: toggleVoiceCall,
-    endCall: _endVoiceCall,
-    interruptSpeaking,
-    callLanguage,
-    setCallLanguage,
-    liveTranscript,
-    assistantSpokenText,
-    isMicMuted,
-    toggleMicMute,
-  } = useVoiceCallAssistant({
-    onTranscriptChange: useCallback(
-      (text: string) => {
-        onPromptChange(text, text.length, text.length, false, []);
-        lastSpokenRef.current = text;
-        // Do NOT run asynchronous LLM dictation cleanup during real-time voice calls
-        // to prevent input field flickering, disappearing text, and words mixing.
-      },
-      [onPromptChange],
-    ),
-    onAutoSend: useCallback(() => {
-      submitComposer(
-        undefined,
-        resolveComposerDispatchMode({
-          running: phase === "running",
-          alternateModifier: false,
-          activeTurnDefault: settings.followUpBehavior,
-        }),
-        "foreground",
-      );
-    }, [phase, settings.followUpBehavior, submitComposer]),
-    onInterrupt: useCallback(() => {
-      void onInterrupt();
-    }, [onInterrupt]),
-    canInterrupt,
-    prompt,
-    phase,
-    promptHistoryMessages,
-    threadId: activeThreadId,
-    disabled: isConnecting || isComposerApprovalState,
-  });
   const expandMobileComposer = useCallback(() => {
     if (composerBlurFrameRef.current !== null) {
       window.cancelAnimationFrame(composerBlurFrameRef.current);
@@ -7274,9 +7229,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
               "in-data-[thread-context-over]:bg-accent/45 in-data-[thread-context-over]:ring-1 in-data-[thread-context-over]:ring-primary/70",
               isDragOverComposer ? "bg-accent/45 ring-1 ring-primary/70" : null,
               projectSelectionRequired ? "opacity-75" : null,
-              ((isCallActive && (callStatus === "thinking" || callStatus === "speaking")) ||
-                phase === "running") &&
-                "streamingBorder",
+              phase === "running" && "streamingBorder",
               composerProviderState.composerSurfaceClassName,
             )}
           >
@@ -7950,15 +7903,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   }
                   className="flex shrink-0 flex-nowrap items-center justify-end gap-1 sm:gap-1.5"
                 >
-                  {/* Voice Call Button in Chat Composer Toolbar */}
-                  <VoiceCallButton
-                    isCallActive={isCallActive}
-                    onToggleCall={toggleVoiceCall}
-                    callStatus={callStatus}
-                    analyserNode={analyserNode}
-                    onInterrupt={interruptSpeaking}
-                    className="mr-0.5"
-                  />
                   {showComposerAttachAction ? (
                     <>
                       <input

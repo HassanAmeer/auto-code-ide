@@ -25,10 +25,48 @@ export async function executeOpenCodeTask(opts: {
 
   onLog?.(`🚀 OpenCode Engine: Initializing session in worktree (${model})...`);
 
-  // Detect candidate ports where OpenCode daemon runs (4099, 45991)
-  const candidatePorts = [4099, 45991];
+  // Detect candidate ports and password where OpenCode daemon runs
+  let detectedPort = 4099;
+  let detectedPassword =
+    process.env.OPENCODE_SERVER_PASSWORD || process.env.OPENCODE_PASSWORD || "autocode123";
+
+  try {
+    const serversDir = NodeFS.existsSync("/root/autojobs/data/userdata/opencode-servers")
+      ? "/root/autojobs/data/userdata/opencode-servers"
+      : NodeFS.existsSync("/root/autojobs/data/opencode-servers")
+        ? "/root/autojobs/data/opencode-servers"
+        : null;
+
+    if (serversDir && NodeFS.existsSync(serversDir)) {
+      const files = NodeFS.readdirSync(serversDir).filter((f) => f.endsWith(".json"));
+      files.sort((a, b) => {
+        try {
+          return (
+            NodeFS.statSync(NodePath.join(serversDir, b)).mtimeMs -
+            NodeFS.statSync(NodePath.join(serversDir, a)).mtimeMs
+          );
+        } catch {
+          return 0;
+        }
+      });
+      const firstFile = files[0];
+      if (firstFile) {
+        const sInfo = JSON.parse(NodeFS.readFileSync(NodePath.join(serversDir, firstFile), "utf8"));
+        if (sInfo.port) detectedPort = Number(sInfo.port);
+        if (sInfo.pid && NodeFS.existsSync(`/proc/${sInfo.pid}/environ`)) {
+          try {
+            const envStr = NodeFS.readFileSync(`/proc/${sInfo.pid}/environ`, "utf8");
+            const m = envStr.match(/OPENCODE_PASSWORD=([^\0]+)/);
+            if (m && m[1]) detectedPassword = m[1];
+          } catch {}
+        }
+      }
+    }
+  } catch {}
+
+  const candidatePorts = [detectedPort, 4099, 45991].filter((p, i, a) => a.indexOf(p) === i);
   let activeBase = "";
-  let activeAuth = "Basic " + Buffer.from("opencode:autocode123").toString("base64");
+  let activeAuth = "Basic " + Buffer.from(`opencode:${detectedPassword}`).toString("base64");
 
   for (const cp of candidatePorts) {
     try {

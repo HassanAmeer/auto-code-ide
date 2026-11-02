@@ -249,6 +249,13 @@ export async function querySuperAgentLLM(
     }
   } catch (proxyErr: any) {
     console.warn("SuperAgent proxy fetch error, attempting direct fetch:", proxyErr);
+    if (proxyErr?.name === "AbortError" && !signal?.aborted) {
+      return {
+        ok: false,
+        error: `AI model (${model}) ne response dene mein zyada waqt lagaya (timeout). Model busy ya quota limit par ho sakta hai. Barah-e-karam dropdown se doosra model chunein.`,
+        code: "TIMEOUT",
+      };
+    }
   }
 
   // 2. Direct browser fetch fallback (if providerConfig has baseUrl)
@@ -1534,15 +1541,6 @@ CRITICAL INSTRUCTIONS FOR THIS WHATSAPP INQUIRY:
 
   let friendlyError = "";
   if (
-    errCode === "timeout" ||
-    errCode === "network_error" ||
-    /failed to fetch|network|timeout|connection/i.test(errText)
-  ) {
-    friendlyError =
-      lang === "urdu"
-        ? `⚠️ Network Error: AI model (${selectedModel}) se connection nahi ho saka. Barah-e-karam apna internet aur server connection check karein.`
-        : `⚠️ Network Error: Could not connect to AI model (${selectedModel}). Please verify your network and server connection.`;
-  } else if (
     /rate|quota|limit|429|overloaded|pressure/i.test(errText) ||
     errCode === "resource_pressure"
   ) {
@@ -1550,6 +1548,16 @@ CRITICAL INSTRUCTIONS FOR THIS WHATSAPP INQUIRY:
       lang === "urdu"
         ? `⚠️ AI Rate Limit: Model "${selectedModel}" is waqt busy ya quota limit par hai (${errText}). Barah-e-karam dropdown se doosra model select karein.`
         : `⚠️ AI Rate Limit: Model "${selectedModel}" hit rate or quota limit (${errText}). Please switch models via the dropdown.`;
+  } else if (errCode === "timeout" || /timeout/i.test(errText)) {
+    friendlyError =
+      lang === "urdu"
+        ? `⚠️ Model Timeout: AI model (${selectedModel}) ne jawab dene mein zyada waqt lagaya. Model busy ho sakta hai, barah-e-karam dobara koshish karein ya dropdown se doosra model chunein.`
+        : `⚠️ Model Timeout: AI model (${selectedModel}) took too long to respond. Please try again or switch models.`;
+  } else if (errCode === "network_error" || /failed to fetch|network|connection/i.test(errText)) {
+    friendlyError =
+      lang === "urdu"
+        ? `⚠️ Network Error: AI model (${selectedModel}) se connection nahi ho saka. Barah-e-karam apna internet aur server connection check karein.`
+        : `⚠️ Network Error: Could not connect to AI model (${selectedModel}). Please verify your network and server connection.`;
   } else if (/payment|balance|buyer_fault|unauthorized|401|403|auth/i.test(errText)) {
     friendlyError =
       lang === "urdu"

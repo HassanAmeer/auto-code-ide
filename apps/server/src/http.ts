@@ -1220,12 +1220,27 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
         let port = 4099;
         let pid: number | undefined;
         try {
-          const serversDir = NodePath.join(
-            config.dbPath ? NodePath.dirname(config.dbPath) : "/root/autojobs/data",
-            "userdata/opencode-servers",
-          );
+          const baseDir = config.dbPath
+            ? NodePath.dirname(config.dbPath)
+            : "/root/autojobs/data/userdata";
+          const serversDir = NodeFS.existsSync(NodePath.join(baseDir, "opencode-servers"))
+            ? NodePath.join(baseDir, "opencode-servers")
+            : NodeFS.existsSync(NodePath.join(baseDir, "userdata/opencode-servers"))
+              ? NodePath.join(baseDir, "userdata/opencode-servers")
+              : NodePath.join("/root/autojobs/data/userdata/opencode-servers");
+
           if (NodeFS.existsSync(serversDir)) {
             const files = NodeFS.readdirSync(serversDir).filter((f) => f.endsWith(".json"));
+            files.sort((a, b) => {
+              try {
+                return (
+                  NodeFS.statSync(NodePath.join(serversDir, b)).mtimeMs -
+                  NodeFS.statSync(NodePath.join(serversDir, a)).mtimeMs
+                );
+              } catch {
+                return 0;
+              }
+            });
             const firstFile = files[0];
             if (firstFile) {
               const sInfo = JSON.parse(
@@ -1361,8 +1376,8 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
             let lastMsgs: any[] = [];
 
             const pollStart = Date.now();
-            while (Date.now() - pollStart < 60000) {
-              await new Promise((r) => setTimeout(r, 800));
+            while (Date.now() - pollStart < 25000) {
+              await new Promise((r) => setTimeout(r, 600));
               const mRes = await fetch(`${activeBase}/session/${sessionId}/message`, {
                 headers: { Authorization: activeAuth },
                 signal: AbortSignal.timeout(5000),
@@ -1372,24 +1387,36 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
               const msgs = mData?.data || [];
               lastMsgs = msgs;
 
-              // Check for errors across any assistant message
+              // Check for errors across any assistant message (including retries and rate limits)
               for (const m of msgs) {
-                if (m.type === "assistant" && m.finish === "error") {
-                  const errDetail = m.error?.message || JSON.stringify(m.error);
+                const retryErr =
+                  m.retry?.error?.message ||
+                  (typeof m.retry?.error === "string" ? m.retry.error : "");
+                const errDetail =
+                  m.error?.message ||
+                  retryErr ||
+                  (m.finish === "error" ? JSON.stringify(m.error || "Execution error") : "");
+
+                if (errDetail) {
                   if (m.error?.status === 429 || /free.*limit|quota|429/i.test(errDetail)) {
-                    hitRateLimit = true;
-                    try {
-                      const { rotateWarpIp } =
-                        await import("@t3tools/provider-opencodebypasssetup/server");
-                      await rotateWarpIp();
-                    } catch {}
-                    break;
+                    return {
+                      ok: false,
+                      error: `OpenCode free model '${pureModel}' ki free quota limit full ho chuki hai (Upstream 429). Barah-e-karam dropdown se Gemini ya doosra active model select karein.`,
+                      code: "RESOURCE_PRESSURE",
+                    };
                   }
-                  return { ok: false, error: errDetail, code: "MODEL_ERROR" };
+                  if (/ECONNREFUSED|connect/i.test(errDetail) && (m.retry?.attempt ?? 0) >= 2) {
+                    return {
+                      ok: false,
+                      error: `OpenCode model backend connect nahi ho saka (${errDetail}). Barah-e-karam dropdown se Gemini model select karein.`,
+                      code: "MODEL_ERROR",
+                    };
+                  }
+                  if (m.finish === "error") {
+                    return { ok: false, error: errDetail, code: "MODEL_ERROR" };
+                  }
                 }
               }
-
-              if (hitRateLimit) break;
 
               // Find assistant message with text (check reverse to get latest)
               const reversedMsgs = [...msgs].reverse();
