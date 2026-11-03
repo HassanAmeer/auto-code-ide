@@ -45,6 +45,7 @@ import { RequestLogsFloatingButton } from "../components/logs/RequestLogsFloatin
 import { NotesSheet } from "../components/notes/NotesSheet";
 import { MemorySheet } from "../components/memory/MemorySheet";
 import { BackgroundModeDialog } from "../components/background/BackgroundModeDialog";
+import { ProjectFileExplorer } from "../components/chat/terminal/ProjectFileExplorer";
 import { useCopyToClipboard } from "../hooks/useCopyToClipboard";
 import { useDefaultThemeAdoption } from "../hooks/useDefaultTheme";
 import { useEnvironmentThemeSync } from "../hooks/useEnvironmentTheme";
@@ -241,6 +242,7 @@ function RootRouteView() {
           <NotesSheet />
           <MemorySheet />
           <BackgroundModeDialog />
+          <ProjectFileExplorer />
           {/* Above the router: a theme draft is judged by walking the app, so the
               editor has to survive navigation away from settings. */}
           <ThemeEditorHost />

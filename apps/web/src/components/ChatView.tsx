@@ -493,7 +493,6 @@ import {
   isNaturalLanguagePrompt,
   isKnownUnixBinary,
 } from "./chat/terminal/terminalClient";
-import { ProjectFileExplorer } from "./chat/terminal/ProjectFileExplorer";
 import { ProviderSubagentBar } from "./chat/ProviderSubagentBar";
 import { getTriggerDisplayModelName } from "./chat/providerIconUtils";
 import { resolveTimelineIsAtEnd, worktreeSetupAgentStarted } from "./chat/MessagesTimeline.logic";
@@ -12078,9 +12077,6 @@ export default function ChatView(props: ChatViewProps) {
               : {})}
           />
         </header>
-
-        {/* Project File Explorer & Editor */}
-        <ProjectFileExplorer />
 
         {/* Mobile Concept 2: Segmented Tabs Switcher (Chat vs Fullscreen Terminal) */}
         {isTerminalQuickBarOpen && (

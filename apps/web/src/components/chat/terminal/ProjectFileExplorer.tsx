@@ -297,9 +297,10 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
       if (targetRoot) {
         setRootPath(targetRoot);
         setInputPath(targetRoot);
+        void loadDirectory(targetRoot);
       }
     }
-  }, [isOpen, store.selectedProjectId, store.activeCwd, projects]);
+  }, [isOpen, store.selectedProjectId, store.activeCwd, projects, loadDirectory]);
 
   // When rootPath changes, reload root
   useEffect(() => {
@@ -1228,7 +1229,7 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
   const isDirty = selectedFile && selectedFile.content !== selectedFile.originalContent;
 
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex justify-end sm:items-center sm:justify-center p-0 sm:p-5 animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-[150] flex justify-end sm:items-center sm:justify-center p-0 sm:p-5 animate-in fade-in duration-150">
       {/* Backdrop */}
       <div
         onClick={() => terminalStore.setFileExplorerOpen(false)}
@@ -1240,7 +1241,7 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
       <div
         role="dialog"
         aria-label="File Manager"
-        className="relative z-50 h-[100dvh] max-h-[100dvh] w-[90vw] max-w-[90vw] sm:w-full sm:max-w-6xl sm:h-[88vh] flex flex-col bg-[#0c1017] border-l sm:border border-zinc-800 shadow-2xl text-zinc-100 overflow-hidden font-sans rounded-none sm:rounded-[8px]"
+        className="relative z-[151] h-[100dvh] max-h-[100dvh] w-[90vw] max-w-[90vw] sm:w-full sm:max-w-6xl sm:h-[88vh] flex flex-col bg-[#0c1017] border-l sm:border border-zinc-800 shadow-2xl text-zinc-100 overflow-hidden font-sans rounded-none sm:rounded-[8px]"
       >
         {/* Top Header & Windows-style Address/Path Bar (Safe area top padding on mobile) */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between border-b border-zinc-800/80 bg-[#161b22] px-3 pt-7 pb-2 sm:py-2 select-none gap-2 shrink-0">
