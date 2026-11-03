@@ -89,7 +89,6 @@ import {
   runSuperBotTurn,
   getLiveKitToken,
   getLiveKitRoomInfo,
-  geminiKeyRotator,
   processWhatsAppWebhook,
   getWhatsAppSessions,
   getWhatsAppChats,
@@ -1258,102 +1257,6 @@ export const layerLiveKitStatusRoute = HttpRouter.add(
   }),
 );
 
-export const layerGroqModelsRoute = HttpRouter.add(
-  "POST",
-  "/api/groq/models",
-  Effect.gen(function* () {
-    const request = yield* HttpServerRequest.HttpServerRequest;
-    const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
-      apiKey?: string;
-    };
-
-    const apiKey = bodyJson?.apiKey?.trim();
-    if (!apiKey) {
-      return HttpServerResponse.jsonUnsafe({
-        ok: false,
-        error: "Groq API key is required to fetch models.",
-      });
-    }
-
-    const res = yield* Effect.promise(async () => {
-      try {
-        const resp = await fetch("https://api.groq.com/openai/v1/models", {
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            Accept: "application/json",
-            "User-Agent": "AutoCode-Voice/1.0",
-          },
-          signal: AbortSignal.timeout(10000),
-        });
-
-        const data = (await resp.json()) as any;
-        if (!resp.ok) {
-          return {
-            ok: false,
-            error: data?.error?.message || `Groq API returned HTTP ${resp.status}`,
-          };
-        }
-
-        const rawList = Array.isArray(data?.data) ? data.data : [];
-        const chatModels = rawList
-          .filter((m: any) => {
-            const id = String(m?.id || "").toLowerCase();
-            if (m?.active === false) return false;
-            if (
-              id.includes("whisper") ||
-              id.includes("distil") ||
-              id.includes("embed") ||
-              id.includes("tts")
-            ) {
-              return false;
-            }
-            return true;
-          })
-          .map((m: any) => {
-            const id = String(m.id);
-            let name = id;
-            let description = "Groq High-Speed LLM";
-            if (id.includes("llama-3.3-70b")) {
-              name = "Llama 3.3 70B (Recommended)";
-              description = "128k context, versatile flagship reasoning";
-            } else if (id.includes("llama-3.1-8b")) {
-              name = "Llama 3.1 8B Instant";
-              description = "128k context, ultra-low latency";
-            } else if (id.includes("deepseek-r1")) {
-              name = "DeepSeek R1 Distill Llama 70B";
-              description = "128k context, deep chain-of-thought reasoning";
-            } else if (id.includes("qwen-qwq")) {
-              name = "Qwen QwQ 32B";
-              description = "128k context, math and code specialist";
-            } else if (id.includes("llama-guard")) {
-              name = id;
-              description = "Safety moderation model";
-            }
-            return {
-              id,
-              name,
-              description,
-              contextWindow: m.context_window,
-              ownedBy: m.owned_by,
-            };
-          });
-
-        return {
-          ok: true,
-          models: chatModels,
-        };
-      } catch (err: any) {
-        return {
-          ok: false,
-          error: err?.message || String(err),
-        };
-      }
-    });
-
-    return HttpServerResponse.jsonUnsafe(res);
-  }),
-);
-
 export const layerSuperAgentChatRoute = HttpRouter.add(
   "POST",
   "/api/super-agent/chat",
@@ -2252,17 +2155,6 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
   }),
 );
 
-export const layerGeminiStatusRoute = HttpRouter.add(
-  "GET",
-  "/api/gemini/status",
-  Effect.sync(() => {
-    return HttpServerResponse.jsonUnsafe({
-      ok: true,
-      rotator: geminiKeyRotator.getStatusSummary(),
-    });
-  }),
-);
-
 // ── Multi-Turn Session Ledger API (Lambay Mashwaray ke liye Memory) 🧠 ───────
 
 export const layerSessionLedgerGetRoute = HttpRouter.add(
@@ -2332,56 +2224,6 @@ export const layerSessionLedgerClearRoute = HttpRouter.add(
       sessionId,
       cleared: true,
     });
-  }),
-);
-
-// ── Zero-Cost YouTube & Web Link Research API (Inspired by DIGI LABS) ────────
-
-export const layerResearchMediaLinkRoute = HttpRouter.add(
-  "POST",
-  "/api/research/media-link",
-  Effect.gen(function* () {
-    const request = yield* HttpServerRequest.HttpServerRequest;
-    const body = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
-      url?: string;
-      query?: string;
-    };
-
-    const url = body?.url?.trim() ?? "";
-    if (!url) {
-      return HttpServerResponse.jsonUnsafe({ ok: false, error: "url required" });
-    }
-
-    const result = yield* Effect.promise(async () => {
-      const { researchMediaLink } = await import("./youtubeTranscript.ts");
-      return researchMediaLink(url, body?.query);
-    });
-
-    return HttpServerResponse.jsonUnsafe(result);
-  }),
-);
-
-export const layerResearchMediaLinkGetRoute = HttpRouter.add(
-  "GET",
-  "/api/research/media-link",
-  Effect.gen(function* () {
-    const request = yield* HttpServerRequest.HttpServerRequest;
-    const urlObj = HttpServerRequest.toURL(request);
-    const mediaUrl = Option.isSome(urlObj) ? (urlObj.value.searchParams.get("url") ?? "") : "";
-    const query = Option.isSome(urlObj)
-      ? (urlObj.value.searchParams.get("query") ?? undefined)
-      : undefined;
-
-    if (!mediaUrl) {
-      return HttpServerResponse.jsonUnsafe({ ok: false, error: "url query parameter required" });
-    }
-
-    const result = yield* Effect.promise(async () => {
-      const { researchMediaLink } = await import("./youtubeTranscript.ts");
-      return researchMediaLink(mediaUrl, query);
-    });
-
-    return HttpServerResponse.jsonUnsafe(result);
   }),
 );
 
