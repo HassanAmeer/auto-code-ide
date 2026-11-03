@@ -1830,3 +1830,69 @@ it("renders automatic completion as a work entry instead of a user bubble", () =
     })[0]?.kind,
   ).toBe("message");
 });
+
+it("suppresses fallback timeout error card when the assistant response was already generated", () => {
+  const threadId = ThreadId.make("thread-1");
+  const runId = RunId.make("run-1");
+  const rootNodeId = NodeId.make("node-root");
+
+  const now = DateTime.makeUnsafe("2026-06-20T00:00:00.000Z");
+
+  const assistantMessage: OrchestrationV2ProjectedTurnItem = {
+    position: 0,
+    visibility: "local",
+    sourceThreadId: threadId,
+    sourceItemId: TurnItemId.make("item-assistant"),
+    item: {
+      id: TurnItemId.make("item-assistant"),
+      threadId,
+      runId,
+      nodeId: rootNodeId,
+      providerThreadId: ProviderThreadId.make("prov-thread"),
+      providerTurnId: null,
+      nativeItemRef: null,
+      parentItemId: null,
+      ordinal: 1 as any,
+      status: "completed",
+      title: "Assistant reply",
+      startedAt: now,
+      completedAt: now,
+      updatedAt: now,
+      type: "assistant_message",
+      messageId: MessageId.make("msg-1"),
+      text: "All set! I'm ready to help with your project.",
+      streaming: false,
+    },
+  };
+
+  const attempts: OrchestrationV2RunAttempt[] = [
+    {
+      id: "attempt-1" as any,
+      runId,
+      attemptOrdinal: 1 as any,
+      rootNodeId,
+      providerInstanceId: ProviderInstanceId.make("claude"),
+      providerThreadId: ProviderThreadId.make("prov-thread"),
+      providerTurnId: null,
+      reason: "initial",
+      status: "failed",
+      startedAt: now,
+      completedAt: now,
+    },
+  ];
+
+  const entries = deriveTimelineEntriesFromVisibleTurnItems({
+    visibleTurnItems: [assistantMessage],
+    optimisticMessages: [],
+    attempts,
+  });
+
+  // Must only contain the assistant message, no error cards!
+  expect(entries).toHaveLength(1);
+  expect(entries[0]!.kind).toBe("message");
+  expect(
+    entries.some(
+      (e) => e.kind === "work" && (e as any).entry?.projectedItem?.item?.type === "error",
+    ),
+  ).toBe(false);
+});

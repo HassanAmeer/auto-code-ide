@@ -614,6 +614,20 @@ export interface TimelineEntriesProjection {
   readonly entries: TimelineEntry[];
 }
 
+export function getTimelineEntryRunId(entry: TimelineEntry): RunId | null {
+  if (entry.kind === "message") {
+    return entry.message.runId ?? null;
+  }
+  if (entry.kind === "proposed-plan") {
+    return entry.proposedPlan.runId;
+  }
+  if (entry.kind === "html-render" || entry.kind === "mcp-app") return entry.runId;
+  if (entry.kind === "event") {
+    return entry.projectedItem.item.runId ?? null;
+  }
+  return entry.kind === "work" ? (entry.entry.runId ?? null) : null;
+}
+
 export function deriveTimelineEntriesFromVisibleTurnItems(
   input: TimelineEntriesInput,
 ): TimelineEntry[] {
@@ -662,6 +676,69 @@ export function deriveTimelineEntriesFromVisibleTurnItems(
   const retriedRunIds = new Set<RunId>();
   if (input.retryingRunId) {
     retriedRunIds.add(input.retryingRunId);
+  }
+
+  // Pre-scan all runs that have produced an assistant message with content or are actively streaming
+  const runsWithSubstantialAssistantMessage = new Set<RunId>();
+  for (const { item } of input.visibleTurnItems) {
+    if (
+      item.runId &&
+      item.type === "assistant_message" &&
+      (Boolean(item.text?.trim()) || Boolean((item as { streaming?: boolean }).streaming))
+    ) {
+      runsWithSubstantialAssistantMessage.add(item.runId);
+    }
+  }
+  for (const message of input.anchoredMessages ?? []) {
+    if (
+      message.role === "assistant" &&
+      message.runId &&
+      (Boolean(message.text?.trim()) || Boolean(message.streaming))
+    ) {
+      runsWithSubstantialAssistantMessage.add(message.runId);
+    }
+  }
+  for (const message of input.optimisticMessages) {
+    if (
+      message.role === "assistant" &&
+      message.runId &&
+      (Boolean(message.text?.trim()) || Boolean(message.streaming))
+    ) {
+      runsWithSubstantialAssistantMessage.add(message.runId);
+    }
+  }
+
+  // Group attempts by rootNodeId to find preceding runs that were retried or superseded
+  const attemptsByRootNode = new Map<NodeId, OrchestrationV2RunAttempt[]>();
+  for (const attempt of input.attempts ?? []) {
+    const list = attemptsByRootNode.get(attempt.rootNodeId) ?? [];
+    list.push(attempt);
+    attemptsByRootNode.set(attempt.rootNodeId, list);
+  }
+  for (const list of attemptsByRootNode.values()) {
+    if (list.length > 1) {
+      list.sort((a, b) => a.attemptOrdinal - b.attemptOrdinal);
+      // All attempts before the latest one for this root node are retried runs
+      for (let i = 0; i < list.length - 1; i++) {
+        retriedRunIds.add(list[i]!.runId);
+      }
+    }
+    // If any attempt for this root node is currently running, completed, or has an assistant message,
+    // all failed or superseded attempts for this root node are obsolete retried runs
+    const hasSuccessfulOrActive = list.some(
+      (a) =>
+        a.status === "running" ||
+        a.status === "completed" ||
+        a.status === "pending" ||
+        runsWithSubstantialAssistantMessage.has(a.runId),
+    );
+    if (hasSuccessfulOrActive) {
+      for (const a of list) {
+        if (a.status === "failed" || a.status === "cancelled") {
+          retriedRunIds.add(a.runId);
+        }
+      }
+    }
   }
 
   // Group runs by conversational turn (user prompt).
@@ -717,12 +794,25 @@ export function deriveTimelineEntriesFromVisibleTurnItems(
     // Suppress internal retry user prompts - never render them as visible user bubbles
     if (item.type === "user_message" && isInternalRetryPrompt(item.text)) continue;
 
-    // When a turn is retried, suppress its error card, partial assistant message, and failed reasoning
+    // When a turn is retried, suppress its error card, empty assistant message, and failed reasoning
     // so the retried response starts and generates in-place
     if (item.runId && retriedRunIds.has(item.runId)) {
-      if (item.type === "error" || item.type === "assistant_message" || item.type === "reasoning") {
+      if (
+        item.type === "error" ||
+        (item.type === "assistant_message" && !item.text?.trim()) ||
+        item.type === "reasoning"
+      ) {
         continue;
       }
+    }
+
+    // Suppress trailing error cards on runs that already produced a substantial assistant response
+    if (
+      item.type === "error" &&
+      item.runId &&
+      runsWithSubstantialAssistantMessage.has(item.runId)
+    ) {
+      continue;
     }
     const createdAt = projectedItemCreatedAt(row);
     const attempt = resolveAttempt(item);
@@ -896,20 +986,6 @@ export function deriveTimelineEntriesFromVisibleTurnItems(
     }
   }
 
-  function getTimelineEntryRunId(entry: TimelineEntry): RunId | null {
-    if (entry.kind === "message") {
-      return entry.message.runId ?? null;
-    }
-    if (entry.kind === "proposed-plan") {
-      return entry.proposedPlan.runId;
-    }
-    if (entry.kind === "html-render" || entry.kind === "mcp-app") return entry.runId;
-    if (entry.kind === "event") {
-      return entry.projectedItem.item.runId ?? null;
-    }
-    return entry.kind === "work" ? (entry.entry.runId ?? null) : null;
-  }
-
   // Fallback: If an attempt or run failed but no error card was emitted, ensure an error bubble is visible on the assistant side
   const runIdsWithErrors = new Set<RunId>();
   for (const entry of entries) {
@@ -929,7 +1005,8 @@ export function deriveTimelineEntriesFromVisibleTurnItems(
     if (
       attempt.status === "failed" &&
       !runIdsWithErrors.has(attempt.runId) &&
-      !retriedRunIds.has(attempt.runId)
+      !retriedRunIds.has(attempt.runId) &&
+      !runsWithSubstantialAssistantMessage.has(attempt.runId)
     ) {
       runIdsWithErrors.add(attempt.runId);
       const createdAt = attempt.completedAt
@@ -1003,6 +1080,22 @@ export function deriveTimelineEntriesFromVisibleTurnItems(
 
     const currentSig = getErrorSignature(entry);
     const prevSig = getErrorSignature(prevEntry);
+
+    // If this entry is an error card for a run that already produced an assistant message, skip it
+    const entryRunId = getTimelineEntryRunId(entry);
+    const hasAssistantResponse =
+      entryRunId &&
+      entries.some(
+        (e) =>
+          getTimelineEntryRunId(e) === entryRunId &&
+          ((e.kind === "message" && e.message.role === "assistant" && e.message.text?.trim()) ||
+            (e.kind === "event" &&
+              e.projectedItem.item.type === "assistant_message" &&
+              e.projectedItem.item.text?.trim())),
+      );
+    if (currentSig && hasAssistantResponse) {
+      continue;
+    }
 
     // If consecutive error cards have the same error signature, keep only the latest one
     if (currentSig && prevSig && currentSig === prevSig) {
@@ -1245,6 +1338,22 @@ function reuseTimelineEntries(
 
     const currentSig = getErrorSignature(entry);
     const prevSig = getErrorSignature(prevEntry);
+
+    // If this entry is an error card for a run that already produced an assistant message, skip it
+    const entryRunId = getTimelineEntryRunId(entry);
+    const hasAssistantResponse =
+      entryRunId &&
+      entries.some(
+        (e) =>
+          getTimelineEntryRunId(e) === entryRunId &&
+          ((e.kind === "message" && e.message.role === "assistant" && e.message.text?.trim()) ||
+            (e.kind === "event" &&
+              e.projectedItem.item.type === "assistant_message" &&
+              e.projectedItem.item.text?.trim())),
+      );
+    if (currentSig && hasAssistantResponse) {
+      continue;
+    }
 
     // If consecutive error cards have the same error signature, keep only the latest one
     if (currentSig && prevSig && currentSig === prevSig) {
