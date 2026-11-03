@@ -32,6 +32,7 @@ import {
   customProviderToServerProvider,
   type CustomProvider,
 } from "../../lib/customProviders";
+import { useUnifiedProviders } from "../../lib/useUnifiedProviders";
 import type { ModelEsque } from "../chat/providerIconUtils";
 import { EMPTY_SERVER_PROVIDERS } from "../../state/server";
 import { ProviderModelPicker } from "../chat/ProviderModelPicker";
@@ -75,30 +76,8 @@ export function SourceControlWritingSettingsSection() {
   // against every target before it fans out.
   const environmentId = environment?.environmentId ?? null;
   const hasServerTargets = connectedEnvironments.length > 0;
-  const [customProvidersList, setCustomProvidersList] = useState<CustomProvider[]>(() =>
-    getCustomProviders(),
-  );
-
-  useEffect(() => {
-    return subscribeCustomProviders((list) => {
-      setCustomProvidersList(list);
-    });
-  }, []);
-
   const rawServerProviders = environment?.serverConfig?.providers ?? EMPTY_SERVER_PROVIDERS;
-
-  const serverProviders = useMemo(() => {
-    const nonCustomRaw = rawServerProviders.filter(
-      (p) => p.driver !== "custom" && p.instanceId !== "custom",
-    );
-    if (!Array.isArray(customProvidersList) || customProvidersList.length === 0)
-      return nonCustomRaw;
-    const customStatuses = customProvidersList
-      .filter((cp): cp is CustomProvider => Boolean(cp && typeof cp === "object"))
-      .map(customProviderToServerProvider)
-      .filter(Boolean);
-    return [...nonCustomRaw, ...customStatuses];
-  }, [rawServerProviders, customProvidersList]);
+  const { serverProviders } = useUnifiedProviders(rawServerProviders);
   // The writing style is one object; each control only cares about its own field.
   const styleFieldMixed = (field: keyof ServerSettings["sourceControlWritingStyle"]) => {
     const first = targets[0];

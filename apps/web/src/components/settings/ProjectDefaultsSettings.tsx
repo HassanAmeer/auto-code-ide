@@ -19,6 +19,7 @@ import {
   customProviderToServerProvider,
   type CustomProvider,
 } from "../../lib/customProviders";
+import { useUnifiedProviders } from "../../lib/useUnifiedProviders";
 import type { ModelEsque } from "../chat/providerIconUtils";
 import {
   applyProviderInstanceSettings,
@@ -72,30 +73,8 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
   const representative = target
     ? environments.find((environment) => environment.environmentId === target.environmentId)
     : undefined;
-  const [customProvidersList, setCustomProvidersList] = useState<CustomProvider[]>(() =>
-    getCustomProviders(),
-  );
-
-  useEffect(() => {
-    return subscribeCustomProviders((list) => {
-      setCustomProvidersList(list);
-    });
-  }, []);
-
   const rawServerProviders = representative?.serverConfig?.providers ?? EMPTY_SERVER_PROVIDERS;
-
-  const providers = useMemo(() => {
-    const nonCustomRaw = rawServerProviders.filter(
-      (p) => p.driver !== "custom" && p.instanceId !== "custom",
-    );
-    if (!Array.isArray(customProvidersList) || customProvidersList.length === 0)
-      return nonCustomRaw;
-    const customStatuses = customProvidersList
-      .filter((cp): cp is CustomProvider => Boolean(cp && typeof cp === "object"))
-      .map(customProviderToServerProvider)
-      .filter(Boolean);
-    return [...nonCustomRaw, ...customStatuses];
-  }, [rawServerProviders, customProvidersList]);
+  const { serverProviders: providers } = useUnifiedProviders(rawServerProviders);
 
   const selection = resolveDefaultProviderModelSelection(providers, settings.defaultModelSelection);
   const entries = useMemo(

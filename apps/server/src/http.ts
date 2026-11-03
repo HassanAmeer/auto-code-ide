@@ -1212,18 +1212,15 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
     const appSettings = getAllAppSettings(config.dbPath);
     const activeCoreEngine = String(appSettings?.active_core_engine || "opencode-full-engine");
 
-    // Architectural Rule: External CLI & Port discovery ONLY run when opencode-adapter is explicitly selected.
-    // When opencode-full-engine (standalone) is active, bypass external ports and process via internal engine.
-    const isOpenCodeAdapter =
-      activeCoreEngine === "opencode-adapter" &&
-      (bodyJson?.instanceId === "opencodebypasssetup" ||
-        bodyJson?.instanceId === "opencode" ||
-        model.toLowerCase().startsWith("opencode/") ||
-        OPENCODE_FREE_MODELS.includes(model.toLowerCase()));
+    const isOpenCode =
+      bodyJson?.instanceId === "opencodebypasssetup" ||
+      bodyJson?.instanceId === "opencode" ||
+      model.toLowerCase().startsWith("opencode/") ||
+      OPENCODE_FREE_MODELS.includes(model.toLowerCase());
 
     const result = yield* Effect.promise(async () => {
-      if (isOpenCodeAdapter) {
-        // Run turn via OpenCode External CLI Adapter daemon
+      if (isOpenCode) {
+        // Run turn via OpenCode Local Runtime
         let port = 4099;
         let pid: number | undefined;
         try {
@@ -1889,19 +1886,14 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
           enrichedMessages.unshift({ role: "system", content: sys });
         }
 
-        // Standalone engine / Gemini fallback: If no explicit custom provider API key is provided and Gemini keys are active
-        if (
-          (!apiKey || model.toLowerCase().includes("gemini")) &&
-          geminiKeyRotator.getActiveKey()
-        ) {
+        // ONLY call Gemini if the user explicitly selected a Gemini model
+        if (model.toLowerCase().includes("gemini") && geminiKeyRotator.getActiveKey()) {
           const userPromptParts = enrichedMessages
             .filter((m) => m.role !== "system")
             .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
             .join("\n\n");
           const systemContent = enrichedMessages.find((m) => m.role === "system")?.content || "";
-          const effectiveGeminiModel = model.toLowerCase().includes("gemini")
-            ? model
-            : "gemini-2.5-flash";
+          const effectiveGeminiModel = model;
 
           const geminiRes = await queryGeminiWithRotation({
             model: effectiveGeminiModel,

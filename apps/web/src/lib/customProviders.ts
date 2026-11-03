@@ -130,6 +130,7 @@ export function customProviderToServerProvider(cp: CustomProvider): ServerProvid
     models,
     slashCommands: [],
     skills: [],
+    supportsTextGeneration: true,
   } as unknown as ServerProvider;
 }
 
@@ -344,6 +345,27 @@ if (typeof window !== "undefined") {
       }).catch(() => {});
     }
   })();
+}
+
+export async function fetchCustomProviders(): Promise<CustomProvider[]> {
+  if (typeof window === "undefined") return getCustomProviders();
+  try {
+    const res = await fetch("/api/custom-provider/list");
+    if (res.ok) {
+      const data = (await res.json()) as { ok?: boolean; providers?: CustomProvider[] };
+      if (data.ok && Array.isArray(data.providers) && data.providers.length > 0) {
+        const normalized = data.providers
+          .map(normalizeCustomProvider)
+          .filter((p): p is CustomProvider => p !== null);
+        if (normalized.length > 0) {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+          window.dispatchEvent(new CustomEvent(EVENT_KEY, { detail: normalized }));
+          return normalized;
+        }
+      }
+    }
+  } catch {}
+  return getCustomProviders();
 }
 
 export function subscribeCustomProviders(

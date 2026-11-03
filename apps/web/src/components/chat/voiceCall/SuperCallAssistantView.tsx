@@ -88,6 +88,7 @@ import {
   type SessionLedgerData,
 } from "~/lib/speech/multiTurnSessionLedger";
 import { useGroqSettings, GROQ_MODEL_OPTIONS, fetchGroqLiveModels } from "~/lib/groqVoiceSettings";
+import { useAutoRetrySettings, findNextFallbackModel } from "~/lib/autoRetrySettings";
 import { executeTerminalCommand } from "~/components/chat/terminal/terminalClient";
 import { Link } from "@tanstack/react-router";
 import { type ProviderInstanceId } from "@t3tools/contracts";
@@ -127,6 +128,7 @@ import {
   customProviderToServerProvider,
   type CustomProvider,
 } from "~/lib/customProviders";
+import { useUnifiedProviders } from "~/lib/useUnifiedProviders";
 import {
   deriveProviderInstanceEntries,
   sortProviderInstanceEntries,
@@ -1028,30 +1030,11 @@ export function SuperCallAssistantView() {
   }, [ttsSettings]);
 
   // Providers, models & settings
+  const [autoRetrySettings] = useAutoRetrySettings();
   const rawServerProviders = useAtomValue(primaryServerProvidersAtom);
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
-  const [customProvidersList, setCustomProvidersList] = useState<CustomProvider[]>(() =>
-    getCustomProviders(),
-  );
-
-  useEffect(() => {
-    return subscribeCustomProviders((list) => {
-      setCustomProvidersList(list);
-    });
-  }, []);
-
-  const providers = useMemo(() => {
-    const nonCustomRaw = rawServerProviders.filter(
-      (p) => p.driver !== "custom" && p.instanceId !== "custom",
-    );
-    if (!Array.isArray(customProvidersList) || customProvidersList.length === 0)
-      return nonCustomRaw;
-    const customStatuses = customProvidersList
-      .filter((cp): cp is CustomProvider => Boolean(cp && typeof cp === "object"))
-      .map(customProviderToServerProvider)
-      .filter(Boolean);
-    return [...nonCustomRaw, ...customStatuses];
-  }, [rawServerProviders, customProvidersList]);
+  const { serverProviders: providers, customProvidersList } =
+    useUnifiedProviders(rawServerProviders);
 
   const clientSettings = useClientSettings();
   const primaryServerSettings = useAtomValue(primaryServerSettingsAtom);
@@ -1213,69 +1196,159 @@ export function SuperCallAssistantView() {
 
       try {
         const activeProjId = projects[0]?.id ? String(projects[0].id) : undefined;
-        const matchingCustomProvider = customProvidersList.find(
-          (cp) =>
-            cp.id === effectiveInstanceId ||
-            cp.name === effectiveInstanceId ||
-            String(cp.id) === String(effectiveInstanceId),
+        let currentInstanceId = isGroqActive ? ("groq" as ProviderInstanceId) : effectiveInstanceId;
+        let currentModel = effectiveSelectedModel;
+        let res: any = null;
+        const attemptedFavorites = new Set<string>();
+        attemptedFavorites.add(`${String(currentInstanceId)}:${currentModel}`);
+
+        const favoritesList = settings?.favorites || [];
+        let retryAttempt = 0;
+        const maxRetries = autoRetrySettings.enabled
+          ? Math.max(1, autoRetrySettings.maxRetries)
+          : 1;
+        const delaySeconds = autoRetrySettings.enabled
+          ? Math.max(0, autoRetrySettings.delaySeconds)
+          : 0;
+        const canAutoSwitch = Boolean(
+          autoRetrySettings.enabled && autoRetrySettings.autoSwitchModel,
         );
 
-        const effectiveProviderConfig = isGroqActive
-          ? ({
-              baseUrl: "https://api.groq.com/openai/v1",
-              apiKey: groqSettings.apiKey.trim(),
-              format: "openai",
-            } as any)
-          : matchingCustomProvider
+        while (true) {
+          const matchingCustomProvider = customProvidersList.find(
+            (cp) =>
+              cp.id === currentInstanceId ||
+              cp.name === currentInstanceId ||
+              String(cp.id) === String(currentInstanceId),
+          );
+
+          const effectiveProviderConfig = isGroqActive
             ? ({
-                baseUrl: matchingCustomProvider.baseUrl,
-                apiKey: matchingCustomProvider.apiKey,
-                headers: matchingCustomProvider.headers as any,
-                format: matchingCustomProvider.format,
+                baseUrl: "https://api.groq.com/openai/v1",
+                apiKey: groqSettings.apiKey.trim(),
+                format: "openai",
               } as any)
-            : undefined;
+            : matchingCustomProvider
+              ? ({
+                  baseUrl: matchingCustomProvider.baseUrl,
+                  apiKey: matchingCustomProvider.apiKey,
+                  headers: matchingCustomProvider.headers as any,
+                  format: matchingCustomProvider.format,
+                } as any)
+              : undefined;
 
-        const res = await executeSuperAgentInstruction({
-          userText: effectiveUserPrompt,
-          projects,
-          activeProjectId: activeProjId,
-          selectedModel: effectiveSelectedModel,
-          selectedInstanceId: isGroqActive ? "groq" : String(effectiveInstanceId),
-          chatId: activeSessionId,
-          conversationHistory: (activeSession?.messages || []).map((m) => ({
-            role: m.role === "user" ? ("user" as const) : ("assistant" as const),
-            text: m.text,
-          })),
-          providerConfig: effectiveProviderConfig,
-          signal: controller.signal,
-          onStatusUpdate: (status) => {
-            if (!controller.signal.aborted) {
-              setAgentStatus(status);
-            }
-          },
-          onFillerSpoken: (fillerText) => {
-            if (!controller.signal.aborted) {
-              setAgentStatus(fillerText);
-            }
-          },
-          onToolCall: (tool) => {
-            if (!controller.signal.aborted) {
-              setLiveTools((prev) => {
-                const idx = prev.findIndex((t) => t.name === tool.name);
-                if (idx >= 0) {
-                  const next = [...prev];
-                  next[idx] = tool;
-                  return next;
-                }
-                return [...prev, tool];
-              });
-            }
-          },
-        });
+          res = await executeSuperAgentInstruction({
+            userText: effectiveUserPrompt,
+            projects,
+            activeProjectId: activeProjId,
+            selectedModel: currentModel,
+            selectedInstanceId: String(currentInstanceId),
+            chatId: activeSessionId,
+            conversationHistory: (activeSession?.messages || []).map((m) => ({
+              role: m.role === "user" ? ("user" as const) : ("assistant" as const),
+              text: m.text,
+            })),
+            providerConfig: effectiveProviderConfig,
+            signal: controller.signal,
+            onStatusUpdate: (status) => {
+              if (!controller.signal.aborted) {
+                setAgentStatus(status);
+              }
+            },
+            onFillerSpoken: (fillerText) => {
+              if (!controller.signal.aborted) {
+                setAgentStatus(fillerText);
+              }
+            },
+            onToolCall: (tool) => {
+              if (!controller.signal.aborted) {
+                setLiveTools((prev) => {
+                  const idx = prev.findIndex((t) => t.name === tool.name);
+                  if (idx >= 0) {
+                    const next = [...prev];
+                    next[idx] = tool;
+                    return next;
+                  }
+                  return [...prev, tool];
+                });
+              }
+            },
+          });
 
-        if (controller.signal.aborted) {
-          console.log("[SuperAgent] Discarding response: request was aborted.");
-          return;
+          if (controller.signal.aborted) {
+            console.log("[SuperAgent] Discarding response: request was aborted.");
+            return;
+          }
+
+          // If execution succeeded, exit loop
+          if (res.actionTaken !== "provider_error") {
+            break;
+          }
+
+          // Check if auto-retry is enabled in settings
+          if (!autoRetrySettings.enabled) {
+            break;
+          }
+
+          // Check if error is rate limit (429 or quota) and whether retryOnRateLimit is allowed
+          const isRateLimitError =
+            res.details?.code === "resource_pressure" ||
+            res.details?.code === "RESOURCE_PRESSURE" ||
+            res.details?.status === 429 ||
+            /limit|quota|429/i.test(res.details?.error || "");
+
+          if (isRateLimitError && !autoRetrySettings.retryOnRateLimit && !canAutoSwitch) {
+            break;
+          }
+
+          retryAttempt++;
+          if (retryAttempt > maxRetries) {
+            break;
+          }
+
+          // Look for next favorited (starred) model candidate if autoSwitchModel is enabled
+          let nextCandidate: ReturnType<typeof findNextFallbackModel> = null;
+          if (canAutoSwitch) {
+            nextCandidate = findNextFallbackModel(
+              { instanceId: currentInstanceId, model: currentModel },
+              instanceEntries,
+              favoritesList,
+            );
+          }
+
+          const nextKey = nextCandidate
+            ? `${String(nextCandidate.instanceId)}:${nextCandidate.model}`
+            : null;
+          const shouldSwitch = Boolean(
+            nextCandidate && nextKey && !attemptedFavorites.has(nextKey),
+          );
+
+          if (shouldSwitch && nextCandidate && nextKey) {
+            attemptedFavorites.add(nextKey);
+            currentInstanceId = nextCandidate.instanceId;
+            currentModel = nextCandidate.model;
+            // Update dropdown UI and localStorage
+            handleModelChange(nextCandidate.instanceId, nextCandidate.model);
+          }
+
+          // Delay countdown according to autoRetrySettings.delaySeconds
+          if (delaySeconds > 0) {
+            for (let s = delaySeconds; s > 0; s--) {
+              if (controller.signal.aborted) return;
+              const notice =
+                shouldSwitch && nextCandidate
+                  ? isUrduLanguage(userText)
+                    ? `⚠️ Model limit: Favorite model (${nextCandidate.displayName}) par ${s}s mein switch ho raha hai... (${retryAttempt}/${maxRetries})`
+                    : `⚠️ Model limit: Switching to favorite model (${nextCandidate.displayName}) in ${s}s... (${retryAttempt}/${maxRetries})`
+                  : isUrduLanguage(userText)
+                    ? `⚠️ Model busy: ${s}s mein dobara koshish ki ja rahi hai... (${retryAttempt}/${maxRetries})`
+                    : `⚠️ Model busy: Retrying in ${s}s... (${retryAttempt}/${maxRetries})`;
+              setAgentStatus(notice);
+              await new Promise((r) => setTimeout(r, 1000));
+            }
+          }
+
+          continue;
         }
 
         const meta: any = res.delegatedTask

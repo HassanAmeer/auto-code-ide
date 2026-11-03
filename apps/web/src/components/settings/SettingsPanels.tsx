@@ -117,6 +117,7 @@ import {
   customProviderToServerProvider,
   type CustomProvider,
 } from "../../lib/customProviders";
+import { useUnifiedProviders } from "../../lib/useUnifiedProviders";
 import type { ModelEsque } from "../chat/providerIconUtils";
 import {
   applyProviderInstanceSettings,
@@ -1991,30 +1992,8 @@ export function GeneralSettingsPanel() {
   const isEnvironmentScope = scope.environmentIds.length === 1 && environmentId !== null;
   const hasServerTargets = connectedEnvironments.length > 0;
   const mixedResponseStreamingMode = useScopedSettingsMixed(["responseStreamingMode"]);
-  const [customProvidersList, setCustomProvidersList] = useState<CustomProvider[]>(() =>
-    getCustomProviders(),
-  );
-
-  useEffect(() => {
-    return subscribeCustomProviders((list) => {
-      setCustomProvidersList(list);
-    });
-  }, []);
-
   const rawServerProviders = environment?.serverConfig?.providers ?? EMPTY_SERVER_PROVIDERS;
-
-  const serverProviders = useMemo(() => {
-    const nonCustomRaw = rawServerProviders.filter(
-      (p) => p.driver !== "custom" && p.instanceId !== "custom",
-    );
-    if (!Array.isArray(customProvidersList) || customProvidersList.length === 0)
-      return nonCustomRaw;
-    const customStatuses = customProvidersList
-      .filter((cp): cp is CustomProvider => Boolean(cp && typeof cp === "object"))
-      .map(customProviderToServerProvider)
-      .filter(Boolean);
-    return [...nonCustomRaw, ...customStatuses];
-  }, [rawServerProviders, customProvidersList]);
+  const { serverProviders, customProvidersList } = useUnifiedProviders(rawServerProviders);
 
   const supportsAutoSettlement =
     connectedEnvironments.length > 0 &&

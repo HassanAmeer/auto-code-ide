@@ -365,6 +365,7 @@ import {
   subscribeCustomProviders,
   type CustomProvider,
 } from "../lib/customProviders";
+import { useUnifiedProviders } from "../lib/useUnifiedProviders";
 import {
   getComposerPromptInjectionState,
   getComposerProviderState,
@@ -3213,32 +3214,11 @@ export default function ChatView(props: ChatViewProps) {
 
   // Once a thread selects an environment, never substitute the primary
   // environment's config while the selected environment is still loading.
-  const [customProvidersList, setCustomProvidersList] = useState<CustomProvider[]>(() =>
-    getCustomProviders(),
-  );
-
-  useEffect(() => {
-    return subscribeCustomProviders((list) => {
-      setCustomProvidersList(list);
-    });
-  }, []);
-
   const serverConfig = activeThread
     ? (activeEnvironment?.serverConfig ?? null)
     : (primaryEnvironment?.serverConfig ?? null);
   const rawProviderStatuses = serverConfig?.providers ?? EMPTY_PROVIDERS;
-  const providerStatuses = useMemo(() => {
-    const nonCustomRaw = rawProviderStatuses.filter(
-      (p) => p.driver !== "custom" && p.instanceId !== "custom",
-    );
-    if (!Array.isArray(customProvidersList) || customProvidersList.length === 0)
-      return nonCustomRaw;
-    const customStatuses = customProvidersList
-      .filter((cp): cp is CustomProvider => Boolean(cp && typeof cp === "object"))
-      .map(customProviderToServerProvider)
-      .filter(Boolean);
-    return [...nonCustomRaw, ...customStatuses];
-  }, [rawProviderStatuses, customProvidersList]);
+  const { serverProviders: providerStatuses } = useUnifiedProviders(rawProviderStatuses);
   const selectedProviderByThreadId = composerActiveProvider ?? null;
   const threadProvider =
     activeThread?.modelSelection.instanceId ??
