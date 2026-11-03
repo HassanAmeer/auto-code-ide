@@ -17,6 +17,7 @@ import {
   CpuIcon,
   SettingsIcon,
   SparklesIcon,
+  StarIcon,
   Trash2Icon,
 } from "lucide-react";
 import { Link, useNavigate } from "@tanstack/react-router";
@@ -2153,6 +2154,20 @@ export function GeneralSettingsPanel() {
         />
         {autoRetrySettings.enabled ? (
           <>
+            <div className="flex items-start gap-2.5 rounded-lg border border-border/50 bg-muted/20 px-3.5 py-2.5 text-xs text-muted-foreground">
+              <StarIcon className="size-4 shrink-0 text-amber-500 fill-amber-500 mt-0.5" />
+              <div className="space-y-0.5">
+                <span className="font-medium text-foreground">
+                  ⭐ Favorite (Starred) Models Only Failover
+                </span>
+                <p className="text-[11.5px] leading-relaxed text-muted-foreground">
+                  Auto-switch aur retry sirf unhi AI models ke darmiyan rotate karega jo aapne{" "}
+                  <strong>Favorite (⭐ Star)</strong> kiye honge. Agar koi model favorite nahi hai
+                  to sirf selected model hi retry hoga.
+                </p>
+              </div>
+            </div>
+
             <SettingsRow
               id="auto-retry-delay"
               title="Retry delay (seconds)"
@@ -2190,7 +2205,7 @@ export function GeneralSettingsPanel() {
             <SettingsRow
               id="auto-retry-switch-model"
               title="Auto-route (Auto-switch model after retries)"
-              description="When the current model exhausts its retry attempts (e.g. 3 attempts), automatically shift to the next available AI model."
+              description="When the current model exhausts its retry attempts (e.g. 3 attempts), automatically switch only to the next Starred (⭐ Favorite) AI model."
               control={
                 <Switch
                   checked={autoRetrySettings.autoSwitchModel}
@@ -2248,7 +2263,7 @@ export function GeneralSettingsPanel() {
                   {autoRetrySettings.maxRetries} times
                 </span>{" "}
                 {autoRetrySettings.autoSwitchModel
-                  ? "➜ auto-route / shift to next available provider model"
+                  ? "➜ auto-route / shift only to next Starred (⭐ Favorite) model"
                   : "➜ stop on failure"}
                 .
               </p>
