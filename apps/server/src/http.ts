@@ -650,18 +650,36 @@ const handlePortProxy = Effect.gen(function* () {
     const timeoutId = setTimeout(() => controller.abort(), 60000);
 
     const upstreamRes = yield* Effect.tryPromise({
-      try: () =>
-        fetch(targetUrl, {
-          method: request.method,
-          headers: forwardHeaders,
-          body: rawBody,
-          redirect: "manual",
-          signal: controller.signal,
-        }),
+      try: async () => {
+        try {
+          return await fetch(targetUrl, {
+            method: request.method,
+            headers: forwardHeaders,
+            body: rawBody,
+            redirect: "manual",
+            signal: controller.signal,
+          });
+        } catch (fetchErr: any) {
+          clearTimeout(timeoutId);
+          return fetchErr;
+        }
+      },
       catch: (cause) => cause,
     });
     clearTimeout(timeoutId);
 
+    if (!(upstreamRes instanceof Response)) {
+      const err = upstreamRes;
+      const isConnRefused =
+        err?.cause?.code === "ECONNREFUSED" ||
+        err?.code === "ECONNREFUSED" ||
+        err?.message?.includes("ECONNREFUSED") ||
+        err?.name === "AbortError";
+
+      return HttpServerResponse.html(renderDevServerOfflinePage(portNum), {
+        status: isConnRefused ? 502 : 500,
+      });
+    }
     const outHeaders: Record<string, string> = {};
     upstreamRes.headers.forEach((val, key) => {
       const lk = key.toLowerCase();
@@ -685,7 +703,7 @@ const handlePortProxy = Effect.gen(function* () {
     if (contentType.includes("text/html")) {
       const html = yield* Effect.tryPromise({
         try: () => upstreamRes.text(),
-        catch: (cause) => cause,
+        catch: () => "",
       });
       const baseTag = `<base href="/proxy/${portNum}/">`;
       let injectedHtml = String(html);
@@ -702,7 +720,7 @@ const handlePortProxy = Effect.gen(function* () {
 
     const arrayBuf = yield* Effect.tryPromise({
       try: () => upstreamRes.arrayBuffer(),
-      catch: (cause) => cause,
+      catch: () => new ArrayBuffer(0),
     });
     return HttpServerResponse.uint8Array(new Uint8Array(arrayBuf as ArrayBuffer), {
       status: upstreamRes.status,
@@ -710,14 +728,12 @@ const handlePortProxy = Effect.gen(function* () {
       headers: outHeaders,
     });
   } catch (err: any) {
-    const isConnRefused =
-      err?.cause?.code === "ECONNREFUSED" ||
-      err?.code === "ECONNREFUSED" ||
-      err?.message?.includes("ECONNREFUSED") ||
-      err?.name === "AbortError";
+    return HttpServerResponse.html(renderDevServerOfflinePage(portNum), { status: 502 });
+  }
+});
 
-    return HttpServerResponse.html(
-      `<!DOCTYPE html>
+function renderDevServerOfflinePage(portNum: number) {
+  return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
@@ -742,11 +758,8 @@ const handlePortProxy = Effect.gen(function* () {
     <a href="javascript:location.reload()" class="btn">🔄 Retry Connection</a>
   </div>
 </body>
-</html>`,
-      { status: isConnRefused ? 502 : 500 },
-    );
-  }
-});
+</html>`;
+}
 
 export const layerDynamicPortProxyRoute = Layer.mergeAll(
   HttpRouter.add("GET", "/proxy/*", handlePortProxy),
