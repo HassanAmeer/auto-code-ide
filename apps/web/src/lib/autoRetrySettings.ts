@@ -129,23 +129,23 @@ export function findNextFallbackModel(
   );
   if (availableEntries.length === 0) return null;
 
-  // Build a lookup of favorited model keys
-  const favoriteKeys = new Set((favorites ?? []).map((f) => `${f.provider}:${f.model}`));
+  const isKeyFavorited = (instId: string, slug: string): boolean => {
+    return (favorites ?? []).some((f) => {
+      const provMatch =
+        f.provider === instId ||
+        `custom_${f.provider}` === instId ||
+        f.provider === `custom_${instId}` ||
+        String(f.provider) === String(instId);
+      const modelMatch = f.model === slug || f.model.toLowerCase() === slug.toLowerCase();
+      return provMatch && modelMatch;
+    });
+  };
 
-  // Per user instruction:
-  // "The next model that was favorited can move.
-  // In the general settings, we have a setting for auto-retry, and then the next model is selected.
-  // If it's on retry, after two to three attempts, it moves to the next model.
-  // It should only move from the favorited models.
-  // We have favorited or starred models that we select from the dropdown in the provider.
-  // When we click on the favorite, only that model should auto-retry,
-  // and no other model from any provider should retry until it's added to the favorites."
   const favoriteCandidates: FallbackModelCandidate[] = [];
 
   for (const entry of availableEntries) {
     for (const m of entry.models) {
-      const key = `${entry.instanceId}:${m.slug}`;
-      if (favoriteKeys.has(key)) {
+      if (isKeyFavorited(entry.instanceId, m.slug)) {
         favoriteCandidates.push({
           instanceId: entry.instanceId,
           model: m.slug,

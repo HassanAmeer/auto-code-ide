@@ -771,11 +771,27 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
       if (getModelDisabledReason?.(instanceId, modelSlug)) {
         return;
       }
-      const options = modelOptionsByInstance.get(instanceId);
+      let options = modelOptionsByInstance.get(instanceId);
+      if (!options) {
+        for (const [k, v] of modelOptionsByInstance.entries()) {
+          if (String(k) === `custom_${instanceId}` || `custom_${k}` === String(instanceId)) {
+            options = v;
+            break;
+          }
+        }
+      }
       if (!options) {
         return;
       }
-      const entry = entryByInstanceId.get(instanceId);
+      let entry = entryByInstanceId.get(instanceId);
+      if (!entry) {
+        for (const [k, v] of entryByInstanceId.entries()) {
+          if (String(k) === `custom_${instanceId}` || `custom_${k}` === String(instanceId)) {
+            entry = v;
+            break;
+          }
+        }
+      }
       if (!entry) {
         return;
       }

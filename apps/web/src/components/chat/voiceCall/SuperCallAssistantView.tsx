@@ -89,6 +89,7 @@ import {
 } from "~/lib/speech/multiTurnSessionLedger";
 import { useGroqSettings, GROQ_MODEL_OPTIONS, fetchGroqLiveModels } from "~/lib/groqVoiceSettings";
 import { useAutoRetrySettings, findNextFallbackModel } from "~/lib/autoRetrySettings";
+import { AutonomousTaskBoard } from "./AutonomousTaskBoard";
 import { executeTerminalCommand } from "~/components/chat/terminal/terminalClient";
 import { Link } from "@tanstack/react-router";
 import { type ProviderInstanceId } from "@t3tools/contracts";
@@ -875,8 +876,8 @@ export function SuperCallAssistantView() {
   // Command Center / Right Sidebar Drawer
   const [isCommandCenterOpen, setIsCommandCenterOpen] = useState(false);
   const [commandCenterTab, setCommandCenterTab] = useState<
-    "memory" | "ledger" | "tasks" | "voice" | "settings"
-  >("memory");
+    "board" | "memory" | "ledger" | "tasks" | "voice" | "settings"
+  >("board");
   const [isInputFocused, setIsInputFocused] = useState(false);
 
   // Multi-Turn Session Ledger State (Lambay Mashwaray ke liye Memory)
@@ -1877,8 +1878,25 @@ export function SuperCallAssistantView() {
               </button>
             </div>
 
-            {/* Navigation Tabs (5 Tabs: Memory, Tasks, Voice, Settings, Logs) - Single Compact Line */}
-            <div className="grid grid-cols-5 border-b border-border/50 px-1 bg-muted/20 text-center">
+            {/* Navigation Tabs (6 Tabs: Board, Memory, Ledger, Tasks, Voice, Settings) - Single Compact Line */}
+            <div className="grid grid-cols-6 border-b border-border/50 px-1 bg-muted/20 text-center">
+              <button
+                type="button"
+                onClick={() => setCommandCenterTab("board")}
+                className={cn(
+                  "py-1.5 px-0.5 text-[11px] font-medium border-b-2 transition-colors cursor-pointer flex items-center justify-center gap-1 whitespace-nowrap",
+                  commandCenterTab === "board"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <LayoutGrid className="size-3.5 shrink-0" />
+                <span className="hidden sm:inline">Board</span>
+                <span className="text-[8px] px-1 py-0.5 rounded-full bg-cyan-500/20 text-cyan-400 font-mono leading-none">
+                  AI
+                </span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => setCommandCenterTab("memory")}
@@ -1970,6 +1988,17 @@ export function SuperCallAssistantView() {
 
             {/* Tab Contents */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {/* TAB: AUTONOMOUS WORKTREES TASK BOARD */}
+              {commandCenterTab === "board" && (
+                <div className="space-y-4">
+                  <AutonomousTaskBoard
+                    projectName={activeProject?.name || "Workspace"}
+                    activeModel={effectiveSelectedModel}
+                    onOpenPreview={(url) => window.open(url, "_blank")}
+                  />
+                </div>
+              )}
+
               {/* TAB: WORKSPACE CHAT MEMORY */}
               {commandCenterTab === "memory" && (
                 <div className="space-y-4">
@@ -2810,6 +2839,20 @@ export function SuperCallAssistantView() {
               <span className="hidden xs:inline text-[10px]">Spaces Canvas</span>
             </button>
 
+            {/* Autonomous Worktrees Task Board Quick Button */}
+            <button
+              type="button"
+              onClick={() => {
+                setCommandCenterTab("board");
+                setIsCommandCenterOpen(true);
+              }}
+              className="flex items-center gap-1 px-1.5 sm:px-2 py-1 rounded-md border border-cyan-500/40 bg-cyan-500/10 hover:bg-cyan-500/20 text-[11px] font-semibold text-cyan-300 transition-all cursor-pointer shadow-xs active:scale-95"
+              title="Open Autonomous Multi-Agent Worktrees Board"
+            >
+              <LayoutGrid className="size-3 text-cyan-400" />
+              <span className="hidden xs:inline text-[10px]">Task Board</span>
+            </button>
+
             {/* Command Center Right-Side Sheet Button */}
             <button
               type="button"
@@ -3162,6 +3205,18 @@ export function SuperCallAssistantView() {
                               <span>Open Live Preview</span>
                               <ExternalLink className="size-3" />
                             </a>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCommandCenterTab("board");
+                                setIsCommandCenterOpen(true);
+                              }}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-cyan-500/30 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 font-medium text-xs transition-all cursor-pointer active:scale-95"
+                              title="View and track this task on the Autonomous Board"
+                            >
+                              <LayoutGrid className="size-3 text-cyan-400" />
+                              <span>Task Board</span>
+                            </button>
                             <button
                               type="button"
                               onClick={() =>
