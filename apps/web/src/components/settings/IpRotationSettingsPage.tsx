@@ -75,13 +75,6 @@ const BUILTIN_PROVIDERS: AvailableProviderItem[] = [
     endpoint: "http://127.0.0.1:4096",
   },
   {
-    id: "builtin_grok",
-    name: "Grok AI",
-    category: "builtin",
-    typeOrFormat: "xAI API",
-    endpoint: "api.x.ai",
-  },
-  {
     id: "builtin_claude",
     name: "Claude AI",
     category: "builtin",

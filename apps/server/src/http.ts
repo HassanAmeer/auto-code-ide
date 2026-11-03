@@ -90,7 +90,6 @@ import {
   getLiveKitToken,
   getLiveKitRoomInfo,
   geminiKeyRotator,
-  queryGeminiWithRotation,
   processWhatsAppWebhook,
   getWhatsAppSessions,
   getWhatsAppChats,
@@ -1772,7 +1771,7 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
             }
           }
         }
-        console.warn(`[SuperAgent] Falling back to standard provider / Gemini key rotator...`);
+        console.warn(`[SuperAgent] Falling back to standard provider...`);
       }
 
       // Custom Provider or OpenRouter fallback
@@ -1832,10 +1831,6 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
           chatUrl = `${rawBase}/v1/chat/completions`;
         }
 
-        if (model.toLowerCase().includes("gemini") && !apiKey) {
-          apiKey = geminiKeyRotator.getActiveKey() || apiKey;
-        }
-
         const reqHeaders: Record<string, string> = {
           "Content-Type": "application/json",
           Accept: "application/json",
@@ -1886,33 +1881,6 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
           enrichedMessages.unshift({ role: "system", content: sys });
         }
 
-        // ONLY call Gemini if the user explicitly selected a Gemini model
-        if (model.toLowerCase().includes("gemini") && geminiKeyRotator.getActiveKey()) {
-          const userPromptParts = enrichedMessages
-            .filter((m) => m.role !== "system")
-            .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
-            .join("\n\n");
-          const systemContent = enrichedMessages.find((m) => m.role === "system")?.content || "";
-          const effectiveGeminiModel = model;
-
-          const geminiRes = await queryGeminiWithRotation({
-            model: effectiveGeminiModel,
-            prompt: userPromptParts || "Hello",
-            systemInstruction: systemContent,
-            temperature: bodyJson?.temperature ?? 0.7,
-          });
-
-          if (geminiRes.ok && geminiRes.reply) {
-            clearTimeout(timeoutId);
-            return {
-              ok: true,
-              reply: geminiRes.reply,
-              model: effectiveGeminiModel,
-              intent: botResult?.intent || "chat",
-            };
-          }
-        }
-
         const effectiveFallbackModel =
           model.toLowerCase().startsWith("opencode/") ||
           OPENCODE_FREE_MODELS.includes(model.toLowerCase())
@@ -1949,45 +1917,6 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
             data?.error ||
             data?.message ||
             `HTTP ${response.status} ${response.statusText}`;
-
-          // GOLDEN RULE FAILOVER: Only rotate on 429 / RESOURCE_EXHAUSTED
-          if (
-            geminiKeyRotator.isQuotaExhausted(response.status, data) &&
-            geminiKeyRotator.getKeysCount() > 1
-          ) {
-            geminiKeyRotator.markQuotaExhausted(apiKey || "");
-            const nextKey = geminiKeyRotator.getActiveKey();
-            if (nextKey && nextKey !== apiKey) {
-              const retryHeaders = { ...reqHeaders };
-              retryHeaders["Authorization"] = `Bearer ${nextKey.trim()}`;
-              retryHeaders["x-api-key"] = nextKey.trim();
-              try {
-                const retryRes = await fetch(chatUrl, {
-                  method: "POST",
-                  headers: retryHeaders,
-                  body: JSON.stringify({
-                    model,
-                    messages: enrichedMessages,
-                    temperature: bodyJson?.temperature ?? 0.7,
-                    max_tokens: bodyJson?.maxTokens ?? 1500,
-                  }),
-                  signal: AbortSignal.timeout(45000),
-                });
-                if (retryRes.ok) {
-                  const retryData: any = await retryRes.json();
-                  geminiKeyRotator.markSuccess(nextKey);
-                  const retryContent =
-                    retryData?.choices?.[0]?.message?.content ||
-                    retryData?.choices?.[0]?.text ||
-                    retryData?.candidates?.[0]?.content?.parts?.[0]?.text ||
-                    "";
-                  if (retryContent) {
-                    return { ok: true, reply: retryContent, rotatedKey: true };
-                  }
-                }
-              } catch {}
-            }
-          }
 
           return {
             ok: false,

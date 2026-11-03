@@ -87,7 +87,6 @@ import {
   pruneDecisionsAfterTimestamp,
   type SessionLedgerData,
 } from "~/lib/speech/multiTurnSessionLedger";
-import { useGroqSettings, GROQ_MODEL_OPTIONS, fetchGroqLiveModels } from "~/lib/groqVoiceSettings";
 import { useAutoRetrySettings, findNextFallbackModel } from "~/lib/autoRetrySettings";
 import { AutonomousTaskBoard } from "./AutonomousTaskBoard";
 import { executeTerminalCommand } from "~/components/chat/terminal/terminalClient";
@@ -876,7 +875,7 @@ export function SuperCallAssistantView() {
   // Command Center / Right Sidebar Drawer
   const [isCommandCenterOpen, setIsCommandCenterOpen] = useState(false);
   const [commandCenterTab, setCommandCenterTab] = useState<
-    "board" | "memory" | "ledger" | "tasks" | "voice" | "settings"
+    "board" | "memory" | "ledger" | "tasks" | "voice"
   >("board");
   const [isInputFocused, setIsInputFocused] = useState(false);
 
@@ -891,58 +890,6 @@ export function SuperCallAssistantView() {
     setSessionLedger(loadSessionLedger(activeSessionId || "default"));
     return subscribeSessionLedger(activeSessionId || "default", setSessionLedger);
   }, [activeSessionId]);
-
-  // Groq AI Integration State
-  const [groqSettings, updateGroqSettings] = useGroqSettings();
-  const [groqApiKeyInput, setGroqApiKeyInput] = useState(groqSettings.apiKey);
-  const [isGroqKeyVisible, setIsGroqKeyVisible] = useState(false);
-  const [isGroqKeySaved, setIsGroqKeySaved] = useState(false);
-  const [isFetchingGroqModels, setIsFetchingGroqModels] = useState(false);
-  const [groqModelsFetchStatus, setGroqModelsFetchStatus] = useState<string | null>(null);
-
-  useEffect(() => {
-    setGroqApiKeyInput(groqSettings.apiKey);
-  }, [groqSettings.apiKey]);
-
-  const handleFetchLiveGroqModels = useCallback(
-    async (keyToUse?: string) => {
-      const key = (keyToUse || groqApiKeyInput || groqSettings.apiKey || "").trim();
-      if (!key) {
-        setGroqModelsFetchStatus("Enter Groq API Key first");
-        setTimeout(() => setGroqModelsFetchStatus(null), 3000);
-        return;
-      }
-      setIsFetchingGroqModels(true);
-      setGroqModelsFetchStatus(null);
-      try {
-        const res = await fetchGroqLiveModels(key);
-        if (res.ok && res.models && res.models.length > 0) {
-          setGroqModelsFetchStatus(`✓ ${res.models.length} Live Models Loaded`);
-          if (!res.models.some((m) => m.id === groqSettings.model)) {
-            updateGroqSettings({ model: res.models[0].id });
-          }
-        } else {
-          setGroqModelsFetchStatus(`⚠️ ${res.error || "Failed to load models"}`);
-        }
-      } catch (e: any) {
-        setGroqModelsFetchStatus(`⚠️ ${e?.message || "Failed"}`);
-      } finally {
-        setIsFetchingGroqModels(false);
-        setTimeout(() => setGroqModelsFetchStatus(null), 4000);
-      }
-    },
-    [groqApiKeyInput, groqSettings.apiKey, groqSettings.model, updateGroqSettings],
-  );
-
-  const handleSaveGroqApiKey = useCallback(() => {
-    const clean = groqApiKeyInput.trim();
-    updateGroqSettings({ apiKey: clean });
-    setIsGroqKeySaved(true);
-    setTimeout(() => setIsGroqKeySaved(false), 2000);
-    if (clean) {
-      void handleFetchLiveGroqModels(clean);
-    }
-  }, [groqApiKeyInput, updateGroqSettings, handleFetchLiveGroqModels]);
 
   // Bot Attachment from File Manager / Ask AI (Folder or File)
   const [botAttachment, setLocalBotAttachment] = useState<BotAttachment | null>(() =>
@@ -1073,7 +1020,7 @@ export function SuperCallAssistantView() {
       ? activeInstanceId
       : firstInstance?.instanceId) ?? ("" as ProviderInstanceId);
 
-  const effectiveModel = selectedModel || firstInstance?.models?.[0]?.slug || "gemini-2.5-flash";
+  const effectiveModel = selectedModel || firstInstance?.models?.[0]?.slug || "beam-free";
 
   const modelOptionsByInstance = useMemo<
     ReadonlyMap<ProviderInstanceId, ReadonlyArray<ModelEsque>>
@@ -1190,14 +1137,11 @@ export function SuperCallAssistantView() {
         payload: { type: "user_turn", text: userText },
       });
 
-      const isGroqActive = Boolean(groqSettings.enabled && groqSettings.apiKey?.trim());
-      const effectiveSelectedModel = isGroqActive
-        ? groqSettings.model || "llama-3.3-70b-versatile"
-        : effectiveModel;
+      const effectiveSelectedModel = effectiveModel;
 
       try {
         const activeProjId = projects[0]?.id ? String(projects[0].id) : undefined;
-        let currentInstanceId = isGroqActive ? ("groq" as ProviderInstanceId) : effectiveInstanceId;
+        let currentInstanceId = effectiveInstanceId;
         let currentModel = effectiveSelectedModel;
         let res: any = null;
         const attemptedFavorites = new Set<string>();
@@ -1223,20 +1167,14 @@ export function SuperCallAssistantView() {
               String(cp.id) === String(currentInstanceId),
           );
 
-          const effectiveProviderConfig = isGroqActive
+          const effectiveProviderConfig = matchingCustomProvider
             ? ({
-                baseUrl: "https://api.groq.com/openai/v1",
-                apiKey: groqSettings.apiKey.trim(),
-                format: "openai",
+                baseUrl: matchingCustomProvider.baseUrl,
+                apiKey: matchingCustomProvider.apiKey,
+                headers: matchingCustomProvider.headers as any,
+                format: matchingCustomProvider.format,
               } as any)
-            : matchingCustomProvider
-              ? ({
-                  baseUrl: matchingCustomProvider.baseUrl,
-                  apiKey: matchingCustomProvider.apiKey,
-                  headers: matchingCustomProvider.headers as any,
-                  format: matchingCustomProvider.format,
-                } as any)
-              : undefined;
+            : undefined;
 
           res = await executeSuperAgentInstruction({
             userText: effectiveUserPrompt,
@@ -1967,23 +1905,6 @@ export function SuperCallAssistantView() {
                 <SlidersHorizontal className="size-3.5 shrink-0" />
                 <span className="hidden sm:inline">Voice</span>
               </button>
-
-              <button
-                type="button"
-                onClick={() => setCommandCenterTab("settings")}
-                className={cn(
-                  "py-1.5 px-0.5 text-[11px] font-medium border-b-2 transition-colors cursor-pointer flex items-center justify-center gap-1 whitespace-nowrap",
-                  commandCenterTab === "settings"
-                    ? "border-primary text-primary"
-                    : "border-transparent text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <Settings2 className="size-3.5 shrink-0" />
-                <span className="hidden sm:inline">Settings</span>
-                {groqSettings.enabled && (
-                  <span className="size-1.5 rounded-full bg-orange-400 animate-pulse" />
-                )}
-              </button>
             </div>
 
             {/* Tab Contents */}
@@ -2492,232 +2413,6 @@ export function SuperCallAssistantView() {
                         <Play className="size-3" />
                         <span>Test Voice</span>
                       </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* TAB 5: GROQ AI & CALL ASSISTANT SETTINGS */}
-              {commandCenterTab === "settings" && (
-                <div className="space-y-4">
-                  {/* Groq AI Acceleration Header Card */}
-                  <div className="p-4 rounded-xl border border-border/80 bg-gradient-to-br from-card/90 to-orange-950/10 space-y-3.5 shadow-xs">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2.5">
-                        <div className="size-8 rounded-lg bg-orange-500/15 border border-orange-500/30 text-orange-400 flex items-center justify-center shadow-xs">
-                          <Zap className="size-4.5 fill-orange-400 text-orange-400" />
-                        </div>
-                        <div>
-                          <h3 className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                            Groq AI Acceleration
-                            <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-orange-500/20 text-orange-400 font-mono font-medium">
-                              Ultra-Fast
-                            </span>
-                          </h3>
-                          <p className="text-[10px] text-muted-foreground">
-                            Ultra low-latency LPU inference for Voice Call Assistant
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Enable Groq Toggle Switch */}
-                      <label className="relative inline-flex items-center cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={groqSettings.enabled}
-                          onChange={(e) => {
-                            const enabled = e.target.checked;
-                            updateGroqSettings({ enabled });
-                          }}
-                          className="sr-only peer"
-                        />
-                        <div className="w-9 h-5 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-orange-500"></div>
-                      </label>
-                    </div>
-
-                    {/* Status Pill Indicator */}
-                    <div
-                      className={cn(
-                        "px-3 py-2 rounded-lg text-[11px] flex items-center justify-between font-medium border transition-colors",
-                        groqSettings.enabled
-                          ? groqSettings.apiKey?.trim()
-                            ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-                            : "bg-amber-500/10 border-amber-500/30 text-amber-400"
-                          : "bg-muted/40 border-border/50 text-muted-foreground",
-                      )}
-                    >
-                      <span className="flex items-center gap-1.5">
-                        <span
-                          className={cn(
-                            "size-2 rounded-full",
-                            groqSettings.enabled
-                              ? groqSettings.apiKey?.trim()
-                                ? "bg-emerald-400 animate-pulse"
-                                : "bg-amber-400"
-                              : "bg-zinc-600",
-                          )}
-                        />
-                        {groqSettings.enabled
-                          ? groqSettings.apiKey?.trim()
-                            ? "Groq Active (Bottom selector will show 'Groq')"
-                            : "Action Required: Enter Groq API Key"
-                          : "Groq Inactive (Using standard AI model selector)"}
-                      </span>
-                      {groqSettings.enabled && (
-                        <span className="text-[9.5px] font-mono opacity-80 truncate max-w-[120px]">
-                          {groqSettings.model || "llama-3.3-70b-versatile"}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Groq API Key Input Card with Eye & Save buttons */}
-                  <div className="p-3.5 rounded-xl border border-border/70 bg-card/60 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                        <Key className="size-3.5 text-orange-400" />
-                        Groq API Key
-                      </label>
-                      <a
-                        href="https://console.groq.com/keys"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[10px] text-orange-400 hover:text-orange-300 flex items-center gap-1 transition-colors"
-                      >
-                        <span>Get Free Key</span>
-                        <ExternalLink className="size-2.5" />
-                      </a>
-                    </div>
-
-                    <div className="relative flex items-center">
-                      <input
-                        type={isGroqKeyVisible ? "text" : "password"}
-                        value={groqApiKeyInput}
-                        onChange={(e) => setGroqApiKeyInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            handleSaveGroqApiKey();
-                          }
-                        }}
-                        placeholder="gsk_..."
-                        className="w-full h-9 rounded-lg border border-border/80 bg-background/80 px-3 pr-20 text-xs font-mono text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-orange-500/60"
-                      />
-
-                      {/* Action Buttons: Eye (Show/Hide) and Save */}
-                      <div className="absolute right-1.5 flex items-center gap-1">
-                        {/* Eye Icon Button */}
-                        <button
-                          type="button"
-                          onClick={() => setIsGroqKeyVisible(!isGroqKeyVisible)}
-                          className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer"
-                          title={isGroqKeyVisible ? "Hide API Key" : "Show API Key"}
-                        >
-                          {isGroqKeyVisible ? (
-                            <EyeOff className="size-3.5" />
-                          ) : (
-                            <Eye className="size-3.5" />
-                          )}
-                        </button>
-
-                        {/* Save Icon Button */}
-                        <button
-                          type="button"
-                          onClick={handleSaveGroqApiKey}
-                          className={cn(
-                            "flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium transition-all cursor-pointer shadow-xs",
-                            isGroqKeySaved
-                              ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
-                              : "bg-orange-500/20 text-orange-400 hover:bg-orange-500/30 border border-orange-500/40",
-                          )}
-                          title="Save Groq API Key"
-                        >
-                          {isGroqKeySaved ? (
-                            <>
-                              <Check className="size-3" />
-                              <span className="text-[10px]">Saved</span>
-                            </>
-                          ) : (
-                            <>
-                              <Save className="size-3" />
-                              <span className="text-[10px]">Save</span>
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    </div>
-
-                    <p className="text-[10px] text-muted-foreground leading-relaxed">
-                      Jab Groq active hoga to call assistant Groq LPU se fast answer generate karega
-                      aur niche model dropdown ki jagah sirf <strong>Groq</strong> button nazar
-                      aayega.
-                    </p>
-                  </div>
-
-                  {/* Groq Model Picker */}
-                  <div className="p-3.5 rounded-xl border border-border/70 bg-card/60 space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                        <Bot className="size-3.5 text-primary" />
-                        Groq Model Selection
-                      </label>
-                      <div className="flex items-center gap-2">
-                        {groqModelsFetchStatus && (
-                          <span className="text-[10px] text-muted-foreground animate-fade-in font-medium">
-                            {groqModelsFetchStatus}
-                          </span>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => handleFetchLiveGroqModels()}
-                          disabled={isFetchingGroqModels}
-                          className="flex items-center gap-1 text-[10px] text-orange-400 hover:text-orange-300 transition-colors p-1 rounded-md hover:bg-orange-500/10 cursor-pointer disabled:opacity-50"
-                          title="Call Groq Models API & Refresh List"
-                        >
-                          <RefreshCw
-                            className={cn(
-                              "size-3",
-                              isFetchingGroqModels && "animate-spin text-orange-400",
-                            )}
-                          />
-                          <span>{isFetchingGroqModels ? "Loading..." : "Fetch Models"}</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
-                      {(groqSettings.availableModels && groqSettings.availableModels.length > 0
-                        ? groqSettings.availableModels
-                        : GROQ_MODEL_OPTIONS
-                      ).map((opt) => {
-                        const isSelected =
-                          (groqSettings.model || "llama-3.3-70b-versatile") === opt.id;
-                        return (
-                          <button
-                            key={opt.id}
-                            type="button"
-                            onClick={() => updateGroqSettings({ model: opt.id })}
-                            className={cn(
-                              "w-full p-2.5 rounded-lg border text-left transition-all cursor-pointer flex items-center justify-between",
-                              isSelected
-                                ? "border-orange-500/60 bg-orange-500/10 text-foreground ring-1 ring-orange-500/30"
-                                : "border-border/60 bg-muted/20 text-muted-foreground hover:bg-muted/40",
-                            )}
-                          >
-                            <div className="min-w-0 pr-2">
-                              <div className="text-xs font-semibold text-foreground flex items-center gap-1.5 truncate">
-                                <span className="truncate">{opt.name}</span>
-                              </div>
-                              <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
-                                {opt.description}
-                              </p>
-                            </div>
-                            {isSelected && (
-                              <CheckCircle2 className="size-4 text-orange-400 shrink-0 ml-1" />
-                            )}
-                          </button>
-                        );
-                      })}
                     </div>
                   </div>
                 </div>
@@ -3376,7 +3071,7 @@ export function SuperCallAssistantView() {
           {isProcessing && (
             <LiveProcessingActivityView
               agentStatus={agentStatus}
-              selectedModel={groqSettings.enabled ? groqSettings.model || "Groq" : effectiveModel}
+              selectedModel={effectiveModel}
               dispatchStartTime={activeDispatchStartTime || Date.now()}
               liveTools={liveTools}
             />
@@ -3635,34 +3330,19 @@ export function SuperCallAssistantView() {
 
           {/* 2. Sleek Horizontal Divider Directly Below with End-to-End Controls & Floating Waves (10-15% scaled down on mobile) */}
           <div className="relative flex items-center justify-between w-full min-h-[34px] sm:min-h-[46px]">
-            {/* Left End: AI Model Dropdown / Groq Indicator (At the very left end) */}
+            {/* Left End: AI Model Dropdown */}
             <div className="relative z-10 shrink-0 pr-1 max-w-[100px] xs:max-w-[125px] sm:max-w-none">
-              {groqSettings.enabled ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCommandCenterTab("settings");
-                    setIsCommandCenterOpen(true);
-                  }}
-                  className="h-5.5 sm:h-6 inline-flex items-center gap-1.5 rounded-full border border-orange-500/40 bg-orange-500/10 hover:bg-orange-500/20 px-2 text-[9.5px] sm:text-[11px] font-semibold text-orange-400 shadow-xs cursor-pointer select-none transition-all active:scale-95"
-                  title={`Groq is active (${groqSettings.model || "llama-3.3-70b-versatile"}). Click to open Settings.`}
-                >
-                  <Zap className="size-2.5 sm:size-3 text-orange-400 fill-orange-400" />
-                  <span>Groq</span>
-                </button>
-              ) : (
-                <ProviderModelPicker
-                  activeInstanceId={effectiveInstanceId}
-                  model={effectiveModel}
-                  lockedProvider={null}
-                  instanceEntries={instanceEntries}
-                  modelOptionsByInstance={modelOptionsByInstance}
-                  keybindings={keybindings}
-                  size="xs"
-                  triggerClassName="h-5.5 sm:h-6 rounded-full border border-zinc-800 bg-background px-1.5 sm:px-2 text-[9.5px] sm:text-[11px] font-medium text-zinc-400 hover:text-white hover:border-zinc-600 shadow-xs cursor-pointer select-none truncate"
-                  onInstanceModelChange={handleModelChange}
-                />
-              )}
+              <ProviderModelPicker
+                activeInstanceId={effectiveInstanceId}
+                model={effectiveModel}
+                lockedProvider={null}
+                instanceEntries={instanceEntries}
+                modelOptionsByInstance={modelOptionsByInstance}
+                keybindings={keybindings}
+                size="xs"
+                triggerClassName="h-5.5 sm:h-6 rounded-full border border-zinc-800 bg-background px-1.5 sm:px-2 text-[9.5px] sm:text-[11px] font-medium text-zinc-400 hover:text-white hover:border-zinc-600 shadow-xs cursor-pointer select-none truncate"
+                onInstanceModelChange={handleModelChange}
+              />
             </div>
 
             {/* Left Line Segment (starts at model picker right edge, stops at center wave) */}

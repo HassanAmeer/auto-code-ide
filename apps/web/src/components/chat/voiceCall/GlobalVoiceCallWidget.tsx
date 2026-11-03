@@ -48,7 +48,7 @@ const GlobalVoiceCallWidgetInner = memo(function GlobalVoiceCallWidgetInner() {
     setSpokenText("");
 
     const activeProjId = projects[0]?.id ? String(projects[0].id) : undefined;
-    const selectedModel = localStorage.getItem("super_call_assistant_model") || "Gemini 2.5 Flash";
+    const selectedModel = localStorage.getItem("super_call_assistant_model") || "beam-free";
 
     try {
       const res = await executeSuperAgentInstruction({
