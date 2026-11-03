@@ -664,6 +664,36 @@ export function deriveTimelineEntriesFromVisibleTurnItems(
     retriedRunIds.add(input.retryingRunId);
   }
 
+  // Group runs by conversational turn (user prompt).
+  // If multiple runs occur under the same turn (initial failure + retries),
+  // all preceding runs were retried. Only the latest run in that turn is active.
+  let currentTurnRunIds: RunId[] = [];
+  const turnRunGroups: RunId[][] = [];
+  for (const { item } of input.visibleTurnItems) {
+    if (
+      item.type === "user_message" &&
+      !isInternalRetryPrompt(item.text) &&
+      !foldedAnswerMessageIds.has(item.messageId)
+    ) {
+      if (currentTurnRunIds.length > 0) {
+        turnRunGroups.push(currentTurnRunIds);
+        currentTurnRunIds = [];
+      }
+    }
+    if (item.runId && !currentTurnRunIds.includes(item.runId)) {
+      currentTurnRunIds.push(item.runId);
+    }
+  }
+  if (currentTurnRunIds.length > 0) {
+    turnRunGroups.push(currentTurnRunIds);
+  }
+
+  for (const group of turnRunGroups) {
+    for (let i = 0; i < group.length - 1; i++) {
+      retriedRunIds.add(group[i]!);
+    }
+  }
+
   for (let i = 0; i < orderedRunIds.length; i++) {
     const runId = orderedRunIds[i];
     const hasRetryPrompt = input.visibleTurnItems.some(
@@ -952,7 +982,38 @@ export function deriveTimelineEntriesFromVisibleTurnItems(
     }
   }
 
-  return entries;
+  // Deduplicate consecutive error cards / timeout failures so multiple retries
+  // do not produce a stack of duplicate error banners in the timeline
+  const deduplicatedEntries: TimelineEntry[] = [];
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i]!;
+    const prevEntry = deduplicatedEntries[deduplicatedEntries.length - 1];
+
+    const getErrorSignature = (e: TimelineEntry | undefined): string | null => {
+      if (!e) return null;
+      if (e.kind === "event" && e.projectedItem.item.type === "error") {
+        return `${e.projectedItem.item.failure.code ?? ""}:${e.projectedItem.item.failure.message}`;
+      }
+      if (e.kind === "work" && e.entry.projectedItem?.item.type === "error") {
+        const item = e.entry.projectedItem.item;
+        return `${item.failure.code ?? ""}:${item.failure.message}`;
+      }
+      return null;
+    };
+
+    const currentSig = getErrorSignature(entry);
+    const prevSig = getErrorSignature(prevEntry);
+
+    // If consecutive error cards have the same error signature, keep only the latest one
+    if (currentSig && prevSig && currentSig === prevSig) {
+      deduplicatedEntries[deduplicatedEntries.length - 1] = entry;
+      continue;
+    }
+
+    deduplicatedEntries.push(entry);
+  }
+
+  return deduplicatedEntries;
 }
 
 type AttachmentResource = Extract<AssetResource, { readonly _tag: "attachment" }>;
@@ -1163,7 +1224,38 @@ function reuseTimelineEntries(
       }),
     );
   }
-  return entries;
+  // Deduplicate consecutive error cards / timeout failures so multiple retries
+  // do not produce a stack of duplicate error banners in the timeline
+  const deduplicatedEntries: TimelineEntry[] = [];
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i]!;
+    const prevEntry = deduplicatedEntries[deduplicatedEntries.length - 1];
+
+    const getErrorSignature = (e: TimelineEntry | undefined): string | null => {
+      if (!e) return null;
+      if (e.kind === "event" && e.projectedItem.item.type === "error") {
+        return `${e.projectedItem.item.failure.code ?? ""}:${e.projectedItem.item.failure.message}`;
+      }
+      if (e.kind === "work" && e.entry.projectedItem?.item.type === "error") {
+        const item = e.entry.projectedItem.item;
+        return `${item.failure.code ?? ""}:${item.failure.message}`;
+      }
+      return null;
+    };
+
+    const currentSig = getErrorSignature(entry);
+    const prevSig = getErrorSignature(prevEntry);
+
+    // If consecutive error cards have the same error signature, keep only the latest one
+    if (currentSig && prevSig && currentSig === prevSig) {
+      deduplicatedEntries[deduplicatedEntries.length - 1] = entry;
+      continue;
+    }
+
+    deduplicatedEntries.push(entry);
+  }
+
+  return deduplicatedEntries;
 }
 
 /** Reuse immutable entries during streaming without reordering the canonical v2 sequence. */

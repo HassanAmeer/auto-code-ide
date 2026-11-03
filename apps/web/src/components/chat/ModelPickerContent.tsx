@@ -10,7 +10,7 @@ import { formatProviderUpdateRequiredNotice } from "@t3tools/client-runtime/prov
 import { useNavigate } from "@tanstack/react-router";
 import { LegendList, type LegendListRef } from "@legendapp/list/react";
 import { memo, useMemo, useState, useCallback, useEffect, useLayoutEffect, useRef } from "react";
-import { ChevronRightIcon, RotateCwIcon } from "lucide-react";
+import { ChevronRightIcon, RotateCwIcon, StarIcon } from "lucide-react";
 import {
   fetchModelsFromProvider,
   getCustomProviders,
@@ -1007,7 +1007,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
             onSelectInstance={handleSelectInstance}
             onFocusSearch={focusSearchInput}
             instanceEntries={sidebarInstanceEntries}
-            showFavorites={false}
+            showFavorites={true}
             {...(selectableUnavailableInstanceIds ? { selectableUnavailableInstanceIds } : {})}
             {...(lockedDisabledInstanceIds
               ? {
@@ -1263,7 +1263,19 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
                 ))}
               </div>
             ) : (
-              <ComboboxEmpty className="empty:h-0">No models found</ComboboxEmpty>
+              <ComboboxEmpty className="empty:h-0 py-6 text-center text-xs text-muted-foreground">
+                {selectedInstanceId === "favorites" ? (
+                  <div className="flex flex-col items-center gap-1.5 px-4">
+                    <StarIcon className="size-5 text-muted-foreground/60" />
+                    <span>No favorite models yet</span>
+                    <span className="text-3xs text-muted-foreground/60">
+                      Star (⭐) any model in the list to quickly access it here.
+                    </span>
+                  </div>
+                ) : (
+                  "No models found"
+                )}
+              </ComboboxEmpty>
             )}
             {updateRequiredNotices.map(({ instanceId, notice }) => (
               <p

@@ -124,13 +124,24 @@ export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
                       <Toolbar.Button
                         className={cn(
                           "relative isolate flex w-full cursor-pointer aspect-square items-center justify-center rounded-md transition-colors hover:bg-foreground/10 focus-visible:bg-foreground/10 focus-visible:outline-none",
+                          props.selectedInstanceId === "favorites"
+                            ? "bg-foreground/10 text-amber-500"
+                            : "text-muted-foreground hover:text-foreground",
                         )}
                         onClick={() => handleSelect("favorites")}
                         type="button"
                         aria-label="Favorites"
                         aria-pressed={props.selectedInstanceId === "favorites"}
                       >
-                        <StarIcon className="size-5 fill-current shrink-0" aria-hidden />
+                        <StarIcon
+                          className={cn(
+                            "size-5 shrink-0 transition-colors",
+                            props.selectedInstanceId === "favorites"
+                              ? "fill-amber-500 text-amber-500"
+                              : "text-muted-foreground fill-none hover:text-foreground",
+                          )}
+                          aria-hidden
+                        />
                       </Toolbar.Button>
                     }
                   />
