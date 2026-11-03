@@ -27,7 +27,7 @@ import {
   ArrowUp,
   Upload,
   FolderPlus,
-  Sparkles,
+  Bot,
 } from "lucide-react";
 import { resolvePrimaryEnvironmentHttpUrl } from "../../../environments/primary";
 import { useTerminalStore, terminalStore } from "./terminalStore";
@@ -1064,11 +1064,10 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                       e.stopPropagation();
                       handleAskAiAboutPath(subPath, dirName, "folder");
                     }}
-                    title={`Ask AI Bot about "${dirName}" folder`}
-                    className="flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-purple-500/20 hover:bg-purple-500/35 text-purple-300 hover:text-purple-200 border border-purple-500/30 text-3xs font-medium transition-all cursor-pointer"
+                    title="Ask AI"
+                    className="p-1 rounded-[4px] bg-purple-500/20 hover:bg-purple-500/35 text-purple-300 hover:text-purple-200 border border-purple-500/30 transition-all cursor-pointer"
                   >
-                    <Sparkles className="size-2.5 text-purple-400" />
-                    <span>Ask AI</span>
+                    <Bot className="size-3 text-purple-400" />
                   </button>
 
                   {/* Open folder as root */}
@@ -1174,11 +1173,10 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                     e.stopPropagation();
                     handleAskAiAboutPath(filePath, file.name, "file");
                   }}
-                  title={`Ask AI Bot about "${file.name}"`}
-                  className="flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-purple-500/20 hover:bg-purple-500/35 text-purple-300 hover:text-purple-200 border border-purple-500/30 text-3xs font-medium transition-all cursor-pointer"
+                  title="Ask AI"
+                  className="p-1 rounded-[4px] bg-purple-500/20 hover:bg-purple-500/35 text-purple-300 hover:text-purple-200 border border-purple-500/30 transition-all cursor-pointer"
                 >
-                  <Sparkles className="size-2.5 text-purple-400" />
-                  <span>Ask AI</span>
+                  <Bot className="size-3 text-purple-400" />
                 </button>
                 {file.name.toLowerCase().endsWith(".zip") && (
                   <button
@@ -1452,11 +1450,10 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                       const folderName = rootPath.split("/").filter(Boolean).pop() || "root";
                       handleAskAiAboutPath(rootPath, folderName, "folder");
                     }}
-                    title={`Ask AI Bot about current folder (${rootPath})`}
-                    className="flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-purple-900/30 hover:bg-purple-800/50 text-purple-300 border border-purple-600/30 transition-colors cursor-pointer"
+                    title="Ask AI"
+                    className="flex items-center justify-center p-1 rounded-[4px] bg-purple-900/30 hover:bg-purple-800/50 text-purple-300 border border-purple-600/30 transition-colors cursor-pointer shrink-0"
                   >
-                    <Sparkles className="size-2.5 text-purple-400" />
-                    <span>Ask AI</span>
+                    <Bot className="size-3 text-purple-400" />
                   </button>
                 </div>
                 <div className="flex items-center gap-1">
@@ -1480,28 +1477,40 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    title="Upload files or ZIP archive (auto-extracts to project folder)"
+                    title="Upload files or ZIP archive"
                     disabled={isUploading}
-                    className="flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-sky-900/40 hover:bg-sky-800/60 text-sky-300 border border-sky-700/50 transition-colors cursor-pointer"
+                    className="flex items-center gap-0.5 px-1.5 py-1 rounded-[4px] bg-sky-900/40 hover:bg-sky-800/60 text-sky-300 border border-sky-700/50 transition-colors cursor-pointer shrink-0"
                   >
-                    <Upload className="size-2.5" />
-                    <span>{isUploading ? "Uploading..." : "File / ZIP"}</span>
+                    {isUploading ? (
+                      <RotateCw className="size-3 animate-spin text-sky-400" />
+                    ) : (
+                      <div className="flex items-center gap-0.5">
+                        <Upload className="size-3" />
+                        <FileText className="size-3" />
+                      </div>
+                    )}
                   </button>
                   <button
                     type="button"
                     onClick={() => folderInputRef.current?.click()}
-                    title="Upload entire folder structure"
+                    title="Upload folder"
                     disabled={isUploading}
-                    className="flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-sky-900/40 hover:bg-sky-800/60 text-sky-300 border border-sky-700/50 transition-colors cursor-pointer"
+                    className="flex items-center gap-0.5 px-1.5 py-1 rounded-[4px] bg-sky-900/40 hover:bg-sky-800/60 text-sky-300 border border-sky-700/50 transition-colors cursor-pointer shrink-0"
                   >
-                    <FolderPlus className="size-2.5" />
-                    <span>Upload Folder</span>
+                    {isUploading ? (
+                      <RotateCw className="size-3 animate-spin text-sky-400" />
+                    ) : (
+                      <div className="flex items-center gap-0.5">
+                        <Upload className="size-3" />
+                        <Folder className="size-3" />
+                      </div>
+                    )}
                   </button>
                   <button
                     type="button"
                     onClick={() => setCreateModal({ parentPath: rootPath, type: "file" })}
                     title="Add file in project root"
-                    className="flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition-colors cursor-pointer"
+                    className="flex items-center gap-1 px-1.5 py-1 rounded-[4px] bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition-colors cursor-pointer shrink-0"
                   >
                     <Plus className="size-2.5" />
                     <span>File</span>
@@ -1510,7 +1519,7 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                     type="button"
                     onClick={() => setCreateModal({ parentPath: rootPath, type: "directory" })}
                     title="Add folder in project root"
-                    className="flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition-colors cursor-pointer"
+                    className="flex items-center gap-1 px-1.5 py-1 rounded-[4px] bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition-colors cursor-pointer shrink-0"
                   >
                     <Plus className="size-2.5" />
                     <span>Folder</span>
@@ -1599,11 +1608,10 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                     <button
                       type="button"
                       onClick={handleAskAiAboutFile}
-                      title="Send file context to AI Chat"
-                      className="flex items-center gap-1 px-2 py-1 rounded-[5px] bg-purple-600/20 hover:bg-purple-600/40 text-purple-300 border border-purple-500/30 text-3xs font-semibold transition-colors cursor-pointer mr-1"
+                      title="Ask AI"
+                      className="flex items-center justify-center p-1.5 rounded-[5px] bg-purple-600/20 hover:bg-purple-600/40 text-purple-300 border border-purple-500/30 transition-colors cursor-pointer mr-1"
                     >
-                      <Sparkles className="size-3 text-purple-400" />
-                      <span>Ask AI</span>
+                      <Bot className="size-3.5 text-purple-400" />
                     </button>
 
                     {!selectedFile.isBinary && !selectedFile.isImage && (
