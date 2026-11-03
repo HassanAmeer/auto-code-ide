@@ -94,7 +94,35 @@ export class ServerBrowserContexts {
 
   private async launchOptions(forceNoSandbox = false) {
     const executablePath = await this.options.executable();
-    const env = this.options.env ?? process.env;
+    const rawEnv = this.options.env ?? process.env;
+    const env: NodeJS.ProcessEnv = { ...rawEnv };
+
+    // Prevent ERR_PROXY_CONNECTION_FAILED in headless preview tabs:
+    // 1. Never route loopback or internal app domains through proxy.
+    const noProxySet = new Set(
+      (env.NO_PROXY || env.no_proxy || "localhost,127.0.0.1,::1")
+        .split(",")
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean),
+    );
+    noProxySet.add("localhost");
+    noProxySet.add("127.0.0.1");
+    noProxySet.add("::1");
+    noProxySet.add("autojobs.tokendeal.cloud");
+    noProxySet.add(".tokendeal.cloud");
+    noProxySet.add("tokendeal.cloud");
+    const mergedNoProxy = Array.from(noProxySet).join(",");
+    env.NO_PROXY = mergedNoProxy;
+    env.no_proxy = mergedNoProxy;
+
+    // 2. Remove dead/unreachable ALL_PROXY socks entries (e.g. 10808) that crash Chromium's socket connections.
+    if (env.ALL_PROXY && /10808|localhost:10808|127\.0\.0\.1:10808/.test(env.ALL_PROXY)) {
+      delete env.ALL_PROXY;
+    }
+    if (env.all_proxy && /10808|localhost:10808|127\.0\.0\.1:10808/.test(env.all_proxy)) {
+      delete env.all_proxy;
+    }
+
     const noSandbox = forceNoSandbox || sandboxDisabled(env);
     return {
       executablePath,
@@ -104,6 +132,7 @@ export class ServerBrowserContexts {
         "--disable-gpu",
         "--force-device-scale-factor=2",
         "--disable-blink-features=AutomationControlled",
+        "--proxy-bypass-list=<-loopback>,localhost,127.0.0.1,::1,autojobs.tokendeal.cloud,*.tokendeal.cloud",
         ...(noSandbox
           ? ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
           : []),
