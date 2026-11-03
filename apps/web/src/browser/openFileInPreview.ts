@@ -154,7 +154,8 @@ export async function openFileInPreview<AssetError, PreviewError>(input: {
   if (assetResult._tag === "Failure") {
     return AsyncResult.failure(assetResult.cause);
   }
-  const assetUrl = resolveAssetUrl(input.httpBaseUrl, assetResult.value.relativeUrl);
+  const targetPath = assetResult.value.shortUrl ?? assetResult.value.relativeUrl;
+  const assetUrl = resolveAssetUrl(input.httpBaseUrl, targetPath);
   if (assetUrl === null) {
     return AsyncResult.failure(
       Cause.die(new Error("The environment returned an invalid asset URL.")),

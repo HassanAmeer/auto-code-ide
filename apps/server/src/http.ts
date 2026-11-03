@@ -65,7 +65,7 @@ import {
   listAllProjects,
   type ResolvedProjectTarget,
 } from "./persistence/AppSettingsStore.ts";
-import { ASSET_ROUTE_PREFIX, resolveAsset } from "./assets/AssetAccess.ts";
+import { ASSET_ROUTE_PREFIX, resolveAsset, resolveShortAsset } from "./assets/AssetAccess.ts";
 import { githubMediaResponse } from "./assets/GitHubMediaFetch.ts";
 import { statMediaFile, streamMediaFile, type OpenMediaFile } from "./assets/MediaFile.ts";
 import {
@@ -524,6 +524,245 @@ export const layerAssetRoute = HttpRouter.add(
       Effect.orElseSucceed(() => HttpServerResponse.text("Internal Server Error", { status: 500 })),
     );
   }),
+);
+
+export const layerShortAssetRoute = HttpRouter.add(
+  "GET",
+  "/p/*",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const url = HttpServerRequest.toURL(request);
+    if (Option.isNone(url)) {
+      return HttpServerResponse.text("Bad Request", { status: 400 });
+    }
+
+    const pathAfter = url.value.pathname.slice("/p/".length);
+    const slashIdx = pathAfter.indexOf("/");
+    const shortId = slashIdx === -1 ? pathAfter : pathAfter.slice(0, slashIdx);
+    const subPath = slashIdx === -1 ? "" : decodeURIComponent(pathAfter.slice(slashIdx + 1));
+
+    if (!shortId) {
+      return HttpServerResponse.text("Not Found", { status: 404 });
+    }
+
+    const asset = yield* resolveShortAsset(shortId, subPath);
+    if (!asset) {
+      return HttpServerResponse.html(
+        `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Preview Expired</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; background: #0b0f19; color: #f8fafc; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; }
+    .card { background: #131b2e; padding: 2.5rem; border-radius: 16px; border: 1px solid #1e293b; max-width: 480px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+    h2 { margin-top: 0; color: #38bdf8; font-size: 1.5rem; }
+    p { color: #94a3b8; font-size: 0.95rem; line-height: 1.6; }
+    a { display: inline-block; margin-top: 1.25rem; padding: 0.65rem 1.4rem; background: #3b82f6; color: #fff; text-decoration: none; border-radius: 8px; font-weight: 500; }
+    a:hover { background: #2563eb; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>🔗 Preview Expired or Not Found</h2>
+    <p>This live preview link has expired or the server was restarted. Please open your project in AutoCode and click Preview to get a fresh link.</p>
+    <a href="/">Open AutoCode</a>
+  </div>
+</body>
+</html>`,
+        { status: 404 },
+      );
+    }
+
+    if (asset.kind === "bytes") {
+      return HttpServerResponse.uint8Array(asset.bytes, {
+        contentType: asset.mimeType,
+        headers: { "cache-control": "private, max-age=3600", "x-content-type-options": "nosniff" },
+      });
+    }
+
+    return yield* assetFileResponse(
+      asset,
+      request.method === "GET" ? request.headers.range : undefined,
+      request.headers["if-range"],
+      request.method === "HEAD" ? "HEAD" : "GET",
+    ).pipe(
+      Effect.orElseSucceed(() => HttpServerResponse.text("Internal Server Error", { status: 500 })),
+    );
+  }),
+);
+
+const handlePortProxy = Effect.gen(function* () {
+  const request = yield* HttpServerRequest.HttpServerRequest;
+  const url = HttpServerRequest.toURL(request);
+  if (Option.isNone(url)) {
+    return HttpServerResponse.text("Bad Request", { status: 400 });
+  }
+
+  const pathname = url.value.pathname;
+  const match = pathname.match(/^\/(?:proxy|port)\/(\d+)(?:\/(.*))?$/);
+  if (!match) {
+    return HttpServerResponse.text("Invalid proxy URL format. Expected /proxy/:port/...", {
+      status: 400,
+    });
+  }
+
+  const portNum = parseInt(match[1]!, 10);
+  if (
+    isNaN(portNum) ||
+    portNum < 1 ||
+    portNum > 65535 ||
+    portNum === 13773 ||
+    portNum === 80 ||
+    portNum === 443 ||
+    portNum === 22
+  ) {
+    return HttpServerResponse.text("Prohibited or invalid port number.", { status: 403 });
+  }
+
+  const subPath = match[2] ?? "";
+  const search = url.value.search;
+  const targetUrl = `http://127.0.0.1:${portNum}/${subPath}${search}`;
+
+  const forwardHeaders: Record<string, string> = {};
+  for (const [k, v] of Object.entries(request.headers)) {
+    const lk = k.toLowerCase();
+    if (lk !== "host" && lk !== "connection" && lk !== "content-length") {
+      forwardHeaders[lk] = v;
+    }
+  }
+  forwardHeaders["host"] = `127.0.0.1:${portNum}`;
+
+  try {
+    let rawBody: Uint8Array | undefined = undefined;
+    if (request.method !== "GET" && request.method !== "HEAD") {
+      try {
+        const bodyBuf = yield* request.arrayBuffer;
+        if (bodyBuf && bodyBuf.byteLength > 0) {
+          rawBody = new Uint8Array(bodyBuf);
+        }
+      } catch {
+        // No body
+      }
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000);
+
+    const upstreamRes = yield* Effect.tryPromise({
+      try: () =>
+        fetch(targetUrl, {
+          method: request.method,
+          headers: forwardHeaders,
+          body: rawBody,
+          redirect: "manual",
+          signal: controller.signal,
+        }),
+      catch: (cause) => cause,
+    });
+    clearTimeout(timeoutId);
+
+    const outHeaders: Record<string, string> = {};
+    upstreamRes.headers.forEach((val, key) => {
+      const lk = key.toLowerCase();
+      if (lk === "location") {
+        const rewritten = val
+          .replace(new RegExp(`^http://127\\.0\\.0\\.1:${portNum}/`, "i"), `/proxy/${portNum}/`)
+          .replace(new RegExp(`^http://localhost:${portNum}/`, "i"), `/proxy/${portNum}/`)
+          .replace(/^\/(?!\/)/, `/proxy/${portNum}/`);
+        outHeaders["location"] = rewritten;
+      } else if (
+        lk !== "content-encoding" &&
+        lk !== "content-length" &&
+        lk !== "transfer-encoding"
+      ) {
+        outHeaders[lk] = val;
+      }
+    });
+
+    const contentType = upstreamRes.headers.get("content-type") || "";
+
+    if (contentType.includes("text/html")) {
+      const html = yield* Effect.tryPromise({
+        try: () => upstreamRes.text(),
+        catch: (cause) => cause,
+      });
+      const baseTag = `<base href="/proxy/${portNum}/">`;
+      let injectedHtml = String(html);
+      if (/<head[^>]*>/i.test(injectedHtml)) {
+        injectedHtml = injectedHtml.replace(/(<head[^>]*>)/i, `$1\n  ${baseTag}`);
+      } else {
+        injectedHtml = `${baseTag}\n${injectedHtml}`;
+      }
+      return HttpServerResponse.html(injectedHtml, {
+        status: upstreamRes.status,
+        headers: outHeaders,
+      });
+    }
+
+    const arrayBuf = yield* Effect.tryPromise({
+      try: () => upstreamRes.arrayBuffer(),
+      catch: (cause) => cause,
+    });
+    return HttpServerResponse.uint8Array(new Uint8Array(arrayBuf as ArrayBuffer), {
+      status: upstreamRes.status,
+      contentType: contentType || "application/octet-stream",
+      headers: outHeaders,
+    });
+  } catch (err: any) {
+    const isConnRefused =
+      err?.cause?.code === "ECONNREFUSED" ||
+      err?.code === "ECONNREFUSED" ||
+      err?.message?.includes("ECONNREFUSED") ||
+      err?.name === "AbortError";
+
+    return HttpServerResponse.html(
+      `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Dev Server Offline :${portNum}</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; background: #0b0f19; color: #f8fafc; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; }
+    .card { background: #131b2e; padding: 2.5rem; border-radius: 16px; border: 1px solid #1e293b; max-width: 500px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+    .badge { display: inline-block; padding: 0.25rem 0.75rem; background: #334155; color: #94a3b8; border-radius: 9999px; font-size: 0.8rem; font-family: monospace; margin-bottom: 1rem; }
+    h2 { margin-top: 0; color: #f59e0b; font-size: 1.5rem; }
+    p { color: #94a3b8; font-size: 0.95rem; line-height: 1.6; }
+    code { background: #1e293b; padding: 0.2rem 0.5rem; border-radius: 4px; color: #38bdf8; font-family: monospace; }
+    .btn { display: inline-block; margin-top: 1.25rem; padding: 0.65rem 1.4rem; background: #2563eb; color: #fff; text-decoration: none; border-radius: 8px; font-weight: 500; cursor: pointer; }
+    .btn:hover { background: #1d4ed8; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="badge">PORT ${portNum}</div>
+    <h2>⚠️ Dev Server Not Running</h2>
+    <p>No active service was detected listening on port <code>${portNum}</code> on this host.</p>
+    <p>Start your application in the AutoCode terminal (e.g. <code>npm run dev</code> or <code>node server.js</code>), then refresh this tab.</p>
+    <a href="javascript:location.reload()" class="btn">🔄 Retry Connection</a>
+  </div>
+</body>
+</html>`,
+      { status: isConnRefused ? 502 : 500 },
+    );
+  }
+});
+
+export const layerDynamicPortProxyRoute = Layer.mergeAll(
+  HttpRouter.add("GET", "/proxy/*", handlePortProxy),
+  HttpRouter.add("POST", "/proxy/*", handlePortProxy),
+  HttpRouter.add("PUT", "/proxy/*", handlePortProxy),
+  HttpRouter.add("DELETE", "/proxy/*", handlePortProxy),
+  HttpRouter.add("PATCH", "/proxy/*", handlePortProxy),
+  HttpRouter.add("OPTIONS", "/proxy/*", handlePortProxy),
+  HttpRouter.add("HEAD", "/proxy/*", handlePortProxy),
+  HttpRouter.add("GET", "/port/*", handlePortProxy),
+  HttpRouter.add("POST", "/port/*", handlePortProxy),
+  HttpRouter.add("PUT", "/port/*", handlePortProxy),
+  HttpRouter.add("DELETE", "/port/*", handlePortProxy),
+  HttpRouter.add("PATCH", "/port/*", handlePortProxy),
+  HttpRouter.add("OPTIONS", "/port/*", handlePortProxy),
+  HttpRouter.add("HEAD", "/port/*", handlePortProxy),
 );
 
 export const layerAttachmentUploadRoute = HttpRouter.add(

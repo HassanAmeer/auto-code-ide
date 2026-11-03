@@ -674,6 +674,8 @@ const layerMakeRoutes = Layer.mergeAll(
     ),
     ServerHttp.layerOtlpTracesProxyRoute,
     ServerHttp.layerAssetRoute,
+    ServerHttp.layerShortAssetRoute,
+    ServerHttp.layerDynamicPortProxyRoute,
     ServerHttp.layerAttachmentUploadRoute,
     ServerHttp.layerTerminalExecRoute,
     ServerHttp.layerTerminalStreamRoute,

@@ -1359,6 +1359,9 @@ HOST IDE WORKSPACE & FILE MANAGEMENT:
   ...
   \`\`\`
 • If the user asks where files are saved or how to preview, inform them that the host IDE automatically saves files to their project directory (${projectCwd}) and displays them in the Live Preview panel.
+• LIVE PREVIEW & REVERSE PROXY CAPABILITIES:
+  - Static Web & 3D apps: Accessible inside the IDE Preview panel or via compact clean URLs like https://autojobs.tokendeal.cloud/p/<shortId>/<fileName>.
+  - Node.js & Dev Servers (e.g. port 3000, 5173, 8080): Accessible in external browser tabs and mobile devices via https://autojobs.tokendeal.cloud/proxy/<port>/ which reverse-proxies any active local dev server over HTTPS.
 • You do not need to execute shell commands or manipulate disk files yourself—the host IDE automatically saves and commits files to Git when it detects your code blocks.
 
 ================================================================================

@@ -1,3 +1,4 @@
+import * as NodeCrypto from "node:crypto";
 import type { AssetResource } from "@t3tools/contracts";
 import {
   AssetAttachmentNotFoundError,
@@ -776,12 +777,62 @@ export const issueAssetUrl = Effect.fn("AssetAccess.issueAssetUrl")(function* (i
   }
   const encodedPayload = base64UrlEncode(encodeAssetClaims(claims));
   const token = `${encodedPayload}.${signPayload(encodedPayload, signingSecret)}`;
+  const shortId = registerShortAsset(token, fileName, expiresAt);
+  const shortUrl = `/p/${shortId}/${encodeURIComponent(fileName)}`;
   return {
     relativeUrl: `${ASSET_ROUTE_PREFIX}/${token}/${encodeURIComponent(fileName)}`,
+    shortUrl,
+    shortId,
     expiresAt,
     ...(sourcePath !== undefined ? { sourcePath } : {}),
     ...(imageDimensions !== null ? { imageDimensions } : {}),
   };
+});
+
+export interface ShortAssetEntry {
+  readonly shortId: string;
+  readonly token: string;
+  readonly fileName: string;
+  readonly expiresAt: number;
+}
+
+const SHORT_ASSET_REGISTRY = new Map<string, ShortAssetEntry>();
+
+export function registerShortAsset(token: string, fileName: string, expiresAt: number): string {
+  const shortId = NodeCrypto.randomBytes(4).toString("hex");
+  SHORT_ASSET_REGISTRY.set(shortId, {
+    shortId,
+    token,
+    fileName,
+    expiresAt,
+  });
+  if (SHORT_ASSET_REGISTRY.size > 2000) {
+    const now = Date.now();
+    for (const [key, val] of SHORT_ASSET_REGISTRY.entries()) {
+      if (val.expiresAt <= now) SHORT_ASSET_REGISTRY.delete(key);
+    }
+  }
+  return shortId;
+}
+
+export function getShortAsset(shortId: string): ShortAssetEntry | null {
+  const entry = SHORT_ASSET_REGISTRY.get(shortId);
+  if (!entry) return null;
+  if (entry.expiresAt <= Date.now()) {
+    SHORT_ASSET_REGISTRY.delete(shortId);
+    return null;
+  }
+  return entry;
+}
+
+export const resolveShortAsset = Effect.fn("AssetAccess.resolveShortAsset")(function* (
+  shortId: string,
+  subPath?: string,
+) {
+  const entry = getShortAsset(shortId);
+  if (!entry) return null;
+  const relativePath = subPath && subPath.trim().length > 0 ? subPath.trim() : entry.fileName;
+  return yield* resolveAsset(entry.token, relativePath);
 });
 
 export const resolveAsset = Effect.fn("AssetAccess.resolveAsset")(function* (

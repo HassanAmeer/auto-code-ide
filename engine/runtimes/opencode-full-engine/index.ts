@@ -44,6 +44,8 @@ export const ATTACHED_TOOLS = [
   "question",
   "file-diff",
   "mcp-resource",
+  "preview",
+  "preview_port",
 ] as const;
 
 export type AttachedToolName = (typeof ATTACHED_TOOLS)[number];
@@ -456,6 +458,35 @@ export function compactSessionHistory(
 // 5. Universal Tool Dispatcher
 // ---------------------------------------------------------------------------
 
+export interface PreviewToolInput {
+  readonly file?: string;
+  readonly port?: number;
+}
+
+export function executePreviewTool(input: PreviewToolInput, cwd: string) {
+  const host = process.env.APP_URL || "https://autojobs.tokendeal.cloud";
+  if (input.port && typeof input.port === "number") {
+    return {
+      ok: true,
+      type: "port_proxy",
+      port: input.port,
+      proxyUrl: `${host}/proxy/${input.port}/`,
+      directUrl: `${host}/port/${input.port}/`,
+      instructions: `Live dev server is available at: ${host}/proxy/${input.port}/`,
+    };
+  }
+
+  const fileName = input.file || "index.html";
+  const cleanFileName = NodePath.basename(fileName);
+  return {
+    ok: true,
+    type: "static_file",
+    file: fileName,
+    previewUrl: `${host}/p/${cleanFileName}`,
+    instructions: `Static HTML preview is accessible at: ${host}/p/${cleanFileName} or via the in-app Preview tab.`,
+  };
+}
+
 export async function executeEngineTool(
   toolName: AttachedToolName | string,
   params: any,
@@ -489,6 +520,10 @@ export async function executeEngineTool(
       return { ok: true, file: params?.path, status: "diff-generated" };
     case "subagent":
       return { ok: true, agent: params?.agent || "subagent-worker", status: "dispatched" };
+    case "preview":
+    case "preview_file":
+    case "preview_port":
+      return executePreviewTool(params, cwd);
     default:
       throw new Error(`Unknown OpenCode engine tool: ${toolName}`);
   }
