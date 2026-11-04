@@ -26,7 +26,6 @@ import { Route as SettingsSkillsRouteImport } from './routes/settings.skills'
 import { Route as SettingsScheduledTasksRouteImport } from './routes/settings.scheduled-tasks'
 import { Route as SettingsProvidersRouteImport } from './routes/settings.providers'
 import { Route as SettingsProjectsRouteImport } from './routes/settings.projects'
-import { Route as SettingsOpenSourceLicensesRouteImport } from './routes/settings.open-source-licenses'
 import { Route as SettingsNotificationsRouteImport } from './routes/settings.notifications'
 import { Route as SettingsMcpRouteImport } from './routes/settings.mcp'
 import { Route as SettingsKeybindingsRouteImport } from './routes/settings.keybindings'
@@ -128,12 +127,6 @@ const SettingsProjectsRoute = SettingsProjectsRouteImport.update({
   path: '/projects',
   getParentRoute: () => SettingsRoute,
 } as any)
-const SettingsOpenSourceLicensesRoute =
-  SettingsOpenSourceLicensesRouteImport.update({
-    id: '/open-source-licenses',
-    path: '/open-source-licenses',
-    getParentRoute: () => SettingsRoute,
-  } as any)
 const SettingsNotificationsRoute = SettingsNotificationsRouteImport.update({
   id: '/notifications',
   path: '/notifications',
@@ -238,7 +231,6 @@ export interface FileRoutesByFullPath {
   '/settings/keybindings': typeof SettingsKeybindingsRoute
   '/settings/mcp': typeof SettingsMcpRoute
   '/settings/notifications': typeof SettingsNotificationsRoute
-  '/settings/open-source-licenses': typeof SettingsOpenSourceLicensesRoute
   '/settings/projects': typeof SettingsProjectsRoute
   '/settings/providers': typeof SettingsProvidersRoute
   '/settings/scheduled-tasks': typeof SettingsScheduledTasksRoute
@@ -272,7 +264,6 @@ export interface FileRoutesByTo {
   '/settings/keybindings': typeof SettingsKeybindingsRoute
   '/settings/mcp': typeof SettingsMcpRoute
   '/settings/notifications': typeof SettingsNotificationsRoute
-  '/settings/open-source-licenses': typeof SettingsOpenSourceLicensesRoute
   '/settings/projects': typeof SettingsProjectsRoute
   '/settings/providers': typeof SettingsProvidersRoute
   '/settings/scheduled-tasks': typeof SettingsScheduledTasksRoute
@@ -309,7 +300,6 @@ export interface FileRoutesById {
   '/settings/keybindings': typeof SettingsKeybindingsRoute
   '/settings/mcp': typeof SettingsMcpRoute
   '/settings/notifications': typeof SettingsNotificationsRoute
-  '/settings/open-source-licenses': typeof SettingsOpenSourceLicensesRoute
   '/settings/projects': typeof SettingsProjectsRoute
   '/settings/providers': typeof SettingsProvidersRoute
   '/settings/scheduled-tasks': typeof SettingsScheduledTasksRoute
@@ -347,7 +337,6 @@ export interface FileRouteTypes {
     | '/settings/keybindings'
     | '/settings/mcp'
     | '/settings/notifications'
-    | '/settings/open-source-licenses'
     | '/settings/projects'
     | '/settings/providers'
     | '/settings/scheduled-tasks'
@@ -381,7 +370,6 @@ export interface FileRouteTypes {
     | '/settings/keybindings'
     | '/settings/mcp'
     | '/settings/notifications'
-    | '/settings/open-source-licenses'
     | '/settings/projects'
     | '/settings/providers'
     | '/settings/scheduled-tasks'
@@ -417,7 +405,6 @@ export interface FileRouteTypes {
     | '/settings/keybindings'
     | '/settings/mcp'
     | '/settings/notifications'
-    | '/settings/open-source-licenses'
     | '/settings/projects'
     | '/settings/providers'
     | '/settings/scheduled-tasks'
@@ -564,13 +551,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsProjectsRouteImport
       parentRoute: typeof SettingsRoute
     }
-    '/settings/open-source-licenses': {
-      id: '/settings/open-source-licenses'
-      path: '/open-source-licenses'
-      fullPath: '/settings/open-source-licenses'
-      preLoaderRoute: typeof SettingsOpenSourceLicensesRouteImport
-      parentRoute: typeof SettingsRoute
-    }
     '/settings/notifications': {
       id: '/settings/notifications'
       path: '/notifications'
@@ -715,7 +695,6 @@ interface SettingsRouteChildren {
   SettingsKeybindingsRoute: typeof SettingsKeybindingsRoute
   SettingsMcpRoute: typeof SettingsMcpRoute
   SettingsNotificationsRoute: typeof SettingsNotificationsRoute
-  SettingsOpenSourceLicensesRoute: typeof SettingsOpenSourceLicensesRoute
   SettingsProjectsRoute: typeof SettingsProjectsRoute
   SettingsProvidersRoute: typeof SettingsProvidersRoute
   SettingsScheduledTasksRoute: typeof SettingsScheduledTasksRoute
@@ -740,7 +719,6 @@ const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsKeybindingsRoute: SettingsKeybindingsRoute,
   SettingsMcpRoute: SettingsMcpRoute,
   SettingsNotificationsRoute: SettingsNotificationsRoute,
-  SettingsOpenSourceLicensesRoute: SettingsOpenSourceLicensesRoute,
   SettingsProjectsRoute: SettingsProjectsRoute,
   SettingsProvidersRoute: SettingsProvidersRoute,
   SettingsScheduledTasksRoute: SettingsScheduledTasksRoute,
