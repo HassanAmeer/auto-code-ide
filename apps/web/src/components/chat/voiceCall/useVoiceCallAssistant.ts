@@ -1497,8 +1497,14 @@ export function useVoiceCallAssistant({
         if (speakingText) {
           setAssistantSpokenText(speakingText);
           addAiSpokenPhrase(speakingText);
+          cludeGodsEchoFilterRef.current.registerPlaybackStart(
+            "tts-" + Date.now(),
+            speakingText,
+            Date.now(),
+          );
         }
       } else {
+        cludeGodsEchoFilterRef.current.registerPlaybackEnd("", Date.now());
         activeTtsTextRef.current = "";
         // If a streaming player is currently actively playing sentence chunks or has queued chunks waiting,
         // do not switch status or reset state yet (the player's onFinished handler will transition when all chunks conclude).
@@ -1694,7 +1700,7 @@ export function useVoiceCallAssistant({
     updateCallStatus("thinking");
     thinkingAmbientSound.start();
 
-    // Safety turn timeout: If assistant fails to stream or backend errors out, return to listening after 15s
+    // Safety turn timeout: If assistant fails to stream or backend errors out, return to listening after 35s
     clearTurnTimeout();
     turnTimeoutRef.current = setTimeout(() => {
       const isPlayerBusy = Boolean(
@@ -1719,7 +1725,7 @@ export function useVoiceCallAssistant({
           } catch {}
         }
       }
-    }, 15000);
+    }, 35000);
 
     // Clear transcript baselines and turn buffers for the next turn
     manualBaselineRef.current = "";
@@ -1727,12 +1733,15 @@ export function useVoiceCallAssistant({
     accumulatedTurnFinalRef.current = "";
     lastFinalizedIndexRef.current = -1;
     // Advance turn start index to the current length of recognition results
-    // so next turn only picks up fresh speech without aborting recognition!
     turnStartResultIndexRef.current = currentEventResultsLengthRef.current;
 
-    // DO NOT abort SpeechRecognition! In Chromium, aborting kills the active audio stream,
-    // causing a 300-800ms gap that swallows the beginning of the next sentence or drops trailing speech.
-    // By keeping SpeechRecognition alive, the microphone is truly 100% full-duplex always-on.
+    // Reset SpeechRecognition session so Chrome purges previous turn's transcripts
+    // and can NEVER concatenate turn 1's words with turn 2!
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.abort();
+      } catch {}
+    }
 
     addVoiceCallLog({
       category: "SYSTEM",
