@@ -41,7 +41,6 @@ import { readPullRequestListPreferences } from "../pullRequest/pullRequestListPr
 import { isSidebarUtilityPage, useNavigateToMainApp } from "./mainAppLocation";
 import { SidebarThreadUndoNotice } from "./SidebarThreadUndoNotice";
 import { SidebarProviderUpdatePill } from "./SidebarProviderUpdatePill";
-import { SidebarUpdateArchitectureWarning, SidebarUpdatePill } from "./SidebarUpdatePill";
 import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
 import { useTerminalStore, terminalStore } from "../chat/terminal/terminalStore";
 import { SidebarResourceStats } from "./SidebarResourceStats";
@@ -563,9 +562,7 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
             </div>
 
             {/* Right side */}
-            <div className="flex items-center gap-1">
-              <SidebarUpdatePill />
-            </div>
+            <div className="flex items-center gap-1"></div>
           </>
         )}
       </SidebarMenu>
@@ -767,7 +764,6 @@ export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
       <div className="px-1.5 pt-0 flex flex-col gap-1 w-full">
         <SidebarThreadUndoNotice />
         <SidebarProviderUpdatePill />
-        <SidebarUpdateArchitectureWarning />
       </div>
       <SidebarUtilityMenu />
     </SidebarFooter>
