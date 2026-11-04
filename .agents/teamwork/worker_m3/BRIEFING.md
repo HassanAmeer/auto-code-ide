@@ -1,4 +1,4 @@
-# BRIEFING — 2026-11-04T10:41:00Z
+# BRIEFING — 2026-11-04T11:03:00Z
 
 ## Mission
 
@@ -30,7 +30,7 @@ Integrate instant interruption (<150ms barge-in), CludeGods echo filtering, safe
 ## Current Parent
 
 - Conversation ID: 21f0c9dc-dca6-48e4-a0d7-5ba869aaf28d
-- Updated: not yet
+- Updated: 2026-11-04T11:00:57Z
 
 ## Task Summary
 
@@ -41,25 +41,29 @@ Integrate instant interruption (<150ms barge-in), CludeGods echo filtering, safe
 
 ## Change Tracker
 
-- **Files modified**: None yet
-- **Build status**: Untested
+- **Files modified**:
+  - `apps/web/src/components/chat/voiceCall/useVoiceCallAssistant.ts`: Integrated CludeGodsEchoFilter playhead hooks, safeStopSpeechPlayback cutoff, fixed voice barge-in abort bug, pure stop instant return to listening, and continuous STT keep-alive.
+  - `apps/web/src/components/chat/voiceCall/voiceCallAssistant.test.ts`: Added 6 comprehensive unit tests covering sub-150ms cutoff, user speech preservation, pure stop, CludeGods echo rejection, continuous STT keep-alive, and StreamingTtsPlayer playhead callbacks.
+- **Build status**: PASS (21/21 voiceCallAssistant tests pass, 88/88 speech tests pass, tsc clean, vp build clean in 51.98s)
 - **Pending issues**: None
 
 ## Quality Status
 
-- **Build/test result**: Pending implementation
-- **Lint status**: Clean
-- **Tests added/modified**: Pending
+- **Build/test result**: PASS (100% tests passing)
+- **Lint status**: Clean (tsc --noEmit passed with 0 errors)
+- **Tests added/modified**: 6 new unit tests added to voiceCallAssistant.test.ts (21 total)
 
 ## Key Decisions Made
 
-- Use CludeGodsEchoFilter playhead registration hooked into StreamingTtsPlayer onChunkStart and onChunkEnd.
-- In handleVoiceBargeIn, do NOT abort recognitionRef.current; only halt TTS and LLM stream.
-- In recognition.onresult, filter transcripts through echoFilter.processInterimTranscript / processFinalTranscript.
-- Differentiate between pure interrupt command (stripped === "") which returns to "listening", and command + query or speech-over which sets "user-speaking".
+- Wired StreamingTtsPlayer `onChunkStart` and `onChunkEnd` to `cludeGodsEchoFilterRef.current.registerPlaybackStart` and `registerPlaybackEnd`.
+- Replaced `interruptSpeakingRef.current()` inside voice barge-in with direct audio cutoff (`safeStopSpeechPlayback()` and `streamingPlayer.stop()`) and stream abort, preserving `recognitionRef.current` without calling `abort()`.
+- Added pure stop detection: if `isExplicitInterrupt && !stripped.trim()`, clear prompt, reset transcript, disarm auto-dispatch timer, and immediately transition call status to `"listening"`.
+- Enhanced `recognition.onerror` to treat `aborted` and `no-speech` as benign, auto-reconnect on `network` (250ms backoff), and advance language fallback on `language-not-supported`.
+- Tuned `recognition.onend` restart delay to platform (30ms desktop, 180ms mobile).
 
 ## Artifact Index
 
 - /home/hasan/Documents/reactjs/t3forweb/.agents/teamwork/worker_m3/DISPATCH.md — Dispatch instructions
 - /home/hasan/Documents/reactjs/t3forweb/.agents/teamwork/worker_m3/BRIEFING.md — Situational awareness
 - /home/hasan/Documents/reactjs/t3forweb/.agents/teamwork/worker_m3/progress.md — Heartbeat and progress log
+- /home/hasan/Documents/reactjs/t3forweb/.agents/teamwork/worker_m3/handoff.md — Final handoff report
