@@ -227,27 +227,10 @@ function WishlistCard({
 }) {
   const [localItems, setLocalItems] = useState(items);
 
-  const handleToggle = async (itemId: string) => {
-    try {
-      const res = await fetch("/api/bot/wishlist/toggle-approve", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectName, itemId }),
-      });
-      const data = (await res.json()) as {
-        ok: boolean;
-        item?: import("~/lib/callAssistantStore").WishlistItem;
-      };
-      if (data.ok && data.item) {
-        setLocalItems((prev) =>
-          prev.map((it) =>
-            it.id === itemId ? { ...it, autoApprove: data.item!.autoApprove } : it,
-          ),
-        );
-      }
-    } catch {
-      // silent fail
-    }
+  const handleToggle = (itemId: string) => {
+    setLocalItems((prev) =>
+      prev.map((it) => (it.id === itemId ? { ...it, autoApprove: !it.autoApprove } : it)),
+    );
   };
 
   const pending = localItems.filter((i) => i.status === "pending" || i.status === "in_progress");
@@ -1307,33 +1290,9 @@ export function SuperCallAssistantView() {
               },
               actionType: res.actionTaken,
             }
-          : res.actionTaken === "wishlist_listed" || res.actionTaken === "wishlist_item_added"
-            ? await (async () => {
-                try {
-                  const projectName =
-                    activeProjId ||
-                    activeSession?.messages.find((m) => m.role === "user")?.text ||
-                    "Workspace";
-                  const r = await fetch(
-                    `/api/bot/wishlist?project=${encodeURIComponent(projectName)}`,
-                  );
-                  const data = (await r.json()) as {
-                    ok: boolean;
-                    items: import("~/lib/callAssistantStore").WishlistItem[];
-                    projectName: string;
-                  };
-                  return {
-                    actionType: res.actionTaken,
-                    wishlistItems: data.ok ? data.items : [],
-                    wishlistProject: data.projectName,
-                  };
-                } catch {
-                  return { actionType: res.actionTaken };
-                }
-              })()
-            : res.actionTaken
-              ? { actionType: res.actionTaken }
-              : undefined;
+          : res.actionTaken
+            ? { actionType: res.actionTaken }
+            : undefined;
 
         // Auto-detect code diffs in assistant reply
         const diffMatch = res.reply.match(/```(?:diff)?\n([\s\S]*?(?:---|\+\+\+|@@)[\s\S]*?)```/);

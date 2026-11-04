@@ -11,8 +11,6 @@
 import { loadLiveKitConfig } from "./config.ts";
 import { executeBash } from "../cline/tools.ts";
 import { autoHealProject } from "../cline/auto-healer.ts";
-import { classifyIntent } from "../supervisor/intentClassifier.ts";
-import { buildSmartBotSystemPrompt } from "../supervisor/prompt.ts";
 
 export async function executeTerminalCommand(
   cmd: string,
@@ -148,26 +146,20 @@ export async function processLiveKitVoiceTurn(
   context: AgentContext,
   onFillerTriggered?: (fillerText: string) => void,
 ): Promise<{ reply: string; spokenReply: string; toolCalled?: string }> {
-  const analysis = classifyIntent(transcript);
-  const isUrdu = context.language === "urdu" || analysis.isUrdu;
+  const isUrdu =
+    context.language === "urdu" ||
+    /[\u0600-\u06FF]|aap|main|karo|batao|kya|hai|theek/i.test(transcript);
   const effectiveLang = isUrdu ? "urdu" : "english";
 
-  // Check if intent requires a tool execution
-  const requiresTool =
-    analysis.intent === "GIT_FEATURES_SEARCH" ||
-    analysis.intent === "HEALTH_RADAR_STATUS" ||
-    analysis.intent === "ERROR_HEALING_FIX";
+  // Check if speech requests git or healing
+  const isGit = /\b(git|commit|log|status|history)\b/i.test(transcript);
+  const isHeal = /\b(fix|heal|repair|error|theek)\b/i.test(transcript);
 
-  if (requiresTool) {
-    // 1. Trigger instant natural conversational filler voice feedback
+  if (isGit || isHeal) {
     const filler = getRandomFiller(effectiveLang);
     onFillerTriggered?.(filler);
 
-    // 2. Map and run the corresponding tool
-    let toolName = "git_status";
-    if (analysis.intent === "GIT_FEATURES_SEARCH") toolName = "git_log";
-    if (analysis.intent === "ERROR_HEALING_FIX") toolName = "auto_heal";
-
+    const toolName = isHeal ? "auto_heal" : "git_status";
     const toolResult = await executeVoiceAgentTool(toolName, {}, context);
 
     return {
@@ -176,12 +168,6 @@ export async function processLiveKitVoiceTurn(
       toolCalled: toolName,
     };
   }
-
-  // Conversational response
-  const systemPrompt = buildSmartBotSystemPrompt({
-    intentAnalysis: analysis,
-    language: effectiveLang,
-  });
 
   const spoken =
     effectiveLang === "urdu"

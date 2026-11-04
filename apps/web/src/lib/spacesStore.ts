@@ -50,15 +50,6 @@ export function saveSpacePages(projectName: string, pages: SpacePage[]): void {
   try {
     localStorage.setItem(getStorageKey(projectName), JSON.stringify(pages));
     notifySubscribers(pages);
-
-    // Sync in background to server /api/bot/spaces if available
-    void fetch("/api/bot/spaces", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ projectName, pages }),
-    }).catch(() => {
-      // Background sync fail is safe (localStorage is source of truth on client)
-    });
   } catch (err) {
     console.error("[SpacesStore] Failed to save space pages:", err);
   }
