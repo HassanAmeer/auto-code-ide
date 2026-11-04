@@ -338,4 +338,28 @@ describe("CludeGodsEchoFilter Unit Tests", () => {
       expect(avgElapsed).toBeLessThan(5.0); // Must be strictly under 5ms
     });
   });
+
+  describe("12. Bilingual Urdu Script Transliteration & Echo Cancellation", () => {
+    it("drops Urdu script acoustic echo when assistant spoke in Roman Urdu", () => {
+      filter.registerPlaybackStart("u1", "Main aap ka kaam mukammal kar raha hoon", 10000);
+
+      // Microphone transcribes Chrome's ur-PK Urdu script:
+      const decision = filter.processInterimTranscript("میں آپ کا کام مکمل کر رہا ہوں", 10500);
+
+      expect(decision.action).toBe("drop");
+      expect(decision.isBargeIn).toBe(false);
+    });
+
+    it("triggers instant barge-in when user speaks Urdu script stop command during playback", () => {
+      filter.registerPlaybackStart("u1", "Main aap ko sun raha hoon", 10000);
+
+      const decisionStop = filter.processInterimTranscript("سٹاپ", 10500);
+      expect(decisionStop.action).toBe("barge");
+      expect(decisionStop.isBargeIn).toBe(true);
+
+      const decisionRuko = filter.processInterimTranscript("روکو", 10500);
+      expect(decisionRuko.action).toBe("barge");
+      expect(decisionRuko.isBargeIn).toBe(true);
+    });
+  });
 });

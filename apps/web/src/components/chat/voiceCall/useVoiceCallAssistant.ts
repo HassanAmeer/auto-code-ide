@@ -333,12 +333,15 @@ export function containsInterruptCommand(text: string): boolean {
   const clean = cleanForComparison(text);
   if (!clean) return false;
 
-  if (isPureInterruptCommand(clean)) return true;
+  const romanClean = cleanForComparison(transliterateUrduToRoman(text));
+
+  if (isPureInterruptCommand(clean) || (romanClean && isPureInterruptCommand(romanClean)))
+    return true;
 
   for (const trigger of INTERRUPT_COMMAND_TRIGGERS) {
     const cleanTrigger = cleanForComparison(trigger);
     const prefixRegex = new RegExp(`^(?:(?:${FILLERS.join("|")})\\s+)?${cleanTrigger}\\b`, "i");
-    if (prefixRegex.test(clean)) {
+    if (prefixRegex.test(clean) || (romanClean && prefixRegex.test(romanClean))) {
       return true;
     }
   }
@@ -347,13 +350,17 @@ export function containsInterruptCommand(text: string): boolean {
   if (
     /\b(?:stop|listen|suno|ruko|wait|pause|ruk|bas|chup|khamosh|cancel|halt|tehro|thehro)\b/i.test(
       clean,
-    )
+    ) ||
+    (romanClean &&
+      /\b(?:stop|listen|suno|ruko|wait|pause|ruk|bas|chup|khamosh|cancel|halt|tehro|thehro)\b/i.test(
+        romanClean,
+      ))
   ) {
     return true;
   }
 
   // Urdu script
-  if (/(?:سٹاپ|سنو|سنیں|روکو|رک|ٹھہرو|بس|چپ|خاموش)/.test(clean)) {
+  if (/(?:سٹاپ|سنو|سنیں|روکو|رکو|روک|رک|ٹھہرو|ٹھہریں|بس|چپ|خاموش)/.test(clean)) {
     return true;
   }
 
@@ -362,7 +369,24 @@ export function containsInterruptCommand(text: string): boolean {
 
 export function stripInterruptCommand(text: string): string {
   let cleaned = text;
-  const sortedTriggers = [...INTERRUPT_COMMAND_TRIGGERS].sort((a, b) => b.length - a.length);
+  const sortedTriggers = [
+    ...INTERRUPT_COMMAND_TRIGGERS,
+    "سٹاپ",
+    "روکو",
+    "رکو",
+    "روک",
+    "رک",
+    "سنو",
+    "سنیں",
+    "ٹھہرو",
+    "ٹھہریں",
+    "بس",
+    "چپ",
+    "خاموش",
+    "رک جاؤ",
+    "بس کرو",
+    "روک دو",
+  ].sort((a, b) => b.length - a.length);
 
   for (const trigger of sortedTriggers) {
     const escaped = trigger.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -441,7 +465,10 @@ export function stripAiSpeechFromTranscript(transcript: string, aiPhrases: strin
   for (const rawPhrase of aiPhrases) {
     if (!rawPhrase || !rawPhrase.trim()) continue;
     const cleanPhrase = rawPhrase.trim().replace(/[.,!?;:۔()"'`]/g, "");
-    const phraseWords = cleanPhrase.toLowerCase().split(/\s+/).filter(Boolean);
+    const phraseWords = transliterateUrduToRoman(cleanPhrase)
+      .toLowerCase()
+      .split(/\s+/)
+      .filter(Boolean);
     if (phraseWords.length < 3) continue;
 
     const resultWords = result.split(/\s+/);
@@ -451,8 +478,10 @@ export function stripAiSpeechFromTranscript(transcript: string, aiPhrases: strin
       const rawRw = resultWords[i];
       const pw = phraseWords[i];
       if (!rawRw || !pw) break;
-      const rw = rawRw.toLowerCase().replace(/[.,!?;:۔()"'`]/g, "");
-      if (rw === pw || (rw.length >= 3 && pw.includes(rw))) {
+      const rw = transliterateUrduToRoman(rawRw)
+        .toLowerCase()
+        .replace(/[.,!?;:۔()"'`]/g, "");
+      if (rw === pw || (rw.length >= 3 && (pw.includes(rw) || rw.includes(pw)))) {
         matchCount++;
       } else {
         break;
@@ -617,6 +646,9 @@ export function useVoiceCallAssistant({
   // Guard flag during auto-sending to prevent manual baseline re-entry
   const isAutoSendingRef = useRef(false);
 
+  // History of dispatched turns to prevent Chrome STT continuous buffer re-emission
+  const dispatchedTurnsHistoryRef = useRef<Set<string>>(new Set());
+
   // Turn tracking: snapshot message IDs present before turn was dispatched
   const preTurnMessageIdsRef = useRef<Set<string>>(new Set());
   const waitingForAssistantResponseRef = useRef(false);
@@ -709,6 +741,7 @@ export function useVoiceCallAssistant({
     lastFinalizedIndexRef.current = -1;
     turnStartResultIndexRef.current = 0;
     recentEmittedTranscriptsRef.current.clear();
+    dispatchedTurnsHistoryRef.current.clear();
     preTurnMessageIdsRef.current.clear();
     isEndingCallRef.current = false;
     allTurnAiTextRef.current = "";
@@ -1166,9 +1199,35 @@ export function useVoiceCallAssistant({
 
         if (!rawSpeech) return;
 
+        // Strip previously dispatched turn text to prevent Chrome continuous STT re-emissions
+        let sanitizedRawSpeech = rawSpeech.trim();
+        for (const prevTurn of dispatchedTurnsHistoryRef.current) {
+          if (!prevTurn || prevTurn.length < 3) continue;
+          const cleanPrev = prevTurn
+            .replace(/[.,!?;:۔()"'`]/g, "")
+            .trim()
+            .toLowerCase();
+          const cleanCurr = sanitizedRawSpeech
+            .replace(/[.,!?;:۔()"'`]/g, "")
+            .trim()
+            .toLowerCase();
+          const romanCurr = transliterateUrduToRoman(cleanCurr).toLowerCase();
+
+          if (cleanCurr === cleanPrev || romanCurr === cleanPrev) {
+            // Full match with previous turn: drop completely
+            return;
+          }
+          if (cleanCurr.startsWith(cleanPrev + " ")) {
+            sanitizedRawSpeech = sanitizedRawSpeech.slice(prevTurn.length).trim();
+          } else if (romanCurr.startsWith(cleanPrev + " ")) {
+            sanitizedRawSpeech = sanitizedRawSpeech.slice(prevTurn.length).trim();
+          }
+        }
+        if (!sanitizedRawSpeech) return;
+
         // NOISE GATING & AMBIENT NOISE FILTER (Acoustic Noise Shield):
         // Filter out ambient mic hiss, fan rumble, breath noise, and low-energy noise syllables
-        const trimmedRaw = rawSpeech.trim();
+        const trimmedRaw = sanitizedRawSpeech.trim();
         const noiseSyllableRegex = /^(?:[اہاوہمہمامآہاوع]|ah|uh|um|hmm|shh|psst|oh)+$/i;
         const isNoiseSyllable = noiseSyllableRegex.test(trimmedRaw);
         const wordsList = trimmedRaw.split(/\s+/).filter(Boolean);
@@ -1197,7 +1256,7 @@ export function useVoiceCallAssistant({
         }
 
         // Deduplicate immediate duplicate words that recognition engines emit
-        const cleanSpeech = removeConsecutiveDuplicateWords(rawSpeech);
+        const cleanSpeech = removeConsecutiveDuplicateWords(sanitizedRawSpeech);
         if (!cleanSpeech) return;
 
         // Strip any AI spoken words that might have bled into speech from the speakers
@@ -1727,7 +1786,10 @@ export function useVoiceCallAssistant({
       }
     }, 35000);
 
-    // Clear transcript baselines and turn buffers for the next turn
+    // Clear transcript baselines, composer input, and turn buffers for the next turn
+    promptRef.current = "";
+    onTranscriptChangeRef.current("");
+    setLiveTranscript("");
     manualBaselineRef.current = "";
     lastTranscribedTextRef.current = "";
     accumulatedTurnFinalRef.current = "";
@@ -1735,13 +1797,20 @@ export function useVoiceCallAssistant({
     // Advance turn start index to the current length of recognition results
     turnStartResultIndexRef.current = currentEventResultsLengthRef.current;
 
-    // Reset SpeechRecognition session so Chrome purges previous turn's transcripts
-    // and can NEVER concatenate turn 1's words with turn 2!
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.abort();
-      } catch {}
+    // Track dispatched text in history to prevent any Chrome continuous buffer re-emission
+    const dispatchedNorm = currentText.trim().toLowerCase();
+    if (dispatchedNorm) {
+      dispatchedTurnsHistoryRef.current.add(dispatchedNorm);
+      const dispatchedRoman = transliterateUrduToRoman(dispatchedNorm).toLowerCase();
+      if (dispatchedRoman) {
+        dispatchedTurnsHistoryRef.current.add(dispatchedRoman);
+      }
     }
+
+    // CRITICAL: DO NOT call recognitionRef.current?.abort()!
+    // The microphone MUST stay 100% continuously alive until the user explicitly ends the call.
+    // Keeping the mic open allows immediate barge-in ("Stop" / "Ruko") while assistant is speaking,
+    // and eliminates audio pipeline re-initialization lag.
 
     addVoiceCallLog({
       category: "SYSTEM",

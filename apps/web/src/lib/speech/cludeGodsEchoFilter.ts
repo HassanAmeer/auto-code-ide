@@ -23,6 +23,8 @@
  * 7. Ultra-Low Latency (<2.5ms typical, strictly <5ms budget).
  */
 
+import { containsUrduOrHindi, transliterateUrduToRoman } from "./romanUrduTransliterate";
+
 export interface SpokenUtterance {
   id: string;
   text: string;
@@ -198,7 +200,7 @@ const BARGE_STOPWORDS = new Set<string>([
   "ji",
 ]);
 
-// Explicit interrupt commands (English & Roman Urdu) that instantly bypass echo stripping
+// Explicit interrupt commands (English, Roman Urdu & Urdu script) that instantly bypass echo stripping
 const EXPLICIT_INTERRUPT_KEYWORDS = [
   "stop",
   "ruko",
@@ -208,6 +210,7 @@ const EXPLICIT_INTERRUPT_KEYWORDS = [
   "halt",
   "cancel",
   "thahro",
+  "thehro",
   "chup",
   "pause",
   "ruk jao",
@@ -216,10 +219,29 @@ const EXPLICIT_INTERRUPT_KEYWORDS = [
   "baskaro",
   "rok do",
   "rokdo",
+  "band karo",
   "shut up",
   "quiet",
   "silence",
   "hold on",
+  // Urdu script
+  "سٹاپ",
+  "روکو",
+  "رکو",
+  "روک",
+  "رک",
+  "سنو",
+  "سنیں",
+  "ٹھہرو",
+  "ٹھہریں",
+  "بس",
+  "چپ",
+  "خاموش",
+  "رک جاؤ",
+  "رک جا",
+  "بس کرو",
+  "روک دو",
+  "بند کرو",
 ];
 
 // Number to word mappings for English and Roman Urdu numeral expansion
@@ -286,8 +308,19 @@ const ROMAN_URDU_NORMALIZATION_MAP: Record<string, string> = {
   vps: "vps",
 };
 
+let sharedDpBuffer1 = new Int32Array(512);
+let sharedDpBuffer2 = new Int32Array(512);
+
+function ensureDpCapacity(needed: number) {
+  if (sharedDpBuffer1.length < needed) {
+    const nextCap = Math.max(needed + 128, sharedDpBuffer1.length * 2);
+    sharedDpBuffer1 = new Int32Array(nextCap);
+    sharedDpBuffer2 = new Int32Array(nextCap);
+  }
+}
+
 /**
- * Fast Levenshtein edit distance using single flat Int32Array (O(min(N, M)) space)
+ * Fast Levenshtein edit distance using reusable Int32Array (zero allocations in hot loops)
  */
 export function levenshteinDistance(s1: string, s2: string): number {
   if (s1 === s2) return 0;
@@ -303,8 +336,9 @@ export function levenshteinDistance(s1: string, s2: string): number {
 
   const m = a.length;
   const n = b.length;
-  let prevRow = new Int32Array(m + 1);
-  let currRow = new Int32Array(m + 1);
+  ensureDpCapacity(m + 1);
+  let prevRow = sharedDpBuffer1;
+  let currRow = sharedDpBuffer2;
 
   for (let i = 0; i <= m; i++) {
     prevRow[i] = i;
@@ -333,7 +367,7 @@ export function levenshteinDistance(s1: string, s2: string): number {
 }
 
 /**
- * Fast Longest Common Subsequence (LCS) length with two-row DP
+ * Fast Longest Common Subsequence (LCS) length with two-row DP using reusable buffers
  */
 export function lcsLength(s1: string, s2: string): number {
   if (!s1 || !s2) return 0;
@@ -348,11 +382,17 @@ export function lcsLength(s1: string, s2: string): number {
 
   const m = a.length;
   const n = b.length;
-  let prev = new Int32Array(m + 1);
-  let curr = new Int32Array(m + 1);
+  ensureDpCapacity(m + 1);
+  let prev = sharedDpBuffer1;
+  let curr = sharedDpBuffer2;
+
+  for (let i = 0; i <= m; i++) {
+    prev[i] = 0;
+  }
 
   for (let j = 1; j <= n; j++) {
     const charB = b.charCodeAt(j - 1);
+    curr[0] = 0;
     for (let i = 1; i <= m; i++) {
       if (a.charCodeAt(i - 1) === charB) {
         curr[i] = (prev[i - 1] ?? 0) + 1;
@@ -377,17 +417,22 @@ export function sequenceRatio(s1: string, s2: string): number {
   return (2.0 * lcsLength(s1, s2)) / total;
 }
 
+const URDU_HINDI_REGEX = /[\u0600-\u06FF\u0900-\u097F]/;
+
 /**
- * Clean string to lowercase alphanumeric only (strips punctuation and spaces)
+ * Clean string to lowercase alphanumeric only (strips punctuation and spaces).
+ * Transliterates Urdu/Hindi characters into Roman Urdu so script matches Latin equivalents.
  */
 export function cleanAlphanumeric(text: string): string {
-  return text.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const norm = URDU_HINDI_REGEX.test(text) ? transliterateUrduToRoman(text) : text;
+  return norm.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
 /**
  * Expands numbers in text to their English word equivalents
  */
 export function expandNumerals(text: string): string {
+  if (!/\d/.test(text)) return text;
   return text.replace(/\b\d+\b/g, (match) => {
     return NUMERAL_MAP[match] || match;
   });
@@ -402,10 +447,11 @@ export function normalizeRomanUrduWord(word: string): string {
 }
 
 /**
- * Tokenizes text into normalized words with numeric expansion and Urdu normalization
+ * Tokenizes text into normalized words with numeric expansion, Urdu transliteration, and Urdu normalization
  */
 export function tokenizeWords(text: string): string[] {
-  const expanded = expandNumerals(text);
+  const norm = URDU_HINDI_REGEX.test(text) ? transliterateUrduToRoman(text) : text;
+  const expanded = expandNumerals(norm);
   const words = expanded
     .toLowerCase()
     .replace(/[^\w\s]/g, " ")
@@ -889,10 +935,13 @@ export class CludeGodsEchoFilter {
 
     // Check multi-word explicit phrases like "ruk jao", "bas karo", "shut up", "hold on"
     const lower = text.toLowerCase().trim();
+    const romanLower = containsUrduOrHindi(lower)
+      ? transliterateUrduToRoman(lower).toLowerCase().trim()
+      : lower;
     for (const phrase of EXPLICIT_INTERRUPT_KEYWORDS) {
       if (phrase.includes(" ")) {
         const regex = new RegExp(`(^|\\b)${phrase}(\\b|$)`, "i");
-        if (regex.test(lower)) {
+        if (regex.test(lower) || regex.test(romanLower)) {
           const phraseTokens = tokenizeWords(phrase);
           const allInSaid = phraseTokens.every((pt) => activeSaidWords.includes(pt));
           if (!allInSaid) {
@@ -964,6 +1013,11 @@ export class CludeGodsEchoFilter {
       const cleanSaid = cleanAlphanumeric(said);
       if (cleanSaid.length < this.options.charEchoMinChars) continue;
 
+      // Fast exact substring match
+      if (cleanSaid.includes(cleanHeard)) {
+        return 1.0;
+      }
+
       // If said is shorter or comparable in length to heard
       if (cleanSaid.length <= hLen + 4) {
         const score = sequenceRatio(cleanHeard, cleanSaid);
@@ -972,14 +1026,15 @@ export class CludeGodsEchoFilter {
         continue;
       }
 
-      // Slide window over cleanSaid with widths: hLen - 2, hLen, hLen + 3
-      const windowWidths = [hLen - 2, hLen, hLen + 3].filter(
+      // Slide window over cleanSaid
+      const windowWidths = (hLen > 30 ? [hLen] : [hLen - 2, hLen, hLen + 3]).filter(
         (w) => w >= 6 && w <= cleanSaid.length,
       );
 
       for (const w of windowWidths) {
         const maxStart = cleanSaid.length - w;
-        for (let i = 0; i <= maxStart; i++) {
+        const step = maxStart > 20 ? 3 : maxStart > 10 ? 2 : 1;
+        for (let i = 0; i <= maxStart; i += step) {
           const slice = cleanSaid.slice(i, i + w);
           const score = sequenceRatio(cleanHeard, slice);
           if (score > maxScore) {
@@ -1005,6 +1060,7 @@ export class CludeGodsEchoFilter {
     for (const t of saidTexts) {
       allSaidWords.push(...tokenizeWords(t));
     }
+    const saidWordsSet = new Set(allSaidWords);
     const joinedSaid = allSaidWords.join("");
 
     const flags = new Array<boolean>(heardWords.length).fill(false);
@@ -1012,7 +1068,7 @@ export class CludeGodsEchoFilter {
     // 1. Loose word equivalence
     for (let i = 0; i < heardWords.length; i++) {
       const hw = heardWords[i];
-      if (hw && isLooseWordMatch(hw, allSaidWords, joinedSaid)) {
+      if (hw && (saidWordsSet.has(hw) || isLooseWordMatch(hw, allSaidWords, joinedSaid))) {
         flags[i] = true;
       }
     }
