@@ -9,6 +9,7 @@ import {
   FileJsonIcon,
   SettingsIcon,
   TerminalSquareIcon,
+  PhoneCallIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { memo, useCallback, useState } from "react";
@@ -41,6 +42,7 @@ import { readPullRequestListPreferences } from "../pullRequest/pullRequestListPr
 import { isSidebarUtilityPage, useNavigateToMainApp } from "./mainAppLocation";
 import { SidebarThreadUndoNotice } from "./SidebarThreadUndoNotice";
 import { SidebarProviderUpdatePill } from "./SidebarProviderUpdatePill";
+import { SidebarUpdateArchitectureWarning, SidebarUpdatePill } from "./SidebarUpdatePill";
 import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
 import { useTerminalStore, terminalStore } from "../chat/terminal/terminalStore";
 import { SidebarResourceStats } from "./SidebarResourceStats";
@@ -382,6 +384,30 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
               </div>
             </button>
 
+            {/* Super Call Assistant */}
+            <button
+              type="button"
+              onClick={() => {
+                closeMobileSidebar();
+                void navigate({ to: "/bot" });
+                setIsExpanded(false);
+              }}
+              className={cn(
+                "flex items-center gap-2 rounded-lg p-1.5 text-xs font-medium transition-all text-left cursor-pointer",
+                location.pathname === "/bot" || location.pathname === "/call-assistant"
+                  ? "bg-indigo-500/15 text-indigo-300 border border-indigo-500/30"
+                  : "hover:bg-sidebar-row-hover text-sidebar-foreground border border-transparent",
+              )}
+            >
+              <div className="size-6 rounded-md bg-indigo-500/10 text-indigo-400 flex items-center justify-center shrink-0">
+                <PhoneCallIcon className="size-3.5" />
+              </div>
+              <div className="flex flex-col min-w-0">
+                <span className="font-semibold text-[11px] truncate">Call Assistant</span>
+                <span className="text-[9px] text-muted-foreground truncate">Super Agent</span>
+              </div>
+            </button>
+
             {/* Pull Requests (if supported) */}
             {pullRequestsSupported ? (
               <button
@@ -562,7 +588,9 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
             </div>
 
             {/* Right side */}
-            <div className="flex items-center gap-1"></div>
+            <div className="flex items-center gap-1">
+              <SidebarUpdatePill />
+            </div>
           </>
         )}
       </SidebarMenu>
@@ -764,6 +792,7 @@ export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
       <div className="px-1.5 pt-0 flex flex-col gap-1 w-full">
         <SidebarThreadUndoNotice />
         <SidebarProviderUpdatePill />
+        <SidebarUpdateArchitectureWarning />
       </div>
       <SidebarUtilityMenu />
     </SidebarFooter>

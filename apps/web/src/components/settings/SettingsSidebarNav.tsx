@@ -318,7 +318,9 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
               <SidebarMenu>
                 {navItems.map((item) => {
                   const Icon = item.icon;
-                  const isGeneralDetailPage = false;
+                  const isGeneralDetailPage =
+                    item.to === "/settings/general" &&
+                    pathname === "/settings/open-source-licenses";
                   const isActive =
                     isGeneralDetailPage ||
                     pathname === item.to ||

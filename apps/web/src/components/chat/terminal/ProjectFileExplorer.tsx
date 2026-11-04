@@ -649,6 +649,7 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
         content,
       });
       terminalStore.setFileExplorerOpen(false);
+      void navigate({ to: "/bot" });
       toastManager.add({
         type: "success",
         title: `Attached ${type === "folder" ? "Folder" : "File"} to AI Bot`,

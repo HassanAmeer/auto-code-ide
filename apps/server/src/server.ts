@@ -49,7 +49,11 @@ import * as ProviderHostLive from "./provider/ProviderHostLive.ts";
 import * as AcpRegistrySupport from "@t3tools/provider-acp-registry/server/AcpRegistrySupport";
 import * as CheckpointDiffQuery from "./checkpointing/CheckpointDiffQuery.ts";
 import * as CheckpointStore from "./checkpointing/CheckpointStore.ts";
+import * as AzureDevOpsCli from "./sourceControl/AzureDevOpsCli.ts";
+import * as BitbucketApi from "./sourceControl/BitbucketApi.ts";
 import * as GitHubApi from "./sourceControl/GitHubApi.ts";
+import * as GitLabCli from "./sourceControl/GitLabCli.ts";
+import * as ForgejoCli from "./sourceControl/ForgejoCli.ts";
 import * as TextGeneration from "./textGeneration/TextGeneration.ts";
 import * as ProviderInstanceRegistryHydration from "./provider/ProviderInstanceRegistryHydration.ts";
 import * as TerminalManager from "./terminal/Manager.ts";
@@ -265,7 +269,15 @@ const layerPersistence = Layer.empty.pipe(Layer.provideMerge(SqlitePersistence.l
 const layerVcsDriverRegistry = VcsDriverRegistry.layer.pipe(Layer.provide(VcsProjectConfig.layer));
 
 const layerSourceControlProviderRegistry = SourceControlProviderRegistry.layer.pipe(
-  Layer.provide(GitHubApi.layerWithDependencies),
+  Layer.provide(
+    Layer.mergeAll(
+      AzureDevOpsCli.layer,
+      BitbucketApi.layer,
+      GitHubApi.layerWithDependencies,
+      GitLabCli.layer,
+      ForgejoCli.layer,
+    ),
+  ),
   Layer.provideMerge(GitVcsDriver.layer),
   Layer.provideMerge(layerVcsDriverRegistry),
 );
@@ -273,9 +285,34 @@ const layerSourceControlProviderRegistry = SourceControlProviderRegistry.layer.p
 const layerRepositoryIdentityResolver = Layer.effect(
   RepositoryIdentityResolver.RepositoryIdentityResolver,
   Effect.gen(function* () {
+    const registry = yield* SourceControlProviderRegistry.SourceControlProviderRegistry;
     return yield* RepositoryIdentityResolver.make({
       refine: Effect.fn(function* (identity: RepositoryIdentity) {
-        return identity;
+        const remote = ForgejoCli.parseForgejoRemote(identity.locator.remoteUrl);
+        if (
+          !remote ||
+          !identity.rootPath ||
+          (identity.provider !== undefined &&
+            identity.provider !== "unknown" &&
+            identity.provider !== "forgejo")
+        )
+          return identity;
+        const handle = yield* registry.resolveHandle({
+          cwd: identity.rootPath,
+          context: {
+            provider: { kind: "unknown", name: "Unknown", baseUrl: "" },
+            remoteName: identity.locator.remoteName,
+            remoteUrl: identity.locator.remoteUrl,
+          },
+        });
+        if (handle.context?.provider.kind !== "forgejo") return identity;
+        const baseUrl = handle.context.provider.baseUrl.replace(/\/+$/, "");
+        const basePath = new URL(baseUrl).pathname.replace(/^\/+|\/+$/g, "");
+        const path =
+          !remote.ssh && basePath && remote.path.startsWith(`${basePath}/`)
+            ? remote.path.slice(basePath.length + 1)
+            : remote.path;
+        return { ...identity, provider: "forgejo", webUrl: `${baseUrl}/${path}` };
       }),
     });
   }),
@@ -648,10 +685,22 @@ const layerMakeRoutes = Layer.mergeAll(
     ServerHttp.layerCustomProviderSaveRoute,
     ServerHttp.layerCustomProviderDeleteRoute,
     ServerHttp.layerCustomProviderSyncRoute,
+    ServerHttp.layerLiveKitTokenRoute,
+    ServerHttp.layerLiveKitStatusRoute,
     ServerHttp.layerSuperAgentChatRoute,
     ServerHttp.layerSessionLedgerGetRoute,
     ServerHttp.layerSessionLedgerAddDecisionRoute,
     ServerHttp.layerSessionLedgerClearRoute,
+    ServerHttp.layerBotWishlistGetRoute,
+    ServerHttp.layerBotWishlistToggleApproveRoute,
+    ServerHttp.layerBotWishlistUpdateStatusRoute,
+    ServerHttp.layerBotSpacesGetRoute,
+    ServerHttp.layerBotSpacesPostRoute,
+    ServerHttp.layerBotKnowledgeGetRoute,
+    ServerHttp.layerBotKnowledgeRuleAddRoute,
+    ServerHttp.layerBotKnowledgeRuleRemoveRoute,
+    ServerHttp.layerBotKnowledgeBookmarkAddRoute,
+    ServerHttp.layerBotKnowledgeBookmarkRemoveRoute,
     ServerHttp.layerWhatsAppWebhookRoute,
     ServerHttp.layerWhatsAppSessionsRoute,
     ServerHttp.layerWhatsAppChatsRoute,

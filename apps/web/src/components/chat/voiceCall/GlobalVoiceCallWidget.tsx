@@ -1,4 +1,5 @@
 import { memo, useCallback, useState, useRef } from "react";
+import { useLocation } from "@tanstack/react-router";
 import { useProjects } from "~/state/entities";
 import { VoiceCallFloatingWidget } from "./VoiceCallFloatingWidget";
 import { useVoiceCallAssistant } from "./useVoiceCallAssistant";
@@ -119,5 +120,16 @@ const GlobalVoiceCallWidgetInner = memo(function GlobalVoiceCallWidgetInner() {
  * so that view renders its own full layout without any parallel speech recognition listeners.
  */
 export const GlobalVoiceCallWidget = memo(function GlobalVoiceCallWidget() {
+  const location = useLocation();
+
+  const isCallAssistantPage =
+    location.pathname.startsWith("/bot") || location.pathname.startsWith("/call-assistant");
+
+  // If user is already on the dedicated /call-assistant screen or /bot, completely yield
+  // and do NOT mount any speech recognition listeners, hooks, or floating widgets.
+  if (isCallAssistantPage) {
+    return null;
+  }
+
   return <GlobalVoiceCallWidgetInner />;
 });

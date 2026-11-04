@@ -87,6 +87,8 @@ import { WEBHOOK_ROUTE_PREFIX } from "./scheduledTasks/ScheduledTaskService.ts";
 import { browserApiCorsAllowedHeaders, browserApiCorsAllowedMethods } from "./httpCors.ts";
 import {
   runSuperBotTurn,
+  getLiveKitToken,
+  getLiveKitRoomInfo,
   processWhatsAppWebhook,
   getWhatsAppSessions,
   getWhatsAppChats,
@@ -1221,6 +1223,41 @@ export const layerCustomProviderSyncRoute = HttpRouter.add(
   }),
 );
 
+export const layerLiveKitTokenRoute = HttpRouter.add(
+  "GET",
+  "/api/livekit/token",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const url = new URL(request.url, "http://127.0.0.1");
+    const room = url.searchParams.get("room") || "autojobs-call-room";
+    const identity = url.searchParams.get("identity") || `user_${Date.now().toString(36)}`;
+    const name = url.searchParams.get("name") || "AutoCode User";
+
+    const res = yield* Effect.promise(() =>
+      getLiveKitToken({
+        roomName: room,
+        participantIdentity: identity,
+        participantName: name,
+      }),
+    );
+
+    return HttpServerResponse.jsonUnsafe(res);
+  }),
+);
+
+export const layerLiveKitStatusRoute = HttpRouter.add(
+  "GET",
+  "/api/livekit/status",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const url = new URL(request.url, "http://127.0.0.1");
+    const room = url.searchParams.get("room") || "autojobs-call-room";
+
+    const res = yield* Effect.promise(() => getLiveKitRoomInfo(room));
+    return HttpServerResponse.jsonUnsafe(res);
+  }),
+);
+
 export const layerSuperAgentChatRoute = HttpRouter.add(
   "POST",
   "/api/super-agent/chat",
@@ -2203,6 +2240,309 @@ export const layerSessionLedgerClearRoute = HttpRouter.add(
 );
 
 // ── Bot Wishlist API ────────────────────────────────────────────────────────
+
+export const layerBotWishlistGetRoute = HttpRouter.add(
+  "GET",
+  "/api/bot/wishlist",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const url = HttpServerRequest.toURL(request);
+    const projectName = Option.isSome(url)
+      ? (url.value.searchParams.get("project") ?? "Workspace")
+      : "Workspace";
+
+    const items = yield* Effect.promise(async () => {
+      try {
+        const { getBacklogItems } = await import("../../../bot/memory/featureBacklog.ts" as string);
+        return (getBacklogItems as (p: string) => unknown[])(projectName);
+      } catch {
+        return [];
+      }
+    });
+
+    return HttpServerResponse.jsonUnsafe({ ok: true, items, projectName });
+  }),
+);
+
+export const layerBotWishlistToggleApproveRoute = HttpRouter.add(
+  "POST",
+  "/api/bot/wishlist/toggle-approve",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const body = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      projectName?: string;
+      itemId?: string;
+    };
+
+    const projectName = body?.projectName ?? "Workspace";
+    const itemId = body?.itemId ?? "";
+    if (!itemId) {
+      return HttpServerResponse.jsonUnsafe({ ok: false, error: "itemId required" });
+    }
+
+    const updated = yield* Effect.promise(async () => {
+      try {
+        const { toggleAutoApprove } = await import(
+          "../../../bot/memory/featureBacklog.ts" as string
+        );
+        return (toggleAutoApprove as (p: string, id: string) => unknown)(projectName, itemId);
+      } catch {
+        return null;
+      }
+    });
+
+    if (!updated) {
+      return HttpServerResponse.jsonUnsafe({ ok: false, error: "Item not found" });
+    }
+    return HttpServerResponse.jsonUnsafe({ ok: true, item: updated });
+  }),
+);
+
+export const layerBotWishlistUpdateStatusRoute = HttpRouter.add(
+  "POST",
+  "/api/bot/wishlist/update-status",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const body = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      projectName?: string;
+      itemId?: string;
+      status?: "pending" | "in_progress" | "completed" | "discarded";
+    };
+
+    const projectName = body?.projectName ?? "Workspace";
+    const itemId = body?.itemId ?? "";
+    const status = body?.status ?? "pending";
+    if (!itemId) {
+      return HttpServerResponse.jsonUnsafe({ ok: false, error: "itemId required" });
+    }
+
+    const success = yield* Effect.promise(async () => {
+      try {
+        const { updateBacklogStatus } = await import(
+          "../../../bot/memory/featureBacklog.ts" as string
+        );
+        return (updateBacklogStatus as (p: string, id: string, s: string) => boolean)(
+          projectName,
+          itemId,
+          status,
+        );
+      } catch {
+        return false;
+      }
+    });
+
+    return HttpServerResponse.jsonUnsafe({ ok: success, status, itemId });
+  }),
+);
+
+// ── Bot Spaces & Living Document API (OpenDots Inspired) ───────────────────
+
+export const layerBotSpacesGetRoute = HttpRouter.add(
+  "GET",
+  "/api/bot/spaces",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const url = HttpServerRequest.toURL(request);
+    const projectName = Option.isSome(url)
+      ? (url.value.searchParams.get("project") ?? "Workspace")
+      : "Workspace";
+
+    const pages = yield* Effect.promise(async () => {
+      try {
+        const { loadSpacesDocuments } = await import("../../../bot/memory/spaces.ts" as string);
+        return (loadSpacesDocuments as (p: string) => unknown[])(projectName);
+      } catch {
+        return [];
+      }
+    });
+
+    return HttpServerResponse.jsonUnsafe({ ok: true, pages, projectName });
+  }),
+);
+
+export const layerBotSpacesPostRoute = HttpRouter.add(
+  "POST",
+  "/api/bot/spaces",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const body = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      projectName?: string;
+      pages?: any[];
+      page?: any;
+    };
+
+    const projectName = body?.projectName ?? "Workspace";
+
+    const result = yield* Effect.promise(async () => {
+      try {
+        const { saveSpacesDocuments, upsertSpacesDocument } = await import(
+          "../../../bot/memory/spaces.ts" as string
+        );
+        if (body?.page) {
+          return (upsertSpacesDocument as (p: string, doc: any) => any)(projectName, body.page);
+        }
+        if (Array.isArray(body?.pages)) {
+          (saveSpacesDocuments as (p: string, docs: any[]) => void)(projectName, body.pages);
+          return body.pages;
+        }
+        return null;
+      } catch {
+        return null;
+      }
+    });
+
+    return HttpServerResponse.jsonUnsafe({ ok: Boolean(result), result, projectName });
+  }),
+);
+
+// ── Bot Per-Project Knowledge & Rulebook API ────────────────────────────────
+export const layerBotKnowledgeGetRoute = HttpRouter.add(
+  "GET",
+  "/api/bot/knowledge",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const url = HttpServerRequest.toURL(request);
+    const projectName = Option.isSome(url)
+      ? (url.value.searchParams.get("project") ?? "Workspace")
+      : "Workspace";
+
+    const knowledge = yield* Effect.promise(async () => {
+      try {
+        const { loadProjectKnowledge } = await import(
+          "../../../bot/memory/projectKnowledgeVault.ts" as string
+        );
+        return (loadProjectKnowledge as (p: string) => unknown)(projectName);
+      } catch {
+        return { projectName, rules: [], bookmarks: [], lastUpdated: Date.now() };
+      }
+    });
+
+    return HttpServerResponse.jsonUnsafe({ ok: true, knowledge, projectName });
+  }),
+);
+
+export const layerBotKnowledgeRuleAddRoute = HttpRouter.add(
+  "POST",
+  "/api/bot/knowledge/rule/add",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const body = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      projectName?: string;
+      rule?: string;
+    };
+
+    const projectName = body?.projectName ?? "Workspace";
+    const rule = body?.rule ?? "";
+    if (!rule.trim()) {
+      return HttpServerResponse.jsonUnsafe({ ok: false, error: "rule required" });
+    }
+
+    const rules = yield* Effect.promise(async () => {
+      try {
+        const { addProjectRule } = await import(
+          "../../../bot/memory/projectKnowledgeVault.ts" as string
+        );
+        return (addProjectRule as (p: string, r: string) => string[])(projectName, rule);
+      } catch {
+        return [];
+      }
+    });
+
+    return HttpServerResponse.jsonUnsafe({ ok: true, rules });
+  }),
+);
+
+export const layerBotKnowledgeRuleRemoveRoute = HttpRouter.add(
+  "POST",
+  "/api/bot/knowledge/rule/remove",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const body = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      projectName?: string;
+      index?: number;
+    };
+
+    const projectName = body?.projectName ?? "Workspace";
+    const index = typeof body?.index === "number" ? body.index : -1;
+
+    const rules = yield* Effect.promise(async () => {
+      try {
+        const { removeProjectRule } = await import(
+          "../../../bot/memory/projectKnowledgeVault.ts" as string
+        );
+        return (removeProjectRule as (p: string, idx: number) => string[])(projectName, index);
+      } catch {
+        return [];
+      }
+    });
+
+    return HttpServerResponse.jsonUnsafe({ ok: true, rules });
+  }),
+);
+
+export const layerBotKnowledgeBookmarkAddRoute = HttpRouter.add(
+  "POST",
+  "/api/bot/knowledge/bookmark/add",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const body = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      projectName?: string;
+      bookmark?: { title: string; url: string; category?: string };
+    };
+
+    const projectName = body?.projectName ?? "Workspace";
+    const bookmark = body?.bookmark;
+    if (!bookmark?.title || !bookmark?.url) {
+      return HttpServerResponse.jsonUnsafe({ ok: false, error: "title and url required" });
+    }
+
+    const added = yield* Effect.promise(async () => {
+      try {
+        const { addProjectBookmark } = await import(
+          "../../../bot/memory/projectKnowledgeVault.ts" as string
+        );
+        return (addProjectBookmark as (p: string, b: unknown) => unknown)(projectName, bookmark);
+      } catch {
+        return null;
+      }
+    });
+
+    return HttpServerResponse.jsonUnsafe({ ok: Boolean(added), bookmark: added });
+  }),
+);
+
+export const layerBotKnowledgeBookmarkRemoveRoute = HttpRouter.add(
+  "POST",
+  "/api/bot/knowledge/bookmark/remove",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const body = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      projectName?: string;
+      bookmarkId?: string;
+    };
+
+    const projectName = body?.projectName ?? "Workspace";
+    const bookmarkId = body?.bookmarkId ?? "";
+
+    const ok = yield* Effect.promise(async () => {
+      try {
+        const { removeProjectBookmark } = await import(
+          "../../../bot/memory/projectKnowledgeVault.ts" as string
+        );
+        return (removeProjectBookmark as (p: string, id: string) => boolean)(
+          projectName,
+          bookmarkId,
+        );
+      } catch {
+        return false;
+      }
+    });
+
+    return HttpServerResponse.jsonUnsafe({ ok });
+  }),
+);
+
+// ── End Bot Wishlist & Knowledge API ────────────────────────────────────────
 
 // ── WhatsApp Gateway & Bot Management API ──────────────────────────────────
 export const layerWhatsAppWebhookRoute = HttpRouter.add(

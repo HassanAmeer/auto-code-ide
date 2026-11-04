@@ -58,7 +58,9 @@ const app = <AppRoot router={router} />;
 // the bundled clerk-js out of the browser build entirely.
 const managedAuthShellModule =
   clerkPublishableKey && hasCloudPublicConfig()
-    ? import("./components/clerk/BrowserManagedAuthShell")
+    ? isElectron
+      ? import("./components/clerk/ElectronManagedAuthShell")
+      : import("./components/clerk/BrowserManagedAuthShell")
     : null;
 
 // The index.html boot splash lives inside #root, and React's first commit

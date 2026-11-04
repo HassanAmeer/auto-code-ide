@@ -14,10 +14,14 @@ import { Route as UsageRouteImport } from './routes/usage'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ConnectAgentRouteImport } from './routes/connect-agent'
 import { Route as ConnectRouteImport } from './routes/connect'
+import { Route as CallAssistantRouteImport } from './routes/call-assistant'
+import { Route as BotRouteImport } from './routes/bot'
 import { Route as AiTerminalRouteImport } from './routes/ai-terminal'
 import { Route as ChatRouteImport } from './routes/_chat'
 import { Route as ChatIndexRouteImport } from './routes/_chat.index'
+import { Route as SettingsTtsRouteImport } from './routes/settings.tts'
 import { Route as SettingsSttTtsRouteImport } from './routes/settings.stt-tts'
+import { Route as SettingsSttRouteImport } from './routes/settings.stt'
 import { Route as SettingsStorageRouteImport } from './routes/settings.storage'
 import { Route as SettingsSourceControlRouteImport } from './routes/settings.source-control'
 import { Route as SettingsSoundRouteImport } from './routes/settings.sound'
@@ -26,6 +30,7 @@ import { Route as SettingsSkillsRouteImport } from './routes/settings.skills'
 import { Route as SettingsScheduledTasksRouteImport } from './routes/settings.scheduled-tasks'
 import { Route as SettingsProvidersRouteImport } from './routes/settings.providers'
 import { Route as SettingsProjectsRouteImport } from './routes/settings.projects'
+import { Route as SettingsOpenSourceLicensesRouteImport } from './routes/settings.open-source-licenses'
 import { Route as SettingsNotificationsRouteImport } from './routes/settings.notifications'
 import { Route as SettingsMcpRouteImport } from './routes/settings.mcp'
 import { Route as SettingsKeybindingsRouteImport } from './routes/settings.keybindings'
@@ -68,6 +73,16 @@ const ConnectRoute = ConnectRouteImport.update({
   path: '/connect',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CallAssistantRoute = CallAssistantRouteImport.update({
+  id: '/call-assistant',
+  path: '/call-assistant',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BotRoute = BotRouteImport.update({
+  id: '/bot',
+  path: '/bot',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AiTerminalRoute = AiTerminalRouteImport.update({
   id: '/ai-terminal',
   path: '/ai-terminal',
@@ -82,9 +97,19 @@ const ChatIndexRoute = ChatIndexRouteImport.update({
   path: '/',
   getParentRoute: () => ChatRoute,
 } as any)
+const SettingsTtsRoute = SettingsTtsRouteImport.update({
+  id: '/tts',
+  path: '/tts',
+  getParentRoute: () => SettingsRoute,
+} as any)
 const SettingsSttTtsRoute = SettingsSttTtsRouteImport.update({
   id: '/stt-tts',
   path: '/stt-tts',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsSttRoute = SettingsSttRouteImport.update({
+  id: '/stt',
+  path: '/stt',
   getParentRoute: () => SettingsRoute,
 } as any)
 const SettingsStorageRoute = SettingsStorageRouteImport.update({
@@ -127,6 +152,12 @@ const SettingsProjectsRoute = SettingsProjectsRouteImport.update({
   path: '/projects',
   getParentRoute: () => SettingsRoute,
 } as any)
+const SettingsOpenSourceLicensesRoute =
+  SettingsOpenSourceLicensesRouteImport.update({
+    id: '/open-source-licenses',
+    path: '/open-source-licenses',
+    getParentRoute: () => SettingsRoute,
+  } as any)
 const SettingsNotificationsRoute = SettingsNotificationsRouteImport.update({
   id: '/notifications',
   path: '/notifications',
@@ -212,6 +243,8 @@ const ChatEnvironmentIdThreadIdRoute =
 export interface FileRoutesByFullPath {
   '/': typeof ChatIndexRoute
   '/ai-terminal': typeof AiTerminalRoute
+  '/bot': typeof BotRoute
+  '/call-assistant': typeof CallAssistantRoute
   '/connect': typeof ConnectRoute
   '/connect-agent': typeof ConnectAgentRoute
   '/settings': typeof SettingsRouteWithChildren
@@ -231,6 +264,7 @@ export interface FileRoutesByFullPath {
   '/settings/keybindings': typeof SettingsKeybindingsRoute
   '/settings/mcp': typeof SettingsMcpRoute
   '/settings/notifications': typeof SettingsNotificationsRoute
+  '/settings/open-source-licenses': typeof SettingsOpenSourceLicensesRoute
   '/settings/projects': typeof SettingsProjectsRoute
   '/settings/providers': typeof SettingsProvidersRoute
   '/settings/scheduled-tasks': typeof SettingsScheduledTasksRoute
@@ -239,12 +273,16 @@ export interface FileRoutesByFullPath {
   '/settings/sound': typeof SettingsSoundRoute
   '/settings/source-control': typeof SettingsSourceControlRoute
   '/settings/storage': typeof SettingsStorageRoute
+  '/settings/stt': typeof SettingsSttRoute
   '/settings/stt-tts': typeof SettingsSttTtsRoute
+  '/settings/tts': typeof SettingsTtsRoute
   '/$environmentId/$threadId': typeof ChatEnvironmentIdThreadIdRoute
   '/draft/$draftId': typeof ChatDraftDraftIdRoute
 }
 export interface FileRoutesByTo {
   '/ai-terminal': typeof AiTerminalRoute
+  '/bot': typeof BotRoute
+  '/call-assistant': typeof CallAssistantRoute
   '/connect': typeof ConnectRoute
   '/connect-agent': typeof ConnectAgentRoute
   '/settings': typeof SettingsRouteWithChildren
@@ -264,6 +302,7 @@ export interface FileRoutesByTo {
   '/settings/keybindings': typeof SettingsKeybindingsRoute
   '/settings/mcp': typeof SettingsMcpRoute
   '/settings/notifications': typeof SettingsNotificationsRoute
+  '/settings/open-source-licenses': typeof SettingsOpenSourceLicensesRoute
   '/settings/projects': typeof SettingsProjectsRoute
   '/settings/providers': typeof SettingsProvidersRoute
   '/settings/scheduled-tasks': typeof SettingsScheduledTasksRoute
@@ -272,7 +311,9 @@ export interface FileRoutesByTo {
   '/settings/sound': typeof SettingsSoundRoute
   '/settings/source-control': typeof SettingsSourceControlRoute
   '/settings/storage': typeof SettingsStorageRoute
+  '/settings/stt': typeof SettingsSttRoute
   '/settings/stt-tts': typeof SettingsSttTtsRoute
+  '/settings/tts': typeof SettingsTtsRoute
   '/': typeof ChatIndexRoute
   '/$environmentId/$threadId': typeof ChatEnvironmentIdThreadIdRoute
   '/draft/$draftId': typeof ChatDraftDraftIdRoute
@@ -281,6 +322,8 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_chat': typeof ChatRouteWithChildren
   '/ai-terminal': typeof AiTerminalRoute
+  '/bot': typeof BotRoute
+  '/call-assistant': typeof CallAssistantRoute
   '/connect': typeof ConnectRoute
   '/connect-agent': typeof ConnectAgentRoute
   '/settings': typeof SettingsRouteWithChildren
@@ -300,6 +343,7 @@ export interface FileRoutesById {
   '/settings/keybindings': typeof SettingsKeybindingsRoute
   '/settings/mcp': typeof SettingsMcpRoute
   '/settings/notifications': typeof SettingsNotificationsRoute
+  '/settings/open-source-licenses': typeof SettingsOpenSourceLicensesRoute
   '/settings/projects': typeof SettingsProjectsRoute
   '/settings/providers': typeof SettingsProvidersRoute
   '/settings/scheduled-tasks': typeof SettingsScheduledTasksRoute
@@ -308,7 +352,9 @@ export interface FileRoutesById {
   '/settings/sound': typeof SettingsSoundRoute
   '/settings/source-control': typeof SettingsSourceControlRoute
   '/settings/storage': typeof SettingsStorageRoute
+  '/settings/stt': typeof SettingsSttRoute
   '/settings/stt-tts': typeof SettingsSttTtsRoute
+  '/settings/tts': typeof SettingsTtsRoute
   '/_chat/': typeof ChatIndexRoute
   '/_chat/$environmentId/$threadId': typeof ChatEnvironmentIdThreadIdRoute
   '/_chat/draft/$draftId': typeof ChatDraftDraftIdRoute
@@ -318,6 +364,8 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/ai-terminal'
+    | '/bot'
+    | '/call-assistant'
     | '/connect'
     | '/connect-agent'
     | '/settings'
@@ -337,6 +385,7 @@ export interface FileRouteTypes {
     | '/settings/keybindings'
     | '/settings/mcp'
     | '/settings/notifications'
+    | '/settings/open-source-licenses'
     | '/settings/projects'
     | '/settings/providers'
     | '/settings/scheduled-tasks'
@@ -345,12 +394,16 @@ export interface FileRouteTypes {
     | '/settings/sound'
     | '/settings/source-control'
     | '/settings/storage'
+    | '/settings/stt'
     | '/settings/stt-tts'
+    | '/settings/tts'
     | '/$environmentId/$threadId'
     | '/draft/$draftId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/ai-terminal'
+    | '/bot'
+    | '/call-assistant'
     | '/connect'
     | '/connect-agent'
     | '/settings'
@@ -370,6 +423,7 @@ export interface FileRouteTypes {
     | '/settings/keybindings'
     | '/settings/mcp'
     | '/settings/notifications'
+    | '/settings/open-source-licenses'
     | '/settings/projects'
     | '/settings/providers'
     | '/settings/scheduled-tasks'
@@ -378,7 +432,9 @@ export interface FileRouteTypes {
     | '/settings/sound'
     | '/settings/source-control'
     | '/settings/storage'
+    | '/settings/stt'
     | '/settings/stt-tts'
+    | '/settings/tts'
     | '/'
     | '/$environmentId/$threadId'
     | '/draft/$draftId'
@@ -386,6 +442,8 @@ export interface FileRouteTypes {
     | '__root__'
     | '/_chat'
     | '/ai-terminal'
+    | '/bot'
+    | '/call-assistant'
     | '/connect'
     | '/connect-agent'
     | '/settings'
@@ -405,6 +463,7 @@ export interface FileRouteTypes {
     | '/settings/keybindings'
     | '/settings/mcp'
     | '/settings/notifications'
+    | '/settings/open-source-licenses'
     | '/settings/projects'
     | '/settings/providers'
     | '/settings/scheduled-tasks'
@@ -413,7 +472,9 @@ export interface FileRouteTypes {
     | '/settings/sound'
     | '/settings/source-control'
     | '/settings/storage'
+    | '/settings/stt'
     | '/settings/stt-tts'
+    | '/settings/tts'
     | '/_chat/'
     | '/_chat/$environmentId/$threadId'
     | '/_chat/draft/$draftId'
@@ -422,6 +483,8 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   ChatRoute: typeof ChatRouteWithChildren
   AiTerminalRoute: typeof AiTerminalRoute
+  BotRoute: typeof BotRoute
+  CallAssistantRoute: typeof CallAssistantRoute
   ConnectRoute: typeof ConnectRoute
   ConnectAgentRoute: typeof ConnectAgentRoute
   SettingsRoute: typeof SettingsRouteWithChildren
@@ -467,6 +530,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ConnectRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/call-assistant': {
+      id: '/call-assistant'
+      path: '/call-assistant'
+      fullPath: '/call-assistant'
+      preLoaderRoute: typeof CallAssistantRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/bot': {
+      id: '/bot'
+      path: '/bot'
+      fullPath: '/bot'
+      preLoaderRoute: typeof BotRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/ai-terminal': {
       id: '/ai-terminal'
       path: '/ai-terminal'
@@ -488,11 +565,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChatIndexRouteImport
       parentRoute: typeof ChatRoute
     }
+    '/settings/tts': {
+      id: '/settings/tts'
+      path: '/tts'
+      fullPath: '/settings/tts'
+      preLoaderRoute: typeof SettingsTtsRouteImport
+      parentRoute: typeof SettingsRoute
+    }
     '/settings/stt-tts': {
       id: '/settings/stt-tts'
       path: '/stt-tts'
       fullPath: '/settings/stt-tts'
       preLoaderRoute: typeof SettingsSttTtsRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/stt': {
+      id: '/settings/stt'
+      path: '/stt'
+      fullPath: '/settings/stt'
+      preLoaderRoute: typeof SettingsSttRouteImport
       parentRoute: typeof SettingsRoute
     }
     '/settings/storage': {
@@ -549,6 +640,13 @@ declare module '@tanstack/react-router' {
       path: '/projects'
       fullPath: '/settings/projects'
       preLoaderRoute: typeof SettingsProjectsRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/open-source-licenses': {
+      id: '/settings/open-source-licenses'
+      path: '/open-source-licenses'
+      fullPath: '/settings/open-source-licenses'
+      preLoaderRoute: typeof SettingsOpenSourceLicensesRouteImport
       parentRoute: typeof SettingsRoute
     }
     '/settings/notifications': {
@@ -695,6 +793,7 @@ interface SettingsRouteChildren {
   SettingsKeybindingsRoute: typeof SettingsKeybindingsRoute
   SettingsMcpRoute: typeof SettingsMcpRoute
   SettingsNotificationsRoute: typeof SettingsNotificationsRoute
+  SettingsOpenSourceLicensesRoute: typeof SettingsOpenSourceLicensesRoute
   SettingsProjectsRoute: typeof SettingsProjectsRoute
   SettingsProvidersRoute: typeof SettingsProvidersRoute
   SettingsScheduledTasksRoute: typeof SettingsScheduledTasksRoute
@@ -703,7 +802,9 @@ interface SettingsRouteChildren {
   SettingsSoundRoute: typeof SettingsSoundRoute
   SettingsSourceControlRoute: typeof SettingsSourceControlRoute
   SettingsStorageRoute: typeof SettingsStorageRoute
+  SettingsSttRoute: typeof SettingsSttRoute
   SettingsSttTtsRoute: typeof SettingsSttTtsRoute
+  SettingsTtsRoute: typeof SettingsTtsRoute
 }
 
 const SettingsRouteChildren: SettingsRouteChildren = {
@@ -719,6 +820,7 @@ const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsKeybindingsRoute: SettingsKeybindingsRoute,
   SettingsMcpRoute: SettingsMcpRoute,
   SettingsNotificationsRoute: SettingsNotificationsRoute,
+  SettingsOpenSourceLicensesRoute: SettingsOpenSourceLicensesRoute,
   SettingsProjectsRoute: SettingsProjectsRoute,
   SettingsProvidersRoute: SettingsProvidersRoute,
   SettingsScheduledTasksRoute: SettingsScheduledTasksRoute,
@@ -727,7 +829,9 @@ const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsSoundRoute: SettingsSoundRoute,
   SettingsSourceControlRoute: SettingsSourceControlRoute,
   SettingsStorageRoute: SettingsStorageRoute,
+  SettingsSttRoute: SettingsSttRoute,
   SettingsSttTtsRoute: SettingsSttTtsRoute,
+  SettingsTtsRoute: SettingsTtsRoute,
 }
 
 const SettingsRouteWithChildren = SettingsRoute._addFileChildren(
@@ -737,6 +841,8 @@ const SettingsRouteWithChildren = SettingsRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   ChatRoute: ChatRouteWithChildren,
   AiTerminalRoute: AiTerminalRoute,
+  BotRoute: BotRoute,
+  CallAssistantRoute: CallAssistantRoute,
   ConnectRoute: ConnectRoute,
   ConnectAgentRoute: ConnectAgentRoute,
   SettingsRoute: SettingsRouteWithChildren,
