@@ -46,12 +46,12 @@
 
 ## Milestones
 
-| #   | Name                                                     | Scope                                                                   | Dependencies  | Status  |
-| --- | -------------------------------------------------------- | ----------------------------------------------------------------------- | ------------- | ------- |
-| M1  | CludeGods Echo Filter Engine                             | `cludeGodsEchoFilter.ts` + unit tests                                   | none          | DONE    |
-| M2  | Zero-Freeze TTS Lifecycle & Cancel Deadlock Elimination  | `tts.ts` + `streamingTtsPlayer.ts`                                      | none          | DONE    |
-| M3  | Instant Barge-in & Continuous STT Keep-Alive Integration | `useVoiceCallAssistant.ts` integration with M1 & M2                     | M1, M2        | PLANNED |
-| M4  | E2E Testing Track, Full Verification & Audit             | Tiers 1-4 E2E test pass + Tier 5 Adversarial Hardening + Forensic Audit | M3, E2E Track | PLANNED |
+| #   | Name                                                     | Scope                                                                   | Dependencies  | Status |
+| --- | -------------------------------------------------------- | ----------------------------------------------------------------------- | ------------- | ------ |
+| M1  | CludeGods Echo Filter Engine                             | `cludeGodsEchoFilter.ts` + unit tests                                   | none          | DONE   |
+| M2  | Zero-Freeze TTS Lifecycle & Cancel Deadlock Elimination  | `tts.ts` + `streamingTtsPlayer.ts`                                      | none          | DONE   |
+| M3  | Instant Barge-in & Continuous STT Keep-Alive Integration | `useVoiceCallAssistant.ts` integration with M1 & M2                     | M1, M2        | DONE   |
+| M4  | E2E Testing Track, Full Verification & Audit             | Tiers 1-4 E2E test pass + Tier 5 Adversarial Hardening + Forensic Audit | M3, E2E Track | DONE   |
 
 ## Interface Contracts
 

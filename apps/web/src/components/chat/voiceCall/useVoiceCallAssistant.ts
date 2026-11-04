@@ -42,7 +42,7 @@ import type { ChatMessage, SessionPhase } from "~/types";
 // How long (ms) after TTS finishes to keep echo-guard active (prevents loopback from laptop speaker).
 // Must be long enough to span the inter-chunk gap between sequential streaming TTS sentences.
 // 400ms was too short — speaker echo from the previous chunk triggered false barge-in during the gap.
-const ACOUSTIC_ECHO_COOLDOWN_MS = 1500;
+const ACOUSTIC_ECHO_COOLDOWN_MS = 2500;
 
 /**
  * OpenYabby-inspired noise & conversational backchannel filter.
@@ -417,7 +417,7 @@ export function isUtteranceEchoOfAi(text: string, aiPhrases: string[]): boolean 
           }
           const ratio = matches / candWords.length;
           // Substantial majority of candidate's words must match AI source:
-          if (candWords.length >= 2 && ratio >= 0.7) {
+          if (candWords.length >= 1 && ratio >= 0.6) {
             return true;
           }
         }
@@ -448,8 +448,10 @@ export function stripAiSpeechFromTranscript(transcript: string, aiPhrases: strin
     let matchCount = 0;
     const checkLen = Math.min(resultWords.length, phraseWords.length);
     for (let i = 0; i < checkLen; i++) {
-      const rw = resultWords[i].toLowerCase().replace(/[.,!?;:۔()"'`]/g, "");
+      const rawRw = resultWords[i];
       const pw = phraseWords[i];
+      if (!rawRw || !pw) break;
+      const rw = rawRw.toLowerCase().replace(/[.,!?;:۔()"'`]/g, "");
       if (rw === pw || (rw.length >= 3 && pw.includes(rw))) {
         matchCount++;
       } else {
@@ -607,6 +609,10 @@ export function useVoiceCallAssistant({
 
   // Lock flag while TTS is actively speaking or in post-TTS acoustic cooldown
   const isTtsActiveRef = useRef(false);
+
+  // Session-level TTS tracking: stays true from first chunk start to full session end.
+  // Prevents per-chunk subscribeSpeechState gaps from dropping the echo guard prematurely.
+  const ttsSessionActiveRef = useRef(false);
 
   // Guard flag during auto-sending to prevent manual baseline re-entry
   const isAutoSendingRef = useRef(false);
@@ -805,6 +811,7 @@ export function useVoiceCallAssistant({
       // Acoustic echo physically occurs while the AI is speaking or within the acoustic echo cooldown window
       const isWithinEchoWindow =
         isTtsActiveRef.current ||
+        ttsSessionActiveRef.current ||
         isCurrentlySpeaking() ||
         Date.now() - lastTtsEndedTimestampRef.current < ACOUSTIC_ECHO_COOLDOWN_MS;
 
@@ -1045,20 +1052,20 @@ export function useVoiceCallAssistant({
           }
 
           // 4. User Barge-in validation:
-          const isStreamingBusy = Boolean(
-            streamingPlayerRef.current &&
-            !streamingPlayerRef.current.isStopped() &&
-            (streamingPlayerRef.current.getIsPlaying() ||
-              streamingPlayerRef.current.getQueueLength() > 0 ||
-              streamingPlayerRef.current.hasEnqueuedChunks()),
-          );
-          const bargeInWordThreshold = isStreamingBusy ? 3 : 2;
+          // A barge-in while AI is speaking ONLY occurs if the user gave an explicit command
+          // ("stop", "ruko", "wait", "suno", etc.) OR if CludeGods sequence matcher confirms
+          // genuine user speech that is NOT acoustic echo. Arbitrary words from the speaker
+          // MUST NOT trigger false barge-ins!
           const isUserBargeIn =
             isExplicitInterrupt ||
             cludeGodsDecision.action === "barge" ||
-            wordsList.length >= bargeInWordThreshold;
+            cludeGodsDecision.isBargeIn;
 
           if (!isUserBargeIn) {
+            // Speaker audio echoed into the mic while AI is speaking.
+            // Discard immediately: Advance baseline past this echo so it never leaks into the input field!
+            turnStartResultIndexRef.current = event.results.length;
+            accumulatedTurnFinalRef.current = "";
             return;
           }
 
@@ -1243,10 +1250,8 @@ export function useVoiceCallAssistant({
             title: "Acoustic Echo Filtered (Delayed)",
             detail: `Dropped echo: "${processedSpeech || cleanSpeech}" (${finalEchoDecision.reason})`,
           });
-          if (isFinalTurn) {
-            turnStartResultIndexRef.current = event.results.length;
-            accumulatedTurnFinalRef.current = "";
-          }
+          turnStartResultIndexRef.current = event.results.length;
+          accumulatedTurnFinalRef.current = "";
           return;
         }
 
@@ -1484,6 +1489,7 @@ export function useVoiceCallAssistant({
       // During active voice call:
       if (isSpeaking) {
         isTtsActiveRef.current = true;
+        ttsSessionActiveRef.current = true;
         activeTtsTextRef.current = speakingText || "";
         noiseShieldRef.current?.setBotSpeaking(true);
         updateCallStatus("speaking");
@@ -1501,15 +1507,18 @@ export function useVoiceCallAssistant({
           !streamingPlayerRef.current.isStopped() &&
           (streamingPlayerRef.current.getIsPlaying() ||
             streamingPlayerRef.current.getQueueLength() > 0 ||
-            streamingPlayerRef.current.hasEnqueuedChunks()),
+            streamingPlayerRef.current.hasEnqueuedChunks() ||
+            waitingForAssistantResponseRef.current),
         );
         if (isStreamingPlayerBusy) {
           return;
         }
 
-        lastTtsEndedTimestampRef.current = Date.now();
+        // NOTE: Do NOT reset lastTtsEndedTimestampRef here (per-chunk).
+        // For streaming TTS, the onFinished callback in dispatchAutoSend already sets it
+        // when the ENTIRE session ends. Resetting it per-chunk causes the echo cooldown
+        // window to expire prematurely between chunks, letting acoustic echo slip through.
         setAssistantSpokenText("");
-        waitingForAssistantResponseRef.current = false;
         clearTurnTimeout();
 
         clearTtsCooldownTimer();
@@ -1520,8 +1529,10 @@ export function useVoiceCallAssistant({
             (streamingPlayerRef.current.getIsPlaying() ||
               streamingPlayerRef.current.getQueueLength() > 0),
           );
+          // Only deactivate TTS if player is FULLY done (not just between chunks)
           if (!isCurrentlySpeaking() && !isPlayerStillBusy && isCallActiveRef.current) {
             isTtsActiveRef.current = false;
+            ttsSessionActiveRef.current = false;
             noiseShieldRef.current?.setBotSpeaking(false);
             waitingForAssistantResponseRef.current = false;
 
@@ -1630,7 +1641,7 @@ export function useVoiceCallAssistant({
         });
       },
       onChunkEnd: (chunk) => {
-        cludeGodsEchoFilterRef.current.registerPlaybackEnd(chunk.id);
+        cludeGodsEchoFilterRef.current.registerPlaybackEnd(chunk.id, Date.now());
       },
       onChunkStarted: (chunk: string) => {
         currentPlayingTtsChunkRef.current = chunk;

@@ -489,9 +489,7 @@ export class CludeGodsEchoFilter {
       staleLineTimeoutMs: options?.staleLineTimeoutMs ?? 180000,
       recentUtteranceTtlMs: options?.recentUtteranceTtlMs ?? 60000,
       isHeadphones: options?.isHeadphones ?? (() => false),
-      clock:
-        options?.clock ??
-        (() => (typeof performance !== "undefined" ? performance.now() : Date.now())),
+      clock: options?.clock ?? (() => Date.now()),
     };
   }
 

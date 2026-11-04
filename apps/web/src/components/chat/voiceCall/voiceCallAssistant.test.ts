@@ -199,10 +199,10 @@ describe("VoiceCall Assistant & StreamingTtsPlayer", () => {
 
     // Verify VOCAL_STYLES presets
     expect(VOCAL_STYLES.natural).toBeDefined();
-    expect(VOCAL_STYLES.explainer.rate).toBe("-6%");
-    expect(VOCAL_STYLES.business.rate).toBe("+4%");
-    expect(VOCAL_STYLES.promo.rate).toBe("+18%");
-    expect(VOCAL_STYLES.calm.rate).toBe("-14%");
+    expect(VOCAL_STYLES.explainer?.edgePreset.rate).toBe("-6%");
+    expect(VOCAL_STYLES.business?.edgePreset.rate).toBe("+4%");
+    expect(VOCAL_STYLES.promo?.edgePreset.rate).toBe("+18%");
+    expect(VOCAL_STYLES.calm?.edgePreset.rate).toBe("-14%");
 
     // Verify sanitizer cleans URLs, file paths, and markdown
     const dirty =
@@ -315,10 +315,10 @@ describe("VoiceCall Assistant & StreamingTtsPlayer", () => {
     const units = splitTextIntoSentenceUnits(paragraph);
 
     expect(units.length).toBe(4);
-    expect(units[0]).toBe("Hello brother!");
-    expect(units[1]).toBe("How are you doing today?");
-    expect(units[2]).toBe("I have analyzed your codebase and fixed the bug.");
-    expect(units[3]).toBe("Everything is working perfectly now.");
+    expect(units[0]!).toBe("Hello brother!");
+    expect(units[1]!).toBe("How are you doing today?");
+    expect(units[2]!).toBe("I have analyzed your codebase and fixed the bug.");
+    expect(units[3]!).toBe("Everything is working perfectly now.");
 
     // Single sentence should return single item array
     const single = "Assalam o alaikum kaise hain aap";

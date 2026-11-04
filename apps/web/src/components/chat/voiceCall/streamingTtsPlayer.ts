@@ -193,14 +193,19 @@ export class StreamingTtsPlayer {
   }
 
   private processNext() {
-    if (this.stopped || this.isPlaying) return;
+    if (this.stopped) return;
 
     if (this.queue.length === 0) {
+      // Queue is empty: now it's safe to mark isPlaying = false
+      this.isPlaying = false;
       if (this.isStreamFinished) {
         this.onFinishedCallback?.();
       }
       return;
     }
+
+    // Guard: if already actively playing a chunk (currentChunk set), don't double-start
+    if (this.isPlaying && this.currentChunk !== null) return;
 
     const nextChunk = this.queue.shift();
     if (!nextChunk) {
@@ -240,7 +245,10 @@ export class StreamingTtsPlayer {
         }
       }
 
-      this.isPlaying = false;
+      // NOTE: Do NOT set isPlaying = false here.
+      // processNext() will set isPlaying = false only if the queue is empty.
+      // This prevents the brief inter-chunk gap from triggering false "speech ended" detection
+      // in useVoiceCallAssistant's subscribeSpeechState (isStreamingPlayerBusy check).
       this.processNext();
     });
   }
