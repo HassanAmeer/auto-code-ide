@@ -1,6 +1,10 @@
 import { describe, it, expect, vi } from "vite-plus/test";
 import { extractSpeechChunks, StreamingTtsPlayer } from "./streamingTtsPlayer";
-import { isFarewellOrEndCall, containsInterruptCommand } from "./useVoiceCallAssistant";
+import {
+  isFarewellOrEndCall,
+  containsInterruptCommand,
+  stripInterruptCommand,
+} from "./useVoiceCallAssistant";
 
 describe("VoiceCall Assistant & StreamingTtsPlayer", () => {
   it("extracts speech chunks cleanly and strips code blocks", () => {

@@ -131,8 +131,8 @@ export function BrowserSettingsPanel() {
           fi
         done
 
-        # 2. Chrome binary check (checks standard T3 locations and data folder)
-        CHROME_PATH="$(find ~/.t3/tools/chrome-headless-shell/ /root/autojobs/data/tools/chrome-headless-shell/ "$ROOT_DIR/data/tools/chrome-headless-shell/" -type f -name "chrome-headless-shell" 2>/dev/null | head -n 1)"
+        # 2. Chrome binary check (checks standard AutoCode/T3 locations and data folder)
+        CHROME_PATH="$(find ~/.autocode/tools/chrome-headless-shell/ ~/.t3/tools/chrome-headless-shell/ /root/autojobs/data/tools/chrome-headless-shell/ "$ROOT_DIR/data/tools/chrome-headless-shell/" -type f -name "chrome-headless-shell" 2>/dev/null | head -n 1)"
         if [ -z "$CHROME_PATH" ]; then
           CHROME_PATH="$(find "$HOME" -path "*/tools/chrome-headless-shell/*" -name "chrome-headless-shell" 2>/dev/null | head -n 1)"
         fi
@@ -233,7 +233,7 @@ export function BrowserSettingsPanel() {
         ENV_FILE="$ROOT_DIR/.env"
 
         # Check bundled chrome (includes autojobs data path and home tools)
-        BUNDLED_EXEC="$(find ~/.t3/tools/chrome-headless-shell/ /root/autojobs/data/tools/chrome-headless-shell/ "$ROOT_DIR/data/tools/chrome-headless-shell/" -type f -name 'chrome-headless-shell' 2>/dev/null | head -n 1)"
+        BUNDLED_EXEC="$(find ~/.autocode/tools/chrome-headless-shell/ ~/.t3/tools/chrome-headless-shell/ /root/autojobs/data/tools/chrome-headless-shell/ "$ROOT_DIR/data/tools/chrome-headless-shell/" -type f -name 'chrome-headless-shell' 2>/dev/null | head -n 1)"
         if [ -z "$BUNDLED_EXEC" ]; then
           BUNDLED_EXEC="$(find "$HOME" -path "*/tools/chrome-headless-shell/*" -name "chrome-headless-shell" 2>/dev/null | head -n 1)"
         fi
@@ -1377,7 +1377,7 @@ sudo systemctl restart autojobs`}</pre>
                     variant="ghost"
                     onClick={() =>
                       copyToClipboard(
-                        `CHROME="$(find ~/.t3/tools/ /root/autojobs/data/tools/ -name chrome-headless-shell 2>/dev/null | head -1)"\n$CHROME --no-sandbox --headless --dump-dom about:blank | head -5`,
+                        `CHROME="$(find ~/.autocode/tools/ ~/.t3/tools/ /root/autojobs/data/tools/ -name chrome-headless-shell 2>/dev/null | head -1)"\n$CHROME --no-sandbox --headless --dump-dom about:blank | head -5`,
                         "step4",
                       )
                     }
@@ -1391,7 +1391,7 @@ sudo systemctl restart autojobs`}</pre>
                     <span>{copiedStep === "step4" ? "Copied" : "Copy"}</span>
                   </Button>
                 </div>
-                <pre className="rounded-lg bg-background border px-3 py-2 text-[10px] font-mono text-foreground leading-relaxed select-all overflow-x-auto">{`CHROME="$(find ~/.t3/tools/ /root/autojobs/data/tools/ -name chrome-headless-shell 2>/dev/null | head -1)"
+                <pre className="rounded-lg bg-background border px-3 py-2 text-[10px] font-mono text-foreground leading-relaxed select-all overflow-x-auto">{`CHROME="$(find ~/.autocode/tools/ ~/.t3/tools/ /root/autojobs/data/tools/ -name chrome-headless-shell 2>/dev/null | head -1)"
 $CHROME --no-sandbox --headless --dump-dom about:blank | head -5
 # Agar <html> output aye toh browser 100% chal raha hai ✓`}</pre>
               </div>

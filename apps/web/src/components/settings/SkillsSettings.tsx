@@ -66,6 +66,9 @@ export interface SkillItem {
   path: string;
   fullPath: string;
   isBuiltin: boolean;
+  isDefault?: boolean;
+  isSystem?: boolean;
+  isSuperpower?: boolean;
   isActive: boolean;
   content: string;
 }
@@ -114,7 +117,17 @@ function SkillPagination({
   );
 }
 
-const DEFAULT_BUILTIN_NAMES = new Set([
+export const SUPERPOWER_CORE_SKILLS = new Set([
+  "brainstorming",
+  "dispatching-parallel-agents",
+  "systematic-debugging",
+  "test-driven-development",
+  "verification-before-completion",
+  "writing-plans",
+]);
+
+export const BUILTIN_SKILL_NAMES = new Set([
+  ...SUPERPOWER_CORE_SKILLS,
   "agent-browser-testing",
   "web-ui-design",
   "code-reviewer",
@@ -122,7 +135,10 @@ const DEFAULT_BUILTIN_NAMES = new Set([
   "git-workflow",
   "contribution-triage",
   "test-t3-app",
+  "test-ac-app",
 ]);
+
+const DEFAULT_BUILTIN_NAMES = BUILTIN_SKILL_NAMES;
 
 /**
  * One compact skill row: the name, a short description, the path in grey, and
@@ -185,7 +201,7 @@ export function SkillsSettingsPanel() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState<
-    "all" | "active" | "inactive" | "builtin" | "custom"
+    "all" | "active" | "inactive" | "superpower" | "builtin" | "custom"
   >("all");
 
   // View / Edit modal state
@@ -402,10 +418,19 @@ ${editorBody.trim()}
   // Delete Skill Confirmation
   const handleDeleteSkill = async () => {
     if (!skillToDelete) return;
-    if (skillToDelete.isBuiltin || DEFAULT_BUILTIN_NAMES.has(skillToDelete.dirName)) {
+    const isProtected =
+      skillToDelete.isBuiltin ||
+      skillToDelete.isDefault ||
+      skillToDelete.isSystem ||
+      skillToDelete.isSuperpower ||
+      SUPERPOWER_CORE_SKILLS.has(skillToDelete.dirName) ||
+      DEFAULT_BUILTIN_NAMES.has(skillToDelete.dirName);
+
+    if (isProtected) {
       toastManager.add({
         title: "Action Not Allowed",
-        description: "Built-in default skills cannot be deleted. You can disable them instead.",
+        description:
+          "Core Superpower and built-in system skills cannot be deleted. You can toggle them ON/OFF instead.",
       });
       setSkillToDelete(null);
       return;
@@ -489,7 +514,7 @@ ${editorBody.trim()}
     }
 
     try {
-      await downloadSkillArchive(activeSkills, `t3-active-skills-${Date.now()}.zip`);
+      await downloadSkillArchive(activeSkills, `ac-active-skills-${Date.now()}.zip`);
       toastManager.add({
         title: "Active Skills Bundle Exported",
         description: `Exported ${activeSkills.length} active skills as folders.`,
@@ -770,6 +795,24 @@ ${editorBody.trim()}
   const handleDeleteGlobalSkill = useCallback(async () => {
     const skill = globalSkillToDelete;
     if (!skill) return;
+    const isProtected =
+      skill.isBuiltin ||
+      skill.isDefault ||
+      skill.isSystem ||
+      skill.isSuperpower ||
+      SUPERPOWER_CORE_SKILLS.has(skill.dirName) ||
+      DEFAULT_BUILTIN_NAMES.has(skill.dirName);
+
+    if (isProtected) {
+      toastManager.add({
+        type: "error",
+        title: "Action Not Allowed",
+        description: "Core Superpower and built-in system skills cannot be deleted.",
+      });
+      setGlobalSkillToDelete(null);
+      return;
+    }
+
     setIsDeletingGlobal(true);
     try {
       const res = await fetch("/api/terminal/exec", {
@@ -1018,10 +1061,14 @@ ${raw}
 
   const filteredSkills = useMemo(() => {
     return allSkills.filter((item) => {
+      const isSuper = SUPERPOWER_CORE_SKILLS.has(item.dirName) || item.isSuperpower;
+      const isCore = item.isBuiltin || item.isDefault || item.isSystem || isSuper;
+
       if (filterType === "active" && !item.enabledInProject) return false;
       if (filterType === "inactive" && item.enabledInProject) return false;
-      if (filterType === "builtin" && !item.isBuiltin) return false;
-      if (filterType === "custom" && item.isBuiltin) return false;
+      if (filterType === "superpower" && !isSuper) return false;
+      if (filterType === "builtin" && !isCore) return false;
+      if (filterType === "custom" && isCore) return false;
 
       if (!searchQuery) return true;
       const q = searchQuery.toLowerCase();
@@ -1033,11 +1080,11 @@ ${raw}
     });
   }, [allSkills, filterType, searchQuery]);
 
-  const globalPageCount = Math.max(1, Math.ceil(allSkills.length / SKILL_PAGE_SIZE));
+  const globalPageCount = Math.max(1, Math.ceil(filteredSkills.length / SKILL_PAGE_SIZE));
   const globalSkillsPage = useMemo(() => {
     const page = Math.min(globalPage, globalPageCount);
-    return allSkills.slice((page - 1) * SKILL_PAGE_SIZE, page * SKILL_PAGE_SIZE);
-  }, [allSkills, globalPage, globalPageCount]);
+    return filteredSkills.slice((page - 1) * SKILL_PAGE_SIZE, page * SKILL_PAGE_SIZE);
+  }, [filteredSkills, globalPage, globalPageCount]);
   const projectPageCount = Math.max(1, Math.ceil(skills.length / SKILL_PAGE_SIZE));
   const projectSkillsPage = useMemo(() => {
     const page = Math.min(projectPage, projectPageCount);
@@ -1048,8 +1095,26 @@ ${raw}
     () => allSkills.filter((s) => s.enabledInProject).length,
     [allSkills],
   );
-  const builtinCount = useMemo(() => allSkills.filter((s) => s.isBuiltin).length, [allSkills]);
-  const customCount = useMemo(() => allSkills.filter((s) => !s.isBuiltin).length, [allSkills]);
+  const superpowerCount = useMemo(
+    () => allSkills.filter((s) => SUPERPOWER_CORE_SKILLS.has(s.dirName) || s.isSuperpower).length,
+    [allSkills],
+  );
+  const builtinCount = useMemo(
+    () => allSkills.filter((s) => s.isBuiltin || s.isDefault || s.isSystem).length,
+    [allSkills],
+  );
+  const customCount = useMemo(
+    () =>
+      allSkills.filter(
+        (s) =>
+          !s.isBuiltin &&
+          !s.isDefault &&
+          !s.isSystem &&
+          !s.isSuperpower &&
+          !SUPERPOWER_CORE_SKILLS.has(s.dirName),
+      ).length,
+    [allSkills],
+  );
   const totalSkillCount = allSkills.length;
 
   return (
@@ -1139,12 +1204,19 @@ ${raw}
         ) : (
           <>
             {/* Stats Summary Card */}
-            <div className="grid grid-cols-2 gap-3 pt-2 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 pt-2 sm:grid-cols-3 lg:grid-cols-5">
               <div className="flex flex-col gap-0.5 rounded-lg border bg-card/50 p-3 shadow-xs">
                 <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
                   Total Skills
                 </span>
                 <span className="text-lg font-bold">{totalSkillCount}</span>
+              </div>
+              <div className="flex flex-col gap-0.5 rounded-lg border border-indigo-500/30 bg-indigo-500/5 p-3 shadow-xs">
+                <span className="text-[11px] font-medium text-indigo-400 uppercase tracking-wider flex items-center gap-1">
+                  <SparklesIcon className="size-3" />
+                  Superpowers
+                </span>
+                <span className="text-lg font-bold text-indigo-400">{superpowerCount}</span>
               </div>
               <div className="flex flex-col gap-0.5 rounded-lg border bg-card/50 p-3 shadow-xs">
                 <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
@@ -1186,6 +1258,7 @@ ${raw}
                 {(
                   [
                     { id: "all", label: "All" },
+                    { id: "superpower", label: `Superpowers (${superpowerCount})` },
                     { id: "active", label: `Active (${activeCount})` },
                     { id: "inactive", label: "Inactive" },
                     { id: "builtin", label: "Built-in" },
@@ -1199,6 +1272,9 @@ ${raw}
                     className={cn(
                       "h-7 px-2.5 text-xs font-medium",
                       filterType === tab.id && "bg-muted shadow-xs",
+                      tab.id === "superpower" &&
+                        filterType === "superpower" &&
+                        "border border-indigo-500/40 text-indigo-400",
                     )}
                     onClick={() => setFilterType(tab.id)}
                   >
@@ -1211,7 +1287,7 @@ ${raw}
             <SkillPagination
               page={globalPage}
               pageCount={globalPageCount}
-              total={allSkills.length}
+              total={filteredSkills.length}
               onPageChange={setGlobalPage}
             />
             <div className="overflow-hidden rounded-2xl border bg-card/60">
@@ -1221,17 +1297,46 @@ ${raw}
                   .map((project) => project.title);
                 const globalEntry = globalSkills.find((entry) => entry.dirName === skill.dirName);
                 const projectEntry = skills.find((entry) => entry.dirName === skill.dirName);
+                const isSuper =
+                  SUPERPOWER_CORE_SKILLS.has(skill.dirName) || skill.isSuperpower === true;
+                const isProtected =
+                  skill.isBuiltin ||
+                  skill.isDefault ||
+                  skill.isSystem ||
+                  isSuper ||
+                  DEFAULT_BUILTIN_NAMES.has(skill.dirName);
+                const isSkillActive = skill.enabledInProject || skill.isActive;
+
                 return (
                   <SkillTile
                     key={skill.dirName}
                     skill={skill}
                     path={globalEntry?.fullPath ?? skill.fullPath}
                     badges={
-                      skill.enabledInProject ? (
-                        <span className="shrink-0 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
-                          on
-                        </span>
-                      ) : null
+                      <>
+                        {isSuper && (
+                          <Badge
+                            variant="outline"
+                            className="border-indigo-500/40 bg-indigo-500/10 text-indigo-400 text-2xs font-semibold"
+                          >
+                            Superpower
+                          </Badge>
+                        )}
+                        {!isSuper && skill.isBuiltin && (
+                          <Badge variant="secondary" className="text-2xs">
+                            built-in
+                          </Badge>
+                        )}
+                        {isSkillActive ? (
+                          <span className="shrink-0 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+                            on
+                          </span>
+                        ) : (
+                          <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                            off
+                          </span>
+                        )}
+                      </>
                     }
                     footnote={
                       activeIn.length > 0 ? (
@@ -1265,46 +1370,45 @@ ${raw}
                         icon: <RotateCcwIcon className="size-3.5" />,
                         onClick: () => void handleRevertSkill(skill),
                       },
-                      {
-                        label: "Delete",
-                        icon: <Trash2Icon className="size-3.5" />,
-                        onClick: () =>
-                          globalEntry
-                            ? setGlobalSkillToDelete(globalEntry)
-                            : setSkillToDelete(skill),
-                      },
+                      ...(!isProtected
+                        ? [
+                            {
+                              label: "Delete",
+                              icon: <Trash2Icon className="size-3.5" />,
+                              onClick: () =>
+                                globalEntry
+                                  ? setGlobalSkillToDelete(globalEntry)
+                                  : setSkillToDelete(skill),
+                            },
+                          ]
+                        : []),
                     ]}
                     trailing={
-                      skill.enabledInProject ? (
-                        <Button
-                          size="xs"
-                          variant="ghost"
-                          className="h-7 px-2 text-xs text-muted-foreground"
-                          onClick={() => {
-                            if (globalEntry) {
-                              void handleToggleGlobalSkill(globalEntry, false);
-                            } else if (projectEntry) {
+                      <div className="flex items-center gap-2 pl-2">
+                        <Switch
+                          checked={isSkillActive}
+                          onCheckedChange={(checked) => {
+                            if (projectEntry) {
                               void handleToggleActive(projectEntry);
+                            } else if (globalEntry) {
+                              void handleToggleGlobalSkill(globalEntry, checked);
+                            } else {
+                              void handleToggleActive(skill);
                             }
                           }}
+                          aria-label={`Toggle ${skill.name} ${isSkillActive ? "off" : "on"}`}
+                        />
+                        <span
+                          className={cn(
+                            "w-6 text-[10px] font-bold tracking-wider uppercase",
+                            isSkillActive
+                              ? "text-emerald-500 dark:text-emerald-400"
+                              : "text-muted-foreground/60",
+                          )}
                         >
-                          Added
-                        </Button>
-                      ) : (
-                        <Button
-                          size="xs"
-                          variant="outline"
-                          className="h-7 px-2 text-xs"
-                          disabled={!globalEntry}
-                          onClick={() => {
-                            if (globalEntry) {
-                              void handleToggleGlobalSkill(globalEntry, true);
-                            }
-                          }}
-                        >
-                          Add
-                        </Button>
-                      )
+                          {isSkillActive ? "ON" : "OFF"}
+                        </span>
+                      </div>
                     }
                   />
                 );
@@ -1313,7 +1417,7 @@ ${raw}
             <SkillPagination
               page={globalPage}
               pageCount={globalPageCount}
-              total={allSkills.length}
+              total={filteredSkills.length}
               onPageChange={setGlobalPage}
             />
           </>
@@ -1366,6 +1470,15 @@ ${raw}
           <div className="overflow-hidden rounded-2xl border bg-card/60">
             {projectSkillsPage.map((skill) => {
               const globalEntry = globalSkills.find((entry) => entry.dirName === skill.dirName);
+              const isSuper =
+                SUPERPOWER_CORE_SKILLS.has(skill.dirName) || skill.isSuperpower === true;
+              const isProtected =
+                skill.isBuiltin ||
+                skill.isDefault ||
+                skill.isSystem ||
+                isSuper ||
+                DEFAULT_BUILTIN_NAMES.has(skill.dirName);
+
               return (
                 <SkillTile
                   key={skill.dirName}
@@ -1373,7 +1486,15 @@ ${raw}
                   path={skill.fullPath}
                   badges={
                     <>
-                      {skill.isBuiltin && (
+                      {isSuper && (
+                        <Badge
+                          variant="outline"
+                          className="border-indigo-500/40 bg-indigo-500/10 text-indigo-400 text-2xs font-semibold"
+                        >
+                          Superpower
+                        </Badge>
+                      )}
+                      {!isSuper && skill.isBuiltin && (
                         <Badge variant="secondary" className="text-2xs">
                           built-in
                         </Badge>
@@ -1395,22 +1516,47 @@ ${raw}
                       icon: <EyeIcon className="size-3.5" />,
                       onClick: () => setViewSkill(skill),
                     },
+                    {
+                      label: "Edit",
+                      icon: <PencilIcon className="size-3.5" />,
+                      onClick: () => handleOpenEditModal(skill, "project"),
+                    },
+                    {
+                      label: "Export",
+                      icon: <DownloadIcon className="size-3.5" />,
+                      onClick: () => void handleExportSkill(skill),
+                    },
+                    ...(!isProtected
+                      ? [
+                          {
+                            label: "Delete",
+                            icon: <Trash2Icon className="size-3.5" />,
+                            onClick: () =>
+                              globalEntry
+                                ? setGlobalSkillToDelete(globalEntry)
+                                : setSkillToDelete(skill),
+                          },
+                        ]
+                      : []),
                   ]}
                   trailing={
-                    <Button
-                      size="xs"
-                      variant="ghost"
-                      className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
-                      onClick={() => {
-                        if (globalEntry) {
-                          void handleToggleGlobalSkill(globalEntry, false);
-                        } else {
-                          void handleToggleActive(skill);
-                        }
-                      }}
-                    >
-                      Remove
-                    </Button>
+                    <div className="flex items-center gap-2 pl-2">
+                      <Switch
+                        checked={skill.isActive}
+                        onCheckedChange={() => void handleToggleActive(skill)}
+                        aria-label={`Toggle ${skill.name} ${skill.isActive ? "off" : "on"}`}
+                      />
+                      <span
+                        className={cn(
+                          "w-6 text-[10px] font-bold tracking-wider uppercase",
+                          skill.isActive
+                            ? "text-emerald-500 dark:text-emerald-400"
+                            : "text-muted-foreground/60",
+                        )}
+                      >
+                        {skill.isActive ? "ON" : "OFF"}
+                      </span>
+                    </div>
                   }
                 />
               );

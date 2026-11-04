@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vite-plus/test";
 import {
   stripCodeBlocks,
   sanitizeTextForSpeech,
@@ -14,7 +14,15 @@ import {
   getDeliveryStyleMultipliers,
   getNeuralVoiceScore,
   injectNaturalCadencePauses,
+  safeStopSpeechPlayback,
+  stopSpeaking,
+  speakText,
+  subscribeSpeechState,
 } from "./tts";
+import {
+  StreamingTtsPlayer,
+  type SpeechChunk,
+} from "~/components/chat/voiceCall/streamingTtsPlayer";
 
 describe("stripCodeBlocks", () => {
   it("removes closed triple-backtick code blocks completely", () => {
@@ -373,5 +381,236 @@ describe("Natural Urdu Cadence & Breath-Punctuation", () => {
     const alreadyPunctuated = "Ji boss, main dekh raha hoon.";
     const result2 = injectNaturalCadencePauses(alreadyPunctuated);
     expect(result2).toBe("Ji boss, main dekh raha hoon.");
+  });
+});
+
+describe("Zero-Freeze TTS Lifecycle & Cancel Deadlock Elimination", () => {
+  let originalWindow: any;
+  let originalSpeechSynthesis: any;
+  let originalUtterance: any;
+
+  beforeEach(() => {
+    const target = typeof window !== "undefined" ? window : (globalThis as any);
+    originalWindow = target.window;
+    originalSpeechSynthesis = target.speechSynthesis;
+    originalUtterance = target.SpeechSynthesisUtterance;
+
+    class MockUtterance {
+      text: string;
+      lang = "en-US";
+      pitch = 1.0;
+      rate = 1.0;
+      volume = 1.0;
+      voice: any = null;
+      onstart: any = null;
+      onend: any = null;
+      onerror: any = null;
+      onpause: any = null;
+      onresume: any = null;
+      constructor(text: string) {
+        this.text = text;
+      }
+    }
+
+    target.window = target;
+    target.SpeechSynthesisUtterance = MockUtterance;
+    (globalThis as any).SpeechSynthesisUtterance = MockUtterance;
+    target.speechSynthesis = {
+      speaking: false,
+      paused: false,
+      cancel: vi.fn(),
+      resume: vi.fn(),
+      pause: vi.fn(),
+      speak: vi.fn(),
+      getVoices: vi.fn(() => []),
+    };
+  });
+
+  afterEach(() => {
+    const target = typeof window !== "undefined" ? window : (globalThis as any);
+    target.window = originalWindow;
+    target.speechSynthesis = originalSpeechSynthesis;
+    target.SpeechSynthesisUtterance = originalUtterance;
+    (globalThis as any).SpeechSynthesisUtterance = originalUtterance;
+    safeStopSpeechPlayback();
+  });
+
+  it("safeStopSpeechPlayback unpauses paused synthesis before cancel and resumes immediately after to eliminate browser freeze deadlocks", () => {
+    const target = typeof window !== "undefined" ? window : (globalThis as any);
+    const callOrder: string[] = [];
+
+    target.speechSynthesis = {
+      speaking: true,
+      paused: true,
+      getVoices: vi.fn(() => []),
+      cancel: vi.fn(() => {
+        callOrder.push("cancel");
+      }),
+      resume: vi.fn(() => {
+        callOrder.push("resume");
+        target.speechSynthesis.paused = false;
+      }),
+    };
+
+    safeStopSpeechPlayback();
+
+    expect(target.speechSynthesis.cancel).toHaveBeenCalled();
+    expect(target.speechSynthesis.resume).toHaveBeenCalled();
+    // Order must be resume (unpause before cancel) -> cancel -> resume (state machine unblock)
+    expect(callOrder).toEqual(["resume", "cancel", "resume"]);
+  });
+
+  it("safeStopSpeechPlayback detaches and nullifies event listeners on retained active utterances preventing ghost callbacks", () => {
+    const target = typeof window !== "undefined" ? window : (globalThis as any);
+    let capturedUtterance: any = null;
+
+    target.speechSynthesis = {
+      speaking: true,
+      paused: false,
+      getVoices: vi.fn(() => []),
+      cancel: vi.fn(),
+      resume: vi.fn(),
+      speak: vi.fn((utt) => {
+        capturedUtterance = utt;
+      }),
+    };
+
+    speakText("Test utterance for listener nullification");
+
+    expect(capturedUtterance).not.toBeNull();
+    expect(capturedUtterance.onstart).toBeTypeOf("function");
+    expect(capturedUtterance.onend).toBeTypeOf("function");
+
+    safeStopSpeechPlayback();
+
+    expect(capturedUtterance.onstart).toBeNull();
+    expect(capturedUtterance.onend).toBeNull();
+    expect(capturedUtterance.onerror).toBeNull();
+    expect(capturedUtterance.onpause).toBeNull();
+    expect(capturedUtterance.onresume).toBeNull();
+  });
+
+  it("stopSpeaking delegates directly to safeStopSpeechPlayback and notifies speech state subscribers", () => {
+    const target = typeof window !== "undefined" ? window : (globalThis as any);
+    target.speechSynthesis = {
+      speaking: true,
+      paused: false,
+      getVoices: vi.fn(() => []),
+      cancel: vi.fn(),
+      resume: vi.fn(),
+    };
+
+    const stateEvents: Array<{ isSpeaking: boolean; text: string | null }> = [];
+    const unsubscribe = subscribeSpeechState((isSpeaking, text) => {
+      stateEvents.push({ isSpeaking, text });
+    });
+
+    stopSpeaking();
+    unsubscribe();
+
+    expect(target.speechSynthesis.cancel).toHaveBeenCalled();
+    expect(stateEvents.length).toBeGreaterThan(0);
+    expect(stateEvents[stateEvents.length - 1]).toEqual({ isSpeaking: false, text: null });
+  });
+
+  it("resumes synthesis before speaking if paused to prevent Chromium initial stall", () => {
+    const target = typeof window !== "undefined" ? window : (globalThis as any);
+    const callOrder: string[] = [];
+
+    target.speechSynthesis = {
+      speaking: false,
+      paused: true,
+      getVoices: vi.fn(() => []),
+      resume: vi.fn(() => {
+        callOrder.push("resume");
+        target.speechSynthesis.paused = false;
+      }),
+      speak: vi.fn(() => {
+        callOrder.push("speak");
+      }),
+      cancel: vi.fn(),
+    };
+
+    speakText("AutoCode test message");
+
+    expect(target.speechSynthesis.resume).toHaveBeenCalled();
+    expect(target.speechSynthesis.speak).toHaveBeenCalled();
+    expect(callOrder[0]).toBe("resume");
+    expect(callOrder).toContain("speak");
+  });
+
+  it("StreamingTtsPlayer dispatches onChunkStart and onChunkEnd with SpeechChunk metadata", async () => {
+    const target = typeof window !== "undefined" ? window : (globalThis as any);
+
+    target.speechSynthesis = {
+      speaking: false,
+      paused: false,
+      getVoices: vi.fn(() => []),
+      resume: vi.fn(),
+      speak: vi.fn((utt) => {
+        // Mock speak completes asynchronously
+        setTimeout(() => {
+          utt.onend?.();
+        }, 10);
+      }),
+      cancel: vi.fn(),
+    };
+
+    const startedChunks: SpeechChunk[] = [];
+    const endedChunks: SpeechChunk[] = [];
+
+    const player = new StreamingTtsPlayer({
+      onChunkStart: (chunk) => startedChunks.push(chunk),
+      onChunkEnd: (chunk) => endedChunks.push(chunk),
+    });
+
+    player.enqueue("Pehla jumla yahan hai.");
+
+    expect(startedChunks.length).toBe(1);
+    expect(startedChunks[0].text).toContain("Pehla jumla yahan hai.");
+    expect(startedChunks[0].id).toMatch(/^chunk_\d+_\d+$/);
+    expect(startedChunks[0].index).toBe(0);
+    expect(typeof startedChunks[0].timestamp).toBe("number");
+
+    // Wait for mock speech completion
+    await new Promise((resolve) => setTimeout(resolve, 60));
+
+    expect(endedChunks.length).toBe(1);
+    expect(endedChunks[0].id).toBe(startedChunks[0].id);
+    expect(endedChunks[0].text).toBe(startedChunks[0].text);
+
+    player.stop();
+  });
+
+  it("StreamingTtsPlayer supports instant stop during chunk playback without synthesis deadlock", () => {
+    const target = typeof window !== "undefined" ? window : (globalThis as any);
+
+    target.speechSynthesis = {
+      speaking: true,
+      paused: false,
+      getVoices: vi.fn(() => []),
+      resume: vi.fn(),
+      speak: vi.fn(),
+      cancel: vi.fn(),
+    };
+
+    const endedChunks: SpeechChunk[] = [];
+    const player = new StreamingTtsPlayer({
+      onChunkEnd: (chunk) => endedChunks.push(chunk),
+    });
+
+    player.enqueue("Assistant response that will be cut off.");
+    expect(player.getCurrentChunk()).not.toBeNull();
+    const activeChunk = player.getCurrentChunk()!;
+
+    // Trigger instant stop
+    player.stop();
+
+    expect(player.isStopped()).toBe(true);
+    expect(player.getQueueLength()).toBe(0);
+    expect(player.getCurrentChunk()).toBeNull();
+    expect(target.speechSynthesis.cancel).toHaveBeenCalled();
+    expect(endedChunks.length).toBe(1);
+    expect(endedChunks[0].id).toBe(activeChunk.id);
   });
 });

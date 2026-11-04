@@ -47,6 +47,10 @@
       "types": "./src/agentSkills.ts",
       "import": "./src/agentSkills.ts"
     },
+    "./superpowerSkills": {
+      "types": "./src/superpowerSkills.ts",
+      "import": "./src/superpowerSkills.ts"
+    },
     "./agentAwareness": {
       "types": "./src/agentAwareness.ts",
       "import": "./src/agentAwareness.ts"

@@ -179,14 +179,23 @@ function readSkillFile(skillPath: string): string | undefined {
  * stays listed but cannot be invoked, exactly like Claude's skill overrides.
  */
 function readSkillState(root: string): Record<string, { enabled?: boolean }> {
+  const acPath = NodePath.join(root, ".ac-skills-state.json");
+  const t3Path = NodePath.join(root, ".t3-skills-state.json");
+  const statePath = NodeFS.existsSync(acPath) ? acPath : t3Path;
   try {
-    const parsed = JSON.parse(
-      NodeFS.readFileSync(NodePath.join(root, ".t3-skills-state.json"), "utf-8"),
-    ) as unknown;
+    const parsed = JSON.parse(NodeFS.readFileSync(statePath, "utf-8")) as unknown;
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
       return parsed as Record<string, { enabled?: boolean }>;
     }
   } catch {
+    if (statePath === acPath && NodeFS.existsSync(t3Path)) {
+      try {
+        const parsed = JSON.parse(NodeFS.readFileSync(t3Path, "utf-8")) as unknown;
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          return parsed as Record<string, { enabled?: boolean }>;
+        }
+      } catch {}
+    }
     // No state yet: every skill is active.
   }
   return {};
@@ -325,3 +334,14 @@ export function buildInvokedSkillInstructions(
     ...blocks,
   ].join("\n");
 }
+
+export {
+  SUPERPOWER_SKILLS,
+  SUPERPOWER_SKILL_SET,
+  isSuperpowerSkill,
+  isSkillEnabled,
+  loadSkillContentIfEnabled,
+  getIntakeBotSkillPrompt,
+  getDshWorkerSkillPrompt,
+  getProjectChatEngineSkillPrompt,
+} from "./superpowerSkills.ts";

@@ -51,13 +51,48 @@ describe("discoverCustomSkills", () => {
     assert.isTrue(byName.get("agents-skill")?.path.endsWith("SKILL.md") ?? false);
   });
 
-  it("marks a skill switched off by the skills manager as disabled", () => {
+  it("marks a skill switched off by .ac-skills-state.json as disabled", () => {
+    const workspace = makeWorkspace();
+    const root = NodePath.join(workspace, ".agents", "skills");
+    writeSkill(root, "off-skill", "---\nname: off-skill\n---\n\nBody\n");
+    NodeFS.writeFileSync(
+      NodePath.join(root, ".ac-skills-state.json"),
+      JSON.stringify({ "off-skill": { enabled: false } }),
+      "utf-8",
+    );
+
+    const skills = discoverCustomSkills(workspace);
+    assert.equal(skills.length, 1);
+    assert.equal(skills[0]?.enabled, false);
+  });
+
+  it("marks a skill switched off by .t3-skills-state.json as disabled (fallback)", () => {
     const workspace = makeWorkspace();
     const root = NodePath.join(workspace, ".agents", "skills");
     writeSkill(root, "off-skill", "---\nname: off-skill\n---\n\nBody\n");
     NodeFS.writeFileSync(
       NodePath.join(root, ".t3-skills-state.json"),
       JSON.stringify({ "off-skill": { enabled: false } }),
+      "utf-8",
+    );
+
+    const skills = discoverCustomSkills(workspace);
+    assert.equal(skills.length, 1);
+    assert.equal(skills[0]?.enabled, false);
+  });
+
+  it("prioritizes .ac-skills-state.json over .t3-skills-state.json", () => {
+    const workspace = makeWorkspace();
+    const root = NodePath.join(workspace, ".agents", "skills");
+    writeSkill(root, "my-skill", "---\nname: my-skill\n---\n\nBody\n");
+    NodeFS.writeFileSync(
+      NodePath.join(root, ".t3-skills-state.json"),
+      JSON.stringify({ "my-skill": { enabled: true } }),
+      "utf-8",
+    );
+    NodeFS.writeFileSync(
+      NodePath.join(root, ".ac-skills-state.json"),
+      JSON.stringify({ "my-skill": { enabled: false } }),
       "utf-8",
     );
 

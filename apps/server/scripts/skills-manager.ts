@@ -56,6 +56,27 @@ const SKILLS_DIR = NodePath.join(resolveWorkspaceRoot(), ".agents", "skills");
 const GLOBAL_SKILLS_DIR = NodePath.join(NodeOS.homedir(), ".agents", "skills");
 const FRONTMATTER_PATTERN = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/;
 
+export const SUPERPOWER_CORE_SKILLS = new Set([
+  "brainstorming",
+  "dispatching-parallel-agents",
+  "systematic-debugging",
+  "test-driven-development",
+  "verification-before-completion",
+  "writing-plans",
+]);
+
+export const DEFAULT_BUILTIN_NAMES = new Set([
+  ...SUPERPOWER_CORE_SKILLS,
+  "agent-browser-testing",
+  "web-ui-design",
+  "code-reviewer",
+  "web-designer",
+  "git-workflow",
+  "contribution-triage",
+  "test-t3-app",
+  "test-ac-app",
+]);
+
 interface SkillRecord {
   dirName: string;
   name: string;
@@ -63,6 +84,9 @@ interface SkillRecord {
   path: string;
   fullPath: string;
   isBuiltin: boolean;
+  isDefault: boolean;
+  isSystem: boolean;
+  isSuperpower: boolean;
   isActive: boolean;
   content: string;
 }
@@ -74,26 +98,32 @@ interface SkillStateEntry {
 }
 
 function readState(root: string = SKILLS_DIR): Record<string, SkillStateEntry> {
+  const acPath = NodePath.join(root, ".ac-skills-state.json");
+  const t3Path = NodePath.join(root, ".t3-skills-state.json");
+  const statePath = NodeFS.existsSync(acPath) ? acPath : t3Path;
   try {
-    const parsed = JSON.parse(
-      NodeFS.readFileSync(NodePath.join(root, ".t3-skills-state.json"), "utf-8"),
-    ) as unknown;
+    const parsed = JSON.parse(NodeFS.readFileSync(statePath, "utf-8")) as unknown;
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
       return parsed as Record<string, SkillStateEntry>;
     }
   } catch {
-    // No state yet.
+    if (statePath === acPath && NodeFS.existsSync(t3Path)) {
+      try {
+        const parsed = JSON.parse(NodeFS.readFileSync(t3Path, "utf-8")) as unknown;
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          return parsed as Record<string, SkillStateEntry>;
+        }
+      } catch {}
+    }
   }
   return {};
 }
 
 function writeState(state: Record<string, SkillStateEntry>, root: string = SKILLS_DIR): void {
   NodeFS.mkdirSync(root, { recursive: true });
-  NodeFS.writeFileSync(
-    NodePath.join(root, ".t3-skills-state.json"),
-    `${JSON.stringify(state, null, 2)}\n`,
-    "utf-8",
-  );
+  const content = `${JSON.stringify(state, null, 2)}\n`;
+  NodeFS.writeFileSync(NodePath.join(root, ".ac-skills-state.json"), content, "utf-8");
+  NodeFS.writeFileSync(NodePath.join(root, ".t3-skills-state.json"), content, "utf-8");
 }
 
 function parseFrontmatter(content: string): { name: string; description: string } {
@@ -144,13 +174,18 @@ function listSkillsIn(root: string): SkillRecord[] {
       continue;
     }
     const frontmatter = parseFrontmatter(content);
+    const isSuperpower = SUPERPOWER_CORE_SKILLS.has(dirName);
+    const isBuiltin = DEFAULT_BUILTIN_NAMES.has(dirName);
     skills.push({
       dirName,
       name: frontmatter.name || dirName,
       description: frontmatter.description,
       path: NodePath.join(".agents", "skills", dirName, "SKILL.md"),
       fullPath,
-      isBuiltin: false,
+      isBuiltin,
+      isDefault: isBuiltin || isSuperpower,
+      isSystem: isBuiltin || isSuperpower,
+      isSuperpower,
       isActive: state[dirName]?.enabled !== false,
       content,
     });
@@ -164,7 +199,11 @@ function listSkills(): SkillRecord[] {
 
 /** The global skills, plus whether the given project already uses each one. */
 function projectStatePath(projectRoot: string): string {
-  return NodePath.join(projectRoot, ".agents", "skills", ".t3-skills-state.json");
+  const acPath = NodePath.join(projectRoot, ".agents", "skills", ".ac-skills-state.json");
+  const t3Path = NodePath.join(projectRoot, ".agents", "skills", ".t3-skills-state.json");
+  if (NodeFS.existsSync(acPath)) return acPath;
+  if (NodeFS.existsSync(t3Path)) return t3Path;
+  return acPath;
 }
 
 /** The skills a project copied from the global store. */
@@ -226,7 +265,15 @@ function mirrorProjectSkills(projectRoot: string): void {
  * revert can put the original back.
  */
 function originalPath(root: string, dirName: string): string {
-  return NodePath.join(root, ".t3-skill-originals", `${dirName}.md`);
+  const acOriginal = NodePath.join(root, ".ac-skill-originals", `${dirName}.md`);
+  const t3Original = NodePath.join(root, ".t3-skill-originals", `${dirName}.md`);
+  if (NodeFS.existsSync(acOriginal)) {
+    return acOriginal;
+  }
+  if (NodeFS.existsSync(t3Original)) {
+    return t3Original;
+  }
+  return acOriginal;
 }
 
 function keepOriginal(root: string, dirName: string): void {
@@ -306,9 +353,9 @@ function main(argv: ReadonlyArray<string>): void {
       const [dirName, flag] = args;
       if (!dirName) fail("toggle needs a skill name");
       const state = readState();
-      state[dirName] = { enabled: flag !== "0" };
+      state[dirName] = { ...(state[dirName] || {}), enabled: flag !== "0" };
       writeState(state);
-      process.stdout.write(`${JSON.stringify({ ok: true })}\n`);
+      process.stdout.write(`${JSON.stringify({ ok: true, dirName, enabled: flag !== "0" })}\n`);
       return;
     }
     case "save": {
@@ -336,6 +383,9 @@ function main(argv: ReadonlyArray<string>): void {
     case "delete-global": {
       const [dirName] = args;
       if (!dirName) fail("delete-global needs a skill name");
+      if (DEFAULT_BUILTIN_NAMES.has(dirName) || SUPERPOWER_CORE_SKILLS.has(dirName)) {
+        fail(`Cannot delete core system skill: ${dirName}`);
+      }
       NodeFS.rmSync(NodePath.join(GLOBAL_SKILLS_DIR, dirName), { recursive: true, force: true });
       process.stdout.write(`${JSON.stringify({ ok: true, dirName })}\n`);
       return;
@@ -343,6 +393,9 @@ function main(argv: ReadonlyArray<string>): void {
     case "delete": {
       const [dirName] = args;
       if (!dirName) fail("delete needs a skill name");
+      if (DEFAULT_BUILTIN_NAMES.has(dirName) || SUPERPOWER_CORE_SKILLS.has(dirName)) {
+        fail(`Cannot delete core system skill: ${dirName}`);
+      }
       NodeFS.rmSync(NodePath.join(SKILLS_DIR, dirName), { recursive: true, force: true });
       for (const root of PROJECT_SKILL_ROOTS) {
         NodeFS.rmSync(NodePath.join(resolveWorkspaceRoot(), root, dirName), {

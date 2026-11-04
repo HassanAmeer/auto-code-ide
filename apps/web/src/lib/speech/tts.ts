@@ -370,7 +370,11 @@ export function subscribeTtsSettings(callback: (settings: TtsSettings) => void):
  * Returns available browser voices.
  */
 export function getAvailableVoices(): SpeechSynthesisVoice[] {
-  if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+  if (
+    typeof window === "undefined" ||
+    !("speechSynthesis" in window) ||
+    typeof window.speechSynthesis.getVoices !== "function"
+  ) {
     return [];
   }
   return window.speechSynthesis.getVoices();
@@ -680,30 +684,83 @@ export function isCurrentlySpeaking(): boolean {
 
 let currentSpeechAbortController: { aborted: boolean } | null = null;
 
-export function stopSpeaking(): void {
+/**
+ * Safely halts any active browser SpeechSynthesis playback immediately (<5ms)
+ * without deadlocking the Chromium / Safari audio subsystem or leaving zombie listeners.
+ *
+ * Elimination of Browser Deadlocks:
+ * 1. Chromium & Safari freeze permanently if cancel() is invoked while engine is paused.
+ *    We unconditionally unpause / resume before cancel().
+ * 2. Active SpeechSynthesisUtterance event handlers (onend, onerror) can fire asynchronously
+ *    after cancel() causing ghost finish states. We nullify all event handlers on active utterances.
+ * 3. Immediately calling resume() after cancel() unblocks Blink's audio IPC thread state machine.
+ * 4. Clears active queue, abort controller, and notifies all subscribers.
+ */
+export function safeStopSpeechPlayback(): void {
+  // 1. Mark active abort controller aborted immediately
   if (currentSpeechAbortController) {
     currentSpeechAbortController.aborted = true;
     currentSpeechAbortController = null;
   }
-  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+
+  // 2. Clear keepalive interval
   clearKeepAliveTimer();
-  try {
-    window.speechSynthesis.cancel();
-  } catch {
-    // ignore
+
+  // 3. Nullify event listeners on all retained utterances to prevent ghost callbacks
+  for (const utt of Array.from(activeUtterancesSet)) {
+    try {
+      utt.onstart = null;
+      utt.onend = null;
+      utt.onerror = null;
+      utt.onpause = null;
+      utt.onresume = null;
+    } catch {
+      // ignore
+    }
   }
-  activeUtterance = null;
   activeUtterancesSet.clear();
+  activeUtterance = null;
+
   if (typeof window !== "undefined" && Array.isArray((window as any).__t3_speech_queue)) {
     (window as any).__t3_speech_queue.length = 0;
   }
+
+  if (typeof window !== "undefined" && "speechSynthesis" in window) {
+    // 4. Unpause first: Calling cancel() while paused freezes Chromium/Safari permanently!
+    try {
+      if (window.speechSynthesis.paused && typeof window.speechSynthesis.resume === "function") {
+        window.speechSynthesis.resume();
+      }
+    } catch {}
+
+    // 5. Cancel native speech queue
+    try {
+      window.speechSynthesis.cancel();
+    } catch (err) {
+      console.warn("[TTS] Error invoking speechSynthesis.cancel():", err);
+    }
+
+    // 6. Resume immediately after cancel to ensure engine state machine is unblocked
+    try {
+      if (typeof window.speechSynthesis.resume === "function") {
+        window.speechSynthesis.resume();
+      }
+    } catch {}
+  }
+
+  // 7. Notify all subscribers that speech has stopped
   notifySpeechState(false, null);
+
   addVoiceCallLog({
     category: "TTS",
     title: "TTS Audio Stopped",
-    detail: "Speech synthesis queue cancelled and reset",
+    detail: "Speech synthesis queue safely cancelled and reset",
     level: "info",
   });
+}
+
+export function stopSpeaking(): void {
+  safeStopSpeechPlayback();
 }
 
 /**
@@ -858,11 +915,11 @@ export function injectNaturalCadencePauses(text: string): string {
  * Breaking multi-sentence text into sentences avoids this completely.
  */
 export function splitTextIntoSentenceUnits(text: string): string[] {
-  if (!text) return [];
+  if (!text || !text.trim()) return [];
   const regex = /[^.!?।;:\n]+(?:[.!?।;:\n]+(?:\s+|$)|$)/g;
   const matches = text.match(regex);
-  if (!matches || matches.length <= 1) {
-    return [text];
+  if (!matches) {
+    return [text.trim()].filter(Boolean);
   }
   return matches.map((m) => m.trim()).filter((m) => m.length > 0);
 }
@@ -1097,7 +1154,7 @@ function speakSingleUtterance(
     activeUtterance = utterance;
     clearKeepAliveTimer();
     // Safety interval for Desktop Chromium bug (long speech > 15s pausing or freezing unexpectedly).
-    // In Chromium, briefly pausing and resuming kicks the stalled synthesis queue:
+    // In Chromium, briefly pausing and resuming kicks the stalled synthesis queue (5000ms pulse):
     keepAliveTimer = setInterval(() => {
       if (typeof window !== "undefined" && "speechSynthesis" in window) {
         if (window.speechSynthesis.speaking) {
@@ -1111,7 +1168,7 @@ function speakSingleUtterance(
           } catch {}
         }
       }
-    }, 3500);
+    }, 5000);
 
     notifySpeechState(true, clean);
     addVoiceCallLog({
@@ -1170,7 +1227,7 @@ function speakSingleUtterance(
 
   // Resume unpaused engine state before queuing utterance (prevents Chrome initial freeze)
   if (typeof window !== "undefined" && "speechSynthesis" in window) {
-    if (window.speechSynthesis.paused) {
+    if (window.speechSynthesis.paused && typeof window.speechSynthesis.resume === "function") {
       try {
         window.speechSynthesis.resume();
       } catch {}
@@ -1193,13 +1250,20 @@ export function speakText(text: string, options?: Partial<TtsSettings>, onEnd?: 
     return;
   }
 
+  // Ensure engine is unpaused before starting speech playback
+  if (window.speechSynthesis.paused && typeof window.speechSynthesis.resume === "function") {
+    try {
+      window.speechSynthesis.resume();
+    } catch {}
+  }
+
   // Only cancel if there is an active utterance currently speaking from a previous operation
   let didCancel = false;
   if (
     activeUtterance !== null &&
     (window.speechSynthesis.speaking || window.speechSynthesis.pending)
   ) {
-    stopSpeaking();
+    safeStopSpeechPlayback();
     didCancel = true;
   }
 

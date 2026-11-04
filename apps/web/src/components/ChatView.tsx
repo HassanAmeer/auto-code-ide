@@ -9488,7 +9488,7 @@ export default function ChatView(props: ChatViewProps) {
             id: createData.projectId,
             environmentId: environmentId,
             title: "temp",
-            workspaceRoot: createData.workspaceRoot ?? "~/.t3/projects/temp",
+            workspaceRoot: createData.workspaceRoot ?? "~/.autocode/projects/temp",
             repositoryIdentity: null,
             faviconPath: null,
             projectIcon: null,

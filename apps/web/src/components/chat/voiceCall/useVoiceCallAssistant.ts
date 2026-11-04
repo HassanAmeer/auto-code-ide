@@ -15,12 +15,18 @@ import { transliterateUrduToRoman } from "~/lib/speech/romanUrduTransliterate";
 import {
   speakText,
   stopSpeaking,
+  safeStopSpeechPlayback,
   subscribeSpeechState,
   isCurrentlySpeaking,
   loadTtsSettings,
   subscribeTtsSettings,
   type TtsSettings,
 } from "~/lib/speech/tts";
+import {
+  CludeGodsEchoFilter,
+  tokenizeWords,
+  isExplicitInterruptWord,
+} from "~/lib/speech/cludeGodsEchoFilter";
 import { thinkingAmbientSound } from "./thinkingAmbientSound";
 import { setVoiceCallActiveState } from "./voiceCallState";
 import { startMobileVoiceKeepAlive, stopMobileVoiceKeepAlive } from "./mobileVoiceKeepAlive";
@@ -37,6 +43,24 @@ import type { ChatMessage, SessionPhase } from "~/types";
 // Must be long enough to span the inter-chunk gap between sequential streaming TTS sentences.
 // 400ms was too short — speaker echo from the previous chunk triggered false barge-in during the gap.
 const ACOUSTIC_ECHO_COOLDOWN_MS = 1500;
+
+/**
+ * OpenYabby-inspired noise & conversational backchannel filter.
+ * Prevents isolated sighing, throat clearing, breath artifacts, or filler sounds
+ * ("hmm", "uh", "ah", "pff", "hein", "achha") from triggering whole assistant turns.
+ */
+export const NOISE_FILLER_REGEX =
+  /^(?:[.\s,!?]*(?:ok|okay|oui|non|ah|oh|eh|hm+|mh+|mm+|hein|bah|bon|ben|euh|bof|ouais|mouais|pff+|tss+|ha+|h[eé]|ho|psst|chut|wow|waouh|super|merci|d'accord|voil[aà]|c'est bon|allez|exactement|absolument|parfait|g[eé]nial|cool|nice|top|bien|oh l[aà] l[aà]|pur[eé]e|mince|zut|nan|nah|no|yes|yeah|yep|nope|sure|right|fine|great|hmm+|uh+|um+|er|acha|achha|theek|thik|haan|jee|ji|sahi|hmmm+|uff+|argh+)[\s.,!?]*)+$/i;
+
+export function isNoiseOrFiller(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return true;
+  const words = trimmed.split(/\s+/).filter(Boolean);
+  if (words.length <= 2 && NOISE_FILLER_REGEX.test(trimmed)) {
+    return true;
+  }
+  return false;
+}
 
 const END_CALL_TRIGGERS = [
   "end call",
@@ -138,6 +162,9 @@ const INTERRUPT_COMMAND_TRIGGERS = [
   "wait wait",
   "hold on",
   "pause",
+  "cancel",
+  "halt",
+  "tehro",
   // "listen" variants:
   "listen",
   "listen to me",
@@ -316,8 +343,12 @@ export function containsInterruptCommand(text: string): boolean {
     }
   }
 
-  // Exact word boundary for stop or listen or suno or ruko or wait or chup or bas
-  if (/\b(?:stop|listen|suno|ruko|wait|pause|ruk|bas|chup|khamosh)\b/i.test(clean)) {
+  // Exact word boundary for stop or listen or suno or ruko or wait or chup or bas or cancel or halt or tehro
+  if (
+    /\b(?:stop|listen|suno|ruko|wait|pause|ruk|bas|chup|khamosh|cancel|halt|tehro|thehro)\b/i.test(
+      clean,
+    )
+  ) {
     return true;
   }
 
@@ -329,7 +360,7 @@ export function containsInterruptCommand(text: string): boolean {
   return false;
 }
 
-function stripInterruptCommand(text: string): string {
+export function stripInterruptCommand(text: string): string {
   let cleaned = text;
   const sortedTriggers = [...INTERRUPT_COMMAND_TRIGGERS].sort((a, b) => b.length - a.length);
 
@@ -517,6 +548,9 @@ export function useVoiceCallAssistant({
   const processedTextOffsetRef = useRef<number>(0);
   const activeAssistantMessageIdRef = useRef<string | null>(null);
 
+  // CludeGods acoustic echo cancellation and sequence matching engine
+  const cludeGodsEchoFilterRef = useRef<CludeGodsEchoFilter>(new CludeGodsEchoFilter());
+
   // Acoustic echo isolation timestamps: prevents microphone from capturing laptop speakers
   const lastTtsEndedTimestampRef = useRef<number>(0);
 
@@ -694,6 +728,7 @@ export function useVoiceCallAssistant({
     clearTtsCooldownTimer();
     clearTurnTimeout();
     cleanupRecognition();
+    cludeGodsEchoFilterRef.current.reset();
 
     // Instantly abort any active parent generation/turn/dispatch
     if (canInterruptRef.current && onInterruptRef.current) {
@@ -956,11 +991,33 @@ export function useVoiceCallAssistant({
           const rawOrFormatted = (formattedRecent || recentUtterance).trim();
           const wordsList = rawOrFormatted.split(/\s+/).filter(Boolean);
 
-          // 1. Check for explicit interrupt commands from user FIRST ("ruko", "stop", "chup", "suno", etc.)
-          const isExplicitInterrupt =
-            containsInterruptCommand(formattedRecent) || containsInterruptCommand(recentUtterance);
+          // 1. CludeGods Timestamp-Aware Sequence Matching & Echo Rejection:
+          const cludeGodsDecision = cludeGodsEchoFilterRef.current.processInterimTranscript(
+            rawOrFormatted,
+            Date.now(),
+          );
 
-          // 2. All AI sources for echo detection:
+          // 2. Check for explicit interrupt commands from user ("ruko", "stop", "chup", "suno", "wait", "cancel", "halt", etc.)
+          const isExplicitInterrupt =
+            containsInterruptCommand(formattedRecent) ||
+            containsInterruptCommand(recentUtterance) ||
+            isExplicitInterruptWord(rawOrFormatted) ||
+            (cludeGodsDecision.action === "barge" &&
+              cludeGodsDecision.reason === "explicit_interrupt_command");
+
+          if (cludeGodsDecision.action === "drop" && !isExplicitInterrupt) {
+            // Speaker audio echoed into the mic while AI is speaking.
+            turnStartResultIndexRef.current = event.results.length;
+            accumulatedTurnFinalRef.current = "";
+            addVoiceCallLog({
+              category: "NOISE_GATE",
+              title: "Acoustic Speaker Echo Blocked (CludeGods)",
+              detail: `Echo discarded: "${formattedRecent || recentUtterance}" (${cludeGodsDecision.reason})`,
+            });
+            return;
+          }
+
+          // 3. All AI sources for legacy fallback echo detection:
           const aiSources = [
             activeTtsTextRef.current,
             currentPlayingTtsChunkRef.current,
@@ -987,13 +1044,7 @@ export function useVoiceCallAssistant({
             return;
           }
 
-          // 3. User Barge-in validation:
-          // A single isolated word or low-confidence syllable heard while AI is speaking
-          // (that is NOT an explicit interrupt command) is likely background noise or faint echo.
-          // DO NOT interrupt the AI unless:
-          // a) User gave an explicit interrupt command ("ruko", "stop", "suno"), OR
-          // b) During active streaming playback: user spoke 3+ real words (more aggressive protection)
-          // c) Outside streaming (single TTS chunk): user spoke 2+ real words
+          // 4. User Barge-in validation:
           const isStreamingBusy = Boolean(
             streamingPlayerRef.current &&
             !streamingPlayerRef.current.isStopped() &&
@@ -1002,34 +1053,73 @@ export function useVoiceCallAssistant({
               streamingPlayerRef.current.hasEnqueuedChunks()),
           );
           const bargeInWordThreshold = isStreamingBusy ? 3 : 2;
-          const isUserBargeIn = isExplicitInterrupt || wordsList.length >= bargeInWordThreshold;
+          const isUserBargeIn =
+            isExplicitInterrupt ||
+            cludeGodsDecision.action === "barge" ||
+            wordsList.length >= bargeInWordThreshold;
 
           if (!isUserBargeIn) {
-            // Faint non-command sound or 1-2 words in progress: do NOT halt the AI!
-            // CRITICAL: DO NOT advance turnStartResultIndexRef here!
-            // Advancing turnStartResultIndexRef on word 1 or 2 would permanently chop off
-            // the user's opening words before they reach the 3-word barge-in threshold!
             return;
           }
 
-          // Real user speaking (barge-in):
+          // Real user speaking or stop command (barge-in):
           // Immediately halt AI playback within 5ms:
-          interruptSpeakingRef.current();
-          stopSpeaking();
+          safeStopSpeechPlayback();
           if (streamingPlayerRef.current) {
             streamingPlayerRef.current.stop();
           }
+          thinkingAmbientSound.stop();
+
+          // Abort active LLM response stream if generating
+          if (canInterruptRef.current && onInterruptRef.current) {
+            try {
+              onInterruptRef.current();
+            } catch (err) {
+              console.warn("[VoiceCall] onInterrupt error:", err);
+            }
+          }
+
           isTtsActiveRef.current = false;
           waitingForAssistantResponseRef.current = false;
-          thinkingAmbientSound.stop();
-          updateCallStatus("user-speaking");
+          activeTtsTextRef.current = "";
+          currentPlayingTtsChunkRef.current = "";
+          lastTtsEndedTimestampRef.current = Date.now();
 
+          // CRITICAL BUG FIX: DO NOT call recognitionRef.current?.abort()!
+          // SpeechRecognition keeps running so user's speech buffer is preserved from word 1!
+
+          // CRITICAL BUG FIX: Check if user said ONLY an interrupt command ("Stop", "Ruko", "Wait", etc.):
+          const stripped = stripInterruptCommand(rawOrFormatted);
+          if (isExplicitInterrupt && !stripped.trim()) {
+            promptRef.current = "";
+            lastTranscribedTextRef.current = "";
+            hasPendingSpeechRef.current = false;
+            accumulatedTurnFinalRef.current = "";
+            clearFinalDispatchTimer();
+            onTranscriptChangeRef.current("");
+            setLiveTranscript("");
+            setAssistantSpokenText("");
+            updateCallStatus("listening");
+            turnStartResultIndexRef.current = event.results.length;
+
+            addVoiceCallLog({
+              category: "INTERRUPT",
+              title: "Audio Stopped (User Commanded Stop)",
+              detail: `Command: "${rawOrFormatted}" -> Returned to listening`,
+              level: "info",
+            });
+            return;
+          }
+
+          // If user said speech-over or command + question:
+          updateCallStatus("user-speaking");
           addVoiceCallLog({
             category: "INTERRUPT",
             title: isExplicitInterrupt
-              ? "Call Interrupted (User Commanded Stop/Ruko)"
-              : "Call Interrupted (User Started Speaking)",
+              ? "Call Interrupted (User Commanded Stop/Ruko + Query)"
+              : "Call Interrupted (User Started Speaking Over Assistant)",
             detail: `User said: "${formattedRecent || recentUtterance}"`,
+            level: "info",
           });
 
           // DO NOT advance turnStartResultIndexRef past user speech!
@@ -1138,19 +1228,48 @@ export function useVoiceCallAssistant({
         }
 
         // 3. Acoustic Echo Isolation check:
-        if (isAcousticEchoOfAi(processedSpeech) || isAcousticEchoOfAi(cleanSpeech)) {
+        const isFinalTurn = Boolean(event.results[event.results.length - 1]?.isFinal);
+        const finalEchoDecision = isFinalTurn
+          ? cludeGodsEchoFilterRef.current.processFinalTranscript(processedSpeech, Date.now())
+          : cludeGodsEchoFilterRef.current.processInterimTranscript(processedSpeech, Date.now());
+
+        if (
+          finalEchoDecision.action === "drop" ||
+          isAcousticEchoOfAi(processedSpeech) ||
+          isAcousticEchoOfAi(cleanSpeech)
+        ) {
           addVoiceCallLog({
             category: "NOISE_GATE",
             title: "Acoustic Echo Filtered (Delayed)",
-            detail: `Dropped echo: "${processedSpeech || cleanSpeech}"`,
+            detail: `Dropped echo: "${processedSpeech || cleanSpeech}" (${finalEchoDecision.reason})`,
           });
-          turnStartResultIndexRef.current = event.results.length;
-          accumulatedTurnFinalRef.current = "";
+          if (isFinalTurn) {
+            turnStartResultIndexRef.current = event.results.length;
+            accumulatedTurnFinalRef.current = "";
+          }
           return;
         }
 
         // 4. This is real user speech:
         const stripped = stripInterruptCommand(processedSpeech);
+        const isExplicitCmd = containsInterruptCommand(processedSpeech);
+
+        if (isExplicitCmd && !stripped.trim()) {
+          // User spoke pure interrupt command: stay in listening state without dispatching
+          promptRef.current = "";
+          lastTranscribedTextRef.current = "";
+          hasPendingSpeechRef.current = false;
+          accumulatedTurnFinalRef.current = "";
+          clearFinalDispatchTimer();
+          onTranscriptChangeRef.current("");
+          setLiveTranscript("");
+          updateCallStatus("listening");
+          if (isFinalTurn) {
+            turnStartResultIndexRef.current = event.results.length;
+          }
+          return;
+        }
+
         const speechToUse = stripped.length > 0 ? stripped : processedSpeech;
 
         const combinedText =
@@ -1189,28 +1308,42 @@ export function useVoiceCallAssistant({
       };
 
       recognition.onerror = (event: any) => {
+        const err = event?.error;
         // "aborted" and "no-speech" are routine browser events.
         // DO NOT log warnings and DO NOT restart from them (onend will handle clean restart).
-        if (event.error === "aborted" || event.error === "no-speech") {
+        if (err === "aborted" || err === "no-speech") {
           return;
         }
+
+        // Cloud ASR transient network error: auto-reconnect with short backoff
+        if (err === "network") {
+          console.warn("[STT] Transient network error, will auto-reconnect.");
+          scheduleRestartRecognition(250);
+          return;
+        }
+
+        if (err === "language-not-supported") {
+          console.warn("[STT] Language not supported, advancing fallback.");
+          recognitionLanguageIndexRef.current += 1;
+          scheduleRestartRecognition(100);
+          return;
+        }
+
         addVoiceCallLog({
           category: "STT",
           title: "Speech Recognition Event",
-          detail: `Event: ${event?.error}`,
-          level: event?.error === "not-allowed" ? "error" : "warn",
+          detail: `Event: ${err}`,
+          level: err === "not-allowed" || err === "service-not-allowed" ? "error" : "warn",
         });
-        console.warn("Speech recognition error:", event?.error);
-        if (event.error === "not-allowed" || event.error === "service-not-allowed") {
-          if (callStatusRef.current === "idle") {
-            endCall();
-          }
+        console.warn("Speech recognition error:", err);
+        if (err === "not-allowed" || err === "service-not-allowed") {
+          endCall();
         }
       };
 
       recognition.onend = () => {
         isRecognitionRunningRef.current = false;
-        // Always-On Mic (True Full Duplex): Auto-revive immediately via 0ms loop
+        // Continuous STT Keep-Alive: Auto-revive with platform-tuned delay (30ms desktop, 180ms mobile)
         if (
           isCallActiveRef.current &&
           !isAbortingRef.current &&
@@ -1218,7 +1351,8 @@ export function useVoiceCallAssistant({
           !isUserMutedRef.current
         ) {
           clearRestartTimer();
-          const restartMic = () => {
+          const restartDelay = isMobileDevice ? 180 : 30;
+          restartTimerRef.current = setTimeout(() => {
             if (
               isCallActiveRef.current &&
               !isAbortingRef.current &&
@@ -1233,23 +1367,13 @@ export function useVoiceCallAssistant({
                 } else {
                   startFreshRecognitionRef.current();
                 }
-              } catch {
-                // Micro-fallback if browser was in transitioning state
-                restartTimerRef.current = setTimeout(() => {
-                  if (
-                    isCallActiveRef.current &&
-                    !isRecognitionRunningRef.current &&
-                    !isUserMutedRef.current
-                  ) {
-                    try {
-                      recognitionRef.current?.start?.();
-                    } catch {}
-                  }
-                }, 40);
+              } catch (err: any) {
+                // If browser engine was in transitioning state, re-instantiate fresh instance
+                console.debug("[STT] Soft start failed, recreating instance:", err?.message);
+                startFreshRecognitionRef.current();
               }
             }
-          };
-          restartTimerRef.current = setTimeout(restartMic, 0);
+          }, restartDelay);
         }
       };
 
@@ -1441,8 +1565,19 @@ export function useVoiceCallAssistant({
     }
 
     const currentText = (promptRef.current || lastTranscribedTextRef.current || "").trim();
-    if (!currentText) {
+    if (!currentText || isNoiseOrFiller(currentText)) {
       hasPendingSpeechRef.current = false;
+      if (currentText && isNoiseOrFiller(currentText)) {
+        addVoiceCallLog({
+          category: "NOISE_GATE",
+          title: "Conversational Filler Ignored",
+          detail: `Ignored: "${currentText}"`,
+        });
+        promptRef.current = "";
+        onTranscriptChangeRef.current("");
+        setLiveTranscript("");
+        accumulatedTurnFinalRef.current = "";
+      }
       if (isCallActiveRef.current) {
         updateCallStatus("listening");
       }
@@ -1482,16 +1617,25 @@ export function useVoiceCallAssistant({
         setMicrophoneMuted(false);
         addVoiceCallLog({ category: "TTS", title: "TTS Playback Started", level: "info" });
       },
+      onChunkStart: (chunk) => {
+        cludeGodsEchoFilterRef.current.registerPlaybackStart(chunk.id, chunk.text, chunk.timestamp);
+        currentPlayingTtsChunkRef.current = chunk.text;
+        setAssistantSpokenText(chunk.text);
+        addAiSpokenPhrase(chunk.text);
+        addVoiceCallLog({
+          category: "TTS",
+          title: "TTS Speaking Sentence",
+          detail: chunk.text,
+          level: "info",
+        });
+      },
+      onChunkEnd: (chunk) => {
+        cludeGodsEchoFilterRef.current.registerPlaybackEnd(chunk.id);
+      },
       onChunkStarted: (chunk: string) => {
         currentPlayingTtsChunkRef.current = chunk;
         setAssistantSpokenText(chunk);
         addAiSpokenPhrase(chunk);
-        addVoiceCallLog({
-          category: "TTS",
-          title: "TTS Speaking Sentence",
-          detail: chunk,
-          level: "info",
-        });
       },
       onFinished: () => {
         addVoiceCallLog({ category: "TTS", title: "TTS Playback Completed", level: "success" });
@@ -1745,7 +1889,7 @@ export function useVoiceCallAssistant({
         streamingPlayerRef.current.stop();
         streamingPlayerRef.current = null;
       }
-      stopSpeaking();
+      safeStopSpeechPlayback();
 
       // 2. Stop ambient thinking sound
       thinkingAmbientSound.stop();
@@ -1777,10 +1921,11 @@ export function useVoiceCallAssistant({
       setLiveTranscript("");
       setAssistantSpokenText("");
 
-      // 5. CRITICAL: Instantly abort recognition so all speaker audio in the buffer is destroyed!
-      try {
-        recognitionRef.current?.abort();
-      } catch {}
+      // 5. DO NOT abort SpeechRecognition! In Chromium, aborting kills the active audio stream,
+      // causing a 300-800ms gap that swallows the beginning of the next sentence or drops trailing speech.
+      // Advance turn start index and clear buffers to discard old speaker audio while keeping mic 100% alive:
+      turnStartResultIndexRef.current = currentEventResultsLengthRef.current;
+      accumulatedTurnFinalRef.current = "";
 
       // 6. Instantly return to listening state
       updateCallStatus("listening");

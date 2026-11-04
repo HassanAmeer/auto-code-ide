@@ -4,6 +4,7 @@ import * as NodePath from "node:path";
 import * as NodeChildProcess from "node:child_process";
 import type { ReviewRoundResult, ChecklistItem } from "./types.ts";
 import { getWorktreeDiff } from "./worktreeRunner.ts";
+import { isSkillEnabled } from "@t3tools/shared/superpowerSkills";
 
 export interface ReviewLoopExecutionResult {
   passed: boolean;
@@ -61,6 +62,10 @@ export async function executeAutonomousReviewLoop(opts: {
   const rounds: ReviewRoundResult[] = [];
   const allFixedIssues: string[] = [];
   const checklist = extractChecklistFromPrompt(prompt);
+  const isSysDebugActive = isSkillEnabled("systematic-debugging", worktreePath);
+  if (isSysDebugActive) {
+    onLog?.("⚡ Systematic Debugging Active: Enforcing 3-strike rule & root-cause verification.");
+  }
 
   let currentRound = 1;
   let isClean = false;

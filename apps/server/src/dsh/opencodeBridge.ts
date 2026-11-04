@@ -10,6 +10,7 @@ import {
   executeReadTool,
   executeGlobTool,
 } from "../../../../engine/runtimes/opencode-full-engine/index.ts";
+import { getProjectChatEngineSkillPrompt } from "@t3tools/shared/superpowerSkills";
 
 export interface OpenCodeExecutionResult {
   ok: boolean;
@@ -183,12 +184,24 @@ export async function executeOpenCodeTask(opts: {
 
       if (sessionId) {
         onLog?.(`💻 OpenCode Session [${sessionId}] active. Prompting task...`);
+        const codingSkillsPrompt = getProjectChatEngineSkillPrompt(worktreePath);
+        const fullPromptText = [
+          `[PROJECT: ${projectName} in ${worktreePath}]`,
+          `Task: ${taskTitle}`,
+          ...(codingSkillsPrompt ? ["", codingSkillsPrompt] : []),
+          "",
+          `Requirements:`,
+          prompt,
+          "",
+          `Please generate complete working code without placeholders.`,
+        ].join("\n");
+
         // Standard endpoint: /prompt (replacing non-standard /turn)
         await fetch(`${activeBase}/session/${sessionId}/prompt`, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: activeAuth },
           body: JSON.stringify({
-            text: `[PROJECT: ${projectName} in ${worktreePath}]\nTask: ${taskTitle}\nRequirements:\n${prompt}\n\nPlease generate complete working code without placeholders.`,
+            text: fullPromptText,
           }),
           signal: AbortSignal.timeout(45000),
         }).catch(() => null);

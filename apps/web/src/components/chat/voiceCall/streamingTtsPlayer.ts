@@ -1,11 +1,22 @@
 import {
   speakText,
   stopSpeaking,
+  safeStopSpeechPlayback,
   sanitizeTextForSpeech,
   stripCodeBlocks,
   loadTtsSettings,
   type TtsSettings,
 } from "~/lib/speech/tts";
+
+/**
+ * Metadata for an individual speech sentence chunk.
+ */
+export interface SpeechChunk {
+  id: string;
+  text: string;
+  index: number;
+  timestamp?: number;
+}
 
 /**
  * Splits streaming text incrementally into complete sentence chunks for low-latency TTS.
@@ -27,8 +38,8 @@ export function extractSpeechChunks(
   const chunks: string[] = [];
   let currentStart = 0;
 
-  // Match sentence terminators: ., !, ?, ।, ;, or newline followed by space or end of string
-  const sentenceEndRegex = /([.!?।;:\n]+(?:\s+|$))/g;
+  // Match sentence terminators: ., !, ?, ।, ;, :, newline, and Urdu full stop (۔) / Urdu question mark (؟)
+  const sentenceEndRegex = /([.!?।;:\n\u06D4\u061F]+(?:\s+|$))/g;
   let match: RegExpExecArray | null;
 
   while ((match = sentenceEndRegex.exec(unprocessed)) !== null) {
@@ -63,25 +74,32 @@ export interface StreamingTtsPlayerOptions {
   onStartSpeaking?: (() => void) | undefined;
   onFinished?: (() => void) | undefined;
   onChunkStarted?: ((chunk: string) => void) | undefined;
+  onChunkStart?: ((chunk: SpeechChunk) => void) | undefined;
+  onChunkEnd?: ((chunk: SpeechChunk) => void) | undefined;
   ttsOptions?: Partial<TtsSettings> | undefined;
 }
 
 /**
  * Sequential queue player that streams sentence chunks seamlessly into browser SpeechSynthesis.
- * Includes built-in sentence-level deduplication to prevent repetitive speech output.
+ * Includes built-in sentence-level deduplication to prevent repetitive speech output,
+ * playhead callbacks for echo cancellation / sequence matching, and zero-deadlock instant stop.
  */
 export class StreamingTtsPlayer {
-  private queue: string[] = [];
+  private queue: SpeechChunk[] = [];
   private isPlaying = false;
   private isStreamFinished = false;
   private hasStartedSpeaking = false;
   private onStartSpeakingCallback?: (() => void) | undefined;
   private onFinishedCallback?: (() => void) | undefined;
   private onChunkStartedCallback?: ((chunk: string) => void) | undefined;
+  private onChunkStartCallback?: ((chunk: SpeechChunk) => void) | undefined;
+  private onChunkEndCallback?: ((chunk: SpeechChunk) => void) | undefined;
   private ttsOptions?: Partial<TtsSettings> | undefined;
   private stopped = false;
   private maxChunks?: number | undefined;
   private enqueuedChunksCount = 0;
+  private chunkCounter = 0;
+  private currentChunk: SpeechChunk | null = null;
   private enqueuedSignatures = new Set<string>();
 
   constructor(options?: StreamingTtsPlayerOptions) {
@@ -89,11 +107,17 @@ export class StreamingTtsPlayer {
     this.onStartSpeakingCallback = options?.onStartSpeaking;
     this.onFinishedCallback = options?.onFinished;
     this.onChunkStartedCallback = options?.onChunkStarted;
+    this.onChunkStartCallback = options?.onChunkStart;
+    this.onChunkEndCallback = options?.onChunkEnd;
     this.ttsOptions = options?.ttsOptions;
   }
 
   updateTtsOptions(options: Partial<TtsSettings>): void {
     this.ttsOptions = { ...this.ttsOptions, ...options };
+  }
+
+  getCurrentChunk(): SpeechChunk | null {
+    return this.currentChunk;
   }
 
   getIsPlaying(): boolean {
@@ -147,7 +171,16 @@ export class StreamingTtsPlayer {
 
     this.enqueuedSignatures.add(signature);
     this.enqueuedChunksCount += 1;
-    this.queue.push(clean);
+
+    const chunkIndex = this.chunkCounter++;
+    const speechChunk: SpeechChunk = {
+      id: `chunk_${Date.now()}_${chunkIndex}`,
+      text: clean,
+      index: chunkIndex,
+      timestamp: Date.now(),
+    };
+
+    this.queue.push(speechChunk);
     this.processNext();
   }
 
@@ -176,13 +209,16 @@ export class StreamingTtsPlayer {
     }
 
     this.isPlaying = true;
+    this.currentChunk = nextChunk;
 
     if (!this.hasStartedSpeaking) {
       this.hasStartedSpeaking = true;
       this.onStartSpeakingCallback?.();
     }
 
-    this.onChunkStartedCallback?.(nextChunk);
+    // Trigger both legacy string callback and new SpeechChunk callback
+    this.onChunkStartedCallback?.(nextChunk.text);
+    this.onChunkStartCallback?.(nextChunk);
 
     const mergedOptions: Partial<TtsSettings> = {
       ...loadTtsSettings(),
@@ -191,7 +227,19 @@ export class StreamingTtsPlayer {
         : {}),
     };
 
-    speakText(nextChunk, mergedOptions, () => {
+    speakText(nextChunk.text, mergedOptions, () => {
+      if (this.stopped) return;
+
+      const finishedChunk = this.currentChunk;
+      this.currentChunk = null;
+      if (finishedChunk) {
+        try {
+          this.onChunkEndCallback?.(finishedChunk);
+        } catch (err) {
+          console.warn("[StreamingTtsPlayer] onChunkEnd callback error:", err);
+        }
+      }
+
       this.isPlaying = false;
       this.processNext();
     });
@@ -204,6 +252,18 @@ export class StreamingTtsPlayer {
     this.isPlaying = false;
     this.isStreamFinished = false;
     this.hasStartedSpeaking = false;
-    stopSpeaking();
+
+    if (this.currentChunk) {
+      const activeChunk = this.currentChunk;
+      this.currentChunk = null;
+      try {
+        this.onChunkEndCallback?.(activeChunk);
+      } catch (err) {
+        console.warn("[StreamingTtsPlayer] onChunkEnd callback error during stop:", err);
+      }
+    }
+
+    // Zero-deadlock instant cancel of underlying SpeechSynthesis
+    safeStopSpeechPlayback();
   }
 }

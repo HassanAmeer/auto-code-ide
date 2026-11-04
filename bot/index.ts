@@ -554,6 +554,7 @@ export async function processSuperBotTurn(options: BotTurnOptions): Promise<BotT
   const smartSystemPrompt = buildSmartBotSystemPrompt({
     intentAnalysis: analysis,
     projectName,
+    projectRoot,
     projectMemorySpec: specText,
     language: lang,
   });

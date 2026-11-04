@@ -1,9 +1,11 @@
 import type { IntentAnalysis } from "./intentClassifier.ts";
 import { getLiveWhatsAppContext } from "../whatsapp/client.ts";
+import { getIntakeBotSkillPrompt } from "../../packages/shared/src/superpowerSkills.ts";
 
 export interface BotSupervisorPromptOptions {
   intentAnalysis: IntentAnalysis;
   projectName?: string | undefined;
+  projectRoot?: string | undefined;
   projectMemorySpec?: string | undefined;
   liveFacts?: string | undefined;
   whatsAppContext?: string | undefined;
@@ -14,6 +16,7 @@ export function buildSmartBotSystemPrompt(options: BotSupervisorPromptOptions): 
   const {
     intentAnalysis: _analysis,
     projectName = "Workspace",
+    projectRoot,
     projectMemorySpec,
     liveFacts,
     whatsAppContext,
@@ -29,6 +32,8 @@ export function buildSmartBotSystemPrompt(options: BotSupervisorPromptOptions): 
         return "";
       }
     })();
+
+  const brainstormingSkillPrompt = getIntakeBotSkillPrompt(projectRoot);
 
   return `
 You are **Super Bot** — the Senior AI Tech Lead, Autonomous Supervisor, and Intelligent WhatsApp Controller of this development workspace.
@@ -69,5 +74,6 @@ You communicate dynamically in natural, conversational ${language === "urdu" ? "
 ${resolvedWhatsAppContext ? `\n${resolvedWhatsAppContext}\n` : ""}
 ${projectMemorySpec ? `\n[PROJECT MEMORY]:\n${projectMemorySpec}\n` : ""}
 ${liveFacts ? `\n[LIVE WORKSPACE FACTS]:\n${liveFacts}\n` : ""}
+${brainstormingSkillPrompt ? `\n${brainstormingSkillPrompt}\n` : ""}
 `.trim();
 }

@@ -9,6 +9,7 @@ import { executeOpenCodeTask } from "./opencodeBridge.ts";
 import { executeAutonomousReviewLoop } from "./selfReviewLoop.ts";
 import { decomposeTask } from "./taskDecomposer.ts";
 import { sendWhatsAppMessage, fetchWhatsAppSettings } from "../botBridge.ts";
+import { isSkillEnabled, getDshWorkerSkillPrompt } from "@t3tools/shared/superpowerSkills";
 
 export * from "./types.ts";
 export * from "./worktreeRunner.ts";
@@ -75,8 +76,18 @@ export async function runAutonomousHarnessWorkflow(
     `🚀 Autonomous Harness Worker [worker-${taskId}] started for "${taskTitle}" (${model}).`,
   );
 
+  // Check if dispatching-parallel-agents Superpower skill is active
+  const isParallelSkillActive = isSkillEnabled("dispatching-parallel-agents", projectRoot);
+  const parallelSkillPrompt = isParallelSkillActive ? getDshWorkerSkillPrompt(projectRoot) : "";
+  if (isParallelSkillActive) {
+    logStep(
+      "skill",
+      "⚡ Superpower Active: [dispatching-parallel-agents] - Isolated worker worktree & domain boundaries enabled.",
+    );
+  }
+
   // 1. Supervisor Task Decomposition (Bara Kaam Chotay Tukron Mein Baantna)
-  const subtasks = decomposeTask(taskTitle, prompt);
+  const subtasks = decomposeTask(taskTitle, prompt, projectRoot);
   if (subtasks.length > 1) {
     logStep(
       "plan",
@@ -106,10 +117,14 @@ export async function runAutonomousHarnessWorkflow(
     st.status = "in_progress";
     logStep("subtask", `⚙️ [Milestone ${st.order}/${subtasks.length}] Executing: "${st.title}"...`);
 
-    const subtaskPrompt =
+    const basePrompt =
       subtasks.length > 1
         ? `[MILESTONE ${st.order}/${subtasks.length} FOR PROJECT: ${projectName}]\nTask: ${st.title}\nRequirements:\n${st.description}\n\nFull Objective Context:\n${prompt}`
         : prompt;
+
+    const subtaskPrompt = parallelSkillPrompt
+      ? `${parallelSkillPrompt}\n\n${basePrompt}`
+      : basePrompt;
 
     const subtaskRes = await executeOpenCodeTask({
       worktreePath: allocation.worktreePath,

@@ -1,4 +1,22 @@
 {
+  "brainstorming": {
+    "enabled": true
+  },
+  "dispatching-parallel-agents": {
+    "enabled": true
+  },
+  "systematic-debugging": {
+    "enabled": true
+  },
+  "test-driven-development": {
+    "enabled": true
+  },
+  "verification-before-completion": {
+    "enabled": true
+  },
+  "writing-plans": {
+    "enabled": true
+  },
   "ios-design": {
     "enabled": true
   },

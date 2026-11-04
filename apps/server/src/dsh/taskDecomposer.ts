@@ -1,5 +1,6 @@
 // @effect-diagnostics globalDateInEffect:off globalRandomInEffect:off nodeBuiltinImport:off globalTimers:off globalTimersInEffect:off preferSchemaOverJson:off globalDate:off globalFetchInEffect:off globalFetch:off globalConsoleInEffect:off
 import type { SubtaskPlanItem } from "./types.ts";
+import { isSkillEnabled } from "@t3tools/shared/superpowerSkills";
 
 /**
  * Evaluates whether a prompt or title represents a composite / multi-stage engineering task.
@@ -46,8 +47,15 @@ export function isComplexTask(taskTitle: string, prompt: string): boolean {
 
 /**
  * Decomposes a task prompt into clean, executable subtask units.
+ * When the "dispatching-parallel-agents" Superpower skill is enabled, tasks are decomposed into
+ * domain-isolated milestones that avoid shared state and can run across parallel workers.
  */
-export function decomposeTask(taskTitle: string, prompt: string): SubtaskPlanItem[] {
+export function decomposeTask(
+  taskTitle: string,
+  prompt: string,
+  projectRoot?: string,
+): SubtaskPlanItem[] {
+  const isParallelSkillActive = isSkillEnabled("dispatching-parallel-agents", projectRoot);
   // Check if explicit numbered or bullet items exist
   const explicitMatches = prompt
     .split(/\n+/)

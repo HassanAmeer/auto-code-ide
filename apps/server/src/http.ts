@@ -117,6 +117,7 @@ import {
   formatServerLedgerBulletSummary,
 } from "./multiTurnSessionLedger.ts";
 import { runAutonomousHarnessWorkflow } from "./dsh/index.ts";
+import { getProjectChatEngineSkillPrompt } from "@t3tools/shared/superpowerSkills";
 
 const OTLP_TRACES_PROXY_PATH = "/api/observability/v1/traces";
 const LOOPBACK_HOSTNAMES = new Set(["127.0.0.1", "::1", "localhost"]);
@@ -1474,6 +1475,10 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
         if (isProjectRelated && liveProjectContext) {
           promptText += `${liveProjectContext}\n\n`;
         }
+        const codingSkillsPrompt = getProjectChatEngineSkillPrompt();
+        if (codingSkillsPrompt) {
+          promptText += `${codingSkillsPrompt}\n\n`;
+        }
         for (const m of userMsgs.slice(-6)) {
           promptText += `${m.role === "user" ? "User" : "Assistant"}: ${m.content}\n`;
         }
@@ -2013,12 +2018,16 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
           liveWhatsAppContext = await getLiveWhatsAppContext();
         } catch {}
 
+        const codingSkillsPrompt = getProjectChatEngineSkillPrompt();
         const enrichedMessages = messages.map((m) => {
           if (m.role === "system") {
             let sys = botResult?.systemPrompt || m.content;
             if (liveProjectContext) sys += "\n\n" + liveProjectContext;
             if (liveWhatsAppContext && !sys.includes("[LIVE WHATSAPP GATEWAY STATE")) {
               sys += "\n\n" + liveWhatsAppContext;
+            }
+            if (codingSkillsPrompt && !sys.includes("[ACTIVE SUPERPOWER SKILLS")) {
+              sys += "\n\n" + codingSkillsPrompt;
             }
             return { ...m, content: sys };
           }
@@ -2032,6 +2041,9 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
           if (liveProjectContext) sys += "\n\n" + liveProjectContext;
           if (liveWhatsAppContext && !sys.includes("[LIVE WHATSAPP GATEWAY STATE")) {
             sys += "\n\n" + liveWhatsAppContext;
+          }
+          if (codingSkillsPrompt && !sys.includes("[ACTIVE SUPERPOWER SKILLS")) {
+            sys += "\n\n" + codingSkillsPrompt;
           }
           enrichedMessages.unshift({ role: "system", content: sys });
         }
