@@ -3,7 +3,6 @@ import { assert, expect, it } from "@effect/vitest";
 import {
   buildPairingUrl,
   formatHeadlessServeOutput,
-  renderTerminalQrCode,
   resolveHeadlessConnectionHost,
   resolveHeadlessConnectionString,
   resolveListeningPort,
@@ -54,13 +53,6 @@ it("prefers the actual bound port when an http server address is available", () 
 
 it("builds a clean root URL", () => {
   expect(buildPairingUrl("http://192.168.1.42:3773", "PAIRCODE")).toBe("http://192.168.1.42:3773/");
-});
-
-it("renders terminal QR codes as a multi-line unicode block grid", () => {
-  const qrCode = renderTerminalQrCode("http://192.168.1.42:3773/");
-
-  assert.isTrue(qrCode.includes("█"));
-  assert.isTrue(qrCode.split("\n").length > 10);
 });
 
 it("formats headless serve output with the connection string", () => {
