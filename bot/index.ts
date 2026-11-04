@@ -4,7 +4,6 @@ import { type ClineTaskResult } from "./cline/engine.ts";
 export * from "./cline/auto-healer.ts";
 export * from "./cline/engine.ts";
 export * from "./cline/tools.ts";
-export * from "./livekit/index.ts";
 export * from "./whatsapp/index.ts";
 
 export interface BotTurnOptions {

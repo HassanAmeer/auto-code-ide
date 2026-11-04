@@ -8,4 +8,3 @@ export * from "./GlobalVoiceCallWidget";
 export * from "./useVoiceCallAssistant";
 export * from "./voiceCallState";
 export * from "./mobileVoiceKeepAlive";
-export * from "./useLiveKitCall";
