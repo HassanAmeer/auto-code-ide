@@ -2157,7 +2157,7 @@ export function SuperCallAssistantView() {
                   {/* Subagents & Goals Real-Time Card (Matches Screenshot & DeepSeek / DSH Parallel Workers) */}
                   <div className="pt-3 border-t border-border/60">
                     <SubagentsAndGoalsCard
-                      projectName={activeProject?.name || "Workspace"}
+                      projectName={activeProjectName || "Workspace"}
                       isHandlingProject={true}
                     />
                   </div>
