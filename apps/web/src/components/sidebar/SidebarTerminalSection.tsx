@@ -113,7 +113,7 @@ export function SidebarTerminalSection() {
   }, [location.pathname, navigate]);
 
   return (
-    <div className="border-t border-sidebar-border/30 dark:border-zinc-700/30">
+    <div className="border-b border-sidebar-border/30 dark:border-zinc-700/30">
       {/* Terminal Section Header */}
       <div className="flex items-center justify-between px-3 py-1.5 select-none hover:bg-sidebar-accent/30 transition-colors">
         <button

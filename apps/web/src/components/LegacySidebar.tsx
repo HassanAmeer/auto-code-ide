@@ -3631,6 +3631,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
       }
     >
       <SidebarGroup className="p-0">
+        <SidebarTerminalSection />
         <SidebarBotSection />
         <div className="flex items-center justify-between px-3 py-1.5 border-b border-sidebar-border/30 dark:border-zinc-700/30">
           <span className="text-xs font-semibold tracking-wide uppercase text-sidebar-muted-foreground/80">
@@ -3744,8 +3745,6 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
         {projectsLength === 0 && (
           <div className="px-2 pt-4 text-center text-secondary-label text-xs">No projects yet</div>
         )}
-
-        <SidebarTerminalSection />
       </SidebarGroup>
     </SidebarContent>
   );
