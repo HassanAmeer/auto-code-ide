@@ -141,7 +141,6 @@ import { CircularVoiceWaves } from "./VoiceCallButton";
 import { GrokGeometricVoiceWaves } from "./GrokGeometricVoiceWaves";
 import { buildSuperAgentSystemPrompt } from "./superAgentPrompt";
 import { useVoiceCallAssistant } from "./useVoiceCallAssistant";
-import { useLiveKitCall } from "./useLiveKitCall";
 import {
   speakText,
   stopSpeaking,
@@ -1060,7 +1059,6 @@ export function SuperCallAssistantView() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const livekitRef = useRef<ReturnType<typeof useLiveKitCall> | null>(null);
 
   const adjustTextareaHeight = useCallback((el: HTMLTextAreaElement | null) => {
     if (!el) return;
@@ -1127,19 +1125,6 @@ export function SuperCallAssistantView() {
       setActiveDispatchStartTime(dispatchStartTime);
       setAgentStatus("Analyzing request...");
       setLiveTools([]);
-
-      void livekitRef.current?.sendDataMessage({
-        type: "user_turn",
-        text: userText,
-        timestamp: Date.now(),
-      });
-
-      addVoiceCallLog({
-        category: "LIVEKIT",
-        title: "LiveKit Data Sent (user_turn)",
-        detail: userText,
-        payload: { type: "user_turn", text: userText },
-      });
 
       const effectiveSelectedModel = effectiveModel;
 
@@ -1549,38 +1534,6 @@ export function SuperCallAssistantView() {
   useEffect(() => {
     isCallActiveRef.current = isCallActive;
   }, [isCallActive]);
-
-  const livekit = useLiveKitCall({
-    onDataReceived: (data) => {
-      addVoiceCallLog({
-        category: "LIVEKIT",
-        title: `LiveKit Received (${data && typeof data === "object" ? data.type || "event" : "data"})`,
-        detail: typeof data === "object" ? JSON.stringify(data) : String(data),
-        payload: data,
-        level: "info",
-      });
-      if (data && typeof data === "object") {
-        if (data.type === "filler" && data.text) {
-          setAgentStatus(data.text);
-        } else if (data.type === "tool_status" && data.tool) {
-          setAgentStatus(`Tool Calling: ${data.tool}...`);
-        }
-      }
-    },
-    onError: (err) => {
-      console.warn("[LiveKit Call Notice]:", err);
-      addVoiceCallLog({
-        category: "LIVEKIT",
-        title: "LiveKit Connection Notice",
-        detail: String(err),
-        level: "warn",
-      });
-    },
-  });
-
-  useEffect(() => {
-    livekitRef.current = livekit;
-  }, [livekit]);
 
   const handleToggleCallSession = useCallback(() => {
     const isCurrentlyActive = isCallActive || isCallActiveRef.current;
@@ -2523,7 +2476,7 @@ export function SuperCallAssistantView() {
                       "Notion-like collaborative specs space",
                     ],
                     content:
-                      "# Workspace Overview & System Specs\n\nWelcome to your Living Document Space! You can draft specs, track architecture, and collaborate with your Super Bot here.\n\n### Project Milestones\n- [x] Initial workspace inspection & auto-healing\n- [ ] Database schema review\n- [ ] LiveKit audio call bridge integration\n- [ ] Multi-channel deploy setup",
+                      "# Workspace Overview & System Specs\n\nWelcome to your Living Document Space! You can draft specs, track architecture, and collaborate with your Super Bot here.\n\n### Project Milestones\n- [x] Initial workspace inspection & auto-healing\n- [ ] Database schema review\n- [ ] High-speed WebRTC audio call bridge\n- [ ] Multi-channel deploy setup",
                     projectName: activeProjId || "Workspace",
                     createdAt: Date.now(),
                     updatedAt: Date.now(),

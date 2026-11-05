@@ -87,8 +87,6 @@ import { WEBHOOK_ROUTE_PREFIX } from "./scheduledTasks/ScheduledTaskService.ts";
 import { browserApiCorsAllowedHeaders, browserApiCorsAllowedMethods } from "./httpCors.ts";
 import {
   runSuperBotTurn,
-  getLiveKitToken,
-  getLiveKitRoomInfo,
   processWhatsAppWebhook,
   getWhatsAppSessions,
   getWhatsAppChats,
@@ -1225,41 +1223,6 @@ export const layerCustomProviderSyncRoute = HttpRouter.add(
       ok: true,
       count: bodyJson?.providers?.length ?? 0,
     });
-  }),
-);
-
-export const layerLiveKitTokenRoute = HttpRouter.add(
-  "GET",
-  "/api/livekit/token",
-  Effect.gen(function* () {
-    const request = yield* HttpServerRequest.HttpServerRequest;
-    const url = new URL(request.url, "http://127.0.0.1");
-    const room = url.searchParams.get("room") || "autojobs-call-room";
-    const identity = url.searchParams.get("identity") || `user_${Date.now().toString(36)}`;
-    const name = url.searchParams.get("name") || "AutoCode User";
-
-    const res = yield* Effect.promise(() =>
-      getLiveKitToken({
-        roomName: room,
-        participantIdentity: identity,
-        participantName: name,
-      }),
-    );
-
-    return HttpServerResponse.jsonUnsafe(res);
-  }),
-);
-
-export const layerLiveKitStatusRoute = HttpRouter.add(
-  "GET",
-  "/api/livekit/status",
-  Effect.gen(function* () {
-    const request = yield* HttpServerRequest.HttpServerRequest;
-    const url = new URL(request.url, "http://127.0.0.1");
-    const room = url.searchParams.get("room") || "autojobs-call-room";
-
-    const res = yield* Effect.promise(() => getLiveKitRoomInfo(room));
-    return HttpServerResponse.jsonUnsafe(res);
   }),
 );
 
