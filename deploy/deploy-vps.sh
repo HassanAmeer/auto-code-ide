@@ -132,12 +132,12 @@ fi
 # Rsync web and server dist for zero-downtime, fast asset delivery
 if [ -d "apps/web/dist" ]; then
   echo -e "  ${C_DIM}Syncing web dist...${C_RESET}"
-  rsync -az --delete apps/web/dist/ "${VPS_USER}@${VPS_HOST}:${VPS_DIR}/apps/web/dist/"
+  rsync -az --delete --exclude="*.map" apps/web/dist/ "${VPS_USER}@${VPS_HOST}:${VPS_DIR}/apps/web/dist/"
 fi
 
 if [ -d "apps/server/dist" ]; then
   echo -e "  ${C_DIM}Syncing server dist...${C_RESET}"
-  rsync -az --delete apps/server/dist/ "${VPS_USER}@${VPS_HOST}:${VPS_DIR}/apps/server/dist/"
+  rsync -az --delete --exclude="*.map" apps/server/dist/ "${VPS_USER}@${VPS_HOST}:${VPS_DIR}/apps/server/dist/"
 fi
 
 if [ -d "bot" ]; then
