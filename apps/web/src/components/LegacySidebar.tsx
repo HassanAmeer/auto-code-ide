@@ -21,7 +21,6 @@ import {
   SquarePenIcon,
   TerminalIcon,
   Trash2Icon,
-  TriangleAlertIcon,
   UploadCloudIcon,
   XIcon,
 } from "lucide-react";
@@ -155,7 +154,6 @@ import {
 import { stackedThreadToast, toastManager } from "./ui/toast";
 import { formatRelativeTimeLabel } from "../timestampFormat";
 import { Kbd } from "./ui/kbd";
-import { Alert, AlertAction, AlertDescription, AlertTitle } from "./ui/alert";
 import { Button } from "./ui/button";
 import {
   Dialog,
@@ -3522,12 +3520,6 @@ function SortableProjectItem({
 }
 
 interface SidebarProjectsContentProps {
-  showArm64IntelBuildWarning: boolean;
-  arm64IntelBuildWarningDescription: string | null;
-  desktopUpdateButtonAction: "download" | "install" | "none";
-  desktopUpdateButtonDisabled: boolean;
-  desktopUpdateActionPending: boolean;
-  handleDesktopUpdateButtonClick: () => void;
   projectSortOrder: SidebarProjectSortOrder;
   threadSortOrder: SidebarThreadSortOrder;
   threadPreviewCount: SidebarThreadPreviewCount;
@@ -3565,12 +3557,6 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
   props: SidebarProjectsContentProps,
 ) {
   const {
-    showArm64IntelBuildWarning,
-    arm64IntelBuildWarningDescription,
-    desktopUpdateButtonAction,
-    desktopUpdateButtonDisabled,
-    desktopUpdateActionPending,
-    handleDesktopUpdateButtonClick,
     projectSortOrder,
     threadSortOrder,
     threadPreviewCount,
@@ -3643,29 +3629,6 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
         </SidebarGroup>
       }
     >
-      {showArm64IntelBuildWarning && arm64IntelBuildWarningDescription ? (
-        <SidebarGroup>
-          <Alert variant="warning">
-            <TriangleAlertIcon />
-            <AlertTitle>Intel build on Apple Silicon</AlertTitle>
-            <AlertDescription>{arm64IntelBuildWarningDescription}</AlertDescription>
-            {desktopUpdateButtonAction !== "none" ? (
-              <AlertAction>
-                <Button
-                  size="xs"
-                  variant="outline"
-                  disabled={desktopUpdateButtonDisabled || desktopUpdateActionPending}
-                  onClick={handleDesktopUpdateButtonClick}
-                >
-                  {desktopUpdateButtonAction === "download"
-                    ? "Download ARM build"
-                    : "Install ARM build"}
-                </Button>
-              </AlertAction>
-            ) : null}
-          </Alert>
-        </SidebarGroup>
-      ) : null}
       <SidebarGroup className="p-0">
         <SidebarBotSection />
         <div className="flex items-center justify-between px-3 py-1.5 border-b border-sidebar-border/30 dark:border-zinc-700/30">
@@ -4346,14 +4309,9 @@ export default function LegacySidebar() {
     };
   }, [clearSelection]);
 
-  const desktopUpdateButtonDisabled = true;
-  const desktopUpdateButtonAction = "none" as const;
-  const showArm64IntelBuildWarning = false;
-  const arm64IntelBuildWarningDescription = null;
   const commandPaletteShortcutLabel = isMobile
     ? null
     : shortcutLabelForCommand(keybindings, "commandPalette.toggle", newThreadShortcutLabelOptions);
-  const handleDesktopUpdateButtonClick = useCallback(() => {}, []);
 
   const expandThreadListForProject = useCallback((projectKey: string) => {
     setExpandedThreadListsByProject((current) => {
@@ -4381,12 +4339,6 @@ export default function LegacySidebar() {
       <SidebarChromeHeader isElectron={isElectron} />
 
       <SidebarProjectsContent
-        showArm64IntelBuildWarning={showArm64IntelBuildWarning}
-        arm64IntelBuildWarningDescription={arm64IntelBuildWarningDescription}
-        desktopUpdateButtonAction={desktopUpdateButtonAction}
-        desktopUpdateButtonDisabled={desktopUpdateButtonDisabled}
-        desktopUpdateActionPending={desktopUpdateActionPending}
-        handleDesktopUpdateButtonClick={handleDesktopUpdateButtonClick}
         projectSortOrder={sidebarProjectSortOrder}
         threadSortOrder={sidebarThreadSortOrder}
         threadPreviewCount={sidebarThreadPreviewCount}
