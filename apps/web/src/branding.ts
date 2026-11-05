@@ -17,10 +17,10 @@ export const HOSTED_APP_CHANNEL =
 export const HOSTED_APP_CHANNEL_LABEL =
   HOSTED_APP_CHANNEL === "nightly" ? "Nightly" : HOSTED_APP_CHANNEL === "latest" ? "Latest" : null;
 export const APP_BASE_NAME =
-  injectedDesktopAppBranding?.baseName ?? (import.meta.env.VITE_APP_NAME?.trim() || "AutoCode");
-export const APP_SHORT_NAME = import.meta.env.VITE_APP_SHORT_NAME?.trim() || "AC";
+  injectedDesktopAppBranding?.baseName ?? (import.meta.env.VITE_APP_NAME?.trim() || "BotCode");
+export const APP_SHORT_NAME = import.meta.env.VITE_APP_SHORT_NAME?.trim() || "BotCode";
 export const APP_SUBTITLE =
-  import.meta.env.VITE_APP_SUBTITLE?.trim() || "Automatically code your project";
+  import.meta.env.VITE_APP_SUBTITLE?.trim() || "Autonomous AI Coding Agent";
 export const APP_STAGE_LABEL =
   injectedDesktopAppBranding?.stageLabel ??
   HOSTED_APP_CHANNEL_LABEL ??
