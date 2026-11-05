@@ -8,6 +8,7 @@ import {
   Plus,
   Trash2,
   Pencil,
+  CircleDashed,
 } from "lucide-react";
 import { cn } from "~/lib/utils";
 import { useTerminalStore, terminalStore } from "~/components/chat/terminal/terminalStore";
@@ -62,7 +63,6 @@ export function SidebarTerminalSection() {
       terminalStore.setActiveChatId(newChat.id);
       terminalStore.setQuickBarOpen(true);
       terminalStore.setMobileActiveTab("terminal");
-      window.dispatchEvent(new CustomEvent("t3:new-terminal-thread"));
 
       if (location.pathname.startsWith("/bot") || location.pathname.startsWith("/settings")) {
         void navigate({ to: "/" });
@@ -128,6 +128,9 @@ export function SidebarTerminalSection() {
           )}
           <Terminal className="size-3.5 text-emerald-500" />
           <span>Terminal</span>
+          {store.isAnyTerminalRunning && (
+            <CircleDashed className="size-3 text-emerald-400 animate-spin shrink-0" />
+          )}
           {store.terminalChats.length > 0 && (
             <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-500/10 text-emerald-400 font-medium normal-case font-mono">
               {store.terminalChats.length}
@@ -206,6 +209,7 @@ export function SidebarTerminalSection() {
         <div className="py-1 px-1.5 space-y-0.5">
           {store.terminalChats.map((chat) => {
             const isActive = store.isQuickBarOpen && store.activeChatId === chat.id;
+            const isRunning = Boolean(store.runningChatIds?.[chat.id]);
             return (
               <div
                 key={chat.id}
@@ -252,15 +256,29 @@ export function SidebarTerminalSection() {
                       />
                     ) : (
                       <>
-                        <p className="truncate leading-tight text-xs">{chat.title}</p>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <p className="truncate leading-tight text-xs flex-1">{chat.title}</p>
+                          {isRunning && (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-medium shrink-0 animate-pulse">
+                              <CircleDashed className="size-2.5 animate-spin text-emerald-400" />
+                              <span>Working</span>
+                            </span>
+                          )}
+                        </div>
                         <span className="text-[10px] opacity-60 block truncate">
-                          {new Date(chat.createdAt).toLocaleDateString([], {
-                            month: "short",
-                            day: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                          {chat.projectName ? ` • ${chat.projectName}` : ""}
+                          {isRunning ? (
+                            <span className="text-emerald-400/90 font-medium">Executing...</span>
+                          ) : (
+                            <>
+                              {new Date(chat.createdAt).toLocaleDateString([], {
+                                month: "short",
+                                day: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                              {chat.projectName ? ` • ${chat.projectName}` : ""}
+                            </>
+                          )}
                         </span>
                       </>
                     )}

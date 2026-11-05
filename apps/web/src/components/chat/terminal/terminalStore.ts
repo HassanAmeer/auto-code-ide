@@ -44,6 +44,8 @@ interface TerminalState {
   alwaysAllowedCommands: string[];
   mobileActiveTab: "chat" | "terminal";
   unreadAiToolsCount: number;
+  runningChatIds: Record<string, boolean>;
+  isAnyTerminalRunning: boolean;
 }
 
 import { saveServerSetting } from "~/lib/serverSettingsSync";
@@ -246,6 +248,8 @@ let state: TerminalState = {
   alwaysAllowedCommands: initialAlwaysAllowedCommands,
   mobileActiveTab: "chat",
   unreadAiToolsCount: 0,
+  runningChatIds: {},
+  isAnyTerminalRunning: false,
   history: ["ls -la /", "df -h", "free -m", "uname -a"],
 };
 
@@ -667,6 +671,22 @@ export const terminalStore = {
     notify();
   },
 
+  setChatRunning(chatId: string, isRunning: boolean) {
+    if (!chatId) return;
+    const nextRunning = { ...state.runningChatIds };
+    if (isRunning) {
+      nextRunning[chatId] = true;
+    } else {
+      delete nextRunning[chatId];
+    }
+    state = {
+      ...state,
+      runningChatIds: nextRunning,
+      isAnyTerminalRunning: Object.keys(nextRunning).length > 0,
+    };
+    notify();
+  },
+
   setActiveChatId(id: string | null) {
     if (!id) {
       state = { ...state, activeChatId: null, runs: [] };
@@ -925,303 +945,315 @@ export const terminalStore = {
       throw new Error("Command cannot be empty");
     }
 
-    const currentMode = modeOverride ?? state.inputMode;
-    const isNatural =
-      currentMode === "ai" || (modeOverride === undefined && isNaturalLanguagePrompt(trimmedInput));
-    const resolvedMode: "bash" | "ai" = isNatural ? "ai" : "bash";
-
-    const currentTab = state.terminalTabs.find((t) => t.id === state.activeTabId);
-    const cwd =
-      customCwd ||
-      currentTab?.cwd ||
-      state.activeCwd ||
-      (state.scopeMode === "root" ? "/" : state.lastProjectPath || "/");
-    const activeKeys = state.accessKeys.filter((k) => k.enabled);
-
-    // Translate if AI / natural mode with full awareness of project, git, keys, and notes
-    const actualCommand = isNatural
-      ? translatePromptToBashCommand(trimmedInput, cwd, activeKeys, {
-          cwd,
-          scopeMode: state.scopeMode,
-          projectName: state.selectedProjectTitle,
-          projectPath: state.lastProjectPath,
-          activeKeys,
-          selectedKeyId: state.selectedKeyId,
-        })
-      : trimmedInput;
-
-    const runId = "term_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
-    const executionId = "exec_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
-
-    // Check for interactive commands that hang without TTY
-    const firstWord = actualCommand.trim().split(/\s+/)[0]?.toLowerCase() || "";
-    let effectiveCommand = actualCommand;
-    if (firstWord === "top" && !actualCommand.includes("-b")) {
-      // Auto-batch mode for top so it returns output instead of hanging
-      effectiveCommand = `${actualCommand} -b -n 1`;
+    const targetChatId = state.activeChatId;
+    if (targetChatId) {
+      terminalStore.setChatRunning(targetChatId, true);
     }
 
-    let commandToExecute = effectiveCommand;
-    let targetLabel =
-      state.scopeMode === "root"
-        ? "VPS Host (Root)"
-        : `VPS Host (${state.selectedProjectTitle || "Project"})`;
+    try {
+      const currentMode = modeOverride ?? state.inputMode;
+      const isNatural =
+        currentMode === "ai" ||
+        (modeOverride === undefined && isNaturalLanguagePrompt(trimmedInput));
+      const resolvedMode: "bash" | "ai" = isNatural ? "ai" : "bash";
 
-    let isSshTarget = false;
-    const currentHost = typeof window !== "undefined" ? window.location.hostname : "";
-    const isLoopbackOrSelfHost = (h?: string | null) => {
-      if (!h) return true;
-      const clean = h.trim().toLowerCase();
-      return (
-        clean === "" ||
-        clean === "localhost" ||
-        clean === "127.0.0.1" ||
-        clean === "::1" ||
-        clean === "0.0.0.0" ||
-        clean === "201.18.218.29" ||
-        clean.includes("autojobs") ||
-        clean.includes("tokendeal") ||
-        (Boolean(currentHost) && clean === currentHost.toLowerCase())
-      );
-    };
+      const currentTab = state.terminalTabs.find((t) => t.id === state.activeTabId);
+      const cwd =
+        customCwd ||
+        currentTab?.cwd ||
+        state.activeCwd ||
+        (state.scopeMode === "root" ? "/" : state.lastProjectPath || "/");
+      const activeKeys = state.accessKeys.filter((k) => k.enabled);
 
-    // Check if target is explicitly remote vs local host
-    const activeKeyTarget = state.selectedKeyId
-      ? state.accessKeys.find((k) => k.id === state.selectedKeyId)
-      : null;
-    const activeProfile =
-      state.activeTarget && state.activeTarget !== "local"
-        ? state.sshProfiles.find((p) => p.id === state.activeTarget)
-        : null;
+      // Translate if AI / natural mode with full awareness of project, git, keys, and notes
+      const actualCommand = isNatural
+        ? translatePromptToBashCommand(trimmedInput, cwd, activeKeys, {
+            cwd,
+            scopeMode: state.scopeMode,
+            projectName: state.selectedProjectTitle,
+            projectPath: state.lastProjectPath,
+            activeKeys,
+            selectedKeyId: state.selectedKeyId,
+          })
+        : trimmedInput;
 
-    const isDirectLocalHost =
-      !activeProfile &&
-      (!activeKeyTarget ||
-        activeKeyTarget.id === "key_vps_default" ||
-        activeKeyTarget.type === "server" ||
-        activeKeyTarget.name?.toLowerCase().includes("production server") ||
-        activeKeyTarget.name?.toLowerCase().includes("direct host") ||
-        isLoopbackOrSelfHost(activeKeyTarget.host));
+      const runId = "term_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
+      const executionId = "exec_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
 
-    if (
-      !isDirectLocalHost &&
-      (activeProfile?.host ||
-        (activeKeyTarget?.host && !isLoopbackOrSelfHost(activeKeyTarget.host)))
-    ) {
-      const safeSshCmd = effectiveCommand.replace(/'/g, "'\\''");
-      if (activeProfile?.host) {
-        isSshTarget = true;
-        targetLabel = `SSH: ${activeProfile.label || activeProfile.host}`;
-        commandToExecute = `ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=10 -p ${activeProfile.port || 22} ${activeProfile.user ? `${activeProfile.user}@` : ""}${activeProfile.host} '${safeSshCmd}'`;
-      } else if (activeKeyTarget?.host) {
-        isSshTarget = true;
-        targetLabel = `SSH: ${activeKeyTarget.name} (${activeKeyTarget.user || "root"}@${activeKeyTarget.host})`;
-        const port = activeKeyTarget.port || 22;
-        const userPrefix = activeKeyTarget.user ? `${activeKeyTarget.user}@` : "";
-        commandToExecute = `ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=10 -p ${port} ${userPrefix}${activeKeyTarget.host} '${safeSshCmd}'`;
+      // Check for interactive commands that hang without TTY
+      const firstWord = actualCommand.trim().split(/\s+/)[0]?.toLowerCase() || "";
+      let effectiveCommand = actualCommand;
+      if (firstWord === "top" && !actualCommand.includes("-b")) {
+        // Auto-batch mode for top so it returns output instead of hanging
+        effectiveCommand = `${actualCommand} -b -n 1`;
       }
-    } else {
-      isSshTarget = false;
-      targetLabel =
+
+      let commandToExecute = effectiveCommand;
+      let targetLabel =
         state.scopeMode === "root"
           ? "VPS Host (Root)"
           : `VPS Host (${state.selectedProjectTitle || "Project"})`;
-      commandToExecute = effectiveCommand;
-    }
 
-    // Update history
-    const nextHistory = [
-      trimmedInput,
-      ...state.history.filter((item) => item !== trimmedInput),
-    ].slice(0, 50);
+      let isSshTarget = false;
+      const currentHost = typeof window !== "undefined" ? window.location.hostname : "";
+      const isLoopbackOrSelfHost = (h?: string | null) => {
+        if (!h) return true;
+        const clean = h.trim().toLowerCase();
+        return (
+          clean === "" ||
+          clean === "localhost" ||
+          clean === "127.0.0.1" ||
+          clean === "::1" ||
+          clean === "0.0.0.0" ||
+          clean === "201.18.218.29" ||
+          clean.includes("autojobs") ||
+          clean.includes("tokendeal") ||
+          (Boolean(currentHost) && clean === currentHost.toLowerCase())
+        );
+      };
 
-    const initialRun: TerminalCommandRun = {
-      id: runId,
-      tabId: state.activeTabId,
-      executionId,
-      command: actualCommand,
-      cwd,
-      status: "running",
-      exitCode: null,
-      stdout: "",
-      stderr: "",
-      durationMs: 0,
-      timestamp: Date.now(),
-      targetHost: targetLabel,
-      mode: resolvedMode,
-      aiPrompt: isNatural ? trimmedInput : undefined,
-      activeKeys: activeKeys.length > 0 ? activeKeys : undefined,
-    };
+      // Check if target is explicitly remote vs local host
+      const activeKeyTarget = state.selectedKeyId
+        ? state.accessKeys.find((k) => k.id === state.selectedKeyId)
+        : null;
+      const activeProfile =
+        state.activeTarget && state.activeTarget !== "local"
+          ? state.sshProfiles.find((p) => p.id === state.activeTarget)
+          : null;
 
-    const updatedInitialRuns = [initialRun, ...state.runs];
-    const updatedInitialRunsByChat = state.activeChatId
-      ? {
-          ...state.runsByChat,
-          [state.activeChatId]: [initialRun, ...(state.runsByChat[state.activeChatId] || [])],
-        }
-      : state.runsByChat;
+      const isDirectLocalHost =
+        !activeProfile &&
+        (!activeKeyTarget ||
+          activeKeyTarget.id === "key_vps_default" ||
+          activeKeyTarget.type === "server" ||
+          activeKeyTarget.name?.toLowerCase().includes("production server") ||
+          activeKeyTarget.name?.toLowerCase().includes("direct host") ||
+          isLoopbackOrSelfHost(activeKeyTarget.host));
 
-    state = {
-      ...state,
-      runs: updatedInitialRuns,
-      runsByChat: updatedInitialRunsByChat,
-      history: nextHistory,
-    };
-    saveRunsByChatToStorage(updatedInitialRunsByChat);
-    notify();
-
-    // Execute via server using fast direct JSON execution with stream fallback
-    let result: TerminalExecResult;
-    try {
-      result = await executeTerminalCommand(commandToExecute, cwd, 60_000);
-      // Auto-fallback: If SSH wrapper failed, automatically fallback to direct local host execution!
       if (
-        !result.ok &&
-        isSshTarget &&
-        (result.stderr.toLowerCase().includes("permission denied") ||
-          result.stderr.toLowerCase().includes("host key") ||
-          result.exitCode === 255)
+        !isDirectLocalHost &&
+        (activeProfile?.host ||
+          (activeKeyTarget?.host && !isLoopbackOrSelfHost(activeKeyTarget.host)))
       ) {
-        console.warn(
-          "SSH command wrapper failed, automatically falling back to direct host execution...",
-        );
-        result = await executeTerminalCommand(effectiveCommand, cwd, 60_000);
+        const safeSshCmd = effectiveCommand.replace(/'/g, "'\\''");
+        if (activeProfile?.host) {
+          isSshTarget = true;
+          targetLabel = `SSH: ${activeProfile.label || activeProfile.host}`;
+          commandToExecute = `ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=10 -p ${activeProfile.port || 22} ${activeProfile.user ? `${activeProfile.user}@` : ""}${activeProfile.host} '${safeSshCmd}'`;
+        } else if (activeKeyTarget?.host) {
+          isSshTarget = true;
+          targetLabel = `SSH: ${activeKeyTarget.name} (${activeKeyTarget.user || "root"}@${activeKeyTarget.host})`;
+          const port = activeKeyTarget.port || 22;
+          const userPrefix = activeKeyTarget.user ? `${activeKeyTarget.user}@` : "";
+          commandToExecute = `ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=10 -p ${port} ${userPrefix}${activeKeyTarget.host} '${safeSshCmd}'`;
+        }
+      } else {
+        isSshTarget = false;
+        targetLabel =
+          state.scopeMode === "root"
+            ? "VPS Host (Root)"
+            : `VPS Host (${state.selectedProjectTitle || "Project"})`;
+        commandToExecute = effectiveCommand;
       }
-      if (result.stdout) {
-        terminalStore.appendRunChunk(runId, result.stdout, "stdout");
-      }
-      if (result.stderr) {
-        terminalStore.appendRunChunk(runId, result.stderr, "stderr");
-      }
-    } catch (directErr) {
-      console.warn("Direct execution failed, attempting stream execution...", directErr);
-      try {
-        result = await executeTerminalCommandStream(executionId, commandToExecute, cwd, {
-          onChunk: (chunk, type) => {
-            terminalStore.appendRunChunk(runId, chunk, type);
-          },
-        });
-      } catch (streamErr) {
-        const failMessage = streamErr instanceof Error ? streamErr.message : String(streamErr);
-        result = {
-          ok: false,
-          command: actualCommand,
-          cwd,
-          stdout: "",
-          stderr: `Execution failed: ${failMessage}`,
-          exitCode: 1,
-          durationMs: 0,
-        };
-      }
-    }
 
-    // Auto-update CWD on successful command execution (e.g. `cd <dir>`, `cd ..`)
-    let nextCwd = cwd;
-    if (!isSshTarget && result.ok && result.cwd) {
-      nextCwd = result.cwd;
-      terminalStore.setActiveCwd(result.cwd);
-      if (state.activeTabId) {
-        terminalStore.updateTabCwd(state.activeTabId, result.cwd);
+      // Update history
+      const nextHistory = [
+        trimmedInput,
+        ...state.history.filter((item) => item !== trimmedInput),
+      ].slice(0, 50);
+
+      const initialRun: TerminalCommandRun = {
+        id: runId,
+        tabId: state.activeTabId,
+        executionId,
+        command: actualCommand,
+        cwd,
+        status: "running",
+        exitCode: null,
+        stdout: "",
+        stderr: "",
+        durationMs: 0,
+        timestamp: Date.now(),
+        targetHost: targetLabel,
+        mode: resolvedMode,
+        aiPrompt: isNatural ? trimmedInput : undefined,
+        activeKeys: activeKeys.length > 0 ? activeKeys : undefined,
+      };
+
+      const updatedInitialRuns = [initialRun, ...state.runs];
+      const updatedInitialRunsByChat = state.activeChatId
+        ? {
+            ...state.runsByChat,
+            [state.activeChatId]: [initialRun, ...(state.runsByChat[state.activeChatId] || [])],
+          }
+        : state.runsByChat;
+
+      state = {
+        ...state,
+        runs: updatedInitialRuns,
+        runsByChat: updatedInitialRunsByChat,
+        history: nextHistory,
+      };
+      saveRunsByChatToStorage(updatedInitialRunsByChat);
+      notify();
+
+      // Execute via server using fast direct JSON execution with stream fallback
+      let result: TerminalExecResult;
+      try {
+        result = await executeTerminalCommand(commandToExecute, cwd, 60_000);
+        // Auto-fallback: If SSH wrapper failed, automatically fallback to direct local host execution!
+        if (
+          !result.ok &&
+          isSshTarget &&
+          (result.stderr.toLowerCase().includes("permission denied") ||
+            result.stderr.toLowerCase().includes("host key") ||
+            result.exitCode === 255)
+        ) {
+          console.warn(
+            "SSH command wrapper failed, automatically falling back to direct host execution...",
+          );
+          result = await executeTerminalCommand(effectiveCommand, cwd, 60_000);
+        }
+        if (result.stdout) {
+          terminalStore.appendRunChunk(runId, result.stdout, "stdout");
+        }
+        if (result.stderr) {
+          terminalStore.appendRunChunk(runId, result.stderr, "stderr");
+        }
+      } catch (directErr) {
+        console.warn("Direct execution failed, attempting stream execution...", directErr);
+        try {
+          result = await executeTerminalCommandStream(executionId, commandToExecute, cwd, {
+            onChunk: (chunk, type) => {
+              terminalStore.appendRunChunk(runId, chunk, type);
+            },
+          });
+        } catch (streamErr) {
+          const failMessage = streamErr instanceof Error ? streamErr.message : String(streamErr);
+          result = {
+            ok: false,
+            command: actualCommand,
+            cwd,
+            stdout: "",
+            stderr: `Execution failed: ${failMessage}`,
+            exitCode: 1,
+            durationMs: 0,
+          };
+        }
       }
-    } else if (!isSshTarget && result.ok) {
-      const cdMatch = actualCommand.match(/(?:^|[;&&|])\s*cd\s+([^;&|]+)/);
-      if (cdMatch && cdMatch[1]) {
-        let rawTarget = cdMatch[1].replace(/["']/g, "").trim();
-        if (rawTarget === "~" || rawTarget === "") rawTarget = "/root";
-        if (rawTarget) {
-          let resolvedSegments: string[] = [];
-          if (rawTarget.startsWith("/")) {
-            resolvedSegments = rawTarget.split("/").filter(Boolean);
-          } else {
-            resolvedSegments = cwd
-              .split("/")
-              .filter(Boolean)
-              .concat(rawTarget.split("/").filter(Boolean));
-          }
-          const cleanParts: string[] = [];
-          for (const segment of resolvedSegments) {
-            if (segment === "..") cleanParts.pop();
-            else if (segment !== ".") cleanParts.push(segment);
-          }
-          const normalizedCwd = "/" + cleanParts.join("/");
-          nextCwd = normalizedCwd;
-          terminalStore.setActiveCwd(normalizedCwd);
-          if (state.activeTabId) {
-            terminalStore.updateTabCwd(state.activeTabId, normalizedCwd);
+
+      // Auto-update CWD on successful command execution (e.g. `cd <dir>`, `cd ..`)
+      let nextCwd = cwd;
+      if (!isSshTarget && result.ok && result.cwd) {
+        nextCwd = result.cwd;
+        terminalStore.setActiveCwd(result.cwd);
+        if (state.activeTabId) {
+          terminalStore.updateTabCwd(state.activeTabId, result.cwd);
+        }
+      } else if (!isSshTarget && result.ok) {
+        const cdMatch = actualCommand.match(/(?:^|[;&&|])\s*cd\s+([^;&|]+)/);
+        if (cdMatch && cdMatch[1]) {
+          let rawTarget = cdMatch[1].replace(/["']/g, "").trim();
+          if (rawTarget === "~" || rawTarget === "") rawTarget = "/root";
+          if (rawTarget) {
+            let resolvedSegments: string[] = [];
+            if (rawTarget.startsWith("/")) {
+              resolvedSegments = rawTarget.split("/").filter(Boolean);
+            } else {
+              resolvedSegments = cwd
+                .split("/")
+                .filter(Boolean)
+                .concat(rawTarget.split("/").filter(Boolean));
+            }
+            const cleanParts: string[] = [];
+            for (const segment of resolvedSegments) {
+              if (segment === "..") cleanParts.pop();
+              else if (segment !== ".") cleanParts.push(segment);
+            }
+            const normalizedCwd = "/" + cleanParts.join("/");
+            nextCwd = normalizedCwd;
+            terminalStore.setActiveCwd(normalizedCwd);
+            if (state.activeTabId) {
+              terminalStore.updateTabCwd(state.activeTabId, normalizedCwd);
+            }
           }
         }
       }
-    }
 
-    const { explanation, nextSteps } = generateAiExplanation(actualCommand, result);
-    const suggestedFix =
-      result.exitCode !== 0
-        ? diagnoseCommandFailure(actualCommand, result.stderr, result.exitCode, cwd)
-        : undefined;
+      const { explanation, nextSteps } = generateAiExplanation(actualCommand, result);
+      const suggestedFix =
+        result.exitCode !== 0
+          ? diagnoseCommandFailure(actualCommand, result.stderr, result.exitCode, cwd)
+          : undefined;
 
-    const completedRun: TerminalCommandRun = {
-      id: runId,
-      tabId: state.activeTabId,
-      executionId,
-      command: actualCommand,
-      cwd: result.cwd || nextCwd || cwd,
-      status: result.ok ? "success" : "error",
-      exitCode: result.exitCode,
-      stdout: result.stdout,
-      stderr: result.stderr,
-      durationMs: result.durationMs,
-      timestamp: Date.now(),
-      explanation,
-      nextSteps,
-      suggestedFix,
-      targetHost: targetLabel,
-      mode: currentMode,
-      aiPrompt: currentMode === "ai" ? trimmedInput : undefined,
-      activeKeys: activeKeys.length > 0 ? activeKeys : undefined,
-    };
+      const completedRun: TerminalCommandRun = {
+        id: runId,
+        tabId: state.activeTabId,
+        executionId,
+        command: actualCommand,
+        cwd: result.cwd || nextCwd || cwd,
+        status: result.ok ? "success" : "error",
+        exitCode: result.exitCode,
+        stdout: result.stdout,
+        stderr: result.stderr,
+        durationMs: result.durationMs,
+        timestamp: Date.now(),
+        explanation,
+        nextSteps,
+        suggestedFix,
+        targetHost: targetLabel,
+        mode: currentMode,
+        aiPrompt: currentMode === "ai" ? trimmedInput : undefined,
+        activeKeys: activeKeys.length > 0 ? activeKeys : undefined,
+      };
 
-    const updatedCompletedRuns = state.runs.map((r) => (r.id === runId ? completedRun : r));
-    const updatedCompletedRunsByChat = state.activeChatId
-      ? {
-          ...state.runsByChat,
-          [state.activeChatId]: (state.runsByChat[state.activeChatId] || []).map((r) =>
-            r.id === runId ? completedRun : r,
-          ),
+      const updatedCompletedRuns = state.runs.map((r) => (r.id === runId ? completedRun : r));
+      const updatedCompletedRunsByChat = state.activeChatId
+        ? {
+            ...state.runsByChat,
+            [state.activeChatId]: (state.runsByChat[state.activeChatId] || []).map((r) =>
+              r.id === runId ? completedRun : r,
+            ),
+          }
+        : state.runsByChat;
+
+      const updatedTerminalChats = state.activeChatId
+        ? state.terminalChats.map((c) =>
+            c.id === state.activeChatId
+              ? { ...c, lastPrompt: actualCommand.slice(0, 100), updatedAt: Date.now() }
+              : c,
+          )
+        : state.terminalChats;
+
+      state = {
+        ...state,
+        terminalChats: updatedTerminalChats,
+        runs: updatedCompletedRuns,
+        runsByChat: updatedCompletedRunsByChat,
+      };
+      if (typeof window !== "undefined") {
+        try {
+          window.localStorage.setItem(
+            STORAGE_KEY_RUNS,
+            JSON.stringify(updatedCompletedRuns.slice(0, 20)),
+          );
+          window.localStorage.setItem(
+            STORAGE_KEY_TERMINAL_CHATS,
+            JSON.stringify(updatedTerminalChats),
+          );
+        } catch {
+          // ignore storage quota errors
         }
-      : state.runsByChat;
+      }
+      saveRunsByChatToStorage(updatedCompletedRunsByChat);
+      notify();
 
-    const updatedTerminalChats = state.activeChatId
-      ? state.terminalChats.map((c) =>
-          c.id === state.activeChatId
-            ? { ...c, lastPrompt: actualCommand.slice(0, 100), updatedAt: Date.now() }
-            : c,
-        )
-      : state.terminalChats;
-
-    state = {
-      ...state,
-      terminalChats: updatedTerminalChats,
-      runs: updatedCompletedRuns,
-      runsByChat: updatedCompletedRunsByChat,
-    };
-    if (typeof window !== "undefined") {
-      try {
-        window.localStorage.setItem(
-          STORAGE_KEY_RUNS,
-          JSON.stringify(updatedCompletedRuns.slice(0, 20)),
-        );
-        window.localStorage.setItem(
-          STORAGE_KEY_TERMINAL_CHATS,
-          JSON.stringify(updatedTerminalChats),
-        );
-      } catch {
-        // ignore storage quota errors
+      return completedRun;
+    } finally {
+      if (targetChatId) {
+        terminalStore.setChatRunning(targetChatId, false);
       }
     }
-    saveRunsByChatToStorage(updatedCompletedRunsByChat);
-    notify();
-
-    return completedRun;
   },
 };
 

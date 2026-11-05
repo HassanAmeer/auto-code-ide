@@ -78,4 +78,18 @@ describe("SidebarTerminalSection chat management", () => {
     expect(state.runs.some((r) => r.id === "run_b_1")).toBe(true);
     expect(state.runs.some((r) => r.id === "run_a_1")).toBe(false);
   });
+
+  it("manages isolated terminal chat running/working status", () => {
+    const chat = terminalStore.createTerminalChat({ title: "Isolated Terminal Session" });
+    expect(terminalStore.getState().isAnyTerminalRunning).toBe(false);
+    expect(terminalStore.getState().runningChatIds[chat.id]).toBeFalsy();
+
+    terminalStore.setChatRunning(chat.id, true);
+    expect(terminalStore.getState().isAnyTerminalRunning).toBe(true);
+    expect(terminalStore.getState().runningChatIds[chat.id]).toBe(true);
+
+    terminalStore.setChatRunning(chat.id, false);
+    expect(terminalStore.getState().isAnyTerminalRunning).toBe(false);
+    expect(terminalStore.getState().runningChatIds[chat.id]).toBeFalsy();
+  });
 });

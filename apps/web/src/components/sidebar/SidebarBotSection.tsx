@@ -10,6 +10,7 @@ import {
   ListTodo,
   Pencil,
   Sparkles,
+  CircleDashed,
 } from "lucide-react";
 import { cn } from "~/lib/utils";
 import {
@@ -18,6 +19,7 @@ import {
   deleteCallSession,
   updateCallSessionTitle,
   clearAllCallSessions,
+  useBotWorkingState,
   type CallAssistantSession,
 } from "~/lib/callAssistantStore";
 import { Button } from "~/components/ui/button";
@@ -28,6 +30,7 @@ export function SidebarBotSection() {
   const navigate = useNavigate();
   const location = useLocation();
   const { sessions, activeSessionId, setActiveSessionId } = useCallSessions();
+  const { isWorking: isBotSessionWorking, hasAnyWorking: hasAnyBotWorking } = useBotWorkingState();
 
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
@@ -99,6 +102,9 @@ export function SidebarBotSection() {
           )}
           <Bot className="size-3.5 text-primary" />
           <span>Bot</span>
+          {hasAnyBotWorking && (
+            <CircleDashed className="size-3 text-primary animate-spin shrink-0" />
+          )}
           {sessions.length > 0 && (
             <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-primary/10 text-primary font-medium normal-case">
               {sessions.length}
@@ -223,14 +229,29 @@ export function SidebarBotSection() {
                       />
                     ) : (
                       <>
-                        <p className="truncate leading-tight text-xs">{session.title}</p>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <p className="truncate leading-tight text-xs flex-1">{session.title}</p>
+                          {isBotSessionWorking(session.id) && (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-primary font-medium shrink-0 animate-pulse">
+                              <CircleDashed className="size-2.5 animate-spin text-primary" />
+                              <span>Working</span>
+                            </span>
+                          )}
+                        </div>
                         <span className="text-[10px] opacity-60 block truncate">
-                          {new Date(session.updatedAt || session.createdAt).toLocaleDateString([], {
-                            month: "short",
-                            day: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
+                          {isBotSessionWorking(session.id) ? (
+                            <span className="text-primary/90 font-medium">Processing...</span>
+                          ) : (
+                            new Date(session.updatedAt || session.createdAt).toLocaleDateString(
+                              [],
+                              {
+                                month: "short",
+                                day: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              },
+                            )
+                          )}
                         </span>
                       </>
                     )}

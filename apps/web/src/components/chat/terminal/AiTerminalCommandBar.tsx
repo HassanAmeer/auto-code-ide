@@ -209,6 +209,9 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
       };
       setLatestRun(optimisticRun);
       setIsRunning(true);
+      if (store.activeChatId) {
+        terminalStore.setChatRunning(store.activeChatId, true);
+      }
       setHistoryIndex(null);
 
       try {
@@ -239,6 +242,9 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
         });
       } finally {
         setIsRunning(false);
+        if (store.activeChatId) {
+          terminalStore.setChatRunning(store.activeChatId, false);
+        }
         promptInputRef.current?.focus();
       }
     },
@@ -303,6 +309,9 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
         });
       } finally {
         setIsRunning(false);
+        if (store.activeChatId) {
+          terminalStore.setChatRunning(store.activeChatId, false);
+        }
         promptInputRef.current?.focus();
       }
     },
@@ -332,6 +341,9 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
         });
       } finally {
         setIsRunning(false);
+        if (store.activeChatId) {
+          terminalStore.setChatRunning(store.activeChatId, false);
+        }
         promptInputRef.current?.focus();
       }
     },
@@ -762,7 +774,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
       <AiTerminalHeaderStrip
         activeProject={activeProject ?? null}
         onNewTerminalThread={() => {
-          window.dispatchEvent(new CustomEvent("t3:new-terminal-thread"));
+          terminalStore.createTerminalChat();
         }}
       />
 

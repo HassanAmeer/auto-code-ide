@@ -113,6 +113,7 @@ import { useProjectActivities } from "~/lib/projectActivityLedger";
 import { WhatsAppHeaderButton } from "~/components/whatsapp/WhatsAppHeaderButton";
 import {
   useCallSessions,
+  setBotSessionWorking,
   type CallAssistantMessage,
   type CallAssistantSession,
 } from "~/lib/callAssistantStore";
@@ -826,6 +827,17 @@ export function SuperCallAssistantView() {
       stopSpeaking();
     };
   }, []);
+
+  useEffect(() => {
+    if (activeSessionId) {
+      setBotSessionWorking(activeSessionId, isProcessing);
+    }
+    return () => {
+      if (activeSessionId) {
+        setBotSessionWorking(activeSessionId, false);
+      }
+    };
+  }, [activeSessionId, isProcessing]);
 
   const handleCopyMessage = useCallback((text: string, id: string) => {
     navigator.clipboard.writeText(text);

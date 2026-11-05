@@ -2751,19 +2751,7 @@ export default function ChatView(props: ChatViewProps) {
   const handleNewTerminalThread = useCallback(() => {
     terminalStore.setQuickBarOpen(true);
     clearComposerDraftContent(composerDraftTarget);
-    if (activeProjectRef) {
-      startNewThreadForProject(activeProjectRef, handleNewThread);
-    } else if (allProjects.length > 0) {
-      const proj = allProjects[allProjects.length - 1] ?? allProjects[0]!;
-      startNewThreadForProject(scopeProjectRef(proj.environmentId, proj.id), handleNewThread);
-    }
-  }, [
-    activeProjectRef,
-    allProjects,
-    clearComposerDraftContent,
-    composerDraftTarget,
-    handleNewThread,
-  ]);
+  }, [clearComposerDraftContent, composerDraftTarget]);
 
   useEffect(() => {
     const onNewTerminalThreadEvent = () => {

@@ -391,3 +391,56 @@ export function useCallSessions() {
     handleRevertLastTurn,
   };
 }
+
+const botWorkingSessions = new Set<string>();
+const botWorkingListeners = new Set<() => void>();
+
+export function setBotSessionWorking(sessionId: string, isWorking: boolean): void {
+  if (!sessionId) return;
+  if (isWorking) {
+    botWorkingSessions.add(sessionId);
+  } else {
+    botWorkingSessions.delete(sessionId);
+  }
+  for (const listener of botWorkingListeners) {
+    listener();
+  }
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(
+      new CustomEvent("t3-bot-working-changed", {
+        detail: { sessionId, isWorking, workingSessions: Array.from(botWorkingSessions) },
+      }),
+    );
+  }
+}
+
+export function isBotSessionWorking(sessionId: string): boolean {
+  return botWorkingSessions.has(sessionId);
+}
+
+export function hasAnyBotWorking(): boolean {
+  return botWorkingSessions.size > 0;
+}
+
+export function useBotWorkingState() {
+  const [workingSessionIds, setWorkingSessionIds] = useState<string[]>(() =>
+    Array.from(botWorkingSessions),
+  );
+
+  useEffect(() => {
+    const update = () => setWorkingSessionIds(Array.from(botWorkingSessions));
+    botWorkingListeners.add(update);
+    const windowHandler = () => setWorkingSessionIds(Array.from(botWorkingSessions));
+    window.addEventListener("t3-bot-working-changed", windowHandler);
+    return () => {
+      botWorkingListeners.delete(update);
+      window.removeEventListener("t3-bot-working-changed", windowHandler);
+    };
+  }, []);
+
+  return {
+    workingSessionIds,
+    hasAnyWorking: workingSessionIds.length > 0,
+    isWorking: (id: string) => workingSessionIds.includes(id),
+  };
+}
