@@ -179,10 +179,6 @@
       "types": "./src/dpop.ts",
       "import": "./src/dpop.ts"
     },
-    "./desktopBootstrapToken": {
-      "types": "./src/desktopBootstrapToken.ts",
-      "import": "./src/desktopBootstrapToken.ts"
-    },
     "./dpopCommon": {
       "types": "./src/dpopCommon.ts",
       "import": "./src/dpopCommon.ts"
@@ -354,10 +350,6 @@
     "./usageLimits": {
       "types": "./src/usageLimits.ts",
       "import": "./src/usageLimits.ts"
-    },
-    "./desktopAppControl": {
-      "types": "./src/desktopAppControl.ts",
-      "import": "./src/desktopAppControl.ts"
     },
     "./thirdPartyLicenses": {
       "types": "./src/thirdPartyLicenses.ts",
