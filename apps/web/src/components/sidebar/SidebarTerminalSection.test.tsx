@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vite-plus/test";
 import { terminalStore } from "~/components/chat/terminal/terminalStore";
+import {
+  getTerminalThreadIds,
+  addTerminalThreadId,
+  removeTerminalThreadId,
+  isTerminalThreadId,
+} from "~/components/chat/terminal/terminalThreadRegistry";
 
 const storage = new Map<string, string>();
 const localStorageMock = {
@@ -91,5 +97,17 @@ describe("SidebarTerminalSection chat management", () => {
     terminalStore.setChatRunning(chat.id, false);
     expect(terminalStore.getState().isAnyTerminalRunning).toBe(false);
     expect(terminalStore.getState().runningChatIds[chat.id]).toBeFalsy();
+  });
+
+  it("registers and isolates terminal threads in registry", () => {
+    const testThreadId = "test-terminal-thread-123";
+    expect(isTerminalThreadId(testThreadId)).toBe(false);
+
+    addTerminalThreadId(testThreadId);
+    expect(isTerminalThreadId(testThreadId)).toBe(true);
+    expect(getTerminalThreadIds()).toContain(testThreadId);
+
+    removeTerminalThreadId(testThreadId);
+    expect(isTerminalThreadId(testThreadId)).toBe(false);
   });
 });

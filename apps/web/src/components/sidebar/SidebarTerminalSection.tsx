@@ -1,5 +1,5 @@
-import { useState, useCallback } from "react";
-import { useNavigate, useLocation } from "@tanstack/react-router";
+import { useState, useCallback, useMemo } from "react";
+import { useRouter, useParams } from "@tanstack/react-router";
 import {
   Terminal,
   ChevronDown,
@@ -12,16 +12,54 @@ import {
 } from "lucide-react";
 import { cn } from "~/lib/utils";
 import { useTerminalStore, terminalStore } from "~/components/chat/terminal/terminalStore";
+import {
+  useTerminalThreadIds,
+  addTerminalThreadId,
+  removeTerminalThreadId,
+} from "~/components/chat/terminal/terminalThreadRegistry";
 import { Button } from "~/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipPopup } from "~/components/ui/tooltip";
 import { Menu, MenuTrigger, MenuPopup, MenuItem, MenuSeparator } from "~/components/ui/menu";
+import { useThreadShells, useProjects } from "~/state/entities";
+import { useNewThreadHandler } from "~/hooks/useHandleNewThread";
+import { useThreadActions } from "~/hooks/useThreadActions";
+import { useOrchestrationCommand } from "~/state/use-orchestration-command";
+import {
+  scopeThreadRef,
+  scopeProjectRef,
+  threadEnvironment,
+  type EnvironmentThreadShell,
+} from "@t3tools/client-runtime/environment";
+import { buildThreadRouteParams, resolveThreadRouteTarget } from "~/threadRoutes";
+import { isSidebarThreadWorking } from "~/components/Sidebar.logic";
+import { isLatestRunSettled } from "~/session-logic";
 
 export function SidebarTerminalSection() {
-  const navigate = useNavigate();
-  const location = useLocation();
+  const router = useRouter();
   const store = useTerminalStore();
+  const sidebarThreads = useThreadShells();
+  const projects = useProjects();
+  const handleNewThread = useNewThreadHandler();
+  const { deleteThread } = useThreadActions();
+  const updateThreadMetadata = useOrchestrationCommand(threadEnvironment.updateMetadata, {
+    reportFailure: false,
+  });
 
-  const [editingChatId, setEditingChatId] = useState<string | null>(null);
+  const terminalThreadIds = useTerminalThreadIds();
+  const terminalIdsSet = useMemo(() => new Set(terminalThreadIds), [terminalThreadIds]);
+
+  const routeTarget = useParams({
+    strict: false,
+    select: (params) => resolveThreadRouteTarget(params),
+  });
+  const activeRouteThreadId =
+    routeTarget?.kind === "server"
+      ? routeTarget.threadRef.threadId
+      : routeTarget?.kind === "draft"
+        ? routeTarget.draftId
+        : null;
+
+  const [editingThreadId, setEditingThreadId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
 
   const [isExpanded, setIsExpanded] = useState(() => {
@@ -43,74 +81,111 @@ export function SidebarTerminalSection() {
     });
   }, []);
 
-  const handleCreateNewChat = useCallback(
-    (e?: React.MouseEvent) => {
-      e?.stopPropagation();
-      const projName = store.selectedProjectTitle || "Workspace Shell";
-      const activeSshKey = store.selectedKeyId
-        ? store.accessKeys.find((k) => k.id === store.selectedKeyId)
-        : store.accessKeys.find((k) => (k.type === "ssh" || k.host) && k.enabled);
-      const keyName = activeSshKey?.name || "Local";
-
-      const newChat = terminalStore.createTerminalChat({
-        title: `${projName} (${keyName})`,
-        projectId: store.selectedProjectId,
-        projectName: store.selectedProjectTitle || undefined,
-        sshKeyId: activeSshKey?.id,
-        sshKeyName: keyName,
+  // Filter and sort terminal threads chronologically
+  const terminalThreads = useMemo(() => {
+    return sidebarThreads
+      .filter((t) => terminalIdsSet.has(t.id) && t.archivedAt === null && t.deletedAt === null)
+      .sort((a, b) => {
+        const timeA =
+          typeof a.updatedAt === "number" ? a.updatedAt : Date.parse(String(a.updatedAt || 0));
+        const timeB =
+          typeof b.updatedAt === "number" ? b.updatedAt : Date.parse(String(b.updatedAt || 0));
+        return timeB - timeA;
       });
+  }, [sidebarThreads, terminalIdsSet]);
 
-      terminalStore.setActiveChatId(newChat.id);
-      terminalStore.setQuickBarOpen(true);
-      terminalStore.setMobileActiveTab("terminal");
-
-      if (location.pathname.startsWith("/bot") || location.pathname.startsWith("/settings")) {
-        void navigate({ to: "/" });
-      }
-    },
-    [
-      location.pathname,
-      navigate,
-      store.accessKeys,
-      store.selectedKeyId,
-      store.selectedProjectId,
-      store.selectedProjectTitle,
-    ],
-  );
-
-  const handleSelectChat = useCallback(
-    (chatId: string) => {
-      terminalStore.setActiveChatId(chatId);
-      terminalStore.setQuickBarOpen(true);
-      terminalStore.setMobileActiveTab("terminal");
-
-      if (location.pathname.startsWith("/bot") || location.pathname.startsWith("/settings")) {
-        void navigate({ to: "/" });
-      }
-    },
-    [location.pathname, navigate],
-  );
-
-  const handleDeleteChat = useCallback((e: React.MouseEvent, chatId: string) => {
-    e.stopPropagation();
-    terminalStore.deleteTerminalChat(chatId);
+  const isThreadWorking = useCallback((thread: EnvironmentThreadShell): boolean => {
+    if (isSidebarThreadWorking(thread)) return true;
+    const status = thread.runtime?.status;
+    if (
+      status === "running" ||
+      status === "waiting" ||
+      status === "preparing" ||
+      status === "starting" ||
+      status === "queued"
+    ) {
+      return true;
+    }
+    if (thread.latestRun && !isLatestRunSettled(thread.latestRun, thread.runtime)) {
+      return true;
+    }
+    return false;
   }, []);
 
-  const handleClearAll = useCallback(() => {
+  const hasAnyWorking = useMemo(() => {
+    if (store.isAnyTerminalRunning) return true;
+    return terminalThreads.some(isThreadWorking);
+  }, [isThreadWorking, store.isAnyTerminalRunning, terminalThreads]);
+
+  const handleSelectThread = useCallback(
+    (thread: EnvironmentThreadShell) => {
+      terminalStore.setQuickBarOpen(true);
+      terminalStore.setMobileActiveTab("terminal");
+      terminalStore.setActiveChatId(thread.id);
+      void router.navigate({
+        to: "/$environmentId/$threadId",
+        params: buildThreadRouteParams(scopeThreadRef(thread.environmentId, thread.id)),
+      });
+    },
+    [router],
+  );
+
+  const handleCreateNewChat = useCallback(
+    async (e?: React.MouseEvent) => {
+      e?.stopPropagation();
+      terminalStore.setQuickBarOpen(true);
+      terminalStore.setMobileActiveTab("terminal");
+
+      const targetProj =
+        projects.find((p) => p.id === store.selectedProjectId) ||
+        projects.find((p) => p.title?.toLowerCase().includes("temp")) ||
+        projects[0];
+
+      if (targetProj) {
+        const res = await handleNewThread(scopeProjectRef(targetProj.environmentId, targetProj.id));
+        if (res?.threadId) {
+          addTerminalThreadId(res.threadId);
+          terminalStore.setActiveChatId(res.threadId);
+        }
+      }
+    },
+    [handleNewThread, projects, store.selectedProjectId],
+  );
+
+  const handleDeleteThread = useCallback(
+    async (e: React.MouseEvent, thread: EnvironmentThreadShell) => {
+      e.stopPropagation();
+      removeTerminalThreadId(thread.id);
+      await deleteThread(scopeThreadRef(thread.environmentId, thread.id));
+    },
+    [deleteThread],
+  );
+
+  const handleCommitRename = useCallback(
+    async (thread: EnvironmentThreadShell) => {
+      const trimmed = editingTitle.trim();
+      setEditingThreadId(null);
+      if (!trimmed || trimmed === thread.title) return;
+      await updateThreadMetadata(scopeThreadRef(thread.environmentId, thread.id), {
+        title: trimmed,
+      });
+    },
+    [editingTitle, updateThreadMetadata],
+  );
+
+  const handleClearAll = useCallback(async () => {
     if (window.confirm("Are you sure you want to clear all terminal chats?")) {
-      for (const chat of [...store.terminalChats]) {
-        terminalStore.deleteTerminalChat(chat.id);
+      for (const thread of terminalThreads) {
+        removeTerminalThreadId(thread.id);
+        void deleteThread(scopeThreadRef(thread.environmentId, thread.id));
       }
     }
-  }, [store.terminalChats]);
+  }, [deleteThread, terminalThreads]);
 
   const handleOpenTerminal = useCallback(() => {
     terminalStore.setQuickBarOpen(true);
     terminalStore.setMobileActiveTab("terminal");
-    if (location.pathname.startsWith("/bot") || location.pathname.startsWith("/settings")) {
-      void navigate({ to: "/" });
-    }
-  }, [location.pathname, navigate]);
+  }, []);
 
   return (
     <div className="border-b border-sidebar-border/30 dark:border-zinc-700/30">
@@ -128,12 +203,12 @@ export function SidebarTerminalSection() {
           )}
           <Terminal className="size-3.5 text-emerald-500" />
           <span>Terminal</span>
-          {store.isAnyTerminalRunning && (
+          {hasAnyWorking && (
             <CircleDashed className="size-3 text-emerald-400 animate-spin shrink-0" />
           )}
-          {store.terminalChats.length > 0 && (
+          {terminalThreads.length > 0 && (
             <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-500/10 text-emerald-400 font-medium normal-case font-mono">
-              {store.terminalChats.length}
+              {terminalThreads.length}
             </span>
           )}
         </button>
@@ -168,7 +243,7 @@ export function SidebarTerminalSection() {
                 <Terminal className="size-3.5 text-emerald-400" />
                 <span>Open Terminal</span>
               </MenuItem>
-              {store.terminalChats.length > 0 && (
+              {terminalThreads.length > 0 && (
                 <>
                   <MenuSeparator />
                   <MenuItem
@@ -207,13 +282,13 @@ export function SidebarTerminalSection() {
       {/* Collapsible Terminal Chats List */}
       {isExpanded && (
         <div className="py-1 px-1.5 space-y-0.5">
-          {store.terminalChats.map((chat) => {
-            const isActive = store.isQuickBarOpen && store.activeChatId === chat.id;
-            const isRunning = Boolean(store.runningChatIds?.[chat.id]);
+          {terminalThreads.map((thread) => {
+            const isActive = activeRouteThreadId === thread.id;
+            const isWorking = isThreadWorking(thread);
             return (
               <div
-                key={chat.id}
-                onClick={() => handleSelectChat(chat.id)}
+                key={thread.id}
+                onClick={() => handleSelectThread(thread)}
                 className={cn(
                   "group relative flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs cursor-pointer transition-colors",
                   isActive
@@ -226,7 +301,7 @@ export function SidebarTerminalSection() {
                     className={cn("size-3 shrink-0", isActive ? "text-emerald-400" : "opacity-60")}
                   />
                   <div className="min-w-0 flex-1">
-                    {editingChatId === chat.id ? (
+                    {editingThreadId === thread.id ? (
                       <input
                         type="text"
                         autoFocus
@@ -237,28 +312,22 @@ export function SidebarTerminalSection() {
                           if (e.key === "Enter") {
                             e.preventDefault();
                             e.stopPropagation();
-                            if (editingTitle.trim()) {
-                              terminalStore.updateTerminalChatTitle(chat.id, editingTitle.trim());
-                            }
-                            setEditingChatId(null);
+                            void handleCommitRename(thread);
                           } else if (e.key === "Escape") {
                             e.stopPropagation();
-                            setEditingChatId(null);
+                            setEditingThreadId(null);
                           }
                         }}
                         onBlur={() => {
-                          if (editingTitle.trim()) {
-                            terminalStore.updateTerminalChatTitle(chat.id, editingTitle.trim());
-                          }
-                          setEditingChatId(null);
+                          void handleCommitRename(thread);
                         }}
                         className="text-xs bg-background border border-emerald-500/50 rounded px-1 py-0.5 outline-hidden text-foreground w-full"
                       />
                     ) : (
                       <>
                         <div className="flex items-center gap-1.5 min-w-0">
-                          <p className="truncate leading-tight text-xs flex-1">{chat.title}</p>
-                          {isRunning && (
+                          <p className="truncate leading-tight text-xs flex-1">{thread.title}</p>
+                          {isWorking && (
                             <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-medium shrink-0 animate-pulse">
                               <CircleDashed className="size-2.5 animate-spin text-emerald-400" />
                               <span>Working</span>
@@ -266,18 +335,15 @@ export function SidebarTerminalSection() {
                           )}
                         </div>
                         <span className="text-[10px] opacity-60 block truncate">
-                          {isRunning ? (
+                          {isWorking ? (
                             <span className="text-emerald-400/90 font-medium">Executing...</span>
                           ) : (
-                            <>
-                              {new Date(chat.createdAt).toLocaleDateString([], {
-                                month: "short",
-                                day: "numeric",
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}
-                              {chat.projectName ? ` • ${chat.projectName}` : ""}
-                            </>
+                            new Date(thread.createdAt).toLocaleDateString([], {
+                              month: "short",
+                              day: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })
                           )}
                         </span>
                       </>
@@ -291,8 +357,8 @@ export function SidebarTerminalSection() {
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      setEditingChatId(chat.id);
-                      setEditingTitle(chat.title);
+                      setEditingThreadId(thread.id);
+                      setEditingTitle(thread.title);
                     }}
                     className="p-0.5 rounded bg-transparent hover:text-emerald-400 text-muted-foreground/80 drop-shadow-xs transition-colors cursor-pointer"
                     title="Edit Title"
@@ -301,7 +367,7 @@ export function SidebarTerminalSection() {
                   </button>
                   <button
                     type="button"
-                    onClick={(e) => handleDeleteChat(e, chat.id)}
+                    onClick={(e) => void handleDeleteThread(e, thread)}
                     className="p-0.5 rounded bg-transparent hover:text-destructive text-muted-foreground/80 drop-shadow-xs transition-colors cursor-pointer"
                     title="Delete Chat"
                   >
@@ -312,7 +378,7 @@ export function SidebarTerminalSection() {
             );
           })}
 
-          {store.terminalChats.length === 0 && (
+          {terminalThreads.length === 0 && (
             <div
               onClick={handleCreateNewChat}
               className="px-3 py-2 text-center text-secondary-label text-xs hover:text-foreground cursor-pointer rounded-md transition-colors"

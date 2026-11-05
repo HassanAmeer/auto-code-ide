@@ -39,6 +39,7 @@ import { EnvironmentMachineIcon } from "./EnvironmentMachineIcon";
 import { ProjectFavicon } from "./ProjectFavicon";
 import { SidebarBotSection } from "./sidebar/SidebarBotSection";
 import { SidebarTerminalSection } from "./sidebar/SidebarTerminalSection";
+import { useTerminalThreadIds } from "./chat/terminal/terminalThreadRegistry";
 import { useAtomValue } from "@effect/atom-react";
 import { autoAnimate } from "@formkit/auto-animate";
 import React, { useCallback, useEffect, memo, useMemo, useRef, useState } from "react";
@@ -1396,15 +1397,18 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     },
   });
   const openPrLink = useOpenPrLink();
+  const terminalThreadIds = useTerminalThreadIds();
+  const terminalIdsSet = useMemo(() => new Set(terminalThreadIds), [terminalThreadIds]);
   const sidebarThreads = useThreadShellsForProjectRefs(project.memberProjectRefs);
   const projectThreads = useMemo(() => {
     const seen = new Set<string>();
     return sidebarThreads.filter((thread) => {
+      if (terminalIdsSet.has(thread.id)) return false;
       if (seen.has(thread.id)) return false;
       seen.add(thread.id);
       return true;
     });
-  }, [sidebarThreads]);
+  }, [sidebarThreads, terminalIdsSet]);
   const sidebarThreadByKey = useMemo(
     () =>
       new Map(
