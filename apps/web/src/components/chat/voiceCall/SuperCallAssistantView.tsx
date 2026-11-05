@@ -95,6 +95,7 @@ import { Link } from "@tanstack/react-router";
 import { type ProviderInstanceId } from "@t3tools/contracts";
 import { useAtomValue } from "@effect/atom-react";
 import { cn } from "~/lib/utils";
+import { terminalStore } from "~/components/chat/terminal/terminalStore";
 import {
   getBotAttachment,
   setBotAttachment,
@@ -820,6 +821,8 @@ export function SuperCallAssistantView() {
   const handleInterruptRef = useRef<() => void>(() => {});
 
   useEffect(() => {
+    // Bot view has its own dedicated chat canvas: ensure terminal quickbar is closed
+    terminalStore.setQuickBarOpen(false);
     return () => {
       if (activeAbortControllerRef.current) {
         activeAbortControllerRef.current.abort();

@@ -1911,6 +1911,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
 
   const navigateToThread = useCallback(
     (threadRef: ScopedThreadRef) => {
+      terminalStore.setQuickBarOpen(false);
       if (useThreadSelectionStore.getState().selectedThreadKeys.size > 0) {
         clearSelection();
       }
@@ -2320,6 +2321,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       if (isMobile) {
         setOpenMobile(false);
       }
+      terminalStore.setQuickBarOpen(false);
       void router.navigate({
         to: "/$environmentId/$threadId",
         params: buildThreadRouteParams(threadRef),

@@ -2552,6 +2552,19 @@ export default function ChatView(props: ChatViewProps) {
     activeComposerTasksProgress && activePlan ? activePlan.steps : null;
   const terminalStoreState = useTerminalStore();
   const isTerminalQuickBarOpen = terminalStoreState.isQuickBarOpen;
+  const isTerminalThread = isTerminalThreadId(activeThread.id);
+  const showTerminalSplitPane = isTerminalThread && isTerminalQuickBarOpen;
+
+  // Ensure right terminal pane is strictly active ONLY for AI Terminal chats.
+  // For project chats or any other section, right terminal pane automatically closes.
+  useEffect(() => {
+    if (isTerminalThread) {
+      terminalStore.setQuickBarOpen(true);
+      terminalStore.setActiveChatId(activeThread.id);
+    } else {
+      terminalStore.setQuickBarOpen(false);
+    }
+  }, [activeThread.id, isTerminalThread]);
 
   const [terminalPaneWidth, setTerminalPaneWidth] = useState<number>(() => {
     if (typeof window !== "undefined") {
@@ -4171,7 +4184,7 @@ export default function ChatView(props: ChatViewProps) {
 
   // Mirror AI Agent Tool Calls and Terminal Executions live into the Right-Side Terminal
   useEffect(() => {
-    if (!isTerminalQuickBarOpen || !displayedTimeline?.entries) return;
+    if (!showTerminalSplitPane || !displayedTimeline?.entries) return;
     for (const entry of displayedTimeline.entries) {
       if (entry.kind === "work" && entry.entry) {
         const w = entry.entry;
@@ -12079,7 +12092,7 @@ export default function ChatView(props: ChatViewProps) {
         </header>
 
         {/* Mobile Concept 2: Segmented Tabs Switcher (Chat vs Fullscreen Terminal) */}
-        {isTerminalQuickBarOpen && (
+        {showTerminalSplitPane && (
           <div className="md:hidden flex items-center justify-between px-2.5 py-1 bg-[#0a0a0f] border-b border-white/[0.08] shrink-0 z-30 select-none">
             <div className="flex items-center p-0.5 rounded-md bg-black/60 border border-white/[0.08] w-full max-w-xs shadow-inner">
               <button
@@ -12135,7 +12148,7 @@ export default function ChatView(props: ChatViewProps) {
           <div
             className={cn(
               "relative flex min-h-0 min-w-0 flex-1 flex-col",
-              isTerminalQuickBarOpen && terminalStoreState.mobileActiveTab === "terminal"
+              showTerminalSplitPane && terminalStoreState.mobileActiveTab === "terminal"
                 ? "hidden md:flex"
                 : "flex",
             )}
@@ -12764,8 +12777,8 @@ export default function ChatView(props: ChatViewProps) {
           </div>
           {/* end chat column wrapper */}
 
-          {/* RIGHT PANE: Split Studio Dedicated Linux Terminal */}
-          {isTerminalQuickBarOpen && (
+          {/* RIGHT PANE: Split Studio Dedicated Linux Terminal (ONLY for AI Terminal) */}
+          {showTerminalSplitPane && (
             <>
               {/* Desktop Resizable Split Divider (Drag handle) */}
               <div

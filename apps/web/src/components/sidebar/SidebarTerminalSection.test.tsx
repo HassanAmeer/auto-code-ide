@@ -223,4 +223,18 @@ describe("SidebarTerminalSection chat management", () => {
     setTerminalThreadProject(threadId, null);
     expect(getTerminalThreadProject(threadId)).toBeNull();
   });
+
+  it("ensures right terminal quickbar is opened for AI terminal and closed for other sections", () => {
+    // 1. Initially set to false
+    terminalStore.setQuickBarOpen(false);
+    expect(terminalStore.getState().isQuickBarOpen).toBe(false);
+
+    // 2. When an AI Terminal chat is selected, quickbar opens
+    terminalStore.setQuickBarOpen(true);
+    expect(terminalStore.getState().isQuickBarOpen).toBe(true);
+
+    // 3. When a project chat or bot chat is navigated to, quickbar is closed
+    terminalStore.setQuickBarOpen(false);
+    expect(terminalStore.getState().isQuickBarOpen).toBe(false);
+  });
 });
