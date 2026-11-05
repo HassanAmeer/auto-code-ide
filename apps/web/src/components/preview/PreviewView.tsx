@@ -966,7 +966,7 @@ export function PreviewView({
         if (file.size > 0) {
           const image = {
             type: "image",
-            id: crypto.randomUUID(),
+            id: crypto.randomUUID() as any,
             name: file.name,
             mimeType: file.type,
             sizeBytes: file.size,

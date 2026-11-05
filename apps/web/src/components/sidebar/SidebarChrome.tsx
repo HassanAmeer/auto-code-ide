@@ -786,7 +786,6 @@ export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
       <div className="px-1.5 pt-0 flex flex-col gap-1 w-full">
         <SidebarThreadUndoNotice />
         <SidebarProviderUpdatePill />
-        <SidebarUpdateArchitectureWarning />
       </div>
       <SidebarUtilityMenu />
     </SidebarFooter>

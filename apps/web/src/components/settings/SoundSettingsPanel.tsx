@@ -93,7 +93,7 @@ export function SoundSettingsPanel() {
   };
 
   const updateTtsVoiceURI = (voiceURI: string) => {
-    const preset = TTS_ACCENTS.find((a) => a.id === voiceURI) || TTS_ACCENTS[0];
+    const preset = TTS_ACCENTS.find((a) => a.id === voiceURI) ?? TTS_ACCENTS[0]!;
     const updated: TtsSettings = {
       ...tts,
       language: preset.category,

@@ -1078,7 +1078,6 @@ function OpenCommandPaletteDialog(props: {
     primaryEnvironmentId ??
     environments[0]?.environmentId ??
     null;
-  const wslAddProjectEnvironmentOption = null;
   const browseEnvironmentId = addProjectEnvironmentId ?? defaultAddProjectEnvironmentId;
 
   const triggerFolderUpload = useCallback(
@@ -2173,21 +2172,6 @@ function OpenCommandPaletteDialog(props: {
       openAddProjectFlow();
     },
   });
-
-  if (wslAddProjectEnvironmentOption) {
-    actionItems.push({
-      kind: "action",
-      value: "action:add-project:wsl-folder",
-      searchTerms: ["add project", "open", "wsl", "linux", "folder", "directory"],
-      title: "Open WSL folder",
-      description: wslAddProjectEnvironmentOption.label,
-      icon: <FolderPlusIcon className={ITEM_ICON_CLASS} />,
-      keepOpen: true,
-      run: async () => {
-        await startAddProjectBrowse(wslAddProjectEnvironmentOption.environmentId);
-      },
-    });
-  }
 
   const changeThemeItem: CommandPaletteSubmenuItem = {
     kind: "submenu",

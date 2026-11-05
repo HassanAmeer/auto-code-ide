@@ -27,7 +27,7 @@ export function TtsSettingsPanel() {
   }, []);
 
   const updatePreset = (presetId: TtsVoiceId) => {
-    const chosen = TTS_ACCENTS.find((a) => a.id === presetId) || TTS_ACCENTS[0];
+    const chosen = TTS_ACCENTS.find((a) => a.id === presetId) ?? TTS_ACCENTS[0]!;
     const updated: TtsSettings = {
       ...settings,
       language: chosen.category,

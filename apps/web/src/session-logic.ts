@@ -7,6 +7,7 @@ import {
   type OrchestrationV2RunAttempt,
   type OrchestrationV2ThreadProjection,
   type OrchestrationV2TurnItem,
+  type NodeId,
   type PlanId,
   type RunId,
   type ToolActivitySurface,

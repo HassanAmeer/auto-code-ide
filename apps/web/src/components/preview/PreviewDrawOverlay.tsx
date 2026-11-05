@@ -75,13 +75,13 @@ function renderDrawItem(ctx: CanvasRenderingContext2D, item: DrawItem) {
   if (item.type === "pencil" && item.points && item.points.length > 0) {
     if (item.points.length === 1) {
       ctx.beginPath();
-      ctx.arc(item.points[0].x, item.points[0].y, Math.max(1, item.width / 2), 0, Math.PI * 2);
+      ctx.arc(item.points[0]!.x, item.points[0]!.y, Math.max(1, item.width / 2), 0, Math.PI * 2);
       ctx.fill();
     } else {
       ctx.beginPath();
-      ctx.moveTo(item.points[0].x, item.points[0].y);
+      ctx.moveTo(item.points[0]!.x, item.points[0]!.y);
       for (let i = 1; i < item.points.length; i++) {
-        ctx.lineTo(item.points[i].x, item.points[i].y);
+        ctx.lineTo(item.points[i]!.x, item.points[i]!.y);
       }
       ctx.stroke();
     }

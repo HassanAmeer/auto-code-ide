@@ -693,7 +693,11 @@ function MessageExecutionTimeline({
       }
     }
     if (meta.thought && meta.thought.trim()) {
-      events.push({ kind: "thought", text: meta.thought, durationMs: meta.durationMs });
+      events.push({
+        kind: "thought",
+        text: meta.thought,
+        ...(meta.durationMs != null ? { durationMs: meta.durationMs } : {}),
+      });
     }
   }
 
@@ -705,7 +709,7 @@ function MessageExecutionTimeline({
         {events.map((evt, idx) =>
           evt.kind === "tool" && evt.tool ? (
             <ToolTimelineRow key={`tool-${idx}-${evt.tool.name}`} tool={evt.tool} />
-          ) : evt.text ? (
+          ) : evt.kind === "thought" && evt.text ? (
             <ThoughtTimelineRow
               key={`thought-${idx}`}
               thought={evt.text}

@@ -235,7 +235,10 @@ export function revertSessionToMessage(
   updated[idx] = updatedSession;
   saveCallSessions(updated);
 
-  return { revertedMessage: targetMsg, remainingMessages: remaining };
+  return {
+    ...(targetMsg ? { revertedMessage: targetMsg } : {}),
+    remainingMessages: remaining,
+  };
 }
 
 export function revertLastTurn(sessionId: string): {

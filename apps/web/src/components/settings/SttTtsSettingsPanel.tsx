@@ -135,7 +135,7 @@ export function SttTtsSettingsPanel() {
 
     const updated: TtsSettings = {
       ...tts,
-      language: lang,
+      language: lang as TtsLanguageMode,
       voiceURI: newVoiceURI,
     };
     setTts(updated);

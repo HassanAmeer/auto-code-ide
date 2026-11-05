@@ -1,29 +1,29 @@
-export function shouldAnimateSnapShotArrival(_capturedAt?: number): boolean {
+export function shouldAnimateSnapShotArrival(..._args: any[]): boolean {
   return false;
 }
 
-export function subscribeToPendingSnapShotAnimations(_listener: () => void): () => void {
+export function subscribeToPendingSnapShotAnimations(..._args: any[]): () => void {
   return () => {};
 }
 
-export function scheduleSnapShotAnimationDestination(): () => void {
+export function scheduleSnapShotAnimationDestination(..._args: any[]): () => void {
   return () => {};
 }
 
-export function setSnapShotAnimationDestination(): void {}
+export function setSnapShotAnimationDestination(..._args: any[]): void {}
 
-export function pendingSnapShotAnimationIdsForTarget(): readonly string[] {
+export function pendingSnapShotAnimationIdsForTarget(..._args: any[]): readonly string[] {
   return [];
 }
 
-export function beginSnapShotAnimation(): void {}
-export function finishSnapShotAnimation(): void {}
-export function dismissSnapShotAnimation(): void {}
-export function dismissAllSnapShotAnimations(): void {}
-export function updateSnapShotAnimationSource(): void {}
-export function getPendingSnapShotAnimations(): readonly unknown[] {
+export function beginSnapShotAnimation(..._args: any[]): void {}
+export function finishSnapShotAnimation(..._args: any[]): void {}
+export function dismissSnapShotAnimation(..._args: any[]): void {}
+export function dismissAllSnapShotAnimations(..._args: any[]): void {}
+export function updateSnapShotAnimationSource(..._args: any[]): void {}
+export function getPendingSnapShotAnimations(..._args: any[]): readonly any[] {
   return [];
 }
-export function waitForSnapShotAnimationDestination(): Promise<void> {
+export function waitForSnapShotAnimationDestination(..._args: any[]): Promise<void> {
   return Promise.resolve();
 }

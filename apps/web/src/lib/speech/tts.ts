@@ -952,20 +952,20 @@ function speakSingleUtterance(
   if (settings.language === "auto-male") {
     const detected = detectTextLanguage(clean);
     if (detected === "natural-urdu") {
-      preset = TTS_ACCENTS.find((a) => a.id === "natural-urdu-male") || TTS_ACCENTS[4];
+      preset = TTS_ACCENTS.find((a) => a.id === "natural-urdu-male") ?? TTS_ACCENTS[4]!;
     } else if (detected === "roman-urdu") {
-      preset = TTS_ACCENTS.find((a) => a.id === "roman-urdu-male") || TTS_ACCENTS[2];
+      preset = TTS_ACCENTS.find((a) => a.id === "roman-urdu-male") ?? TTS_ACCENTS[2]!;
     } else {
-      preset = TTS_ACCENTS.find((a) => a.id === "english-male") || TTS_ACCENTS[0];
+      preset = TTS_ACCENTS.find((a) => a.id === "english-male") ?? TTS_ACCENTS[0]!;
     }
   } else if (settings.language === "auto-female") {
     const detected = detectTextLanguage(clean);
     if (detected === "natural-urdu") {
-      preset = TTS_ACCENTS.find((a) => a.id === "natural-urdu-female") || TTS_ACCENTS[5];
+      preset = TTS_ACCENTS.find((a) => a.id === "natural-urdu-female") ?? TTS_ACCENTS[5]!;
     } else if (detected === "roman-urdu") {
-      preset = TTS_ACCENTS.find((a) => a.id === "roman-urdu-female") || TTS_ACCENTS[3];
+      preset = TTS_ACCENTS.find((a) => a.id === "roman-urdu-female") ?? TTS_ACCENTS[3]!;
     } else {
-      preset = TTS_ACCENTS.find((a) => a.id === "english-female") || TTS_ACCENTS[1];
+      preset = TTS_ACCENTS.find((a) => a.id === "english-female") ?? TTS_ACCENTS[1]!;
     }
   } else {
     preset = getActiveTtsPreset(settings);
@@ -1284,6 +1284,10 @@ export function speakText(text: string, options?: Partial<TtsSettings>, onEnd?: 
           return;
         }
         const nextUnit = sentenceUnits[currentIdx++];
+        if (!nextUnit) {
+          onEnd?.();
+          return;
+        }
         speakSingleUtterance(nextUnit, options, playNext, abortController);
       };
       playNext();

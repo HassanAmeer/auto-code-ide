@@ -78,8 +78,8 @@ export function ChatMemorySection() {
     } else {
       addMemory(formTitle.trim(), formDescription.trim(), {
         source: formSource,
-        sourceNoteId: formSourceNote?.id,
-        sourceNoteTitle: formSourceNote?.title,
+        ...(formSourceNote?.id ? { sourceNoteId: formSourceNote.id } : {}),
+        ...(formSourceNote?.title ? { sourceNoteTitle: formSourceNote.title } : {}),
       });
       setIsCreating(false);
     }
