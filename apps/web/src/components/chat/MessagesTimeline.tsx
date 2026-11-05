@@ -3289,19 +3289,6 @@ function CupertinoTimelineErrorCard({
         ? errorInfo.statusCode
         : null;
 
-  // Suppress 408 / Timeout error cards while the AI is actively generating / streaming.
-  // Displaying "HTTP 408 : Request Timeout" at the bottom while response tokens are actively
-  // arriving in real time is jarring, confusing, and contradictory to the user.
-  if (
-    (isWorking || activity?.activeTurnInProgress) &&
-    (numericCode === "408" ||
-      isInterrupted ||
-      errorInfo.statusCode === "408" ||
-      /timeout|timed out|stalled|interrupted/i.test(rawError))
-  ) {
-    return null;
-  }
-
   const displayStatusCode = numericCode
     ? `HTTP ${numericCode}`
     : errorInfo.statusCode
@@ -3370,6 +3357,19 @@ function CupertinoTimelineErrorCard({
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  // Suppress 408 / Timeout error cards while the AI is actively generating / streaming.
+  // Displaying "HTTP 408 : Request Timeout" at the bottom while response tokens are actively
+  // arriving in real time is jarring, confusing, and contradictory to the user.
+  if (
+    (isWorking || activity?.activeTurnInProgress) &&
+    (numericCode === "408" ||
+      isInterrupted ||
+      errorInfo.statusCode === "408" ||
+      /timeout|timed out|stalled|interrupted/i.test(rawError))
+  ) {
+    return null;
+  }
 
   return (
     <div
