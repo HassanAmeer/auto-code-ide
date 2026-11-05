@@ -3314,9 +3314,49 @@ function CupertinoTimelineErrorCard({
     errorInfo.shortReason ||
     "An error occurred during response generation";
 
+  const [viewMode, setViewMode] = useState<"details" | "json">("details");
+
+  const parsedJson = useMemo(() => {
+    const trimmed = (rawError || "").trim();
+    try {
+      if (
+        (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+        (trimmed.startsWith("[") && trimmed.endsWith("]"))
+      ) {
+        return JSON.parse(trimmed);
+      }
+      const firstBrace = trimmed.indexOf("{");
+      const lastBrace = trimmed.lastIndexOf("}");
+      if (firstBrace !== -1 && lastBrace > firstBrace) {
+        const potentialJson = trimmed.slice(firstBrace, lastBrace + 1);
+        return JSON.parse(potentialJson);
+      }
+    } catch {
+      // not JSON
+    }
+
+    return {
+      error: resolvedCategory,
+      statusCode: numericCode ? Number(numericCode) || numericCode : errorInfo.statusCode,
+      model: errorInfo.fullModel || explicitModel || undefined,
+      message: errorInfo.singleLineDetail || rawError,
+      detail: rawError,
+    };
+  }, [rawError, resolvedCategory, numericCode, errorInfo, explicitModel]);
+
+  const jsonString = useMemo(() => {
+    try {
+      return JSON.stringify(parsedJson, null, 2);
+    } catch {
+      return rawError;
+    }
+  }, [parsedJson, rawError]);
+
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation();
-    navigator.clipboard?.writeText(errorInfo.fullDetails || rawError);
+    navigator.clipboard?.writeText(
+      viewMode === "json" ? jsonString : errorInfo.fullDetails || rawError,
+    );
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -3493,32 +3533,98 @@ function CupertinoTimelineErrorCard({
       {/* Uncollapsed / Expanded details section */}
       {expanded ? (
         <div className="border-t border-rose-500/10 bg-muted/15 px-3 py-2.5 ps-7.5 animate-in fade-in duration-150 select-text space-y-2">
-          {errorInfo.recommendation ? (
-            <div className="rounded border border-amber-500/20 bg-amber-500/[0.08] p-2 text-[11px] text-amber-800 dark:text-amber-200">
-              <span className="font-semibold block mb-0.5">Recommended Resolution:</span>
-              <span>{errorInfo.recommendation}</span>
-            </div>
-          ) : null}
+          {/* Header Row: Status Code, Model Name, Category & JSON / Details Toggle Button */}
+          <div className="flex flex-wrap items-center justify-between gap-2 pb-1.5 border-b border-border/25">
+            <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+              {displayStatusCode ? (
+                <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded border leading-none bg-muted/60 border-border/40 text-foreground">
+                  {displayStatusCode}
+                </span>
+              ) : null}
 
-          {errorInfo.fullModel ? (
-            <div className="font-mono text-[10px] text-muted-foreground/80">
-              Model: <span className="text-foreground font-medium">{errorInfo.fullModel}</span>
-            </div>
-          ) : null}
+              {errorInfo.fullModel || explicitModel ? (
+                <span
+                  className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-muted/40 border border-border/30 text-muted-foreground truncate max-w-[220px]"
+                  title={errorInfo.fullModel || explicitModel || undefined}
+                >
+                  Model:{" "}
+                  <span className="text-foreground font-medium">
+                    {errorInfo.fullModel || explicitModel}
+                  </span>
+                </span>
+              ) : null}
 
-          <div className="relative group/err-details">
-            <div className="text-[11px] leading-relaxed text-muted-foreground font-mono bg-muted/30 dark:bg-muted/15 p-2 rounded border border-border/25 whitespace-pre-wrap break-all max-h-48 overflow-y-auto">
-              {rawError}
+              <span className="text-[10px] text-muted-foreground/80 font-mono truncate max-w-[180px]">
+                {resolvedCategory}
+              </span>
             </div>
-            <button
-              type="button"
-              onClick={handleCopy}
-              className="absolute top-1 right-1 opacity-0 group-hover/err-details:opacity-100 transition-opacity px-1.5 py-0.5 rounded bg-background/90 border border-border/50 text-[10px] text-muted-foreground hover:text-foreground cursor-pointer shadow-xs"
-              title="Copy error details"
-            >
-              {copied ? "Copied" : "Copy"}
-            </button>
+
+            {/* Toggle button between Details and JSON */}
+            <div className="flex items-center rounded border border-border/50 bg-background/60 p-0.5 text-[10px] font-mono">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setViewMode("details");
+                }}
+                className={cn(
+                  "px-2 py-0.5 rounded transition-colors cursor-pointer",
+                  viewMode === "details"
+                    ? "bg-muted text-foreground font-semibold shadow-xs"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                Details
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setViewMode("json");
+                }}
+                className={cn(
+                  "px-2 py-0.5 rounded transition-colors cursor-pointer flex items-center gap-1",
+                  viewMode === "json"
+                    ? "bg-muted text-foreground font-semibold shadow-xs"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <span className="text-[9px] opacity-80">{`{ }`}</span>
+                <span>JSON</span>
+              </button>
+            </div>
           </div>
+
+          {/* Body: Details (Exact Error Text) or JSON (Formatted Payload) */}
+          {viewMode === "json" ? (
+            <div className="relative group/err-json">
+              <pre className="text-[11px] leading-relaxed text-sky-300 dark:text-sky-200 font-mono bg-zinc-950/80 p-2.5 rounded border border-border/35 whitespace-pre-wrap break-all max-h-56 overflow-y-auto">
+                <code>{jsonString}</code>
+              </pre>
+              <button
+                type="button"
+                onClick={handleCopy}
+                className="absolute top-1.5 right-1.5 opacity-0 group-hover/err-json:opacity-100 transition-opacity px-1.5 py-0.5 rounded bg-background/90 border border-border/50 text-[10px] text-muted-foreground hover:text-foreground cursor-pointer shadow-xs flex items-center gap-1"
+                title="Copy JSON response"
+              >
+                {copied ? "Copied" : "Copy JSON"}
+              </button>
+            </div>
+          ) : (
+            <div className="relative group/err-details">
+              <div className="text-[11px] leading-relaxed text-muted-foreground font-mono bg-muted/30 dark:bg-muted/15 p-2 rounded border border-border/25 whitespace-pre-wrap break-all max-h-48 overflow-y-auto">
+                {rawError}
+              </div>
+              <button
+                type="button"
+                onClick={handleCopy}
+                className="absolute top-1 right-1 opacity-0 group-hover/err-details:opacity-100 transition-opacity px-1.5 py-0.5 rounded bg-background/90 border border-border/50 text-[10px] text-muted-foreground hover:text-foreground cursor-pointer shadow-xs"
+                title="Copy error details"
+              >
+                {copied ? "Copied" : "Copy"}
+              </button>
+            </div>
+          )}
 
           {sourceThreadId && visibility === "inherited" ? (
             <p className="mt-1 font-mono text-[10px] text-muted-foreground/50">
