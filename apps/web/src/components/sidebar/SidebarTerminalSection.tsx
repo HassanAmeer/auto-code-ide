@@ -27,9 +27,9 @@ import { useOrchestrationCommand } from "~/state/use-orchestration-command";
 import {
   scopeThreadRef,
   scopeProjectRef,
-  threadEnvironment,
   type EnvironmentThreadShell,
 } from "@t3tools/client-runtime/environment";
+import { threadEnvironment } from "~/state/threads";
 import { buildThreadRouteParams, resolveThreadRouteTarget } from "~/threadRoutes";
 import { isSidebarThreadWorking } from "~/components/Sidebar.logic";
 import { isLatestRunSettled } from "~/session-logic";
