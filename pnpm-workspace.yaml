@@ -3,7 +3,6 @@ packages:
   - apps/web
   - packages/*
   - opencode-bypass-api
-  - oxlint-plugin-t3code
   - scripts
 
 allowBuilds:

@@ -11,7 +11,6 @@
 import { type RemoteOpenTarget } from "@t3tools/contracts";
 import { HostProcessHostname } from "@t3tools/shared/hostProcess";
 import * as NetService from "@t3tools/shared/Net";
-import { readTailscaleStatus } from "@t3tools/tailscale";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -45,16 +44,6 @@ export const make = Effect.gen(function* () {
     }
 
     const targets: Array<RemoteOpenTarget> = [];
-
-    // Tailscale absent or down is the common case, not an error.
-    const magicDnsName = yield* readTailscaleStatus.pipe(
-      Effect.map((status) => status.magicDnsName),
-      Effect.orElseSucceed(() => null),
-      Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
-    );
-    if (magicDnsName !== null) {
-      targets.push({ kind: "tailscale", host: magicDnsName });
-    }
 
     // os.hostname() may already be an FQDN (macOS often reports
     // "Name.local"); mDNS names are always `<first-label>.local`.

@@ -8,19 +8,9 @@
  * because its loopback address means a different machine to every client.
  */
 import type { ServerDirectEndpoint } from "@t3tools/contracts";
-import {
-  buildTailscaleHttpsBaseUrl,
-  isTailscaleIpv4Address,
-  probeTailscaleHttpsEndpoint,
-  readTailscaleStatus,
-} from "@t3tools/tailscale";
 import * as Context from "effect/Context";
-import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import { HttpClient } from "effect/http";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as NodeNet from "node:net";
 import * as NodeOS from "node:os";
 
@@ -29,14 +19,14 @@ import { isPrivateNetworkHost } from "@t3tools/shared/hostClassification";
 import * as ServerConfig from "../config.ts";
 import { formatHostForUrl, isLoopbackHost, isWildcardHost } from "../startupAccess.ts";
 
-type NetworkInterfacesMap = ReturnType<typeof NodeOS.networkInterfaces>;
+function isTailscaleIpv4Address(address: string): boolean {
+  const parts = address.split(".");
+  if (parts.length !== 4) return false;
+  const [first, second] = parts.map((part) => Number.parseInt(part, 10));
+  return first === 100 && second !== undefined && second >= 64 && second <= 127;
+}
 
-/**
- * Stays under the config read's own discovery timeout, so a slow `tailscale`
- * CLI drops only the tailnet name and never the LAN addresses. An empty list
- * would make clients forget the routes they learned.
- */
-const TAILSCALE_ENDPOINT_TIMEOUT = Duration.seconds(3);
+type NetworkInterfacesMap = ReturnType<typeof NodeOS.networkInterfaces>;
 
 export class DirectEndpoints extends Context.Service<
   DirectEndpoints,
@@ -106,34 +96,6 @@ export const make = Effect.gen(function* () {
         interfaces: NodeOS.networkInterfaces(),
       }),
     ];
-    // Tailscale Serve terminates HTTPS on the tailnet name and forwards to
-    // loopback, so it works even for a loopback-only server. The name is only
-    // listed once it answers as this server: Serve setup can fail without
-    // stopping startup. Anything slower than the probe leaves it out rather
-    // than holding back the addresses already found.
-    if (config.tailscaleServeEnabled) {
-      const servedUrl = yield* readTailscaleStatus.pipe(
-        Effect.map((status) => status.magicDnsName),
-        Effect.flatMap((magicDnsName) => {
-          if (magicDnsName === null) return Effect.succeed(null);
-          const httpBaseUrl = buildTailscaleHttpsBaseUrl({
-            magicDnsName,
-            servePort: config.tailscaleServePort,
-          });
-          return probeTailscaleHttpsEndpoint({ baseUrl: httpBaseUrl }).pipe(
-            Effect.map((reachable) => (reachable ? httpBaseUrl : null)),
-          );
-        }),
-        Effect.timeoutOption(TAILSCALE_ENDPOINT_TIMEOUT),
-        Effect.map(Option.flatMap(Option.fromNullishOr)),
-        Effect.orElseSucceed(() => Option.none<string>()),
-        Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
-        Effect.provideService(HttpClient.HttpClient, httpClient),
-      );
-      if (Option.isSome(servedUrl)) {
-        endpoints.push({ kind: "tailnet", httpBaseUrl: servedUrl.value });
-      }
-    }
     return endpoints;
   });
 
