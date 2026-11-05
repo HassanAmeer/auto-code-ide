@@ -2775,6 +2775,14 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           label: "/fetch",
           description: "Extract web page content via Fetch MCP (/fetch <url>)",
         },
+        {
+          id: "slash:teamwork-preview",
+          type: "slash-command",
+          command: "teamwork-preview",
+          label: "/teamwork-preview",
+          description:
+            "Dispatch autonomous parallel workers (frontend, backend, QA) via DeepSeek supervisor",
+        },
         ...(planModeUiEnabled
           ? ([
               {
@@ -4247,7 +4255,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           item.command === "fork" ||
           item.command === "export" ||
           item.command === "coder" ||
-          item.command === "review"
+          item.command === "review" ||
+          item.command === "teamwork-preview"
         ) {
           const replacement = `/${item.command} `;
           const applied = applyPromptReplacement(

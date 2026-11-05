@@ -327,3 +327,5 @@ export async function runAutonomousHarnessWorkflow(
     summary: `Autonomous Harness Worker completed "${taskTitle}". 3-Level Review passed (${reviewResult.rounds.length} rounds). Auto-healed ${reviewResult.allFixedIssues.length} issues. Live preview verified healthy.`,
   };
 }
+
+export * from "./conflictResolver.ts";

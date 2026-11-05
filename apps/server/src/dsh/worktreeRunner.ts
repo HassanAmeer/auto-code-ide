@@ -2,6 +2,7 @@
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 import * as NodeChildProcess from "node:child_process";
+import { autoResolveMergeConflicts } from "./conflictResolver.ts";
 
 export interface WorktreeAllocation {
   worktreePath: string;
@@ -106,16 +107,32 @@ export function mergeWorkerWorktree(
       { cwd: worktreePath, stdio: "ignore" },
     );
 
-    // 2. Safe merge into main projectRoot
-    NodeChildProcess.execSync(
-      `git merge "${branchName}" --no-edit -m "merge: ${taskTitle.slice(0, 50).replace(/"/g, "")}"`,
-      {
-        cwd: projectRoot,
-        stdio: "ignore",
-      },
-    );
-
-    return { ok: true };
+    // 2. Safe merge into main projectRoot with automated conflict auto-resolver
+    try {
+      NodeChildProcess.execSync(
+        `git merge "${branchName}" --no-edit -m "merge: ${taskTitle.slice(0, 50).replace(/"/g, "")}"`,
+        {
+          cwd: projectRoot,
+          stdio: "ignore",
+        },
+      );
+      return { ok: true };
+    } catch (mergeErr: any) {
+      // Minor or overlapping conflict detected between parallel subagents!
+      // Trigger automated self-healing review & conflict resolver loop
+      const resolution = autoResolveMergeConflicts(projectRoot, branchName, taskTitle);
+      if (resolution.ok) {
+        return {
+          ok: true,
+          autoHealed: true,
+          resolvedFiles: resolution.resolvedFiles,
+        };
+      }
+      return {
+        ok: false,
+        error: `Merge conflict encountered and could not be auto-healed: ${resolution.error || mergeErr?.message || String(mergeErr)}`,
+      };
+    }
   } catch (err: any) {
     return { ok: false, error: err?.message || String(err) };
   }

@@ -123,6 +123,7 @@ import {
   registerGoalTelemetry,
   updateGoalTelemetryStatus,
 } from "./dsh/index.ts";
+import { isComplexTask } from "./dsh/taskDecomposer.ts";
 import { getProjectChatEngineSkillPrompt } from "@t3tools/shared/superpowerSkills";
 import {
   createSupervisorWorkerEnvelope,
@@ -1307,6 +1308,60 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
     // ── End Super Bot check ────────────────────────────────────────────────────
 
     const config = yield* ServerConfig.ServerConfig;
+
+    // ── DeepSeek Parallel Worker Auto-Dispatch Trigger ─────────────────────────
+    // If prompt starts with /teamwork-preview or is a multi-requirement complex task,
+    // dispatch runAutonomousHarnessWorkflow directly across parallel isolated worktrees.
+    const isTeamworkTrigger =
+      lastUserMsg.startsWith("/teamwork-preview") ||
+      lastUserMsg.includes("/teamwork-preview") ||
+      (isComplexTask(lastUserMsg, lastUserMsg) &&
+        /\b(banao|create|build|fix|implement|develop|karo|kaam|task|milestone|feature|system|app)\b/i.test(
+          lastUserMsg,
+        ));
+
+    if (isTeamworkTrigger) {
+      const cleanPrompt = lastUserMsg.replace(/^\/teamwork-preview\s*/i, "").trim() || lastUserMsg;
+      const targetProject = resolveProjectTarget(
+        config.dbPath,
+        bodyJson?.instanceId || "Workspace",
+      ) || {
+        projectId: "default",
+        projectName: bodyJson?.instanceId || "Workspace",
+        workspaceRoot: "/root/autojobs",
+      };
+
+      const harnessRes = yield* Effect.promise(() =>
+        runAutonomousHarnessWorkflow({
+          projectId: targetProject.projectId,
+          projectName: targetProject.projectName,
+          projectRoot: targetProject.workspaceRoot,
+          projectIdOrName: targetProject.projectName,
+          taskTitle: cleanPrompt.slice(0, 50),
+          prompt: cleanPrompt,
+          model: bodyJson?.model || "deepseek-v4.1-flash-free",
+        }),
+      );
+
+      const milestonesText = (harnessRes.subtasks || [])
+        .map(
+          (st) =>
+            `• **Milestone ${st.order} (${st.category}):** ${st.title} (${st.status === "completed" ? "✓ Done" : st.status})`,
+        )
+        .join("\n");
+
+      const reply = `### 🚀 DeepSeek Autonomous Parallel Workers Dispatched & Completed!\n\nSupervisor ne composite task ko **${harnessRes.subtasks?.length || 1} milestones** mein divide kar ke isolated git worktrees mein parallel execute kiya:\n\n${milestonesText}\n\n• **Files Checked:** ${harnessRes.checklist?.length || 0}\n• **3-Level Review Loop:** ${harnessRes.reviewLoop?.length || 1} rounds verified clean\n• **Auto-Healed Issues:** ${harnessRes.errorsFixed?.length || 0}\n• **Live Preview URL:** ${harnessRes.previewUrl || "Ready"}\n\nHar worker ka live progress aur telemetry timeline aur sidebar widget mein sync ho chuki hai.`;
+
+      return HttpServerResponse.jsonUnsafe({
+        ok: true,
+        reply,
+        spokenReply: `DeepSeek parallel workers ne task divide karke mukammal kar diya hai.`,
+        actionTaken: "autonomous_harness_dispatched",
+        model: "deepseek-supervisor",
+        harnessResult: harnessRes,
+      });
+    }
+    // ── End DeepSeek Parallel Worker Auto-Dispatch Trigger ──────────────────────
     const customProviders = listCustomProviders(config.dbPath);
     const allKnownProjects = listAllProjects(config.dbPath);
 

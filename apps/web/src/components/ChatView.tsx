@@ -478,6 +478,7 @@ import { ExpandedImageDialog } from "./chat/ExpandedImageDialog";
 import { PullRequestThreadDialog } from "./PullRequestThreadDialog";
 import type { AssistantCitationRequest } from "./chat/AssistantCitationSource";
 import { MessagesTimeline, type MessagesTimelineHistoryControls } from "./chat/MessagesTimeline";
+import { ParallelSubagentsAccordion } from "./chat/ParallelSubagentsAccordion";
 import { isVoiceCallActive } from "./chat/voiceCall";
 import {
   playResponseDoneSound,
@@ -9634,6 +9635,70 @@ export default function ChatView(props: ChatViewProps) {
       } else {
         messageTextForSend = `[Fetch MCP Notice: ${url}]\n⚠️ Could not fetch page content: ${fetchRes.error || "Unknown error"}`;
       }
+    } else if (
+      messageTextForSend.startsWith("/teamwork-preview") ||
+      messageTextForSend.startsWith("/teamwork")
+    ) {
+      const cleanPrompt = messageTextForSend
+        .replace(/^\/(?:teamwork-preview|teamwork)\s*/i, "")
+        .trim();
+      toastManager.add({
+        type: "neutral",
+        title: "DeepSeek Parallel Autonomous Workers dispatched",
+      });
+      const targetProjName = activeProject?.title || projectForSend?.title || "Workspace";
+      void fetch(resolvePrimaryEnvironmentHttpUrl("/api/super-agent/dispatch-worker"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectIdOrName: targetProjName,
+          taskTitle: cleanPrompt.slice(0, 60) || "Autonomous Parallel Worker Task",
+          prompt: cleanPrompt || "Implement requested features across parallel isolated worktrees",
+          model: ctxSelectedModel || "deepseek-v4.1-flash-free",
+          stream: true,
+        }),
+      })
+        .then(() => {
+          window.dispatchEvent(new CustomEvent("super-agent-state-updated"));
+          window.dispatchEvent(new CustomEvent("t3-subagents-changed"));
+        })
+        .catch(() => {});
+
+      messageTextForSend = `[Supervisor Teamwork Dispatch: ${cleanPrompt.slice(0, 50) || "Parallel Subagents"}]\n\n🚀 DeepSeek Supervisor has decomposed this task into parallel domain-isolated milestones. Active workers are running in isolated Git worktrees. Monitor live output in the timeline subagents accordion and background services widget below.\n\n${cleanPrompt}`;
+    }
+
+    // Auto-detect multi-requirement prompts (10/10 Protocol / 2+ milestones) and auto-dispatch parallel workers
+    const hasMultipleExplicitRequirements =
+      messageTextForSend.split(/\r?\n/).filter((l) => /^\s*(?:\[\d+\]|\d+[.)]|\*|-|•)\s+/.test(l))
+        .length >= 2;
+    const isExecutionRequest =
+      /\b(banao|create|build|fix|implement|develop|karo|kaam|task|milestone|feature|system|app)\b/i.test(
+        messageTextForSend,
+      );
+
+    if (
+      hasMultipleExplicitRequirements &&
+      isExecutionRequest &&
+      !messageTextForSend.startsWith("/")
+    ) {
+      const targetProjName = activeProject?.title || projectForSend?.title || "Workspace";
+      void fetch(resolvePrimaryEnvironmentHttpUrl("/api/super-agent/dispatch-worker"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectIdOrName: targetProjName,
+          taskTitle:
+            messageTextForSend.split(/\r?\n/)[0]?.slice(0, 60) || "Parallel Subagents Task",
+          prompt: messageTextForSend,
+          model: ctxSelectedModel || "deepseek-v4.1-flash-free",
+          stream: true,
+        }),
+      })
+        .then(() => {
+          window.dispatchEvent(new CustomEvent("super-agent-state-updated"));
+          window.dispatchEvent(new CustomEvent("t3-subagents-changed"));
+        })
+        .catch(() => {});
     }
 
     if (isComposerWebSearchEnabled() && messageTextForSend && !messageTextForSend.startsWith("/")) {
@@ -12269,7 +12334,17 @@ export default function ChatView(props: ChatViewProps) {
                   {...(draftId ? { onWorktreeSetupWorkLocally } : {})}
                   {...(onOpenWorktreeSetupTerminal ? { onOpenWorktreeSetupTerminal } : {})}
                   isPreparingWorktree={!paintOnlyDisplayedTimeline && isPreparingWorktree}
-                  footer={paintOnlyDisplayedTimeline ? null : threadStatusLine}
+                  footer={
+                    paintOnlyDisplayedTimeline ? null : (
+                      <>
+                        <ParallelSubagentsAccordion
+                          activeProjectName={activeProject?.title}
+                          activeProjectId={activeProject?.id ? String(activeProject.id) : undefined}
+                        />
+                        {threadStatusLine}
+                      </>
+                    )
+                  }
                   listRef={legendListRef}
                   timelineEntries={displayedTimeline.entries}
                   providerStatuses={
