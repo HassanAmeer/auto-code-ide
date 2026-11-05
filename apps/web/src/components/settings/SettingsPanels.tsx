@@ -24,7 +24,6 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import type { CSSProperties, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  type DesktopUpdateChannel,
   ProviderDriverKind,
   type ProviderInstanceId,
   type EnvironmentId,
