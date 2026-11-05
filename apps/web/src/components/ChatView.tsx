@@ -2555,7 +2555,7 @@ export default function ChatView(props: ChatViewProps) {
   const terminalStoreState = useTerminalStore();
   const isTerminalQuickBarOpen = terminalStoreState.isQuickBarOpen;
   const isTerminalThread = isTerminalThreadId(activeThread.id);
-  const showTerminalSplitPane = isTerminalThread && isTerminalQuickBarOpen;
+  const showTerminalSplitPane = isTerminalQuickBarOpen;
 
   // Ensure right terminal pane is strictly active ONLY for AI Terminal chats.
   // For project chats or any other section, right terminal pane automatically closes.
