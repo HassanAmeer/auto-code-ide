@@ -85,8 +85,6 @@ export function resolveBoundEndpoints(input: {
 /** @public Service construction is part of the canonical Effect module API. */
 export const make = Effect.gen(function* () {
   const config = yield* ServerConfig.ServerConfig;
-  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const httpClient = yield* HttpClient.HttpClient;
 
   const resolve = Effect.gen(function* () {
     const endpoints = [
