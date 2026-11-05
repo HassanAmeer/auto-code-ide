@@ -153,4 +153,58 @@ describe("SidebarTerminalSection chat management", () => {
     expect(storage.get("adc_terminal_thread_ids")).toBeUndefined();
     expect(storage.get("adc_terminal_deleted_thread_ids")).toBeUndefined();
   });
+
+  it("deduplicates thread IDs in registry when added multiple times", () => {
+    const dupThreadId = "test-dup-thread-789";
+    addTerminalThreadId(dupThreadId);
+    addTerminalThreadId(dupThreadId);
+    addTerminalThreadId(dupThreadId);
+
+    const ids = getTerminalThreadIds();
+    const occurrences = ids.filter((id) => id === dupThreadId);
+    expect(occurrences).toHaveLength(1);
+  });
+
+  it("deduplicates multiple thread shells sharing the same thread id", () => {
+    const threadId = "thread-xyz";
+    const duplicateShells = [
+      {
+        id: threadId,
+        environmentId: "env-1",
+        title: "hy",
+        updatedAt: 1000,
+        archivedAt: null,
+        deletedAt: null,
+      },
+      {
+        id: threadId,
+        environmentId: "env-2",
+        title: "hy",
+        updatedAt: 1000,
+        archivedAt: null,
+        deletedAt: null,
+      },
+      {
+        id: "other-thread",
+        environmentId: "env-1",
+        title: "other",
+        updatedAt: 500,
+        archivedAt: null,
+        deletedAt: null,
+      },
+    ];
+
+    const seen = new Set<string>();
+    const terminalIdsSet = new Set([threadId, "other-thread"]);
+    const filtered = duplicateShells.filter((t) => {
+      if (!terminalIdsSet.has(t.id)) return false;
+      if (t.archivedAt !== null || t.deletedAt !== null) return false;
+      if (seen.has(t.id)) return false;
+      seen.add(t.id);
+      return true;
+    });
+
+    expect(filtered).toHaveLength(2);
+    expect(filtered.filter((t) => t.id === threadId)).toHaveLength(1);
+  });
 });

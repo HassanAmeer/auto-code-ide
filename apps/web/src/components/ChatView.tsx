@@ -4757,6 +4757,9 @@ export default function ChatView(props: ChatViewProps) {
   const canInterruptRunningThread =
     canOperateThread && deriveCanInterruptRunningThread(activeThread !== undefined, activeRuntime);
   const onInterrupt = useCallback(async () => {
+    // When the user explicitly stops / interrupts the response, cancel any auto-retry
+    setAutoRetryCountdown(null);
+    setAutoRetryAttempt(0);
     if (
       !activeThread ||
       !readEnvironmentScope(activeThread.environmentId, AuthOrchestrationOperateScope)
@@ -11496,6 +11499,20 @@ export default function ChatView(props: ChatViewProps) {
       visibleThreadError || (isServerThread && serverRuntime?.status === "failed"),
     );
     if (!autoRetrySettings.enabled || !hasError || isWorking || !activeThread) {
+      setAutoRetryCountdown(null);
+      return;
+    }
+
+    // Never auto-retry if the run or turn was stopped / interrupted by the user
+    const isInterruptedRun = Boolean(
+      serverRuntime?.status === "interrupted" ||
+      serverProjection?.runs.some((run) => run.status === "interrupted") ||
+      serverProjection?.turnItems.some(
+        (item) => item.type === "run_interrupt_result" || item.type === "run_interrupt_request",
+      ) ||
+      (visibleThreadError && /interrupted|stopped by user/i.test(visibleThreadError)),
+    );
+    if (isInterruptedRun) {
       setAutoRetryCountdown(null);
       return;
     }

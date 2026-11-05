@@ -368,6 +368,8 @@ interface TimelineRowSharedState {
   onOpenWorktreeSetupTerminal: ((terminalId: string) => void) | null;
   onRetryTurn?: ((runId?: RunId) => void) | null | undefined;
   workGroupViewState: WorkGroupViewState;
+  interruptedRunIds?: ReadonlySet<RunId>;
+  hasInterruptedRun?: boolean;
 }
 
 interface TimelineRowActivityState {
@@ -1305,6 +1307,35 @@ const ConversationTimeline = memo(function ConversationTimeline({
     };
   }, [timelineViewportElement, rows.length, reportContentOverflow, chatWidth]);
 
+  const interruptedRunIds = useMemo(() => {
+    const set = new Set<RunId>();
+    for (const entry of timelineEntries) {
+      if (
+        entry.kind === "event" &&
+        entry.projectedItem.item.runId !== null &&
+        (entry.projectedItem.item.type === "run_interrupt_request" ||
+          entry.projectedItem.item.type === "run_interrupt_result")
+      ) {
+        set.add(entry.projectedItem.item.runId);
+      }
+    }
+    return set;
+  }, [timelineEntries]);
+
+  const hasInterruptedRun = useMemo(() => {
+    if (latestRun?.status === "interrupted") return true;
+    return timelineEntries.some(
+      (entry) =>
+        entry.kind === "event" &&
+        (entry.projectedItem.item.type === "run_interrupt_request" ||
+          entry.projectedItem.item.type === "run_interrupt_result" ||
+          (entry.projectedItem.item.type === "error" &&
+            /interrupted by user|run interrupted/i.test(
+              (entry.projectedItem.item as any).failure?.message || "",
+            ))),
+    );
+  }, [latestRun?.status, timelineEntries]);
+
   const sharedState = useMemo<TimelineRowSharedState>(
     () => ({
       citationRequest: readyCitationRequest,
@@ -1345,6 +1376,8 @@ const ConversationTimeline = memo(function ConversationTimeline({
       onOpenWorktreeSetupTerminal: onOpenWorktreeSetupTerminal ?? null,
       onRetryTurn: onRetryTurn ?? null,
       workGroupViewState,
+      interruptedRunIds,
+      hasInterruptedRun,
     }),
     [
       readyCitationRequest,
@@ -1384,6 +1417,8 @@ const ConversationTimeline = memo(function ConversationTimeline({
       onOpenWorktreeSetupTerminal,
       onRetryTurn,
       workGroupViewState,
+      interruptedRunIds,
+      hasInterruptedRun,
     ],
   );
   const compactionAwaitingRow =
@@ -3105,6 +3140,7 @@ function CupertinoTimelineErrorCard({
   onRetryTurn,
   onContinue,
   isInterrupted,
+  isUserInterrupted,
   inspectorContent,
 }: {
   rawError: string;
@@ -3119,6 +3155,7 @@ function CupertinoTimelineErrorCard({
   onRetryTurn?: ((runId?: RunId) => void) | null | undefined;
   onContinue?: (() => void) | undefined;
   isInterrupted?: boolean | undefined;
+  isUserInterrupted?: boolean | undefined;
   inspectorContent?: ReactNode | undefined;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -3132,10 +3169,23 @@ function CupertinoTimelineErrorCard({
       ? autoRetrySettings.delaySeconds
       : 10;
   const [countdownSeconds, setCountdownSeconds] = useState(autoRetryDelay);
-  const [isPaused, setIsPaused] = useState(() => autoRetrySettings.enabled === false);
+
+  // If user explicitly stopped or interrupted the turn, NEVER auto-retry!
+  const isInterruptedRun = Boolean(
+    isUserInterrupted ||
+    isInterrupted ||
+    /interrupted|stopped by user|user stopped|run interrupted/i.test(rawError) ||
+    /interrupted|stopped by user|user stopped|run interrupted/i.test(errorType || ""),
+  );
+
+  const [isPaused, setIsPaused] = useState(
+    () => autoRetrySettings.enabled === false || isInterruptedRun,
+  );
   const [isAutoRetried, setIsAutoRetried] = useState(false);
 
   useEffect(() => {
+    // If run was stopped or interrupted by user, do not auto retry
+    if (isInterruptedRun) return;
     if (!onRetryTurn && !retryAction) return;
     if (autoRetrySettings.enabled === false) return;
     if (isPaused || isWorking || isAutoRetried) return;
@@ -3157,6 +3207,7 @@ function CupertinoTimelineErrorCard({
     return () => clearTimeout(timer);
   }, [
     countdownSeconds,
+    isInterruptedRun,
     isPaused,
     isWorking,
     isAutoRetried,
@@ -3373,7 +3424,7 @@ function CupertinoTimelineErrorCard({
             <span>{isWorking ? "Retrying..." : retryAction?.label || "Retry"}</span>
           </Button>
 
-          {!isWorking ? (
+          {!isWorking && !isInterruptedRun ? (
             <div className="flex items-center gap-1.5 select-none">
               <span
                 className={cn(
@@ -3463,6 +3514,17 @@ function CupertinoErrorRow({
     presentation.detail || item.failure.message,
   );
 
+  const isUserInterrupted = Boolean(
+    (item.runId !== null && ctx.interruptedRunIds?.has(item.runId)) ||
+    ctx.hasInterruptedRun ||
+    /interrupted by user|run interrupted|user interrupted|stopped by user/i.test(
+      presentation.detail || item.failure.message || "",
+    ) ||
+    /interrupted by user|run interrupted|user interrupted|stopped by user/i.test(
+      presentation.label || "",
+    ),
+  );
+
   const handleResume = () => {
     if (ctx.threadRef) {
       useComposerDraftStore
@@ -3490,6 +3552,7 @@ function CupertinoErrorRow({
       visibility={visibility}
       sourceThreadId={sourceThreadId}
       isInterrupted={isInterrupted}
+      isUserInterrupted={isUserInterrupted}
       onContinue={handleResume}
       onRetryTurn={ctx.onRetryTurn ? () => ctx.onRetryTurn?.(item.runId ?? undefined) : undefined}
       inspectorContent={
@@ -5811,6 +5874,16 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
         }
         visibility={workEntry.projectedItem?.visibility}
         sourceThreadId={workEntry.projectedItem?.sourceThreadId}
+        isInterrupted={
+          (failureItem.runId !== null && ctx.interruptedRunIds?.has(failureItem.runId)) ||
+          ctx.hasInterruptedRun ||
+          /interrupted/i.test(failureItem.failure.message)
+        }
+        isUserInterrupted={
+          (failureItem.runId !== null && ctx.interruptedRunIds?.has(failureItem.runId)) ||
+          ctx.hasInterruptedRun ||
+          /interrupted/i.test(failureItem.failure.message)
+        }
         retryAction={retryAction}
         onRetryTurn={
           ctx.onRetryTurn ? () => ctx.onRetryTurn?.(failureItem.runId ?? undefined) : undefined

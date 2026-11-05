@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef } from "react";
 import { useRouter, useParams } from "@tanstack/react-router";
 import {
   Terminal,
@@ -79,16 +79,20 @@ export function SidebarTerminalSection() {
     });
   }, []);
 
-  // Filter and sort terminal threads chronologically
+  const isCreatingRef = useRef(false);
+
+  // Filter, deduplicate by thread id, and sort terminal threads chronologically
   const terminalThreads = useMemo(() => {
+    const seen = new Set<string>();
     return sidebarThreads
-      .filter(
-        (t) =>
-          terminalIdsSet.has(t.id) &&
-          !locallyDeletedIds.has(t.id) &&
-          t.archivedAt === null &&
-          t.deletedAt === null,
-      )
+      .filter((t) => {
+        if (!terminalIdsSet.has(t.id)) return false;
+        if (locallyDeletedIds.has(t.id)) return false;
+        if (t.archivedAt !== null || t.deletedAt !== null) return false;
+        if (seen.has(t.id)) return false;
+        seen.add(t.id);
+        return true;
+      })
       .sort((a, b) => {
         const timeA =
           typeof a.updatedAt === "number" ? a.updatedAt : Date.parse(String(a.updatedAt || 0));
@@ -137,20 +141,33 @@ export function SidebarTerminalSection() {
   const handleCreateNewChat = useCallback(
     async (e?: React.MouseEvent) => {
       e?.stopPropagation();
-      terminalStore.setQuickBarOpen(true);
-      terminalStore.setMobileActiveTab("terminal");
+      e?.preventDefault();
 
-      const targetProj =
-        projects.find((p) => p.id === store.selectedProjectId) ||
-        projects.find((p) => p.title?.toLowerCase().includes("temp")) ||
-        projects[0];
+      if (isCreatingRef.current) return;
+      isCreatingRef.current = true;
 
-      if (targetProj) {
-        const res = await handleNewThread(scopeProjectRef(targetProj.environmentId, targetProj.id));
-        if (res?.threadId) {
-          addTerminalThreadId(res.threadId);
-          terminalStore.setActiveChatId(res.threadId);
+      try {
+        terminalStore.setQuickBarOpen(true);
+        terminalStore.setMobileActiveTab("terminal");
+
+        const targetProj =
+          projects.find((p) => p.id === store.selectedProjectId) ||
+          projects.find((p) => p.title?.toLowerCase().includes("temp")) ||
+          projects[0];
+
+        if (targetProj) {
+          const res = await handleNewThread(
+            scopeProjectRef(targetProj.environmentId, targetProj.id),
+          );
+          if (res?.threadId) {
+            addTerminalThreadId(res.threadId);
+            terminalStore.setActiveChatId(res.threadId);
+          }
         }
+      } finally {
+        setTimeout(() => {
+          isCreatingRef.current = false;
+        }, 500);
       }
     },
     [handleNewThread, projects, store.selectedProjectId],
