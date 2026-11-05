@@ -355,12 +355,10 @@
   "dependencies": {
     "@t3tools/contracts": "workspace:*",
     "@t3tools/shared": "workspace:*",
-    "effect": "catalog:",
-    "three": "0.180.0"
+    "effect": "catalog:"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
-    "@types/three": "0.180.0",
     "vite-plus": "catalog:"
   }
 }

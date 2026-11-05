@@ -2,7 +2,7 @@
 // environment host as a standalone CLI, outside an Effect runtime.
 // @effect-diagnostics globalConsole:off
 /**
- * skills-manager — manages the workspace skills in `.agents/skills/<name>/SKILL.md`.
+ * skills-manager — manages the workspace skills in `.opencode/skills/<name>/SKILL.md`.
  *
  * The Skills settings page runs this script on the environment host:
  *   list                  JSON { ok, skills }
@@ -30,7 +30,7 @@ import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 
 /**
- * The workspace root: the directory that owns `.agents/skills`. The server
+ * The workspace root: the directory that owns `.opencode/skills`. The server
  * runs from its own package directory, so the root is found by walking up to
  * the workspace manifest.
  */
@@ -47,13 +47,13 @@ function resolveWorkspaceRoot(): string {
   return process.cwd();
 }
 
-const SKILLS_DIR = NodePath.join(resolveWorkspaceRoot(), ".agents", "skills");
+const SKILLS_DIR = NodePath.join(resolveWorkspaceRoot(), ".opencode", "skills");
 /**
  * The global skill store: one copy of every skill, downloaded once and shared
  * by every project. A project opts in by copying the skill into its own
- * `.agents/skills`, which is where both engines look.
+ * `.opencode/skills`, which is where OpenCode looks.
  */
-const GLOBAL_SKILLS_DIR = NodePath.join(NodeOS.homedir(), ".agents", "skills");
+const GLOBAL_SKILLS_DIR = NodePath.join(NodeOS.homedir(), ".opencode", "skills");
 const FRONTMATTER_PATTERN = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/;
 
 export const SUPERPOWER_CORE_SKILLS = new Set([
@@ -180,7 +180,7 @@ function listSkillsIn(root: string): SkillRecord[] {
       dirName,
       name: frontmatter.name || dirName,
       description: frontmatter.description,
-      path: NodePath.join(".agents", "skills", dirName, "SKILL.md"),
+      path: NodePath.join(".opencode", "skills", dirName, "SKILL.md"),
       fullPath,
       isBuiltin,
       isDefault: isBuiltin || isSuperpower,
@@ -199,8 +199,8 @@ function listSkills(): SkillRecord[] {
 
 /** The global skills, plus whether the given project already uses each one. */
 function projectStatePath(projectRoot: string): string {
-  const acPath = NodePath.join(projectRoot, ".agents", "skills", ".ac-skills-state.json");
-  const t3Path = NodePath.join(projectRoot, ".agents", "skills", ".t3-skills-state.json");
+  const acPath = NodePath.join(projectRoot, ".opencode", "skills", ".ac-skills-state.json");
+  const t3Path = NodePath.join(projectRoot, ".opencode", "skills", ".t3-skills-state.json");
   if (NodeFS.existsSync(acPath)) return acPath;
   if (NodeFS.existsSync(t3Path)) return t3Path;
   return acPath;
@@ -208,7 +208,7 @@ function projectStatePath(projectRoot: string): string {
 
 /** The skills a project copied from the global store. */
 function enabledGlobalSkillsForProject(projectRoot: string): string[] {
-  const state = readState(NodePath.join(projectRoot, ".agents", "skills"));
+  const state = readState(NodePath.join(projectRoot, ".opencode", "skills"));
   return Object.entries(state)
     .filter(([, entry]) => entry.fromGlobal === true)
     .map(([dirName]) => dirName)
@@ -216,7 +216,7 @@ function enabledGlobalSkillsForProject(projectRoot: string): string[] {
 }
 
 function listGlobalSkills(projectRoot: string): Array<SkillRecord & { enabledInProject: boolean }> {
-  const projectState = readState(NodePath.join(projectRoot, ".agents", "skills"));
+  const projectState = readState(NodePath.join(projectRoot, ".opencode", "skills"));
   return listSkillsIn(GLOBAL_SKILLS_DIR).map((skill) => ({
     ...skill,
     enabledInProject: projectState[skill.dirName]?.fromGlobal === true,
@@ -224,12 +224,9 @@ function listGlobalSkills(projectRoot: string): Array<SkillRecord & { enabledInP
 }
 
 /**
- * The project folders every engine reads skills from: the universal
- * `.agents/skills`, Claude's `.claude/skills`, and OpenCode's `.opencode/skills`.
- * A skill enabled for a project is copied into all of them, so the same skill
- * works whichever engine the project runs.
+ * OpenCode's skill location: `.opencode/skills`.
  */
-const PROJECT_SKILL_ROOTS = [".agents/skills", ".claude/skills", ".opencode/skills"] as const;
+const PROJECT_SKILL_ROOTS = [".opencode/skills"] as const;
 
 function projectSkillCopies(dirName: string, projectRoot: string): ReadonlyArray<string> {
   return PROJECT_SKILL_ROOTS.map((root) => NodePath.join(projectRoot, root, dirName));
@@ -242,21 +239,12 @@ function resolveProjectRoot(encoded: string | undefined): string {
 }
 
 /**
- * Every engine reads skills from its own tree, so the project's universal
- * `.agents/skills` is mirrored into the Claude and OpenCode trees. A skill the
- * project already keeps there is never overwritten.
+ * OpenCode skills are retained directly in `.opencode/skills`.
  */
 function mirrorProjectSkills(projectRoot: string): void {
-  const source = NodePath.join(projectRoot, ".agents", "skills");
-  for (const entry of listSkillDirectories(source)) {
-    for (const root of PROJECT_SKILL_ROOTS) {
-      if (root === ".agents/skills") continue;
-      const target = NodePath.join(projectRoot, root, entry);
-      if (NodeFS.existsSync(target)) continue;
-      const skillFile = NodePath.join(source, entry, "SKILL.md");
-      if (!NodeFS.existsSync(skillFile)) continue;
-      copyDirectory(NodePath.join(source, entry), target);
-    }
+  const source = NodePath.join(projectRoot, ".opencode", "skills");
+  if (!NodeFS.existsSync(source)) {
+    NodeFS.mkdirSync(source, { recursive: true });
   }
 }
 
@@ -277,7 +265,7 @@ function originalPath(root: string, dirName: string): string {
 }
 
 function keepOriginal(root: string, dirName: string): void {
-  const target = NodePath.join(root, ".agents", "skills", dirName, "SKILL.md");
+  const target = NodePath.join(root, ".opencode", "skills", dirName, "SKILL.md");
   if (NodeFS.existsSync(originalPath(root, dirName))) return;
   if (!NodeFS.existsSync(target)) return;
   const backup = originalPath(root, dirName);
@@ -311,10 +299,10 @@ function reinstallFromLock(projectRoot: string, dirName: string): boolean {
   if (result.status !== 0) return false;
 
   // The CLI writes the universal tree; keep the other engines in step.
-  const installed = NodePath.join(projectRoot, ".agents", "skills", dirName);
+  const installed = NodePath.join(projectRoot, ".opencode", "skills", dirName);
   if (!NodeFS.existsSync(installed)) return false;
   for (const root of PROJECT_SKILL_ROOTS) {
-    if (root === ".agents/skills") continue;
+    if (root === ".opencode/skills") continue;
     const target = NodePath.join(projectRoot, root, dirName);
     NodeFS.rmSync(target, { recursive: true, force: true });
     copyDirectory(installed, target);
@@ -452,9 +440,9 @@ function main(argv: ReadonlyArray<string>): void {
         NodeFS.rmSync(target, { recursive: true, force: true });
         copyDirectory(source, target);
       }
-      const state = readState(NodePath.join(projectRoot, ".agents", "skills"));
+      const state = readState(NodePath.join(projectRoot, ".opencode", "skills"));
       state[dirName] = { enabled: true, fromGlobal: true };
-      writeState(state, NodePath.join(projectRoot, ".agents", "skills"));
+      writeState(state, NodePath.join(projectRoot, ".opencode", "skills"));
       process.stdout.write(`${JSON.stringify({ ok: true, enabled: dirName })}\n`);
       return;
     }
@@ -462,7 +450,7 @@ function main(argv: ReadonlyArray<string>): void {
       const [dirName, encodedCwd] = args;
       if (!dirName) fail("disable needs a skill name");
       const projectRoot = resolveProjectRoot(encodedCwd);
-      const state = readState(NodePath.join(projectRoot, ".agents", "skills"));
+      const state = readState(NodePath.join(projectRoot, ".opencode", "skills"));
       const entry = state[dirName];
       // Only a copy this manager made is removed; a skill the project owns
       // stays untouched.
@@ -471,7 +459,7 @@ function main(argv: ReadonlyArray<string>): void {
           NodeFS.rmSync(target, { recursive: true, force: true });
         }
         delete state[dirName];
-        writeState(state, NodePath.join(projectRoot, ".agents", "skills"));
+        writeState(state, NodePath.join(projectRoot, ".opencode", "skills"));
       }
       process.stdout.write(`${JSON.stringify({ ok: true, disabled: dirName })}\n`);
       return;
@@ -528,7 +516,7 @@ function main(argv: ReadonlyArray<string>): void {
       if (!command) fail("install needs a command");
 
       // The skills CLI prompts for the target agents and the install scope
-      // when it runs interactively. `.agents/skills` is the universal location
+      // when it runs interactively. `.opencode/skills` is the universal location
       // that Codex and the custom engine both read, so that is the default
       // target, and the scope prompt is skipped with `-y`.
       const tokens = command.split(/\s+/);
@@ -572,14 +560,14 @@ function main(argv: ReadonlyArray<string>): void {
       const [dirName, encodedCwd] = args;
       if (!dirName) fail("reset needs a skill name");
       const projectRoot = resolveProjectRoot(encodedCwd);
-      const projectCopy = NodePath.join(projectRoot, ".agents", "skills", dirName, "SKILL.md");
+      const projectCopy = NodePath.join(projectRoot, ".opencode", "skills", dirName, "SKILL.md");
       const globalCopy = NodePath.join(GLOBAL_SKILLS_DIR, dirName, "SKILL.md");
 
       // The project copy reverts to the pristine global copy.
       if (NodeFS.existsSync(projectCopy) && NodeFS.existsSync(globalCopy)) {
         NodeFS.copyFileSync(globalCopy, projectCopy);
         for (const root of PROJECT_SKILL_ROOTS) {
-          if (root === ".agents/skills") continue;
+          if (root === ".opencode/skills") continue;
           const mirror = NodePath.join(projectRoot, root, dirName, "SKILL.md");
           if (NodeFS.existsSync(mirror)) {
             NodeFS.mkdirSync(NodePath.dirname(mirror), { recursive: true });
@@ -597,7 +585,7 @@ function main(argv: ReadonlyArray<string>): void {
         if (!NodeFS.existsSync(original)) continue;
         const target = NodeFS.existsSync(globalCopy)
           ? globalCopy
-          : NodePath.join(root, ".agents", "skills", dirName, "SKILL.md");
+          : NodePath.join(root, ".opencode", "skills", dirName, "SKILL.md");
         NodeFS.mkdirSync(NodePath.dirname(target), { recursive: true });
         NodeFS.copyFileSync(original, target);
         NodeFS.rmSync(original, { force: true });
