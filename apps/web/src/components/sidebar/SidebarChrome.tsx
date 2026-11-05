@@ -8,7 +8,6 @@ import {
   FolderTreeIcon,
   FileJsonIcon,
   SettingsIcon,
-  TerminalSquareIcon,
   PhoneCallIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -205,7 +204,6 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
   const pullRequestsSupported = usePullRequestsSupported();
 
   const terminalState = useTerminalStore();
-  const isTerminalOpen = terminalState.isQuickBarOpen;
 
   const { activeCount } = useNotes();
   const [isNotesOpen, setIsNotesOpen] = useNotesSheetState();
@@ -239,31 +237,6 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
     closeMobileSidebar();
     void navigateToMainApp();
   }, [closeMobileSidebar, navigateToMainApp]);
-
-  const handleTerminalClick = useCallback(() => {
-    closeMobileSidebar();
-    const isSpecialRoute =
-      typeof window !== "undefined" &&
-      (window.location.pathname.startsWith("/settings") ||
-        window.location.pathname === "/usage" ||
-        window.location.pathname === "/pull-requests");
-
-    if (isSpecialRoute) {
-      void navigate({ to: "/" });
-    }
-
-    const isOpen = terminalStore.getState().isQuickBarOpen;
-    if (isOpen && !isSpecialRoute) {
-      terminalStore.setQuickBarOpen(false);
-    } else {
-      if (terminalStore.getState().terminalChats.length === 0) {
-        terminalStore.createTerminalChat({ title: "AI Terminal Session" });
-      }
-      terminalStore.setQuickBarOpen(true);
-      terminalStore.setMobileActiveTab("terminal");
-      window.dispatchEvent(new CustomEvent("t3:new-terminal-thread"));
-    }
-  }, [closeMobileSidebar, navigate]);
 
   const isFileExplorerOpen = terminalState.isFileExplorerOpen;
 
@@ -355,31 +328,6 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
               <div className="flex flex-col min-w-0">
                 <span className="font-semibold text-[11px] truncate">Archived Chats</span>
                 <span className="text-[9px] text-muted-foreground truncate">Restore or delete</span>
-              </div>
-            </button>
-
-            {/* AI Terminal */}
-            <button
-              type="button"
-              onClick={() => {
-                handleTerminalClick();
-                setIsExpanded(false);
-              }}
-              className={cn(
-                "flex items-center gap-2 rounded-lg p-1.5 text-xs font-medium transition-all text-left cursor-pointer",
-                isTerminalOpen
-                  ? "bg-primary/15 text-primary border border-primary/30"
-                  : "hover:bg-sidebar-row-hover text-sidebar-foreground border border-transparent",
-              )}
-            >
-              <div className="size-6 rounded-md bg-emerald-500/10 text-emerald-400 flex items-center justify-center shrink-0">
-                <TerminalSquareIcon className="size-3.5" />
-              </div>
-              <div className="flex flex-col min-w-0">
-                <span className="font-semibold text-[11px] truncate">AI Terminal</span>
-                <span className="text-[9px] text-muted-foreground truncate">
-                  {isTerminalOpen ? "Active" : "Open shell"}
-                </span>
               </div>
             </button>
 
@@ -533,17 +481,6 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
                 onClick={handleUsageClick}
               />
               <SidebarUtilityItem
-                icon={<TerminalSquareIcon className={cn(isTerminalOpen && "text-emerald-400")} />}
-                label="AI Terminal"
-                onClick={handleTerminalClick}
-                isActive={isTerminalOpen}
-                badge={
-                  isTerminalOpen ? (
-                    <span className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  ) : undefined
-                }
-              />
-              <SidebarUtilityItem
                 icon={
                   <div className="flex items-center justify-center font-mono font-black text-[10px] tracking-tight">
                     <span
@@ -589,83 +526,6 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
         )}
       </SidebarMenu>
     </div>
-  );
-});
-
-export const SidebarAiTerminalItem = memo(function SidebarAiTerminalItem() {
-  const navigate = useNavigate();
-  const { isMobile, setOpenMobile } = useSidebar();
-  const terminalState = useTerminalStore();
-  const isTerminalOpen = terminalState.isQuickBarOpen;
-
-  const handleClick = useCallback(() => {
-    if (isMobile) {
-      setOpenMobile(false);
-    }
-    const isSpecialRoute =
-      typeof window !== "undefined" &&
-      (window.location.pathname.startsWith("/settings") ||
-        window.location.pathname === "/usage" ||
-        window.location.pathname === "/pull-requests");
-
-    if (isSpecialRoute) {
-      void navigate({ to: "/" });
-    }
-
-    const isOpen = terminalStore.getState().isQuickBarOpen;
-    if (isOpen && !isSpecialRoute) {
-      terminalStore.setQuickBarOpen(false);
-    } else {
-      if (terminalStore.getState().terminalChats.length === 0) {
-        terminalStore.createTerminalChat({ title: "AI Terminal Session" });
-      }
-      terminalStore.setQuickBarOpen(true);
-      terminalStore.setMobileActiveTab("terminal");
-      window.dispatchEvent(new CustomEvent("t3:new-terminal-thread"));
-    }
-  }, [isMobile, navigate, setOpenMobile]);
-
-  return (
-    <SidebarMenu className="mb-1">
-      <SidebarMenuItem>
-        <SidebarMenuButton
-          isActive={isTerminalOpen}
-          onClick={handleClick}
-          size="default"
-          className={cn(
-            "w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs transition-all group font-medium cursor-pointer",
-            isTerminalOpen
-              ? "bg-primary/15 text-primary border border-primary/30 shadow-sm"
-              : "text-sidebar-foreground/80 hover:bg-sidebar-row-hover hover:text-sidebar-foreground border border-transparent",
-          )}
-        >
-          <div className="flex items-center gap-2">
-            <div
-              className={cn(
-                "size-5 rounded-md flex items-center justify-center transition-transform group-hover:scale-105",
-                isTerminalOpen
-                  ? "bg-primary/20 text-primary"
-                  : "bg-emerald-500/10 border border-emerald-500/25 text-emerald-400",
-              )}
-            >
-              <TerminalSquareIcon className="size-3.5" />
-            </div>
-            <span className="font-semibold tracking-tight">AI Terminal</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span
-              className={cn(
-                "size-1.5 rounded-full",
-                isTerminalOpen ? "bg-emerald-400 animate-pulse" : "bg-muted-foreground/35",
-              )}
-            />
-            <span className="text-3xs font-mono px-1.5 py-0.5 rounded-full bg-sidebar-muted/30 text-sidebar-muted-foreground border border-border/30 group-hover:border-emerald-500/30 group-hover:text-emerald-400 transition-colors">
-              {isTerminalOpen ? "Active" : "Shell"}
-            </span>
-          </div>
-        </SidebarMenuButton>
-      </SidebarMenuItem>
-    </SidebarMenu>
   );
 });
 
