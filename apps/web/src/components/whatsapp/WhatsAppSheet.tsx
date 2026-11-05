@@ -28,6 +28,7 @@ import {
   MessageSquare,
   ChevronDown,
   ChevronUp,
+  Zap,
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { WhatsAppIcon } from "./WhatsAppHeaderButton";
@@ -123,6 +124,7 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
 
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [optimizingRam, setOptimizingRam] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
@@ -218,6 +220,30 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
     fetchData();
     if (settings.activeSessionId) {
       loadChats(settings.activeSessionId);
+    }
+  };
+
+  const handleOptimizeRam = async () => {
+    if (optimizingRam) return;
+    setOptimizingRam(true);
+    setErrorMsg(null);
+    setSuccessMsg(null);
+    try {
+      const res = await fetch("/api/whatsapp/restart-openwa", { method: "POST" });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        setSuccessMsg("WhatsApp RAM Optimized! OpenWA Docker restarted.");
+        setTimeout(() => setSuccessMsg(null), 4000);
+        setTimeout(() => {
+          fetchData();
+        }, 3000);
+      } else {
+        setErrorMsg(data.error || "Failed to restart OpenWA container");
+      }
+    } catch (err: any) {
+      setErrorMsg(err?.message || "Failed to restart OpenWA");
+    } finally {
+      setOptimizingRam(false);
     }
   };
 
@@ -444,7 +470,23 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
             </h2>
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={handleOptimizeRam}
+              disabled={optimizingRam}
+              className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[10.5px] font-medium border transition-all cursor-pointer ${
+                optimizingRam
+                  ? "border-amber-500/40 bg-amber-500/10 text-amber-300 cursor-wait"
+                  : "border-emerald-500/30 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/60 hover:text-white hover:border-emerald-500/60 active:scale-95"
+              }`}
+              title="Optimize WhatsApp RAM (Restart OpenWA container & free ~1.1GB memory)"
+            >
+              <Zap
+                className={`size-3 ${optimizingRam ? "animate-spin text-amber-400" : "text-emerald-400"}`}
+              />
+              <span>{optimizingRam ? "Freeing RAM..." : "Free RAM"}</span>
+            </button>
             <button
               type="button"
               onClick={handleRefresh}
@@ -1198,6 +1240,34 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
                       <ExternalLink className="size-2.5" />
                     </a>
                   </div>
+                </div>
+              </div>
+
+              {/* Cupertino Form Group 3: Memory & RAM Optimization */}
+              <div className="space-y-1">
+                <span className="text-[10px] font-semibold tracking-wider text-zinc-400 uppercase px-1">
+                  RAM & Server Health
+                </span>
+                <div className="rounded-xl border border-white/[0.08] bg-zinc-900/60 p-2.5 flex items-center justify-between gap-3">
+                  <div className="space-y-0.5">
+                    <p className="text-xs font-semibold text-white flex items-center gap-1.5">
+                      <Zap className="size-3.5 text-amber-400" />
+                      <span>WhatsApp RAM Optimization</span>
+                    </p>
+                    <p className="text-[10px] text-zinc-400 leading-relaxed">
+                      Restarts OpenWA Chrome container to release cached memory (~1.1 GB). Messages
+                      re-sync automatically without losing session login.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={optimizingRam}
+                    onClick={handleOptimizeRam}
+                    className="shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600/90 hover:bg-emerald-500 text-white text-[11px] font-semibold shadow-xs disabled:opacity-50 transition-all cursor-pointer active:scale-95"
+                  >
+                    <Zap className={`size-3 ${optimizingRam ? "animate-spin" : ""}`} />
+                    <span>{optimizingRam ? "Restarting..." : "Free RAM"}</span>
+                  </button>
                 </div>
               </div>
             </div>

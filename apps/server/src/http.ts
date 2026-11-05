@@ -2855,6 +2855,37 @@ export const layerWhatsAppScheduledTaskRunNowRoute = HttpRouter.add(
     return HttpServerResponse.jsonUnsafe(result);
   }),
 );
+export const layerWhatsAppRestartOpenWARoute = HttpRouter.add(
+  "POST",
+  "/api/whatsapp/restart-openwa",
+  Effect.gen(function* () {
+    const result = yield* Effect.promise(
+      () =>
+        new Promise<{ ok: boolean; message?: string; error?: string; stdout?: string }>(
+          (resolve) => {
+            NodeChildProcess.exec(
+              "docker restart openwa",
+              { timeout: 60000 },
+              (error, stdout, stderr) => {
+                if (error) {
+                  resolve({ ok: false, error: error.message || String(stderr) });
+                } else {
+                  resolve({
+                    ok: true,
+                    message: "OpenWA Docker container restarted successfully",
+                    stdout: stdout.trim(),
+                  });
+                }
+              },
+            );
+          },
+        ),
+    );
+    return HttpServerResponse.jsonUnsafe(result, {
+      status: result.ok ? 200 : 500,
+    });
+  }),
+);
 // ── End WhatsApp Gateway & Bot Management API ──────────────────────────────
 
 interface ManagedDevServer {

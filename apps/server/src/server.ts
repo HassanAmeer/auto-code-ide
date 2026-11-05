@@ -712,6 +712,7 @@ const layerMakeRoutes = Layer.mergeAll(
     ServerHttp.layerWhatsAppScheduledTaskCreateRoute,
     ServerHttp.layerWhatsAppScheduledTaskCancelRoute,
     ServerHttp.layerWhatsAppScheduledTaskRunNowRoute,
+    ServerHttp.layerWhatsAppRestartOpenWARoute,
     ServerHttp.layerProjectPreviewRoute,
     ServerHttp.layerProjectInspectRoute,
     ServerHttp.layerSuperAgentDispatchWorkerRoute,
