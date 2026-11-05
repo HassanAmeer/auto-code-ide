@@ -127,7 +127,12 @@ export function parseErrorDetails(
   } else if (/model not found|resource not found|no such model/i.test(text)) {
     statusCode = "404";
   } else if (/timeout|timed out|stalled|took too long/i.test(text)) {
-    statusCode = "408";
+    // If it is a shell command/terminal/process execution timeout, keep status as Timeout instead of HTTP 408
+    if (/command|execut|terminal|script|bash|apt-get|mariadb|process/i.test(text)) {
+      statusCode = "Timeout";
+    } else {
+      statusCode = "408";
+    }
   } else if (/cooling down/i.test(text)) {
     statusCode = "429";
   } else if (/rate limit|too many requests|quota (?:exhausted|exceeded)/i.test(text)) {
@@ -193,6 +198,15 @@ export function parseErrorDetails(
     shortReason = "Model not found";
     recommendation =
       "The selected model ID was not found on the upstream server. Verify the model slug in settings.";
+  } else if (
+    /command.*timeout|terminal.*timeout|execution.*timed? ?out|timed out before completion/i.test(
+      text,
+    )
+  ) {
+    errorCategory = "Command Execution Timeout";
+    shortReason = "Command timeout";
+    recommendation =
+      "Command execution took longer than the allocated timeout limit. Retry with an increased timeout or run in the background.";
   } else if (statusCode === "408" || /timeout|timed out|stalled/i.test(text)) {
     errorCategory = "Model Request Timeout";
     shortReason = "Timeout";

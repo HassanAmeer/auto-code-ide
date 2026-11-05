@@ -215,10 +215,10 @@ export async function bypassChatStream(
     throw new Error(`[opencode-bypass] HTTP ${res.status}: ${errorDetail}`);
   }
 
-  // Once headers are received ok, set streaming idle heartbeat timeout (25 seconds between chunks)
+  // Once headers are received ok, set streaming idle heartbeat timeout (60 seconds before first token)
   resetTimeout(
-    25_000,
-    `[opencode-bypass] HTTP 408 Request Timeout: Model '${options.model}' ka stream stall ho gaya (25s se koi token receive nahi hua). Upstream server busy ya limit hit ho sakti hai.`,
+    60_000,
+    `[opencode-bypass] HTTP 408 Request Timeout: Model '${options.model}' ka stream stall ho gaya (60s se koi token receive nahi hua). Upstream server busy ya limit hit ho sakti hai.`,
   );
 
   const decoder = new TextDecoder();
@@ -232,11 +232,11 @@ export async function bypassChatStream(
         const { done, value } = await reader.read();
         if (done) break;
 
-        // Reset idle timer on every incoming chunk
+        // Reset idle timer on every incoming chunk (allow up to 120s between chunks for thinking models)
         hasReceivedAnyChunk = true;
         resetTimeout(
-          35_000,
-          `[opencode-bypass] HTTP 408 Request Timeout: Model '${options.model}' ka stream stall ho gaya (35s se koi token receive nahi hua). Upstream server busy ya limit hit ho sakti hai.`,
+          120_000,
+          `[opencode-bypass] HTTP 408 Request Timeout: Model '${options.model}' ka stream stall ho gaya (120s se koi token receive nahi hua). Upstream server busy ya limit hit ho sakti hai.`,
         );
 
         buffer += decoder.decode(value, { stream: true });
@@ -280,8 +280,8 @@ export async function bypassChatStream(
       for await (const chunk of res.body as any) {
         hasReceivedAnyChunk = true;
         resetTimeout(
-          35_000,
-          `[opencode-bypass] HTTP 408 Request Timeout: Model '${options.model}' ka stream stall ho gaya (35s se koi token receive nahi hua). Upstream server busy ya limit hit ho sakti hai.`,
+          120_000,
+          `[opencode-bypass] HTTP 408 Request Timeout: Model '${options.model}' ka stream stall ho gaya (120s se koi token receive nahi hua). Upstream server busy ya limit hit ho sakti hai.`,
         );
 
         buffer += typeof chunk === "string" ? chunk : decoder.decode(chunk, { stream: true });

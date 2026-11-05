@@ -1676,11 +1676,11 @@ ${userPrompt || "Continue generating from where you were interrupted"}`;
                 const client = yield* HttpClient.HttpClient;
                 const rawResponse = yield* client.execute(request).pipe(
                   Effect.timeoutOrElse({
-                    duration: "35 seconds",
+                    duration: "60 seconds",
                     orElse: () =>
                       Effect.fail(
                         new Error(
-                          `Connection timed out after 35 seconds while waiting for response from model "${selectedModel}". The upstream model server (${cleanBase}) is unresponsive or taking too long.`,
+                          `Connection timed out after 60 seconds while waiting for response from model "${selectedModel}". The upstream model server (${cleanBase}) is unresponsive or taking too long.`,
                         ),
                       ),
                   }),
