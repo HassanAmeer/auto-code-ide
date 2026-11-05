@@ -19,7 +19,6 @@
       "entry": [
         "src/bin.ts!",
         "src/claude-history-worker.ts!",
-        "scripts/cli.ts",
         "scripts/probe-claude-fork-local-rollback-replay.ts",
         "src/provider/testFixtures/*.mjs",
       ],

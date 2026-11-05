@@ -69,7 +69,7 @@ export default mergeConfig(
     run: {
       tasks: {
         build: {
-          command: "node scripts/cli.ts build",
+          command: "vp pack",
           dependsOn: ["@t3tools/web#build"],
           cache: false,
         },
