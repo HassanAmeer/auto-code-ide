@@ -539,6 +539,8 @@ import {
   findNextFallbackModel,
   markThreadUserStopped,
   clearThreadUserStopped,
+  isThreadUserStopped,
+  isThreadAutoRetryPaused,
 } from "~/lib/autoRetrySettings";
 import {
   isComposerWebSearchEnabled,
@@ -11542,7 +11544,11 @@ export default function ChatView(props: ChatViewProps) {
       ) ||
       (visibleThreadError && /interrupted|stopped by user/i.test(visibleThreadError)),
     );
-    if (isInterruptedRun) {
+    if (
+      isInterruptedRun ||
+      (activeThread?.id && isThreadUserStopped(activeThread.id)) ||
+      (activeThread?.id && isThreadAutoRetryPaused(activeThread.id))
+    ) {
       setAutoRetryCountdown(null);
       return;
     }

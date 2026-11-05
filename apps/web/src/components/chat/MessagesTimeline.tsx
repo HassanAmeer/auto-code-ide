@@ -10,8 +10,10 @@ import { ReadOnlySourcePreview } from "../files/AttachmentFilePreview";
 import { useRightPanelStore } from "~/rightPanelStore";
 import {
   useAutoRetrySettings,
+  useThreadAutoRetryStatus,
   useIsThreadUserStopped,
   clearThreadUserStopped,
+  resetThreadAutoRetry,
 } from "~/lib/autoRetrySettings";
 import {
   getQuestionAnswerPreview,
@@ -371,6 +373,7 @@ interface TimelineRowSharedState {
   onWorktreeSetupWorkLocally: (() => void) | null;
   onOpenWorktreeSetupTerminal: ((terminalId: string) => void) | null;
   onRetryTurn?: ((runId?: RunId) => void) | null | undefined;
+  latestErrorRowId?: string | null | undefined;
   workGroupViewState: WorkGroupViewState;
   interruptedRunIds?: ReadonlySet<RunId>;
   hasInterruptedRun?: boolean;
@@ -933,6 +936,23 @@ const ConversationTimeline = memo(function ConversationTimeline({
     worktreeSetup,
   ]);
   const rows = useStableRows(rawRows, listIdentityKey);
+  const latestErrorRowId = useMemo(() => {
+    for (let i = rows.length - 1; i >= 0; i--) {
+      const r = rows[i];
+      if (!r) continue;
+      if (r.kind === "event" && r.projectedItem.item.type === "error") {
+        return r.id;
+      }
+      if (
+        r.kind === "work" &&
+        r.entry.structuredPayload &&
+        (r.entry.structuredPayload as any).type === "error"
+      ) {
+        return r.id;
+      }
+    }
+    return null;
+  }, [rows]);
   // Run status/timestamps churn on every stream event; the shared row context
   // must not change with them or every timeline row re-renders per event.
   const runs = useStableHandoffRuns(runsProp);
@@ -1379,6 +1399,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
       onWorktreeSetupWorkLocally: onWorktreeSetupWorkLocally ?? null,
       onOpenWorktreeSetupTerminal: onOpenWorktreeSetupTerminal ?? null,
       onRetryTurn: onRetryTurn ?? null,
+      latestErrorRowId,
       workGroupViewState,
       interruptedRunIds,
       hasInterruptedRun,
@@ -1420,6 +1441,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
       onWorktreeSetupWorkLocally,
       onOpenWorktreeSetupTerminal,
       onRetryTurn,
+      latestErrorRowId,
       workGroupViewState,
       interruptedRunIds,
       hasInterruptedRun,
@@ -3140,6 +3162,8 @@ function CupertinoTimelineErrorCard({
   timestamp,
   visibility,
   sourceThreadId,
+  threadId: propThreadId,
+  isLatestError = true,
   retryAction,
   onRetryTurn,
   onContinue,
@@ -3155,6 +3179,8 @@ function CupertinoTimelineErrorCard({
   timestamp?: ReactNode | undefined;
   visibility?: "local" | "inherited" | "synthetic" | undefined;
   sourceThreadId?: string | null | undefined;
+  threadId?: string | null | undefined;
+  isLatestError?: boolean | undefined;
   retryAction?: { label: string; onRetry: () => void } | null | undefined;
   onRetryTurn?: ((runId?: RunId) => void) | null | undefined;
   onContinue?: (() => void) | undefined;
@@ -3168,28 +3194,28 @@ function CupertinoTimelineErrorCard({
   const isWorking = activity?.isWorking ?? false;
 
   const [autoRetrySettings] = useAutoRetrySettings();
-  const isStoppedFromInputBox = useIsThreadUserStopped(sourceThreadId);
+  const activeThreadId = propThreadId || sourceThreadId || null;
+  const { isStopped, isPaused, pause, resume, reset } = useThreadAutoRetryStatus(activeThreadId);
+
   const autoRetryDelay =
     typeof autoRetrySettings.delaySeconds === "number" && autoRetrySettings.delaySeconds > 0
       ? autoRetrySettings.delaySeconds
       : 10;
   const [countdownSeconds, setCountdownSeconds] = useState(autoRetryDelay);
 
-  // If user explicitly stopped or interrupted the turn, NEVER auto-retry!
+  // If user explicitly stopped from input box or turn interrupted, auto-retry is CANCELLED!
   const isInterruptedRun = Boolean(
-    isStoppedFromInputBox ||
+    isStopped ||
     isUserInterrupted ||
     /interrupted by user|stopped by user|user stopped|run interrupted/i.test(rawError) ||
     /interrupted by user|stopped by user|user stopped|run interrupted/i.test(errorType || ""),
   );
 
-  const [isPaused, setIsPaused] = useState(
-    () => autoRetrySettings.enabled === false || isInterruptedRun,
-  );
   const [isAutoRetried, setIsAutoRetried] = useState(false);
 
   useEffect(() => {
-    // If run was stopped or interrupted by user, do not auto retry
+    // ONLY the latest error card in the thread runs auto-retry countdown!
+    if (!isLatestError) return;
     if (isInterruptedRun) return;
     if (!onRetryTurn && !retryAction) return;
     if (autoRetrySettings.enabled === false) return;
@@ -3211,6 +3237,7 @@ function CupertinoTimelineErrorCard({
 
     return () => clearTimeout(timer);
   }, [
+    isLatestError,
     countdownSeconds,
     isInterruptedRun,
     isPaused,
@@ -3223,10 +3250,7 @@ function CupertinoTimelineErrorCard({
 
   const handleManualRetry = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (sourceThreadId) {
-      clearThreadUserStopped(sourceThreadId);
-    }
-    setIsPaused(true);
+    reset();
     setIsAutoRetried(true);
     if (onRetryTurn) {
       onRetryTurn();
@@ -3238,13 +3262,11 @@ function CupertinoTimelineErrorCard({
   const handleToggleTimer = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (isPaused || isAutoRetried) {
-      if (countdownSeconds <= 0 || isAutoRetried) {
-        setCountdownSeconds(autoRetryDelay);
-        setIsAutoRetried(false);
-      }
-      setIsPaused(false);
+      setCountdownSeconds(autoRetryDelay);
+      setIsAutoRetried(false);
+      resume();
     } else {
-      setIsPaused(true);
+      pause();
     }
   };
 
@@ -3432,30 +3454,38 @@ function CupertinoTimelineErrorCard({
             <span>{isWorking ? "Retrying..." : retryAction?.label || "Retry"}</span>
           </Button>
 
-          {!isWorking && !isInterruptedRun ? (
-            <div className="flex items-center gap-1.5 select-none">
-              <span
-                className={cn(
-                  "text-[11px] font-mono",
-                  isPaused || isAutoRetried ? "text-zinc-500" : "text-zinc-400",
-                )}
-              >
-                {isPaused || isAutoRetried ? "Retry paused" : `Retrying in ${countdownSeconds}s`}
-              </span>
-              <button
-                type="button"
-                onClick={handleToggleTimer}
-                className="p-0.5 bg-transparent border-none outline-none shadow-none cursor-pointer flex items-center justify-center transition-colors"
-                title={isPaused || isAutoRetried ? "Resume auto-retry" : "Pause auto-retry"}
-                aria-label={isPaused || isAutoRetried ? "Resume auto-retry" : "Pause auto-retry"}
-              >
-                {isPaused || isAutoRetried ? (
-                  <PlayIcon className="size-3 text-zinc-400 hover:text-zinc-200 fill-zinc-400/20" />
-                ) : (
-                  <SquareIcon className="size-3 text-red-400/80 hover:text-red-400 fill-red-500/20" />
-                )}
-              </button>
-            </div>
+          {!isWorking ? (
+            isInterruptedRun ? (
+              /* User stopped from input box -> Retry cancelled (NO countdown, NO play, NO pause) */
+              <div className="flex items-center gap-1.5 select-none">
+                <span className="text-[11px] font-mono text-zinc-500">Retry cancelled</span>
+              </div>
+            ) : isLatestError ? (
+              /* Only the latest error in the thread shows auto-retry status & controls */
+              <div className="flex items-center gap-1.5 select-none">
+                <span
+                  className={cn(
+                    "text-[11px] font-mono",
+                    isPaused || isAutoRetried ? "text-zinc-500" : "text-zinc-400",
+                  )}
+                >
+                  {isPaused || isAutoRetried ? "Retry paused" : `Retrying in ${countdownSeconds}s`}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleToggleTimer}
+                  className="p-0.5 bg-transparent border-none outline-none shadow-none cursor-pointer flex items-center justify-center transition-colors"
+                  title={isPaused || isAutoRetried ? "Resume auto-retry" : "Pause auto-retry"}
+                  aria-label={isPaused || isAutoRetried ? "Resume auto-retry" : "Pause auto-retry"}
+                >
+                  {isPaused || isAutoRetried ? (
+                    <PlayIcon className="size-3 text-zinc-400 hover:text-zinc-200 fill-zinc-400/20" />
+                  ) : (
+                    <SquareIcon className="size-3 text-red-400/80 hover:text-red-400 fill-red-500/20" />
+                  )}
+                </button>
+              </div>
+            ) : null
           ) : null}
         </div>
       ) : null}
@@ -3548,6 +3578,9 @@ function CupertinoErrorRow({
     ? ctx.runs?.find((r) => r.id === item.runId)?.modelSelection?.model
     : undefined;
 
+  const isLatestError = ctx.latestErrorRowId ? row.id === ctx.latestErrorRowId : true;
+  const effectiveThreadId = sourceThreadId || ctx.threadRef?.threadId || ctx.routeThreadKey || null;
+
   return (
     <CupertinoTimelineErrorCard
       rawError={presentation.detail || item.failure.message}
@@ -3559,6 +3592,8 @@ function CupertinoErrorRow({
       isWarning={presentation.tone === "warning"}
       visibility={visibility}
       sourceThreadId={sourceThreadId}
+      threadId={effectiveThreadId}
+      isLatestError={isLatestError}
       isInterrupted={isInterrupted}
       isUserInterrupted={isUserInterrupted}
       onContinue={handleResume}
@@ -5868,6 +5903,13 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
           }
         : null;
 
+    const isLatestError = ctx.latestErrorRowId ? workEntry.id === ctx.latestErrorRowId : true;
+    const effectiveThreadId =
+      workEntry.projectedItem?.sourceThreadId ||
+      ctx.threadRef?.threadId ||
+      ctx.routeThreadKey ||
+      null;
+
     return (
       <CupertinoTimelineErrorCard
         rawError={failureItem.failure.message}
@@ -5882,6 +5924,8 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
         }
         visibility={workEntry.projectedItem?.visibility}
         sourceThreadId={workEntry.projectedItem?.sourceThreadId}
+        threadId={effectiveThreadId}
+        isLatestError={isLatestError}
         isInterrupted={
           (failureItem.runId !== null && ctx.interruptedRunIds?.has(failureItem.runId)) ||
           ctx.hasInterruptedRun ||

@@ -185,10 +185,11 @@ export function findNextFallbackModel(
 }
 
 // ---------------------------------------------------------------------------
-// Thread-level "Stopped by user from input box" state tracking
+// Thread-level Retry Status Tracking (Stopped from input box / Paused from card)
 // ---------------------------------------------------------------------------
 
 const userStoppedThreadIds = new Set<string>();
+const userPausedThreadIds = new Set<string>();
 
 /**
  * Mark that the user explicitly clicked the Stop button in the input box / composer.
@@ -197,7 +198,13 @@ const userStoppedThreadIds = new Set<string>();
 export function markThreadUserStopped(threadId: string | null | undefined): void {
   if (!threadId) return;
   userStoppedThreadIds.add(threadId);
+  userPausedThreadIds.delete(threadId);
   if (typeof window !== "undefined") {
+    window.dispatchEvent(
+      new CustomEvent("t3-thread-retry-status-changed", {
+        detail: { threadId, status: "stopped" },
+      }),
+    );
     window.dispatchEvent(
       new CustomEvent("t3-thread-user-stopped", { detail: { threadId, stopped: true } }),
     );
@@ -212,6 +219,64 @@ export function clearThreadUserStopped(threadId: string | null | undefined): voi
   userStoppedThreadIds.delete(threadId);
   if (typeof window !== "undefined") {
     window.dispatchEvent(
+      new CustomEvent("t3-thread-retry-status-changed", {
+        detail: { threadId, status: "active" },
+      }),
+    );
+    window.dispatchEvent(
+      new CustomEvent("t3-thread-user-stopped", { detail: { threadId, stopped: false } }),
+    );
+  }
+}
+
+/**
+ * Pause auto-retry for the entire thread (when the user pauses any error card in the thread).
+ */
+export function pauseThreadAutoRetry(threadId: string | null | undefined): void {
+  if (!threadId) return;
+  userPausedThreadIds.add(threadId);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(
+      new CustomEvent("t3-thread-retry-status-changed", {
+        detail: { threadId, status: "paused" },
+      }),
+    );
+  }
+}
+
+/**
+ * Resume auto-retry for the thread (when the user clicks play/resume on an error card).
+ */
+export function resumeThreadAutoRetry(threadId: string | null | undefined): void {
+  if (!threadId) return;
+  userPausedThreadIds.delete(threadId);
+  userStoppedThreadIds.delete(threadId);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(
+      new CustomEvent("t3-thread-retry-status-changed", {
+        detail: { threadId, status: "active" },
+      }),
+    );
+    window.dispatchEvent(
+      new CustomEvent("t3-thread-user-stopped", { detail: { threadId, stopped: false } }),
+    );
+  }
+}
+
+/**
+ * Reset all retry override states (both stopped and paused) for a thread.
+ */
+export function resetThreadAutoRetry(threadId: string | null | undefined): void {
+  if (!threadId) return;
+  userStoppedThreadIds.delete(threadId);
+  userPausedThreadIds.delete(threadId);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(
+      new CustomEvent("t3-thread-retry-status-changed", {
+        detail: { threadId, status: "reset" },
+      }),
+    );
+    window.dispatchEvent(
       new CustomEvent("t3-thread-user-stopped", { detail: { threadId, stopped: false } }),
     );
   }
@@ -222,28 +287,53 @@ export function isThreadUserStopped(threadId: string | null | undefined): boolea
   return userStoppedThreadIds.has(threadId);
 }
 
+export function isThreadAutoRetryPaused(threadId: string | null | undefined): boolean {
+  if (!threadId) return false;
+  return userPausedThreadIds.has(threadId);
+}
+
 /**
- * Hook to reactively observe whether the active chat / thread was stopped by the user from the input box.
+ * Hook to reactively observe thread-level retry status (stopped, paused, active).
  */
-export function useIsThreadUserStopped(threadId: string | null | undefined): boolean {
-  const [stopped, setStopped] = useState(() => isThreadUserStopped(threadId));
+export function useThreadAutoRetryStatus(threadId: string | null | undefined) {
+  const [isStopped, setIsStopped] = useState(() => isThreadUserStopped(threadId));
+  const [isPaused, setIsPaused] = useState(() => isThreadAutoRetryPaused(threadId));
 
   useEffect(() => {
-    setStopped(isThreadUserStopped(threadId));
+    setIsStopped(isThreadUserStopped(threadId));
+    setIsPaused(isThreadAutoRetryPaused(threadId));
     if (typeof window === "undefined" || !threadId) return;
 
     const handler = (e: Event) => {
-      const custom = e as CustomEvent<{ threadId?: string; stopped?: boolean }>;
+      const custom = e as CustomEvent<{ threadId?: string; status?: string }>;
       if (!custom.detail?.threadId || custom.detail.threadId === threadId) {
-        setStopped(isThreadUserStopped(threadId));
+        setIsStopped(isThreadUserStopped(threadId));
+        setIsPaused(isThreadAutoRetryPaused(threadId));
       }
     };
 
+    window.addEventListener("t3-thread-retry-status-changed", handler);
     window.addEventListener("t3-thread-user-stopped", handler);
     return () => {
+      window.removeEventListener("t3-thread-retry-status-changed", handler);
       window.removeEventListener("t3-thread-user-stopped", handler);
     };
   }, [threadId]);
 
-  return stopped;
+  return {
+    isStopped,
+    isPaused,
+    pause: () => pauseThreadAutoRetry(threadId),
+    resume: () => resumeThreadAutoRetry(threadId),
+    cancel: () => markThreadUserStopped(threadId),
+    reset: () => resetThreadAutoRetry(threadId),
+  };
+}
+
+/**
+ * Hook to reactively observe whether the active chat / thread was stopped by the user from the input box.
+ */
+export function useIsThreadUserStopped(threadId: string | null | undefined): boolean {
+  const { isStopped } = useThreadAutoRetryStatus(threadId);
+  return isStopped;
 }
