@@ -15,12 +15,14 @@ import {
   FolderPlusIcon,
   Globe2Icon,
   MoreVerticalIcon,
+  Pencil,
   PlusIcon,
   RefreshCwIcon,
   RotateCcwIcon,
   SearchIcon,
   SquarePenIcon,
   TerminalIcon,
+  Trash2,
   Trash2Icon,
   UploadCloudIcon,
   XIcon,
@@ -508,6 +510,22 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
       lastVisitedAt,
     },
   });
+  const threadDateRaw = thread.latestUserMessageAt ?? thread.updatedAt ?? thread.createdAt;
+  const formattedDate = useMemo(() => {
+    if (!threadDateRaw) return null;
+    try {
+      const d = new Date(threadDateRaw);
+      if (Number.isNaN(d.getTime())) return null;
+      return d.toLocaleDateString([], {
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      return null;
+    }
+  }, [threadDateRaw]);
   const linkedPullRequestStatus = useLinkedThreadPullRequest(
     thread.environmentId,
     thread.linkedPullRequest,
@@ -797,7 +815,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
         data-testid={`thread-row-${thread.id}`}
         className={cn(
           "relative isolate flex w-full min-w-0 cursor-pointer select-none items-center gap-2 overflow-hidden rounded-lg px-2.5 text-left text-[13px] tracking-[-0.01em] outline-hidden focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring group-data-[collapsible=icon]:hidden transition-all duration-150 [&>span:last-child]:truncate [&>svg:not([class*='size-'])]:size-4 [&>svg]:shrink-0 [&>svg]:text-sidebar-muted-foreground",
-          threadStatus ? "min-h-[38px] py-1" : "h-8",
+          "min-h-[38px] py-1",
           isActive
             ? "bg-primary/10 font-medium text-primary shadow-[inset_0_0_0_1px_rgba(var(--primary),0.12)] hover:bg-primary/15"
             : isSelected
@@ -916,9 +934,14 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
               </Tooltip>
             )}
           </div>
-          {renamingThreadKey !== threadKey && threadStatus && (
-            <div className="flex items-center min-w-0 mt-0.5">
-              <ThreadStatusLabel status={threadStatus} />
+          {renamingThreadKey !== threadKey && (threadStatus || formattedDate) && (
+            <div className="flex items-center gap-1.5 min-w-0 mt-0.5">
+              {threadStatus && <ThreadStatusLabel status={threadStatus} />}
+              {formattedDate && (
+                <span className="text-[10px] opacity-60 block truncate leading-none">
+                  {formattedDate}
+                </span>
+              )}
             </div>
           )}
         </div>
@@ -983,7 +1006,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                   Confirm
                 </button>
               ) : canOperateThread && !isThreadRunning && renamingThreadKey !== threadKey ? (
-                <div className="pointer-events-none absolute top-1/2 right-0.5 -translate-y-1/2 flex items-center gap-0.5 opacity-0 transition-opacity duration-150 max-sm:pointer-events-auto max-sm:opacity-100 group-hover/menu-sub-item:pointer-events-auto group-hover/menu-sub-item:opacity-100 group-focus-within/menu-sub-item:pointer-events-auto group-focus-within/menu-sub-item:opacity-100 bg-sidebar/90 dark:bg-zinc-900/90 backdrop-blur-xs rounded px-0.5 shadow-xs">
+                <div className="pointer-events-none absolute top-1/2 right-1 -translate-y-1/2 flex items-center gap-0.5 opacity-0 transition-opacity duration-150 max-sm:pointer-events-auto max-sm:opacity-100 group-hover/thread-row:pointer-events-auto group-hover/thread-row:opacity-100 group-focus-within/thread-row:pointer-events-auto group-focus-within/thread-row:opacity-100 shrink-0">
                   <Tooltip>
                     <TooltipTrigger
                       render={
@@ -992,11 +1015,11 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                           data-thread-selection-safe
                           data-testid={`thread-rename-${thread.id}`}
                           aria-label={`Rename ${thread.title}`}
-                          className={SIDEBAR_ICON_ACTION_BUTTON_CLASS}
+                          className="p-1 rounded bg-transparent hover:text-primary text-muted-foreground/80 drop-shadow-xs transition-colors cursor-pointer"
                           onPointerDown={stopPropagationOnPointerDown}
                           onClick={handleStartRename}
                         >
-                          <SquarePenIcon className="size-3.5" />
+                          <Pencil className="size-2.5" />
                         </button>
                       }
                     />
@@ -1008,11 +1031,11 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                       data-thread-selection-safe
                       data-testid={`thread-archive-${thread.id}`}
                       aria-label={`Archive ${thread.title}`}
-                      className={SIDEBAR_ICON_ACTION_BUTTON_CLASS}
+                      className="p-1 rounded bg-transparent hover:text-destructive text-muted-foreground/80 drop-shadow-xs transition-colors cursor-pointer"
                       onPointerDown={stopPropagationOnPointerDown}
                       onClick={handleStartArchiveConfirmation}
                     >
-                      <ArchiveIcon className="size-3.5" />
+                      <Trash2 className="size-2.5" />
                     </button>
                   ) : (
                     <Tooltip>
@@ -1023,11 +1046,11 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                             data-thread-selection-safe
                             data-testid={`thread-archive-${thread.id}`}
                             aria-label={`Archive ${thread.title}`}
-                            className={SIDEBAR_ICON_ACTION_BUTTON_CLASS}
+                            className="p-1 rounded bg-transparent hover:text-destructive text-muted-foreground/80 drop-shadow-xs transition-colors cursor-pointer"
                             onPointerDown={stopPropagationOnPointerDown}
                             onClick={handleArchiveImmediateClick}
                           >
-                            <ArchiveIcon className="size-3.5" />
+                            <Trash2 className="size-2.5" />
                           </button>
                         }
                       />
@@ -1052,17 +1075,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                       </TooltipTrigger>
                       <TooltipPopup side="top">{jumpLabel}</TooltipPopup>
                     </Tooltip>
-                  ) : (
-                    <span
-                      className={`text-3xs tabular-nums ${
-                        isHighlighted ? "text-foreground" : "text-secondary-label"
-                      }`}
-                    >
-                      {formatRelativeTimeLabel(
-                        thread.latestUserMessageAt ?? thread.updatedAt ?? thread.createdAt,
-                      )}
-                    </span>
-                  )}
+                  ) : null}
                 </span>
               </span>
             </div>
