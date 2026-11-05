@@ -42,7 +42,6 @@ import { readPullRequestListPreferences } from "../pullRequest/pullRequestListPr
 import { isSidebarUtilityPage, useNavigateToMainApp } from "./mainAppLocation";
 import { SidebarThreadUndoNotice } from "./SidebarThreadUndoNotice";
 import { SidebarProviderUpdatePill } from "./SidebarProviderUpdatePill";
-import { SidebarUpdateArchitectureWarning, SidebarUpdatePill } from "./SidebarUpdatePill";
 import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
 import { useTerminalStore, terminalStore } from "../chat/terminal/terminalStore";
 import { SidebarResourceStats } from "./SidebarResourceStats";
@@ -585,11 +584,6 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
                 onClick={() => setIsExpanded((v) => !v)}
                 isActive={isExpanded}
               />
-            </div>
-
-            {/* Right side */}
-            <div className="flex items-center gap-1">
-              <SidebarUpdatePill />
             </div>
           </>
         )}

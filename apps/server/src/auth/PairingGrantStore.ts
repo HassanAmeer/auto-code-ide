@@ -22,7 +22,6 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
 import * as ServerConfig from "../config.ts";
-import * as AuthPairingLinks from "../persistence/AuthPairingLinks.ts";
 
 export interface BootstrapGrant {
   readonly method: ServerAuthBootstrapMethod;
@@ -278,7 +277,72 @@ const PAIRING_TOKEN_REJECTION_LIMIT =
 export const make = Effect.gen(function* () {
   const crypto = yield* Crypto.Crypto;
   const config = yield* ServerConfig.ServerConfig;
-  const pairingLinks = yield* AuthPairingLinks.AuthPairingLinkRepository;
+  const pairingLinksMap = new Map<string, any>();
+  const pairingLinks = {
+    listActive: ({ now }: { now: DateTime.DateTime }) =>
+      Effect.sync(() =>
+        Array.from(pairingLinksMap.values()).filter(
+          (link) =>
+            link.consumedAt === null &&
+            link.revokedAt === null &&
+            DateTime.isGreaterThan(link.expiresAt, now),
+        ),
+      ),
+    revoke: ({ id, revokedAt }: { id: string; revokedAt: DateTime.DateTime }) =>
+      Effect.sync(() => {
+        const link = pairingLinksMap.get(id);
+        if (link && link.revokedAt === null && link.consumedAt === null) {
+          link.revokedAt = revokedAt;
+          return true;
+        }
+        return false;
+      }),
+    create: (input: any) =>
+      Effect.sync(() => {
+        pairingLinksMap.set(input.id, {
+          ...input,
+          consumedAt: null,
+          revokedAt: null,
+        });
+      }),
+    consumeAvailable: (input: any) =>
+      Effect.sync(() => {
+        for (const link of pairingLinksMap.values()) {
+          if (
+            link.credential === input.credential &&
+            link.consumedAt === null &&
+            link.revokedAt === null &&
+            DateTime.isGreaterThan(link.expiresAt, input.now)
+          ) {
+            if (
+              input.proofKeyThumbprint !== null &&
+              link.proofKeyThumbprint !== null &&
+              link.proofKeyThumbprint !== input.proofKeyThumbprint
+            ) {
+              continue;
+            }
+            if (
+              input.requestedScopes !== undefined &&
+              !input.requestedScopes.some((s: string) => link.scopes.includes(s))
+            ) {
+              continue;
+            }
+            link.consumedAt = input.consumedAt;
+            return Option.some(link);
+          }
+        }
+        return Option.none();
+      }),
+    getByCredential: ({ credential }: { credential: string }) =>
+      Effect.sync(() => {
+        for (const link of pairingLinksMap.values()) {
+          if (link.credential === credential) {
+            return Option.some(link);
+          }
+        }
+        return Option.none();
+      }),
+  };
   const seededGrantsRef = yield* Ref.make(new Map<string, StoredBootstrapGrant>());
   const changesPubSub = yield* PubSub.unbounded<BootstrapCredentialChange>();
   const generatePairingToken = Effect.gen(function* () {
@@ -633,6 +697,4 @@ export const make = Effect.gen(function* () {
   });
 });
 
-export const layer = Layer.effect(PairingGrantStore, make).pipe(
-  Layer.provideMerge(AuthPairingLinks.layer),
-);
+export const layer = Layer.effect(PairingGrantStore, make);

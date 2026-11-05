@@ -12,7 +12,6 @@ import { HttpClient, HttpClientResponse } from "effect/http";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 
 import * as ServerConfig from "../config.ts";
-import * as DesktopAppUpdate from "../desktopUpdate/DesktopAppUpdate.ts";
 import * as ProcessRunner from "../processRunner.ts";
 import * as ServiceLauncherClient from "./serviceLauncherClient.ts";
 import { SERVICE_LAUNCHER_PROTOCOL } from "./serviceProtocol.ts";
@@ -23,7 +22,6 @@ interface HarnessOptions {
   readonly managed?: boolean;
   readonly preflight?: "ready" | "blocked";
   readonly requestUpdate?: ServiceLauncherClient.ServiceLauncherClient["Service"]["requestUpdate"];
-  readonly desktopAppUpdate?: DesktopAppUpdate.DesktopAppUpdate["Service"];
 }
 
 // The staged runtime is a release archive: the fake client serves SHA256SUMS
@@ -112,13 +110,6 @@ const makeHarness = Effect.fn("test.make_self_update_harness")(function* (
   const selfUpdate = yield* ServerSelfUpdate.make().pipe(
     Effect.provideService(ProcessRunner.ProcessRunner, runner),
     Effect.provideService(ServiceLauncherClient.ServiceLauncherClient, launcher),
-    Effect.provideService(
-      DesktopAppUpdate.DesktopAppUpdate,
-      options.desktopAppUpdate ?? {
-        available: false,
-        run: () => Effect.die("unexpected desktop app update run"),
-      },
-    ),
     Effect.provideService(HttpClient.HttpClient, releaseHttpClient(order)),
     Effect.provideService(HostProcessPlatform, "linux"),
     Effect.provideService(HostProcessArchitecture, "x64"),

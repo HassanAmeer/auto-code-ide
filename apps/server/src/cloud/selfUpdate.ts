@@ -23,7 +23,6 @@ import { HttpClient } from "effect/http";
 import { CLI_RELEASE_BASE_URL_ENV } from "@t3tools/shared/cliRelease";
 
 import * as ServerConfig from "../config.ts";
-import * as DesktopAppUpdate from "../desktopUpdate/DesktopAppUpdate.ts";
 import * as ProcessRunner from "../processRunner.ts";
 import {
   ensurePinnedRuntimeInstalled,
@@ -171,7 +170,6 @@ export const withRunningThreadContinuation = Effect.fn(
 
 export const make = Effect.fn("cloud.server_self_update.make")(function* () {
   const serverConfig = yield* ServerConfig.ServerConfig;
-  const desktopAppUpdate = yield* DesktopAppUpdate.DesktopAppUpdate;
   const launcher = yield* ServiceLauncherClient.ServiceLauncherClient;
   const runner = yield* ProcessRunner.ProcessRunner;
   const fs = yield* FileSystem.FileSystem;
@@ -186,8 +184,7 @@ export const make = Effect.fn("cloud.server_self_update.make")(function* () {
   );
   const inFlight = yield* Ref.make(false);
 
-  const capability: ServerSelfUpdateCapability | null =
-    serverConfig.mode === "desktop" ? "desktop-managed" : launcher.managed ? "boot-service" : null;
+  const capability: ServerSelfUpdateCapability | null = launcher.managed ? "boot-service" : null;
   const failWith = (reason: string, cause?: unknown) =>
     cause === undefined
       ? new ServerSelfUpdateError({ reason })
@@ -196,17 +193,6 @@ export const make = Effect.fn("cloud.server_self_update.make")(function* () {
   const update: ServerSelfUpdate["Service"]["update"] = Effect.fn(
     "cloud.server_self_update.update",
   )(function* (input, reportProgress = () => Effect.void, onHandoffAccepted = () => Effect.void) {
-    if (capability === "desktop-managed") {
-      // input.targetVersion is meaningless here: the desktop app's own
-      // update feed decides what it downloads, and the result carries what
-      // it actually got.
-      if (desktopAppUpdate.available) {
-        return yield* desktopAppUpdate.run(reportProgress);
-      }
-      return yield* failWith(
-        "This server is managed by the T3 Code desktop app on its machine; update the desktop app to update it.",
-      );
-    }
     if (capability === null) {
       return yield* failWith(
         "Remote updates require the T3 Code background service. Run `t3 service install` on the server machine.",
