@@ -3,6 +3,7 @@ import { runtimeModeConfig, runtimeModeOptions as runtimeModes } from "./runtime
 import { isLocalEnvironmentDisabled } from "../../localEnvironment";
 import { usePrimaryEnvironmentId } from "../../state/environments";
 import { useRightPanelStore } from "~/rightPanelStore";
+import { markThreadUserStopped, clearThreadUserStopped } from "~/lib/autoRetrySettings";
 import { AttachmentFilePreview } from "../files/AttachmentFilePreview";
 import { Dialog, DialogPopup, DialogTitle } from "../ui/dialog";
 import { filterComposerPullRequestMatches } from "@t3tools/shared/composerPullRequestMatches";
@@ -4496,6 +4497,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         onSend: (sendEvent) => {
           // ChatView reports its final composed-input preflight through the
           // composer handle before its first asynchronous send step.
+          if (typeof composerDraftTarget === "object" && "threadId" in composerDraftTarget) {
+            clearThreadUserStopped(composerDraftTarget.threadId);
+          }
           providerInputRejectedRef.current = false;
           onSend(
             sendEvent,
@@ -6610,8 +6614,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     return () => window.removeEventListener("dragend", onWindowDragEnd);
   }, [isDragOverComposer]);
   const handleInterruptPrimaryAction = useCallback(() => {
+    if (typeof composerDraftTarget === "object" && "threadId" in composerDraftTarget) {
+      markThreadUserStopped(composerDraftTarget.threadId);
+    }
     void onInterrupt();
-  }, [onInterrupt]);
+  }, [onInterrupt, composerDraftTarget]);
   const handleImplementPlanInNewThreadPrimaryAction = useCallback(() => {
     void onImplementPlanInNewThread();
   }, [onImplementPlanInNewThread]);

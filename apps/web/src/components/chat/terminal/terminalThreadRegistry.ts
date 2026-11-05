@@ -3,6 +3,7 @@ import { terminalStore } from "./terminalStore";
 
 export const STORAGE_KEY_TERMINAL_THREAD_IDS = "adc_terminal_thread_ids";
 export const STORAGE_KEY_TERMINAL_DELETED_THREAD_IDS = "adc_terminal_deleted_thread_ids";
+export const STORAGE_KEY_TERMINAL_THREAD_PROJECT_MAP = "adc_terminal_thread_project_map";
 
 // Seed known terminal thread IDs from user activity
 export const SEED_TERMINAL_THREAD_IDS = [
@@ -85,10 +86,42 @@ export function addTerminalThreadId(threadId: string): void {
   } catch {}
 }
 
+export function getTerminalThreadProject(threadId: string): string | null {
+  if (!threadId || typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_TERMINAL_THREAD_PROJECT_MAP);
+    if (!raw) return null;
+    const map = JSON.parse(raw);
+    return typeof map[threadId] === "string" ? map[threadId] : null;
+  } catch {
+    return null;
+  }
+}
+
+export function setTerminalThreadProject(threadId: string, projectId: string | null): void {
+  if (!threadId || typeof window === "undefined") return;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_TERMINAL_THREAD_PROJECT_MAP);
+    const map = raw ? JSON.parse(raw) : {};
+    if (projectId) {
+      map[threadId] = projectId;
+    } else {
+      delete map[threadId];
+    }
+    localStorage.setItem(STORAGE_KEY_TERMINAL_THREAD_PROJECT_MAP, JSON.stringify(map));
+    window.dispatchEvent(
+      new CustomEvent("t3:terminal-thread-project-changed", {
+        detail: { threadId, projectId },
+      }),
+    );
+  } catch {}
+}
+
 export function removeTerminalThreadId(threadId: string): void {
   if (!threadId || typeof window === "undefined") return;
   try {
     markTerminalThreadIdDeleted(threadId);
+    setTerminalThreadProject(threadId, null);
     const current = getTerminalThreadIds();
     const updated = current.filter((id) => id !== threadId);
     localStorage.setItem(STORAGE_KEY_TERMINAL_THREAD_IDS, JSON.stringify(updated));
@@ -112,6 +145,7 @@ export function clearAllTerminalThreadIds(): void {
   try {
     localStorage.removeItem(STORAGE_KEY_TERMINAL_THREAD_IDS);
     localStorage.removeItem(STORAGE_KEY_TERMINAL_DELETED_THREAD_IDS);
+    localStorage.removeItem(STORAGE_KEY_TERMINAL_THREAD_PROJECT_MAP);
     window.dispatchEvent(new CustomEvent("t3:terminal-threads-changed", { detail: [] }));
   } catch {}
 }

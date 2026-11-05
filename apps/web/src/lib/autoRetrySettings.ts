@@ -183,3 +183,67 @@ export function findNextFallbackModel(
   const nextIndex = (currentIndex + 1) % favoriteCandidates.length;
   return favoriteCandidates[nextIndex] ?? null;
 }
+
+// ---------------------------------------------------------------------------
+// Thread-level "Stopped by user from input box" state tracking
+// ---------------------------------------------------------------------------
+
+const userStoppedThreadIds = new Set<string>();
+
+/**
+ * Mark that the user explicitly clicked the Stop button in the input box / composer.
+ * When a thread is marked as user-stopped, auto-retry is completely cancelled for that turn.
+ */
+export function markThreadUserStopped(threadId: string | null | undefined): void {
+  if (!threadId) return;
+  userStoppedThreadIds.add(threadId);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(
+      new CustomEvent("t3-thread-user-stopped", { detail: { threadId, stopped: true } }),
+    );
+  }
+}
+
+/**
+ * Clear the user-stopped state (e.g. when the user submits a new prompt or manually clicks Retry).
+ */
+export function clearThreadUserStopped(threadId: string | null | undefined): void {
+  if (!threadId) return;
+  userStoppedThreadIds.delete(threadId);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(
+      new CustomEvent("t3-thread-user-stopped", { detail: { threadId, stopped: false } }),
+    );
+  }
+}
+
+export function isThreadUserStopped(threadId: string | null | undefined): boolean {
+  if (!threadId) return false;
+  return userStoppedThreadIds.has(threadId);
+}
+
+/**
+ * Hook to reactively observe whether the active chat / thread was stopped by the user from the input box.
+ */
+export function useIsThreadUserStopped(threadId: string | null | undefined): boolean {
+  const [stopped, setStopped] = useState(() => isThreadUserStopped(threadId));
+
+  useEffect(() => {
+    setStopped(isThreadUserStopped(threadId));
+    if (typeof window === "undefined" || !threadId) return;
+
+    const handler = (e: Event) => {
+      const custom = e as CustomEvent<{ threadId?: string; stopped?: boolean }>;
+      if (!custom.detail?.threadId || custom.detail.threadId === threadId) {
+        setStopped(isThreadUserStopped(threadId));
+      }
+    };
+
+    window.addEventListener("t3-thread-user-stopped", handler);
+    return () => {
+      window.removeEventListener("t3-thread-user-stopped", handler);
+    };
+  }, [threadId]);
+
+  return stopped;
+}

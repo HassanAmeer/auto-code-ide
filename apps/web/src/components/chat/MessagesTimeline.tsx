@@ -8,7 +8,11 @@ import { PullRequestGlyph } from "../pullRequest/pullRequestIcons";
 import type { WorktreeSetupSnapshot } from "@t3tools/contracts";
 import { ReadOnlySourcePreview } from "../files/AttachmentFilePreview";
 import { useRightPanelStore } from "~/rightPanelStore";
-import { useAutoRetrySettings } from "~/lib/autoRetrySettings";
+import {
+  useAutoRetrySettings,
+  useIsThreadUserStopped,
+  clearThreadUserStopped,
+} from "~/lib/autoRetrySettings";
 import {
   getQuestionAnswerPreview,
   getQuestionAnswerText,
@@ -3164,6 +3168,7 @@ function CupertinoTimelineErrorCard({
   const isWorking = activity?.isWorking ?? false;
 
   const [autoRetrySettings] = useAutoRetrySettings();
+  const isStoppedFromInputBox = useIsThreadUserStopped(sourceThreadId);
   const autoRetryDelay =
     typeof autoRetrySettings.delaySeconds === "number" && autoRetrySettings.delaySeconds > 0
       ? autoRetrySettings.delaySeconds
@@ -3172,10 +3177,10 @@ function CupertinoTimelineErrorCard({
 
   // If user explicitly stopped or interrupted the turn, NEVER auto-retry!
   const isInterruptedRun = Boolean(
+    isStoppedFromInputBox ||
     isUserInterrupted ||
-    isInterrupted ||
-    /interrupted|stopped by user|user stopped|run interrupted/i.test(rawError) ||
-    /interrupted|stopped by user|user stopped|run interrupted/i.test(errorType || ""),
+    /interrupted by user|stopped by user|user stopped|run interrupted/i.test(rawError) ||
+    /interrupted by user|stopped by user|user stopped|run interrupted/i.test(errorType || ""),
   );
 
   const [isPaused, setIsPaused] = useState(
@@ -3218,6 +3223,9 @@ function CupertinoTimelineErrorCard({
 
   const handleManualRetry = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (sourceThreadId) {
+      clearThreadUserStopped(sourceThreadId);
+    }
     setIsPaused(true);
     setIsAutoRetried(true);
     if (onRetryTurn) {

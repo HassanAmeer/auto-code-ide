@@ -487,6 +487,7 @@ import {
 } from "~/lib/sound/soundManager";
 import { AiTerminalCommandBar } from "./chat/terminal";
 import { useTerminalStore, terminalStore } from "./chat/terminal/terminalStore";
+import { isTerminalThreadId } from "./chat/terminal/terminalThreadRegistry";
 import {
   translatePromptToBashCommand,
   isConversationalPrompt,
@@ -533,7 +534,12 @@ import {
   shouldShowThreadErrorBanner,
   ThreadErrorBanner,
 } from "./chat/ThreadErrorBanner";
-import { useAutoRetrySettings, findNextFallbackModel } from "~/lib/autoRetrySettings";
+import {
+  useAutoRetrySettings,
+  findNextFallbackModel,
+  markThreadUserStopped,
+  clearThreadUserStopped,
+} from "~/lib/autoRetrySettings";
 import {
   isComposerWebSearchEnabled,
   performLiveWebSearchOrFetch,
@@ -4760,6 +4766,9 @@ export default function ChatView(props: ChatViewProps) {
     // When the user explicitly stops / interrupts the response, cancel any auto-retry
     setAutoRetryCountdown(null);
     setAutoRetryAttempt(0);
+    if (activeThread?.id) {
+      markThreadUserStopped(activeThread.id);
+    }
     if (
       !activeThread ||
       !readEnvironmentScope(activeThread.environmentId, AuthOrchestrationOperateScope)
@@ -8957,6 +8966,9 @@ export default function ChatView(props: ChatViewProps) {
     },
   ) => {
     e?.preventDefault();
+    if (activeThread?.id) {
+      clearThreadUserStopped(activeThread.id);
+    }
     // Typed out in full rather than picked from the menu. Attachments or contexts
     // mean the user is sending a prompt, so those go through as usual.
     if (
@@ -9538,7 +9550,12 @@ export default function ChatView(props: ChatViewProps) {
       .trim();
 
     // In AI Terminal Studio Mode, enrich prompt context with active Linux VPS host working directory
-    if (isTerminalQuickBarOpen && messageTextForSend && !messageTextForSend.startsWith("/")) {
+    const isTerminalThread = isTerminalThreadId(activeThread.id);
+    if (
+      (isTerminalQuickBarOpen || isTerminalThread) &&
+      messageTextForSend &&
+      !messageTextForSend.startsWith("/")
+    ) {
       const termState = terminalStore.getState();
       const currentTermTab = termState.terminalTabs.find((t) => t.id === termState.activeTabId);
       const activeCwd =

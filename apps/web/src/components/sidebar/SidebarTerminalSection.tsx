@@ -16,6 +16,8 @@ import {
   useTerminalThreadIds,
   addTerminalThreadId,
   removeTerminalThreadId,
+  getTerminalThreadProject,
+  setTerminalThreadProject,
 } from "~/components/chat/terminal/terminalThreadRegistry";
 import { Button } from "~/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipPopup } from "~/components/ui/tooltip";
@@ -130,12 +132,26 @@ export function SidebarTerminalSection() {
       terminalStore.setQuickBarOpen(true);
       terminalStore.setMobileActiveTab("terminal");
       terminalStore.setActiveChatId(thread.id);
+
+      // Sync active terminal project/scope with the thread's selection (defaults to root)
+      const threadProjId = getTerminalThreadProject(thread.id);
+      if (threadProjId) {
+        const proj = projects.find((p) => p.id === threadProjId);
+        if (proj) {
+          terminalStore.setSelectedProject(proj.id, proj.title, proj.workspaceRoot);
+          if (proj.workspaceRoot) terminalStore.setActiveCwd(proj.workspaceRoot);
+        }
+      } else {
+        terminalStore.setSelectedProject(null, null, "/");
+        terminalStore.setActiveCwd("/");
+      }
+
       void router.navigate({
         to: "/$environmentId/$threadId",
         params: buildThreadRouteParams(scopeThreadRef(thread.environmentId, thread.id)),
       });
     },
-    [router],
+    [projects, router],
   );
 
   const handleCreateNewChat = useCallback(
@@ -161,6 +177,14 @@ export function SidebarTerminalSection() {
           );
           if (res?.threadId) {
             addTerminalThreadId(res.threadId);
+            // Default to root unless the user specifically had a project selected
+            if (store.selectedProjectId) {
+              setTerminalThreadProject(res.threadId, store.selectedProjectId);
+            } else {
+              setTerminalThreadProject(res.threadId, null);
+              terminalStore.setSelectedProject(null, null, "/");
+              terminalStore.setActiveCwd("/");
+            }
             terminalStore.setActiveChatId(res.threadId);
           }
         }

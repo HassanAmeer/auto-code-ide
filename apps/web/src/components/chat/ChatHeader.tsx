@@ -9,7 +9,7 @@ import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
-import { ChevronDownIcon } from "lucide-react";
+import { ChevronDownIcon, Terminal, Check, ChevronDown } from "lucide-react";
 import {
   memo,
   useCallback,
@@ -29,6 +29,15 @@ import { threadEnvironment } from "../../state/threads";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { useOrchestrationCommand } from "../../state/use-orchestration-command";
 import { readEnvironmentScope, useEnvironmentScope } from "../../state/session";
+import { useProjects } from "~/state/entities";
+import { Menu, MenuTrigger, MenuPopup, MenuItem, MenuSeparator } from "~/components/ui/menu";
+import {
+  useTerminalThreadIds,
+  isTerminalThreadId,
+  getTerminalThreadProject,
+  setTerminalThreadProject,
+} from "~/components/chat/terminal/terminalThreadRegistry";
+import { terminalStore } from "~/components/chat/terminal/terminalStore";
 import { ProjectFavicon } from "../ProjectFavicon";
 import {
   WorkspaceBreadcrumb,
@@ -91,6 +100,51 @@ export const ChatHeader = memo(function ChatHeader({
     () => scopeThreadRef(activeThreadEnvironmentId, activeThreadId),
     [activeThreadEnvironmentId, activeThreadId],
   );
+
+  const projects = useProjects();
+  const uniqueProjects = useMemo(() => {
+    const seen = new Set<string>();
+    return projects.filter((p) => {
+      const root = p.workspaceRoot?.trim().toLowerCase();
+      const title = p.title?.trim().toLowerCase();
+      const key = root || title || p.id;
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [projects]);
+
+  const terminalThreadIds = useTerminalThreadIds();
+  const isTerminalThread = useMemo(
+    () => isTerminalThreadId(activeThreadId) || terminalThreadIds.includes(activeThreadId),
+    [activeThreadId, terminalThreadIds],
+  );
+
+  const [threadProjectId, setThreadProjectId] = useState<string | null>(() =>
+    getTerminalThreadProject(activeThreadId),
+  );
+
+  useEffect(() => {
+    setThreadProjectId(getTerminalThreadProject(activeThreadId));
+  }, [activeThreadId]);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const customEvent = e as CustomEvent<{ threadId: string; projectId: string | null }>;
+      if (customEvent.detail?.threadId === activeThreadId) {
+        setThreadProjectId(customEvent.detail.projectId);
+      }
+    };
+    window.addEventListener("t3:terminal-thread-project-changed", handler);
+    return () => {
+      window.removeEventListener("t3:terminal-thread-project-changed", handler);
+    };
+  }, [activeThreadId]);
+
+  const selectedProj = useMemo(() => {
+    if (!threadProjectId) return null;
+    return uniqueProjects.find((p) => p.id === threadProjectId) || null;
+  }, [threadProjectId, uniqueProjects]);
   const canOperateThread = useEnvironmentScope(
     activeThreadEnvironmentId,
     AuthOrchestrationOperateScope,
@@ -267,10 +321,129 @@ export const ChatHeader = memo(function ChatHeader({
         ariaLabel="Thread breadcrumb"
         className="flex-1 overflow-clip [overflow-clip-margin:2px]"
       >
-        {/* The project always leads the header: knowing which project a
-            thread lives in is priority zero, and the thread title alone
-            doesn't answer it. */}
-        {activeProject ? (
+        {/* For Terminal chats, show interactive root/project dropdown */}
+        {isTerminalThread ? (
+          <>
+            <WorkspaceBreadcrumbItem className="shrink">
+              <Menu>
+                <MenuTrigger
+                  render={
+                    <button
+                      type="button"
+                      aria-label="Select Terminal Scope"
+                      className="group/term-scope inline-flex min-w-0 max-w-full cursor-pointer items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-semibold text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 transition-all focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring select-none shadow-2xs"
+                    />
+                  }
+                >
+                  {selectedProj ? (
+                    <>
+                      <ProjectFavicon project={selectedProj} className="size-3.5 shrink-0" />
+                      <WorkspaceBreadcrumbText className="max-w-40 text-emerald-300 font-medium">
+                        {selectedProj.title}
+                      </WorkspaceBreadcrumbText>
+                    </>
+                  ) : (
+                    <>
+                      <Terminal className="size-3.5 text-emerald-400 shrink-0" />
+                      <WorkspaceBreadcrumbText className="max-w-40 text-emerald-400 font-mono font-bold">
+                        root
+                      </WorkspaceBreadcrumbText>
+                    </>
+                  )}
+                  <ChevronDown className="size-3 text-emerald-400/70 group-hover/term-scope:text-emerald-300 transition-colors shrink-0" />
+                </MenuTrigger>
+
+                <MenuPopup side="bottom" align="start" className="w-60 p-1 font-sans">
+                  {/* Option 1: Root */}
+                  <MenuItem
+                    onClick={() => {
+                      setTerminalThreadProject(activeThreadId, null);
+                      terminalStore.setSelectedProject(null, null, "/");
+                      terminalStore.setActiveCwd("/");
+                      setThreadProjectId(null);
+                      toastManager.add({
+                        type: "info",
+                        title: "Terminal Scope: Root (/)",
+                        description: "Commands will execute with root privileges on the VPS host.",
+                      });
+                    }}
+                    className={cn(
+                      "flex items-center justify-between gap-2 cursor-pointer text-xs py-1.5",
+                      !selectedProj && "bg-emerald-500/15 text-emerald-400 font-semibold",
+                    )}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Terminal className="size-3.5 text-emerald-400 shrink-0" />
+                      <div className="flex flex-col min-w-0">
+                        <span className="truncate font-mono font-bold">root</span>
+                        <span className="text-3xs text-muted-foreground font-sans font-normal truncate">
+                          VPS Host Root ( / )
+                        </span>
+                      </div>
+                    </div>
+                    {!selectedProj && <Check className="size-3.5 text-emerald-400 shrink-0" />}
+                  </MenuItem>
+
+                  {uniqueProjects.length > 0 && (
+                    <>
+                      <MenuSeparator className="my-1 bg-white/[0.08]" />
+                      <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground select-none">
+                        Projects
+                      </div>
+                      {uniqueProjects.map((proj) => {
+                        const isSelected = selectedProj?.id === proj.id;
+                        return (
+                          <MenuItem
+                            key={proj.id}
+                            onClick={() => {
+                              setTerminalThreadProject(activeThreadId, proj.id);
+                              terminalStore.setSelectedProject(
+                                proj.id,
+                                proj.title,
+                                proj.workspaceRoot,
+                              );
+                              if (proj.workspaceRoot) {
+                                terminalStore.setActiveCwd(proj.workspaceRoot);
+                              }
+                              setThreadProjectId(proj.id);
+                              toastManager.add({
+                                type: "info",
+                                title: `Terminal Scope: ${proj.title}`,
+                                description: `Working directory switched to ${proj.workspaceRoot || proj.title}`,
+                              });
+                            }}
+                            className={cn(
+                              "flex items-center justify-between gap-2 cursor-pointer text-xs py-1.5",
+                              isSelected && "bg-emerald-500/15 text-emerald-300 font-semibold",
+                            )}
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <ProjectFavicon project={proj} className="size-3.5 shrink-0" />
+                              <div className="flex flex-col min-w-0">
+                                <span className="truncate">{proj.title}</span>
+                                {proj.workspaceRoot && (
+                                  <span className="text-3xs text-muted-foreground font-mono truncate">
+                                    {proj.workspaceRoot}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            {isSelected && <Check className="size-3.5 text-emerald-400 shrink-0" />}
+                          </MenuItem>
+                        );
+                      })}
+                    </>
+                  )}
+                </MenuPopup>
+              </Menu>
+            </WorkspaceBreadcrumbItem>
+            <WorkspaceBreadcrumbSeparator>
+              <WorkspaceBreadcrumbText className="text-muted-foreground/60">
+                /
+              </WorkspaceBreadcrumbText>
+            </WorkspaceBreadcrumbSeparator>
+          </>
+        ) : activeProject ? (
           <>
             <WorkspaceBreadcrumbItem className="shrink">
               <Tooltip>
