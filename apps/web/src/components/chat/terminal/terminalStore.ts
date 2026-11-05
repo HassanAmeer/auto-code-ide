@@ -193,7 +193,7 @@ if (typeof window !== "undefined") {
 
 // Ensure each initial chat has its runs populated
 for (const chat of initialTerminalChats) {
-  if (!initialRunsByChat[chat.id] || initialRunsByChat[chat.id].length === 0) {
+  if (!initialRunsByChat[chat.id] || (initialRunsByChat[chat.id]?.length ?? 0) === 0) {
     if (chat.id === initialTerminalChats[0]?.id && initialRuns.length > 0) {
       initialRunsByChat[chat.id] = initialRuns;
     } else {
@@ -203,6 +203,8 @@ for (const chat of initialTerminalChats) {
           command: chat.lastPrompt || `# Session: ${chat.title}`,
           cwd: "/root",
           stdout: `[AI Terminal Session: ${chat.title}]\nTarget: ${chat.sshKeyName || "Local"} | Project: ${chat.projectName || "Workspace"}\nCreated: ${new Date(chat.createdAt).toLocaleString()}\nReady for commands.`,
+          stderr: "",
+          durationMs: 0,
           exitCode: 0,
           status: "success",
           timestamp: chat.createdAt || Date.now(),
@@ -703,6 +705,8 @@ export const terminalStore = {
           command: targetChat.lastPrompt || `# Session: ${targetChat.title}`,
           cwd: state.activeCwd || "/root",
           stdout: `[AI Terminal Session: ${targetChat.title}]\nTarget: ${targetChat.sshKeyName || "Local"} | Project: ${targetChat.projectName || "Workspace"}\nCreated: ${new Date(targetChat.createdAt).toLocaleString()}\nReady for commands.`,
+          stderr: "",
+          durationMs: 0,
           exitCode: 0,
           status: "success",
           timestamp: targetChat.createdAt || Date.now(),
@@ -810,6 +814,10 @@ export const terminalStore = {
     }
     saveRunsByChatToStorage(nextRunsByChat);
     notify();
+  },
+
+  deleteChat(id: string) {
+    this.deleteTerminalChat(id);
   },
 
   saveCustomAccessKey(params: {

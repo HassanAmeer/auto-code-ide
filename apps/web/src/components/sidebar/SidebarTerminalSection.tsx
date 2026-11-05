@@ -24,11 +24,8 @@ import { useThreadShells, useProjects } from "~/state/entities";
 import { useNewThreadHandler } from "~/hooks/useHandleNewThread";
 import { useThreadActions } from "~/hooks/useThreadActions";
 import { useOrchestrationCommand } from "~/state/use-orchestration-command";
-import {
-  scopeThreadRef,
-  scopeProjectRef,
-  type EnvironmentThreadShell,
-} from "@t3tools/client-runtime/environment";
+import { scopeThreadRef, scopeProjectRef } from "@t3tools/client-runtime/environment";
+import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import { threadEnvironment } from "~/state/threads";
 import { buildThreadRouteParams, resolveThreadRouteTarget } from "~/threadRoutes";
 import { isSidebarThreadWorking } from "~/components/Sidebar.logic";
@@ -61,6 +58,7 @@ export function SidebarTerminalSection() {
 
   const [editingThreadId, setEditingThreadId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
+  const [locallyDeletedIds, setLocallyDeletedIds] = useState<Set<string>>(new Set());
 
   const [isExpanded, setIsExpanded] = useState(() => {
     try {
@@ -84,7 +82,13 @@ export function SidebarTerminalSection() {
   // Filter and sort terminal threads chronologically
   const terminalThreads = useMemo(() => {
     return sidebarThreads
-      .filter((t) => terminalIdsSet.has(t.id) && t.archivedAt === null && t.deletedAt === null)
+      .filter(
+        (t) =>
+          terminalIdsSet.has(t.id) &&
+          !locallyDeletedIds.has(t.id) &&
+          t.archivedAt === null &&
+          t.deletedAt === null,
+      )
       .sort((a, b) => {
         const timeA =
           typeof a.updatedAt === "number" ? a.updatedAt : Date.parse(String(a.updatedAt || 0));
@@ -92,7 +96,7 @@ export function SidebarTerminalSection() {
           typeof b.updatedAt === "number" ? b.updatedAt : Date.parse(String(b.updatedAt || 0));
         return timeB - timeA;
       });
-  }, [sidebarThreads, terminalIdsSet]);
+  }, [sidebarThreads, terminalIdsSet, locallyDeletedIds]);
 
   const isThreadWorking = useCallback((thread: EnvironmentThreadShell): boolean => {
     if (isSidebarThreadWorking(thread)) return true;
@@ -155,10 +159,47 @@ export function SidebarTerminalSection() {
   const handleDeleteThread = useCallback(
     async (e: React.MouseEvent, thread: EnvironmentThreadShell) => {
       e.stopPropagation();
+
+      // Optimistically hide the thread immediately
+      setLocallyDeletedIds((prev) => {
+        const next = new Set(prev);
+        next.add(thread.id);
+        return next;
+      });
+
+      // Remove from terminal registry
       removeTerminalThreadId(thread.id);
-      await deleteThread(scopeThreadRef(thread.environmentId, thread.id));
+
+      // Find the next available non-deleted terminal thread
+      const nextThread = terminalThreads.find(
+        (t) => t.id !== thread.id && !locallyDeletedIds.has(t.id),
+      );
+
+      // Update terminalStore activeChatId if this was active
+      if (terminalStore.getState().activeChatId === thread.id) {
+        terminalStore.setActiveChatId(nextThread ? nextThread.id : null);
+      }
+
+      // If this was the active chat route, navigate to next thread or clean view
+      if (activeRouteThreadId === thread.id) {
+        if (nextThread) {
+          void router.navigate({
+            to: "/$environmentId/$threadId",
+            params: buildThreadRouteParams(scopeThreadRef(nextThread.environmentId, nextThread.id)),
+          });
+        } else {
+          void router.navigate({ to: "/" });
+        }
+      }
+
+      // Delete the thread via backend/orchestration
+      try {
+        await deleteThread(scopeThreadRef(thread.environmentId, thread.id));
+      } catch (err) {
+        console.error("Failed to delete terminal thread:", err);
+      }
     },
-    [deleteThread],
+    [activeRouteThreadId, deleteThread, locallyDeletedIds, router, terminalThreads],
   );
 
   const handleCommitRename = useCallback(
@@ -166,21 +207,48 @@ export function SidebarTerminalSection() {
       const trimmed = editingTitle.trim();
       setEditingThreadId(null);
       if (!trimmed || trimmed === thread.title) return;
-      await updateThreadMetadata(scopeThreadRef(thread.environmentId, thread.id), {
-        title: trimmed,
+      await updateThreadMetadata({
+        environmentId: thread.environmentId,
+        input: { threadId: thread.id, title: trimmed },
       });
     },
     [editingTitle, updateThreadMetadata],
   );
 
   const handleClearAll = useCallback(async () => {
+    if (terminalThreads.length === 0) return;
     if (window.confirm("Are you sure you want to clear all terminal chats?")) {
-      for (const thread of terminalThreads) {
+      const threadsToDelete = [...terminalThreads];
+
+      // Optimistically hide all terminal threads immediately
+      setLocallyDeletedIds((prev) => {
+        const next = new Set(prev);
+        for (const t of threadsToDelete) {
+          next.add(t.id);
+        }
+        return next;
+      });
+
+      // Clear terminal store active chat ID
+      terminalStore.setActiveChatId(null);
+
+      // If any of the deleted threads was active in route, navigate to clean view
+      if (threadsToDelete.some((t) => t.id === activeRouteThreadId)) {
+        void router.navigate({ to: "/" });
+      }
+
+      for (const thread of threadsToDelete) {
         removeTerminalThreadId(thread.id);
-        void deleteThread(scopeThreadRef(thread.environmentId, thread.id));
+        void (async () => {
+          try {
+            await deleteThread(scopeThreadRef(thread.environmentId, thread.id));
+          } catch (err) {
+            console.error("Failed to delete thread during clear all:", err);
+          }
+        })();
       }
     }
-  }, [deleteThread, terminalThreads]);
+  }, [activeRouteThreadId, deleteThread, router, terminalThreads]);
 
   const handleOpenTerminal = useCallback(() => {
     terminalStore.setQuickBarOpen(true);

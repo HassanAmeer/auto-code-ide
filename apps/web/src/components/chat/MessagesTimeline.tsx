@@ -8,6 +8,7 @@ import { PullRequestGlyph } from "../pullRequest/pullRequestIcons";
 import type { WorktreeSetupSnapshot } from "@t3tools/contracts";
 import { ReadOnlySourcePreview } from "../files/AttachmentFilePreview";
 import { useRightPanelStore } from "~/rightPanelStore";
+import { useAutoRetrySettings } from "~/lib/autoRetrySettings";
 import {
   getQuestionAnswerPreview,
   getQuestionAnswerText,
@@ -150,6 +151,8 @@ import {
   XIcon,
   ZapIcon,
   RotateCcwIcon,
+  PlayIcon,
+  SquareIcon,
 } from "lucide-react";
 import { ChevronDown, ChevronRight } from "lucide";
 import type {
@@ -3123,6 +3126,69 @@ function CupertinoTimelineErrorCard({
   const activity = useContext(TimelineRowActivityCtx);
   const isWorking = activity?.isWorking ?? false;
 
+  const [autoRetrySettings] = useAutoRetrySettings();
+  const autoRetryDelay =
+    typeof autoRetrySettings.delaySeconds === "number" && autoRetrySettings.delaySeconds > 0
+      ? autoRetrySettings.delaySeconds
+      : 10;
+  const [countdownSeconds, setCountdownSeconds] = useState(autoRetryDelay);
+  const [isPaused, setIsPaused] = useState(() => autoRetrySettings.enabled === false);
+  const [isAutoRetried, setIsAutoRetried] = useState(false);
+
+  useEffect(() => {
+    if (!onRetryTurn && !retryAction) return;
+    if (autoRetrySettings.enabled === false) return;
+    if (isPaused || isWorking || isAutoRetried) return;
+
+    if (countdownSeconds <= 0) {
+      setIsAutoRetried(true);
+      if (onRetryTurn) {
+        onRetryTurn();
+      } else if (retryAction) {
+        retryAction.onRetry();
+      }
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setCountdownSeconds((s) => s - 1);
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [
+    countdownSeconds,
+    isPaused,
+    isWorking,
+    isAutoRetried,
+    onRetryTurn,
+    retryAction,
+    autoRetrySettings.enabled,
+  ]);
+
+  const handleManualRetry = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsPaused(true);
+    setIsAutoRetried(true);
+    if (onRetryTurn) {
+      onRetryTurn();
+    } else if (retryAction) {
+      retryAction.onRetry();
+    }
+  };
+
+  const handleToggleTimer = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isPaused || isAutoRetried) {
+      if (countdownSeconds <= 0 || isAutoRetried) {
+        setCountdownSeconds(autoRetryDelay);
+        setIsAutoRetried(false);
+      }
+      setIsPaused(false);
+    } else {
+      setIsPaused(true);
+    }
+  };
+
   const errorInfo = parseErrorDetails(rawError, explicitModel);
 
   const numericCode =
@@ -3287,20 +3353,13 @@ function CupertinoTimelineErrorCard({
 
       {/* Action / Retry Button Row: Prominent small retry button directly below subtitle */}
       {onRetryTurn || retryAction ? (
-        <div className="px-2.5 pb-2 pt-0.5 ps-5 flex items-center gap-1.5">
+        <div className="px-2.5 pb-2 pt-0.5 ps-5 flex items-center gap-2">
           <Button
             type="button"
             size="xs"
             variant="outline"
             disabled={isWorking}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (onRetryTurn) {
-                onRetryTurn();
-              } else if (retryAction) {
-                retryAction.onRetry();
-              }
-            }}
+            onClick={handleManualRetry}
             className={cn(
               "h-6 px-2.5 gap-1.5 text-xs font-medium rounded shadow-none transition-colors cursor-pointer border",
               isWarning
@@ -3313,6 +3372,32 @@ function CupertinoTimelineErrorCard({
             <RotateCcwIcon className={cn("size-3 text-red-400", isWorking && "animate-spin")} />
             <span>{isWorking ? "Retrying..." : retryAction?.label || "Retry"}</span>
           </Button>
+
+          {!isWorking ? (
+            <div className="flex items-center gap-1.5 select-none">
+              <span
+                className={cn(
+                  "text-[11px] font-mono",
+                  isPaused || isAutoRetried ? "text-zinc-500" : "text-zinc-400",
+                )}
+              >
+                {isPaused || isAutoRetried ? "Retry paused" : `Retrying in ${countdownSeconds}s`}
+              </span>
+              <button
+                type="button"
+                onClick={handleToggleTimer}
+                className="p-0.5 bg-transparent border-none outline-none shadow-none cursor-pointer flex items-center justify-center transition-colors"
+                title={isPaused || isAutoRetried ? "Resume auto-retry" : "Pause auto-retry"}
+                aria-label={isPaused || isAutoRetried ? "Resume auto-retry" : "Pause auto-retry"}
+              >
+                {isPaused || isAutoRetried ? (
+                  <PlayIcon className="size-3 text-zinc-400 hover:text-zinc-200 fill-zinc-400/20" />
+                ) : (
+                  <SquareIcon className="size-3 text-red-400/80 hover:text-red-400 fill-red-500/20" />
+                )}
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
 

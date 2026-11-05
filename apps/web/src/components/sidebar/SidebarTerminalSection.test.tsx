@@ -5,6 +5,8 @@ import {
   addTerminalThreadId,
   removeTerminalThreadId,
   isTerminalThreadId,
+  clearAllTerminalThreadIds,
+  SEED_TERMINAL_THREAD_IDS,
 } from "~/components/chat/terminal/terminalThreadRegistry";
 
 const storage = new Map<string, string>();
@@ -109,5 +111,46 @@ describe("SidebarTerminalSection chat management", () => {
 
     removeTerminalThreadId(testThreadId);
     expect(isTerminalThreadId(testThreadId)).toBe(false);
+  });
+
+  it("permanently removes deleted seed thread ID and never resurrects it", () => {
+    const initialIds = getTerminalThreadIds();
+    expect(initialIds.length).toBeGreaterThan(0);
+    const seedToDelete = SEED_TERMINAL_THREAD_IDS[0]!;
+    expect(initialIds).toContain(seedToDelete);
+    expect(isTerminalThreadId(seedToDelete)).toBe(true);
+
+    removeTerminalThreadId(seedToDelete);
+
+    // Verify it is immediately removed
+    expect(isTerminalThreadId(seedToDelete)).toBe(false);
+    expect(getTerminalThreadIds()).not.toContain(seedToDelete);
+
+    // Call getTerminalThreadIds multiple times to verify no resurrection
+    const idsAfterCall1 = getTerminalThreadIds();
+    const idsAfterCall2 = getTerminalThreadIds();
+    expect(idsAfterCall1).not.toContain(seedToDelete);
+    expect(idsAfterCall2).not.toContain(seedToDelete);
+    expect(isTerminalThreadId(seedToDelete)).toBe(false);
+  });
+
+  it("synchronizes thread removal with terminalStore.deleteChat", () => {
+    const deleteChatSpy = vi.spyOn(terminalStore, "deleteChat");
+    const testThreadId = "test-sync-thread-456";
+
+    addTerminalThreadId(testThreadId);
+    removeTerminalThreadId(testThreadId);
+
+    expect(deleteChatSpy).toHaveBeenCalledWith(testThreadId);
+    deleteChatSpy.mockRestore();
+  });
+
+  it("clears both registries with clearAllTerminalThreadIds", () => {
+    const seedToDelete = SEED_TERMINAL_THREAD_IDS[0]!;
+    removeTerminalThreadId(seedToDelete);
+
+    clearAllTerminalThreadIds();
+    expect(storage.get("adc_terminal_thread_ids")).toBeUndefined();
+    expect(storage.get("adc_terminal_deleted_thread_ids")).toBeUndefined();
   });
 });
