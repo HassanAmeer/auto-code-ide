@@ -5,6 +5,13 @@ import {
   mergeWorkerWorktree,
   cleanupWorkerWorktree,
 } from "./worktreeRunner.ts";
+import {
+  registerWorkerTelemetry,
+  updateWorkerTelemetryStatus,
+  registerGoalTelemetry,
+  updateGoalTelemetryStatus,
+  deriveSpecialistRole,
+} from "./workerRegistry.ts";
 import { executeOpenCodeTask } from "./opencodeBridge.ts";
 import { executeAutonomousReviewLoop } from "./selfReviewLoop.ts";
 import { decomposeTask } from "./taskDecomposer.ts";
@@ -93,6 +100,18 @@ export async function runAutonomousHarnessWorkflow(
 
   // 1. Supervisor Task Decomposition (Bara Kaam Chotay Tukron Mein Baantna)
   const subtasks = decomposeTask(taskTitle, prompt, projectRoot);
+  const mainGoalId = `goal-${taskId}`;
+
+  // Register telemetry for primary supervisor goal
+  registerGoalTelemetry({
+    id: mainGoalId,
+    title: taskTitle,
+    status: "running",
+    projectName,
+    projectId,
+    createdAt: Date.now(),
+  });
+
   if (subtasks.length > 1) {
     logStep(
       "plan",
@@ -101,6 +120,20 @@ export async function runAutonomousHarnessWorkflow(
           .map((st) => `   • [Milestone ${st.order}/${subtasks.length}] ${st.title}`)
           .join("\n"),
     );
+
+    // Register each milestone as an active goal
+    subtasks.forEach((st) => {
+      registerGoalTelemetry({
+        id: `goal-${taskId}-${st.order}`,
+        title: st.title,
+        status: "running",
+        workerId: `worker-${taskId}-${st.order}`,
+        order: st.order,
+        projectName,
+        projectId,
+        createdAt: Date.now(),
+      });
+    });
   } else {
     logStep("plan", `📋 Task confirmed as single atomic milestone: "${taskTitle}".`);
   }
@@ -145,6 +178,23 @@ export async function runAutonomousHarnessWorkflow(
       ? `${parallelSkillPrompt}\n\n${basePrompt}`
       : basePrompt;
 
+    const currentWorkerId = `worker-${taskId}-${st.order}`;
+    const specialistRole = deriveSpecialistRole(st.title, st.category);
+
+    // Register active worker telemetry for live dashboard / bot chat screen
+    registerWorkerTelemetry({
+      id: currentWorkerId,
+      role: specialistRole,
+      status: "running",
+      model: model.includes("deepseek") ? "DeepSeek / Gemini" : model || "DeepSeek / Gemini",
+      cwd: allocation.worktreePath,
+      goal: st.title,
+      projectName,
+      projectId,
+      startedAt: Date.now(),
+      progress: 25,
+    });
+
     logStep(
       `worker-${st.order}`,
       `✉️ Dispatched Supervisor-to-Worker Task Envelope (${milestoneEnvelope.rules.length} strict bounds).`,
@@ -162,12 +212,26 @@ export async function runAutonomousHarnessWorkflow(
     if (subtaskRes.ok) {
       st.status = "completed";
       subtaskRes.filesModified.forEach((f) => filesModifiedSet.add(f));
+      updateWorkerTelemetryStatus(currentWorkerId, "completed", {
+        progress: 100,
+        completedAt: Date.now(),
+        filesModified: subtaskRes.filesModified,
+      });
+      updateGoalTelemetryStatus(`goal-${taskId}-${st.order}`, "completed", {
+        completedAt: Date.now(),
+      });
       logStep(
         "subtask",
         `✓ [Milestone ${st.order}/${subtasks.length}] "${st.title}" completed (${subtaskRes.filesModified.length} files).`,
       );
     } else {
       st.status = "failed";
+      updateWorkerTelemetryStatus(currentWorkerId, "failed", {
+        completedAt: Date.now(),
+      });
+      updateGoalTelemetryStatus(`goal-${taskId}-${st.order}`, "failed", {
+        completedAt: Date.now(),
+      });
       logStep(
         "subtask",
         `⚠️ [Milestone ${st.order}/${subtasks.length}] warning: continuing to next milestone.`,
@@ -239,6 +303,11 @@ export async function runAutonomousHarnessWorkflow(
     "complete",
     `🎉 Task 100% complete & verified clean. Live preview: ${reviewResult.previewUrl}`,
   );
+
+  // Mark main goal completed in telemetry
+  updateGoalTelemetryStatus(mainGoalId, "completed", {
+    completedAt: Date.now(),
+  });
 
   return {
     ok: true,

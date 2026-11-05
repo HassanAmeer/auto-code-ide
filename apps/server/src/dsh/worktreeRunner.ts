@@ -151,3 +151,5 @@ export function cleanupWorkerWorktree(
     } catch {}
   } catch {}
 }
+
+export * from "./workerRegistry.ts";

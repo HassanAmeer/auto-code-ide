@@ -94,6 +94,7 @@ import {
   toggleWhatsAppPriorityTarget,
   createWhatsAppSession,
   deleteWhatsAppSession,
+  startWhatsAppSession,
   getWhatsAppQr,
   sendWhatsAppMessage,
   editWhatsAppMessage,
@@ -114,7 +115,14 @@ import {
   clearServerSessionLedger,
   formatServerLedgerBulletSummary,
 } from "./multiTurnSessionLedger.ts";
-import { runAutonomousHarnessWorkflow } from "./dsh/index.ts";
+import {
+  runAutonomousHarnessWorkflow,
+  getTelemetrySnapshot,
+  registerWorkerTelemetry,
+  updateWorkerTelemetryStatus,
+  registerGoalTelemetry,
+  updateGoalTelemetryStatus,
+} from "./dsh/index.ts";
 import { getProjectChatEngineSkillPrompt } from "@t3tools/shared/superpowerSkills";
 import {
   createSupervisorWorkerEnvelope,
@@ -2626,6 +2634,22 @@ export const layerWhatsAppSessionDeleteRoute = HttpRouter.add(
   }),
 );
 
+export const layerWhatsAppSessionStartRoute = HttpRouter.add(
+  "POST",
+  "/api/whatsapp/sessions/start",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const body = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      sessionId?: string;
+    };
+    if (!body?.sessionId?.trim()) {
+      return HttpServerResponse.jsonUnsafe({ ok: false, error: "sessionId required" });
+    }
+    const result = yield* Effect.promise(() => startWhatsAppSession(body.sessionId!));
+    return HttpServerResponse.jsonUnsafe({ ok: true, result });
+  }),
+);
+
 export const layerWhatsAppSessionQrRoute = HttpRouter.add(
   "GET",
   "/api/whatsapp/sessions/qr",
@@ -3400,6 +3424,64 @@ export const layerSuperAgentDispatchWorkerRoute = HttpRouter.add(
     }
 
     return HttpServerResponse.jsonUnsafe(finalResult);
+  }),
+);
+
+export const layerSuperAgentWorkersRoute = HttpRouter.add(
+  "GET",
+  "/api/super-agent/workers",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const url = new URL(request.url, "http://127.0.0.1");
+    const projectName =
+      url.searchParams.get("project") || url.searchParams.get("projectName") || undefined;
+    const projectId = url.searchParams.get("projectId") || undefined;
+
+    const snapshot = getTelemetrySnapshot({ projectName, projectId });
+    return HttpServerResponse.jsonUnsafe(snapshot);
+  }),
+);
+
+export const layerSuperAgentWorkersPostRoute = HttpRouter.add(
+  "POST",
+  "/api/super-agent/workers",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as any;
+
+    if (bodyJson?.worker) {
+      registerWorkerTelemetry(bodyJson.worker);
+    }
+    if (bodyJson?.goal) {
+      registerGoalTelemetry(bodyJson.goal);
+    }
+    if (bodyJson?.updateWorkerId && bodyJson?.status) {
+      updateWorkerTelemetryStatus(bodyJson.updateWorkerId, bodyJson.status, bodyJson.updates);
+    }
+    if (bodyJson?.updateGoalId && bodyJson?.status) {
+      updateGoalTelemetryStatus(bodyJson.updateGoalId, bodyJson.status, bodyJson.updates);
+    }
+
+    const snapshot = getTelemetrySnapshot({
+      projectName: bodyJson?.projectName,
+      projectId: bodyJson?.projectId,
+    });
+    return HttpServerResponse.jsonUnsafe(snapshot);
+  }),
+);
+
+export const layerSubagentsStatusRoute = HttpRouter.add(
+  "GET",
+  "/api/subagents/status",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const url = new URL(request.url, "http://127.0.0.1");
+    const projectName =
+      url.searchParams.get("project") || url.searchParams.get("projectName") || undefined;
+    const projectId = url.searchParams.get("projectId") || undefined;
+
+    const snapshot = getTelemetrySnapshot({ projectName, projectId });
+    return HttpServerResponse.jsonUnsafe(snapshot);
   }),
 );
 

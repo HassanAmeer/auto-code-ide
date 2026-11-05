@@ -89,6 +89,7 @@ import {
 } from "~/lib/speech/multiTurnSessionLedger";
 import { useAutoRetrySettings, findNextFallbackModel } from "~/lib/autoRetrySettings";
 import { AutonomousTaskBoard } from "./AutonomousTaskBoard";
+import { SubagentsAndGoalsCard } from "./SubagentsAndGoalsCard";
 import { executeTerminalCommand } from "~/components/chat/terminal/terminalClient";
 import { Link } from "@tanstack/react-router";
 import { type ProviderInstanceId } from "@t3tools/contracts";
@@ -2152,6 +2153,14 @@ export function SuperCallAssistantView() {
                       </div>
                     ))
                   )}
+
+                  {/* Subagents & Goals Real-Time Card (Matches Screenshot & DeepSeek / DSH Parallel Workers) */}
+                  <div className="pt-3 border-t border-border/60">
+                    <SubagentsAndGoalsCard
+                      projectName={activeProject?.name || "Workspace"}
+                      isHandlingProject={true}
+                    />
+                  </div>
                 </div>
               )}
 

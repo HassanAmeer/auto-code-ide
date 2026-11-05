@@ -169,27 +169,155 @@ export async function deleteSession(sessionId: string): Promise<boolean> {
   return true;
 }
 
-export async function getSessionQr(sessionId: string): Promise<{ qr?: string; status: string }> {
+export async function startSession(
+  sessionId: string,
+): Promise<{ ok: boolean; status?: string; error?: string }> {
   const settings = getWhatsAppSettings();
-  const res = await fetch(`${settings.gatewayUrl}/api/sessions/${sessionId}/qr`, {
-    headers: getBaseHeaders(settings.apiKey),
-  });
+  try {
+    let res = await fetch(`${settings.gatewayUrl}/api/sessions/${sessionId}/start`, {
+      method: "POST",
+      headers: getBaseHeaders(settings.apiKey),
+    });
 
-  if (res.ok) {
-    const data = await res.json();
-    return data;
+    if (!res.ok && res.status === 404) {
+      // Fallback without /api prefix if gateway mounts sessions at root
+      res = await fetch(`${settings.gatewayUrl}/sessions/${sessionId}/start`, {
+        method: "POST",
+        headers: getBaseHeaders(settings.apiKey),
+      });
+    }
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      const errorMsg = `Failed to start session (${res.status}): ${errText}`;
+      logWhatsAppEvent({
+        type: "error",
+        sessionId,
+        body: errorMsg,
+        error: errorMsg,
+      });
+      return { ok: false, error: errorMsg };
+    }
+
+    const data = (await res.json().catch(() => ({}))) as { status?: string };
+    logWhatsAppEvent({
+      type: "system",
+      sessionId,
+      body: `Session started: ${sessionId} (${data?.status || "STARTED"})`,
+    });
+    return { ok: true, status: data?.status || "STARTED" };
+  } catch (err: any) {
+    const errorMsg = err?.message || String(err);
+    logWhatsAppEvent({
+      type: "error",
+      sessionId,
+      body: `Exception starting session: ${errorMsg}`,
+      error: errorMsg,
+    });
+    return { ok: false, error: errorMsg };
+  }
+}
+
+export async function getSessionQr(
+  sessionId: string,
+): Promise<{ qr?: string; status: string; error?: string }> {
+  const settings = getWhatsAppSettings();
+
+  const fetchQr = async () => {
+    try {
+      const res = await fetch(`${settings.gatewayUrl}/api/sessions/${sessionId}/qr`, {
+        headers: getBaseHeaders(settings.apiKey),
+      });
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        return { ok: true, status: res.status, data };
+      }
+      const rawText = await res.text().catch(() => "");
+      return { ok: false, status: res.status, rawText };
+    } catch (err: any) {
+      return { ok: false, status: 0, rawText: err?.message || String(err) };
+    }
+  };
+
+  const fetchSessionDetails = async () => {
+    try {
+      const res = await fetch(`${settings.gatewayUrl}/api/sessions/${sessionId}`, {
+        headers: getBaseHeaders(settings.apiKey),
+      });
+      if (res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { status?: string; qr?: string };
+        return {
+          ok: true,
+          status: (data?.status || "UNKNOWN") as string,
+          qr: data?.qr as string | undefined,
+        };
+      }
+    } catch {}
+    return { ok: false, status: "UNKNOWN", qr: undefined };
+  };
+
+  // 1. Initial QR attempt
+  const firstQr = await fetchQr();
+  if (firstQr.ok && firstQr.data) {
+    return firstQr.data;
   }
 
-  // Fallback to getting session details
-  const sessionRes = await fetch(`${settings.gatewayUrl}/api/sessions/${sessionId}`, {
-    headers: getBaseHeaders(settings.apiKey),
-  });
-  if (sessionRes.ok) {
-    const sessionData = await sessionRes.json();
-    return { qr: sessionData.qr, status: sessionData.status || "UNKNOWN" };
+  // Check if OpenWA returned 400 "Session is not started" or similar
+  const rawLower = (firstQr.rawText || "").toLowerCase();
+  const isNotStartedError =
+    firstQr.status === 400 &&
+    (rawLower.includes("session is not started") ||
+      rawLower.includes("start first") ||
+      rawLower.includes("not started"));
+
+  // 2. Also check session status details
+  const sessionDetails = await fetchSessionDetails();
+  const sessionStatusUpper = (sessionDetails.status || "").toUpperCase();
+  const isStoppedOrDisconnected = [
+    "STOPPED",
+    "DISCONNECTED",
+    "FAILED",
+    "NOT_FOUND",
+    "INACTIVE",
+    "OFFLINE",
+  ].includes(sessionStatusUpper);
+
+  // If session is not started or currently disconnected/stopped, call start first
+  if (isNotStartedError || isStoppedOrDisconnected) {
+    logWhatsAppEvent({
+      type: "system",
+      sessionId,
+      body: `Session ${sessionId} is not running (${sessionStatusUpper || "400 Not Started"}). Auto-starting session...`,
+    });
+
+    await startSession(sessionId);
+
+    // Wait briefly (2 seconds) for session engine to initialize QR listener
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+
+    // Retry fetching the QR code
+    const retryQr = await fetchQr();
+    if (retryQr.ok && retryQr.data) {
+      return retryQr.data;
+    }
+
+    const retryDetails = await fetchSessionDetails();
+    if (retryDetails.ok && retryDetails.qr) {
+      return { qr: retryDetails.qr, status: retryDetails.status };
+    }
+    return {
+      qr: retryDetails.qr,
+      status: retryDetails.status || "STARTING",
+      error: retryQr.rawText || undefined,
+    };
   }
 
-  return { status: "FAILED" };
+  // Fallback to session details if QR route didn't return ok but session is active
+  if (sessionDetails.ok) {
+    return { qr: sessionDetails.qr, status: sessionDetails.status };
+  }
+
+  return { status: "FAILED", error: firstQr.rawText || "Could not retrieve session QR" };
 }
 
 /**

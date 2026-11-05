@@ -76,6 +76,18 @@ export async function deleteWhatsAppSession(sessionId: string): Promise<any> {
   }
 }
 
+export async function startWhatsAppSession(sessionId: string): Promise<any> {
+  try {
+    const mod = await import("../../../bot/index.ts" as string);
+    if (typeof (mod as any).startSession === "function") {
+      return await (mod as any).startSession(sessionId);
+    }
+    return { ok: false, error: "startSession function not found in bot module" };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || String(err) };
+  }
+}
+
 export async function getWhatsAppQr(sessionId: string): Promise<any> {
   try {
     const mod = await import("../../../bot/index.ts" as string);
