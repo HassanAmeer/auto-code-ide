@@ -39,7 +39,14 @@ export function NotificationSettingsPanel() {
   });
 
   const requestDesktopPermission = async () => {
-    if (typeof Notification === "undefined") return;
+    if (typeof Notification === "undefined") {
+      toastManager.add({
+        type: "error",
+        title: "Notifications Unavailable",
+        description: "Desktop notifications are not supported in this environment.",
+      });
+      return;
+    }
     setRequesting(true);
     try {
       const result = await Notification.requestPermission();
@@ -47,6 +54,18 @@ export function NotificationSettingsPanel() {
       if (result === "granted") {
         updateNotificationSettings({ desktopEnabled: true });
         updateScopedSettings({ notificationMode: "notifications-and-sound" });
+        toastManager.add({
+          type: "info",
+          title: "OS Notifications Enabled",
+          description:
+            "You will now receive native desktop alerts when tasks complete in the background.",
+        });
+      } else if (result === "denied") {
+        toastManager.add({
+          type: "error",
+          title: "Notification Permission Blocked",
+          description: "Please allow notifications in your browser address bar / site settings.",
+        });
       }
     } catch {
       // Ignored
