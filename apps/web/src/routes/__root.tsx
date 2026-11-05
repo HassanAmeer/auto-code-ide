@@ -25,9 +25,7 @@ import { KeybindingsConfigWarning } from "../components/KeybindingsConfigWarning
 import { FirstRunGate } from "../components/onboarding/FirstRunGate";
 import { ConnectOnboardingDialog } from "../components/cloud/ConnectOnboardingDialog";
 import { RelayClientInstallDialog } from "../components/cloud/RelayClientInstallDialog";
-import { RunningThreadKeepAlive } from "../components/desktop/RunningThreadKeepAlive";
 import { ProviderUpdateLaunchNotification } from "../components/ProviderUpdateLaunchNotification";
-import { NightlyMobileBetaNotice } from "../components/NightlyMobileBeta";
 import { LegacyThreadMigrationToast } from "../components/LegacyThreadMigrationToast";
 import { ThreadNotificationCoordinator } from "../components/ThreadNotificationCoordinator";
 import { ReopenClosedViewShortcut } from "../components/ReopenClosedViewShortcut";
@@ -83,8 +81,6 @@ import {
   type KeybindingsUpdateToastController,
 } from "../components/KeybindingsUpdateToast.logic";
 
-import { installDesktopPasteAsText } from "../lib/desktopPasteAsText";
-
 export const Route = createRootRoute({
   beforeLoad: async ({ location }) => {
     if (location.pathname === "/pair") {
@@ -122,7 +118,6 @@ function RootRouteNotFoundView() {
 }
 
 function RootRouteView() {
-  useEffect(() => installDesktopPasteAsText(window.desktopBridge, window), []);
   const pathname = useLocation({ select: (location) => location.pathname });
   const { authGateState } = Route.useRouteContext();
   const primaryEnvironmentAuthenticated = authGateState.status === "authenticated";
@@ -211,7 +206,6 @@ function RootRouteView() {
         <ChatGptWelcomeCoordinator />
         <FirstRunGate enabled={primaryEnvironmentAuthenticated} hostedStatic={false}>
           {primaryEnvironmentAuthenticated ? <AuthenticatedTracingBootstrap /> : null}
-          {isElectron ? <RunningThreadKeepAlive /> : null}
           <RelayClientInstallDialog />
           <ConnectOnboardingDialog />
           <ThreadNotificationCoordinator />
@@ -229,7 +223,6 @@ function RootRouteView() {
           ) : null}
           {primaryEnvironmentAuthenticated ? <ProviderUpdateLaunchNotification /> : null}
           {/* Hosted Nightly is "hosted-static", not authenticated, and needs it too. */}
-          <NightlyMobileBetaNotice />
           {appShell}
           <RequestLogsFloatingButton />
           <NotesSheet />

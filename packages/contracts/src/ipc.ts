@@ -15,11 +15,6 @@ import { type ClientSettings, type QuitConfirmationMode, SnapShotShortcut } from
 import type { EditorId } from "./editor.ts";
 import type { PreviewForwardedShortcut } from "./keybindings.ts";
 
-import type {
-  DesktopAppActivationRequest,
-  DesktopAppActivationResponse,
-} from "./desktopAppActivation.ts";
-
 export interface ContextMenuItem<T extends string = string> {
   id: T;
   label: string;
@@ -1246,11 +1241,7 @@ export interface DesktopBridge {
     uninstall: () => Promise<DesktopCliCommandState>;
   };
   /** Present when the desktop shell accepts `t3 app` activation requests. */
-  appActivation?: {
-    setReady: (ready: boolean) => Promise<void>;
-    complete: (response: DesktopAppActivationResponse) => Promise<void>;
-    onRequest: (listener: (request: DesktopAppActivationRequest) => void) => () => void;
-  };
+  appActivation?: never;
   /**
    * Desktop-only preview surface. Present iff the renderer is hosted by the
    * Electron desktop build; web builds have `preview === undefined`.

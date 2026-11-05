@@ -1,5 +1,4 @@
 import { formatProviderSkillDisplayName } from "@t3tools/shared/inlineSkills";
-import { DESKTOP_PASTE_AS_TEXT_EVENT } from "../../lib/desktopPasteAsText";
 import { runtimeModeConfig, runtimeModeOptions as runtimeModes } from "./runtimeModeConfig";
 import { isLocalEnvironmentDisabled } from "../../localEnvironment";
 import { usePrimaryEnvironmentId } from "../../state/environments";
@@ -2556,11 +2555,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         armPasteAsTextShortcut();
       }
     };
-    window.addEventListener(DESKTOP_PASTE_AS_TEXT_EVENT, onDesktopPasteAsText);
     window.addEventListener("keydown", onKeyDown, true);
     window.addEventListener("blur", onBlur);
     return () => {
-      window.removeEventListener(DESKTOP_PASTE_AS_TEXT_EVENT, onDesktopPasteAsText);
       window.removeEventListener("keydown", onKeyDown, true);
       window.removeEventListener("blur", onBlur);
     };
