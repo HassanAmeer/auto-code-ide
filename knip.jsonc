@@ -16,12 +16,7 @@
     },
     "apps/server": {
       // Vite+ pack entries and the launcher used by installed background services.
-      "entry": [
-        "src/bin.ts!",
-        "src/claude-history-worker.ts!",
-        "scripts/probe-claude-fork-local-rollback-replay.ts",
-        "src/provider/testFixtures/*.mjs",
-      ],
+      "entry": ["src/bin.ts!", "src/claude-history-worker.ts!", "src/provider/testFixtures/*.mjs"],
       // Keep the transitive Effect runtime pinned for standalone npm installs.
       // The Vite+ web build prerequisite.
       // Native and disk-loaded provider packages stay external to the bundle; the

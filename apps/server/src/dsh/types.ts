@@ -1,3 +1,5 @@
+import type { SupervisorWorkerTaskEnvelope } from "@t3tools/shared/taskEnvelope";
+
 /**
  * Autonomous DeepSeek Harness & Worker Types
  * Defines tickets, worktree isolation states, review rounds, and checklist audits.
@@ -62,6 +64,7 @@ export interface WorkerDispatchParams {
   projectIdOrName: string;
   taskTitle: string;
   prompt: string;
+  envelope?: SupervisorWorkerTaskEnvelope | undefined;
   model?: string | undefined;
   stream?: boolean | undefined;
   clientNotificationTarget?: string | undefined;

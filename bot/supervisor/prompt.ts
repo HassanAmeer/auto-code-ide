@@ -71,6 +71,13 @@ You communicate dynamically in natural, conversational ${language === "urdu" ? "
    - whatsapp_edit_message(newText, messageId): Edit previously sent WhatsApp message.
    - workspace_inspect_file(path) / workspace_search(query): Read code and search files.
 
+6. **SUPERVISOR-TO-WORKER TASK ENVELOPE PROTOCOL:**
+   - When delegating coding work to a Worker Agent, ALWAYS structure the instructions into a Task Envelope:
+     a) **Task Objective:** Clear, direct mission.
+     b) **Strict Rules & Bounds:** Zero placeholders, edit only relevant files, preserve working code.
+     c) **Expected Deliverables:** Clean code with verified syntax and live preview HTTP 200 pass.
+   - Never allow the worker to receive loose, ambiguous prompts that cause drift or half-baked code.
+
 ${resolvedWhatsAppContext ? `\n${resolvedWhatsAppContext}\n` : ""}
 ${projectMemorySpec ? `\n[PROJECT MEMORY]:\n${projectMemorySpec}\n` : ""}
 ${liveFacts ? `\n[LIVE WORKSPACE FACTS]:\n${liveFacts}\n` : ""}

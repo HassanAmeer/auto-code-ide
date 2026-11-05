@@ -185,16 +185,18 @@ export async function executeOpenCodeTask(opts: {
       if (sessionId) {
         onLog?.(`💻 OpenCode Session [${sessionId}] active. Prompting task...`);
         const codingSkillsPrompt = getProjectChatEngineSkillPrompt(worktreePath);
-        const fullPromptText = [
-          `[PROJECT: ${projectName} in ${worktreePath}]`,
-          `Task: ${taskTitle}`,
-          ...(codingSkillsPrompt ? ["", codingSkillsPrompt] : []),
-          "",
-          `Requirements:`,
-          prompt,
-          "",
-          `Please generate complete working code without placeholders.`,
-        ].join("\n");
+        const fullPromptText = prompt.includes("SUPERVISOR-TO-WORKER TASK ENVELOPE")
+          ? [...(codingSkillsPrompt ? [codingSkillsPrompt, ""] : []), prompt].join("\n")
+          : [
+              `[PROJECT: ${projectName} in ${worktreePath}]`,
+              `Task: ${taskTitle}`,
+              ...(codingSkillsPrompt ? ["", codingSkillsPrompt] : []),
+              "",
+              `Requirements:`,
+              prompt,
+              "",
+              `Please generate complete working code without placeholders.`,
+            ].join("\n");
 
         // Standard endpoint: /prompt (replacing non-standard /turn)
         await fetch(`${activeBase}/session/${sessionId}/prompt`, {

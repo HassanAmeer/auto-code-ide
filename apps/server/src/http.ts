@@ -118,6 +118,11 @@ import {
 } from "./multiTurnSessionLedger.ts";
 import { runAutonomousHarnessWorkflow } from "./dsh/index.ts";
 import { getProjectChatEngineSkillPrompt } from "@t3tools/shared/superpowerSkills";
+import {
+  createSupervisorWorkerEnvelope,
+  formatSupervisorWorkerPrompt,
+  type SupervisorWorkerTaskEnvelope,
+} from "@t3tools/shared/taskEnvelope";
 
 const OTLP_TRACES_PROXY_PATH = "/api/observability/v1/traces";
 const LOOPBACK_HOSTNAMES = new Set(["127.0.0.1", "::1", "localhost"]);
@@ -3239,6 +3244,7 @@ export const layerSuperAgentDispatchWorkerRoute = HttpRouter.add(
       projectIdOrName?: string;
       taskTitle?: string;
       prompt?: string;
+      envelope?: SupervisorWorkerTaskEnvelope;
       model?: string;
       stream?: boolean;
       clientNotificationTarget?: string;
@@ -3268,6 +3274,18 @@ export const layerSuperAgentDispatchWorkerRoute = HttpRouter.add(
     const targetRoot = project.workspaceRoot;
     const framework = detectProjectFramework(targetRoot);
 
+    const envelope =
+      bodyJson?.envelope ||
+      createSupervisorWorkerEnvelope({
+        task: taskTitle,
+        requirements: prompt,
+        projectName: project.projectName,
+        targetPath: targetRoot,
+        framework,
+      });
+
+    const formattedEnvelopePrompt = formatSupervisorWorkerPrompt(envelope);
+
     // Setup live SSE stream if requested by client
     const passThrough = isStream ? new NodeStreamPromises.PassThrough() : null;
     const streamLogs: string[] = [];
@@ -3290,7 +3308,7 @@ export const layerSuperAgentDispatchWorkerRoute = HttpRouter.add(
 
     sendStreamLog(
       "dispatch",
-      `🚀 Super Bot (Senior Supervisor) initiated task: "${taskTitle}" on Worker Thread.`,
+      `🚀 Super Bot (Senior Supervisor) initiated task: "${taskTitle}" with Task Envelope (${envelope.rules.length} strict bounds).`,
     );
 
     const harnessResult = yield* Effect.promise(() =>
@@ -3300,7 +3318,8 @@ export const layerSuperAgentDispatchWorkerRoute = HttpRouter.add(
         projectRoot: targetRoot,
         projectIdOrName: targetName,
         taskTitle,
-        prompt,
+        prompt: formattedEnvelopePrompt,
+        envelope,
         model: bodyJson?.model || "default",
         stream: isStream,
         clientNotificationTarget: bodyJson?.clientNotificationTarget,
@@ -3311,6 +3330,11 @@ export const layerSuperAgentDispatchWorkerRoute = HttpRouter.add(
     );
 
     const verificationSteps = [
+      {
+        step: "Supervisor-to-Worker Task Envelope",
+        desc: `Dispatched with ${envelope.rules.length} strict bounds & completion criteria.`,
+        status: "completed",
+      },
       ...(harnessResult.subtasks && harnessResult.subtasks.length > 1
         ? [
             {

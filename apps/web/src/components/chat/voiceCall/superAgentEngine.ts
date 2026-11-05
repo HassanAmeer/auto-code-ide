@@ -23,6 +23,11 @@ import {
   addDecisionPoint,
 } from "~/lib/speech/multiTurnSessionLedger";
 import { buildSuperAgentSystemPrompt } from "./superAgentPrompt";
+import {
+  createSupervisorWorkerEnvelope,
+  formatSupervisorWorkerPrompt,
+  type SupervisorWorkerTaskEnvelope,
+} from "@t3tools/shared/taskEnvelope";
 
 export interface SuperAgentRunOptions {
   userText: string;
@@ -412,6 +417,7 @@ async function callWorkerAgentDispatcher(
   prompt: string,
   model?: string,
   onStreamLog?: (log: string) => void,
+  envelope?: SupervisorWorkerTaskEnvelope,
 ): Promise<WorkerDispatchResult> {
   try {
     const res = await fetch(resolveApiUrl("/api/super-agent/dispatch-worker"), {
@@ -421,6 +427,7 @@ async function callWorkerAgentDispatcher(
         projectIdOrName,
         taskTitle,
         prompt,
+        envelope,
         model,
         stream: true,
       }),
@@ -894,14 +901,31 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
     let workerRes: WorkerDispatchResult | null = null;
     if (wantsWorkerExecution) {
       onStatusUpdate?.(`Delegating to Worker (${targetName})...`);
+
+      const envelope = createSupervisorWorkerEnvelope({
+        task: userText.trim(),
+        requirements: [
+          "Implement the requested feature cleanly in the active project workspace.",
+          "Ensure all interactive UI controls and state management work end-to-end.",
+        ],
+        constraints: [
+          "Edit ONLY files relevant to this task; do not rewrite unaffected components.",
+          "Ensure HTML and JSX syntax is 100% clean so live preview builds immediately.",
+        ],
+        expectedOutput:
+          "Complete working implementation with verified syntax and clean live preview rendering.",
+        projectName: targetName,
+      });
+
       workerRes = await callWorkerAgentDispatcher(
         targetName,
         userText.slice(0, 50),
-        userText,
+        formatSupervisorWorkerPrompt(envelope),
         selectedModel,
         (streamLine) => {
           onStatusUpdate?.(streamLine);
         },
+        envelope,
       );
       if (workerRes.ok) {
         recordTool({

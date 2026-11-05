@@ -10,6 +10,11 @@ import { executeAutonomousReviewLoop } from "./selfReviewLoop.ts";
 import { decomposeTask } from "./taskDecomposer.ts";
 import { sendWhatsAppMessage, fetchWhatsAppSettings } from "../botBridge.ts";
 import { isSkillEnabled, getDshWorkerSkillPrompt } from "@t3tools/shared/superpowerSkills";
+import {
+  createSupervisorWorkerEnvelope,
+  formatSupervisorWorkerPrompt,
+  type SupervisorWorkerTaskEnvelope,
+} from "@t3tools/shared/taskEnvelope";
 
 export * from "./types.ts";
 export * from "./worktreeRunner.ts";
@@ -117,14 +122,33 @@ export async function runAutonomousHarnessWorkflow(
     st.status = "in_progress";
     logStep("subtask", `⚙️ [Milestone ${st.order}/${subtasks.length}] Executing: "${st.title}"...`);
 
-    const basePrompt =
-      subtasks.length > 1
-        ? `[MILESTONE ${st.order}/${subtasks.length} FOR PROJECT: ${projectName}]\nTask: ${st.title}\nRequirements:\n${st.description}\n\nFull Objective Context:\n${prompt}`
-        : prompt;
+    const milestoneEnvelope = createSupervisorWorkerEnvelope({
+      task:
+        subtasks.length > 1
+          ? `[Milestone ${st.order}/${subtasks.length} for ${projectName}]: ${st.title}`
+          : taskTitle,
+      requirements: [st.description, ...(params.envelope?.rules || [])],
+      constraints: [
+        `Focus strictly on milestone ${st.order} deliverables without breaking existing code.`,
+      ],
+      expectedOutput:
+        st.category === "frontend_ui"
+          ? "Clean HTML/TSX/CSS UI implementation verified for live preview rendering."
+          : "Complete, production-ready implementation of types, state models, and business logic.",
+      projectName,
+      targetPath: allocation.worktreePath,
+    });
+
+    const basePrompt = formatSupervisorWorkerPrompt(milestoneEnvelope);
 
     const subtaskPrompt = parallelSkillPrompt
       ? `${parallelSkillPrompt}\n\n${basePrompt}`
       : basePrompt;
+
+    logStep(
+      `worker-${st.order}`,
+      `✉️ Dispatched Supervisor-to-Worker Task Envelope (${milestoneEnvelope.rules.length} strict bounds).`,
+    );
 
     const subtaskRes = await executeOpenCodeTask({
       worktreePath: allocation.worktreePath,

@@ -38,11 +38,15 @@ flowchart TD
     G --> H["User ko Chat me Verified Preview Card & Direct Link Dena"]
 ```
 
-### Step 1: Task Delegation (کام ذمے لگانا)
+### Step 1: Task Delegation (کام ذمے لگانا - Task Envelope Protocol)
 
 - Super Bot user se task lene ke baad user ko batata hai:  
   _"Ji boss! Maine project '[project]' ke worker agent ko [feature] ka task assign kar diya hai. Main iski nigrani kar raha hoon."_
-- Super Bot worker dispatcher API (`/api/super-agent/dispatch-worker`) ko structured prompt bhejta hai.
+- Super Bot worker dispatcher API (`/api/super-agent/dispatch-worker`) ko raw prompt ke bajaye **Strict Supervisor-to-Worker Task Envelope** bhejta hai:
+  - **Task Objective:** Wazeh aur to-the-point maqsad.
+  - **Strict Rules & Bounds:** (1) Zero placeholders/TODOs, (2) Only target files modify karna, (3) Syntax integrity & closing tags.
+  - **Expected Output:** Verified working files + Live Preview HTTP 200 criteria.
+  - Yeh envelope worker ko hallucinate hone aur bhatakne se mukammal mehfooz rakhta hai.
 
 ### Step 2: Continuous Verification (بار بار چیک اور تصدیق)
 
