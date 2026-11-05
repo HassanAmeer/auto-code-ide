@@ -101,10 +101,8 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
       <Tooltip>
         <TooltipTrigger
           render={
-            <Button
+            <button
               type="button"
-              variant="ghost"
-              size="compact"
               onClick={() => {
                 const nextMode =
                   terminalState.permissionMode === "full-access" ? "ask" : "full-access";
@@ -120,16 +118,16 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
                 });
               }}
               className={cn(
-                "h-7 px-2 gap-1 text-xs rounded-md shrink-0 flex items-center justify-center cursor-pointer transition-all border active:scale-[0.97]",
+                "h-5 px-1.5 gap-1 text-[10px] rounded-[4px] shrink-0 flex items-center justify-center cursor-pointer transition-all border select-none active:scale-[0.96]",
                 terminalState.permissionMode === "full-access"
-                  ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/25 hover:text-emerald-300 shadow-xs font-medium"
-                  : "bg-amber-500/15 text-amber-300 border-amber-500/40 hover:bg-amber-500/25 hover:text-amber-200 shadow-xs font-medium",
+                  ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/25 shadow-xs font-medium"
+                  : "bg-amber-500/15 text-amber-300 border-amber-500/40 hover:bg-amber-500/25 shadow-xs font-medium",
               )}
               aria-label="Toggle execution permission mode"
             >
-              <ShieldCheck className="size-3.5 shrink-0" />
+              <ShieldCheck className="size-2.5 shrink-0" />
               <span>{terminalState.permissionMode === "full-access" ? "Permitted" : "Ask"}</span>
-            </Button>
+            </button>
           }
         />
         <TooltipPopup side="bottom">
@@ -141,39 +139,36 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
         </TooltipPopup>
       </Tooltip>
 
-      {/* 2. Terminal Studio Toggle Button */}
+      {/* 2. Terminal Studio Toggle Button (Icon Only - Compact) */}
       <Tooltip>
         <TooltipTrigger
           render={
-            <Button
+            <button
               type="button"
-              variant="ghost"
-              size="compact"
               onClick={() => terminalStore.toggleQuickBar()}
               className={cn(
-                "h-7 w-7 min-w-7 sm:w-auto p-0 sm:px-2 gap-1.5 text-xs rounded-md shrink-0 flex items-center justify-center cursor-pointer transition-all border active:scale-[0.97]",
+                "size-5 rounded-[4px] shrink-0 flex items-center justify-center relative cursor-pointer transition-all border select-none active:scale-[0.96]",
                 terminalState.isQuickBarOpen
-                  ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/25 shadow-xs font-medium"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted/50 border-transparent",
+                  ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-xs"
+                  : "bg-white/[0.04] text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.08] border-white/[0.08]",
               )}
               aria-label="Toggle Terminal Studio"
             >
               <Terminal
                 className={cn(
-                  "size-3.5 shrink-0",
-                  terminalState.isQuickBarOpen ? "text-emerald-400" : "text-primary",
+                  "size-2.5 shrink-0",
+                  terminalState.isQuickBarOpen ? "text-emerald-400" : "text-zinc-400",
                 )}
               />
-              <span className="hidden sm:inline">Terminal</span>
               <span
                 className={cn(
-                  "size-1.5 rounded-full shrink-0",
+                  "absolute top-0.5 right-0.5 size-1 rounded-full",
                   terminalState.isQuickBarOpen
-                    ? "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)] animate-pulse"
-                    : "bg-zinc-600",
+                    ? "bg-emerald-400 shadow-[0_0_4px_rgba(52,211,153,0.9)] animate-pulse"
+                    : "bg-zinc-600/70",
                 )}
               />
-            </Button>
+            </button>
           }
         />
         <TooltipPopup side="bottom">
