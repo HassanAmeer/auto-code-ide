@@ -38,6 +38,7 @@ import {
 import { EnvironmentMachineIcon } from "./EnvironmentMachineIcon";
 import { ProjectFavicon } from "./ProjectFavicon";
 import { SidebarBotSection } from "./sidebar/SidebarBotSection";
+import { SidebarTerminalSection } from "./sidebar/SidebarTerminalSection";
 import { useAtomValue } from "@effect/atom-react";
 import { autoAnimate } from "@formkit/auto-animate";
 import React, { useCallback, useEffect, memo, useMemo, useRef, useState } from "react";
@@ -3743,6 +3744,8 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
         {projectsLength === 0 && (
           <div className="px-2 pt-4 text-center text-secondary-label text-xs">No projects yet</div>
         )}
+
+        <SidebarTerminalSection />
       </SidebarGroup>
     </SidebarContent>
   );

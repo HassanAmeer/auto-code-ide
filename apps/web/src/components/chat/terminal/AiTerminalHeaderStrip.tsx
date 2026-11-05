@@ -7,11 +7,9 @@ import {
   Server,
   Key,
   Plus,
-  MessageSquare,
   Trash2,
   Check,
   Terminal,
-  Clock,
   Sparkles,
   Pencil,
   ShieldCheck,
@@ -20,7 +18,6 @@ import { cn } from "../../../lib/utils";
 import { useTerminalStore, terminalStore } from "./terminalStore";
 import { useProjects } from "../../../state/entities";
 import { SshKeysSheet } from "./SshKeysSheet";
-import { TerminalChatsSheet } from "./TerminalChatsSheet";
 import { toastManager } from "../../ui/toast";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 
@@ -78,45 +75,6 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
     }
   };
 
-  // Find active chat session
-  const activeChat = store.terminalChats.find((c) => c.id === store.activeChatId);
-
-  // Active SSH Key
-  const activeSshKey = store.selectedKeyId
-    ? store.accessKeys.find((k) => k.id === store.selectedKeyId)
-    : store.accessKeys.find((k) => (k.type === "ssh" || k.host) && k.enabled);
-
-  // Create new terminal chat
-  const handleCreateNewChat = () => {
-    const projName = store.selectedProjectTitle || activeProject?.title || "Auto Deploy";
-    const keyName = activeSshKey?.name || "Server";
-    const newChat = terminalStore.createTerminalChat({
-      title: `${projName} (${keyName})`,
-      projectId: store.selectedProjectId || activeProject?.id,
-      projectName: projName,
-      sshKeyId: activeSshKey?.id,
-      sshKeyName: keyName,
-    });
-    terminalStore.setActiveChatId(newChat.id);
-    terminalStore.setQuickBarOpen(true);
-
-    // Call external handler if provided to create a fresh thread
-    if (onNewTerminalThread) {
-      onNewTerminalThread();
-    }
-  };
-
-  // Switch chat
-  const handleSelectChat = (chatId: string) => {
-    terminalStore.setActiveChatId(chatId);
-  };
-
-  // Delete chat
-  const handleDeleteChat = (e: React.MouseEvent, chatId: string) => {
-    e.stopPropagation();
-    terminalStore.deleteTerminalChat(chatId);
-  };
-
   return (
     <>
       <div
@@ -145,42 +103,7 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
           }}
           className="flex-1 flex items-center gap-1.5 overflow-x-auto py-0.5 px-0.5 scroll-smooth [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
         >
-          {/* 1. New Terminal Chat Button: Plus icon and Chat icon only */}
-          <button
-            type="button"
-            onClick={handleCreateNewChat}
-            className="flex items-center gap-1 px-1.5 py-0.5 rounded-[5px] bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 text-3xs font-medium shrink-0 cursor-pointer shadow-xs transition-all active:scale-[0.96]"
-            title="Start New Chat"
-          >
-            <Plus className="size-2.5" />
-            <MessageSquare className="size-3" />
-          </button>
-
-          {/* 2. Terminal Chats History Button */}
-          <button
-            type="button"
-            onClick={() => terminalStore.toggleChatsSheet()}
-            className={cn(
-              "flex items-center gap-1 px-2 py-0.5 rounded-[5px] text-3xs font-medium border transition-all cursor-pointer shadow-xs shrink-0 active:scale-[0.98]",
-              store.isChatsSheetOpen
-                ? "bg-[#252528] text-zinc-100 border-white/[0.15]"
-                : "bg-[#18181b]/80 hover:bg-[#222225] text-zinc-300 border-white/[0.08]",
-            )}
-            title="Open Terminal History & Sessions Sheet"
-          >
-            <Clock className="size-2.5 text-emerald-400 shrink-0" />
-            <span className="font-semibold text-4xs truncate max-w-[110px] sm:max-w-[150px]">
-              {activeChat?.title || "History"}
-            </span>
-            <span className="px-1 py-0.2 rounded-[4px] bg-white/[0.06] text-zinc-400 font-mono text-4xs border border-white/[0.06]">
-              {store.terminalChats.length}
-            </span>
-          </button>
-
-          {/* Divider */}
-          <div className="w-px h-3.5 bg-white/[0.08] shrink-0" />
-
-          {/* 3. Projects Section */}
+          {/* Projects Section */}
           <span className="text-zinc-500 text-4xs font-medium shrink-0">Projects:</span>
 
           {uniqueProjects.length === 0 ? (
@@ -366,12 +289,6 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
 
       {/* 90% Width SSH Keys Management Sheet */}
       <SshKeysSheet />
-
-      {/* 90% Width Terminal Chat History Sheet */}
-      <TerminalChatsSheet
-        activeProject={activeProject ?? null}
-        {...(onNewTerminalThread ? { onNewTerminalThread } : {})}
-      />
     </>
   );
 });
