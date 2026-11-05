@@ -1,16 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import {
-  ChevronDownIcon,
-  ChevronRightIcon,
-  FilePlus2Icon,
-  FileTextIcon,
-  Loader2Icon,
-  MoreVerticalIcon,
-  PlayIcon,
-  PuzzleIcon,
-  SquareIcon,
-  TerminalIcon,
-} from "lucide-react";
+import { ChevronDownIcon, Loader2Icon, PlayIcon, SquareIcon } from "lucide-react";
 import {
   AuthOrchestrationOperateScope,
   AuthTerminalOperateScope,
@@ -44,7 +33,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 export function SleekSpinnerRing({ className }: { className?: string }) {
   return (
     <svg
-      className={cn("size-3.5 shrink-0 animate-spin text-slate-400", className)}
+      className={cn("size-3.5 shrink-0 animate-spin text-muted-foreground", className)}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -66,7 +55,7 @@ export function CancelledCircleIcon({ className }: { className?: string }) {
       strokeWidth="1.8"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className={className ?? "size-3.5 shrink-0 text-slate-400"}
+      className={className ?? "size-3.5 shrink-0 text-muted-foreground"}
       aria-hidden="true"
     >
       <circle cx="12" cy="12" r="9" />
@@ -85,7 +74,7 @@ export function TimerIcon({ className }: { className?: string }) {
       strokeWidth="1.8"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className={className ?? "size-3.5 shrink-0 text-slate-400"}
+      className={className ?? "size-3.5 shrink-0 text-muted-foreground"}
       aria-hidden="true"
     >
       <line x1="10" x2="14" y1="2" y2="2" />
@@ -104,7 +93,7 @@ export function TerminalBoxIcon({ className }: { className?: string }) {
       strokeWidth="1.8"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className={className ?? "size-3.5 shrink-0 text-slate-400"}
+      className={className ?? "size-3.5 shrink-0 text-muted-foreground"}
       aria-hidden="true"
     >
       <rect width="20" height="15" x="2" y="4.5" rx="3" />
@@ -123,7 +112,7 @@ export function SubagentBotIcon({ className }: { className?: string }) {
       strokeWidth="1.8"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className={className ?? "size-3.5 shrink-0 text-slate-400"}
+      className={className ?? "size-3.5 shrink-0 text-muted-foreground"}
       aria-hidden="true"
     >
       <path d="M12 8V4H8" />
@@ -170,20 +159,10 @@ export interface BackgroundServicesWidgetProps {
   readonly initialExpanded?: boolean;
   readonly showOpenSheetButton?: boolean;
   readonly className?: string;
-  /** Whether to show the top Overview section (default: true) */
-  readonly overview?: boolean;
-  /** Whether to wrap in standalone dark rounded card container (default: true) */
-  readonly cardStyle?: boolean;
   /** Explicit subagents override or initial list */
   readonly subagents?: ReadonlyArray<SubagentItem>;
   /** Explicit goals override or initial list */
   readonly goals?: ReadonlyArray<GoalItem>;
-  /** Overview action callbacks */
-  readonly onOpenReview?: () => void;
-  readonly onOpenFiles?: () => void;
-  readonly onOpenTerminal?: () => void;
-  readonly onOpenPlugins?: () => void;
-  readonly onMoreOptions?: () => void;
 }
 
 // Fallback showcase items matching the user's screenshot when no active thread or tasks exist
@@ -251,15 +230,8 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
   threadId,
   initialExpanded = false,
   className,
-  overview = true,
-  cardStyle = true,
   subagents: propSubagents,
   goals: propGoals,
-  onOpenReview,
-  onOpenFiles,
-  onOpenTerminal,
-  onOpenPlugins,
-  onMoreOptions,
 }: BackgroundServicesWidgetProps) {
   const activeEnvId = useActiveEnvironmentId();
   const primaryEnvId = usePrimaryEnvironmentId();
@@ -374,7 +346,6 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
     for (const item of storedWorkers) if (!map.has(item.id)) map.set(item.id, item);
 
     const list = Array.from(map.values());
-    // If not bound to a live thread and empty, fallback to demo showcase matching the screenshot
     if (list.length === 0 && !threadId) {
       return [...DEMO_SHOWCASE_SUBAGENTS];
     }
@@ -406,7 +377,6 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
     for (const item of storedGoals) if (!map.has(item.id)) map.set(item.id, item);
 
     const list = Array.from(map.values());
-    // If not bound to a live thread and empty, fallback to demo showcase matching the screenshot
     if (list.length === 0 && !threadId) {
       return [...DEMO_SHOWCASE_GOALS];
     }
@@ -575,133 +545,12 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
   }, [terminalSessions, tasksQuery.data?.tasks, threadDetails?.projection?.turnItems]);
 
   const subagentsCount = combinedSubagents.length;
-  // If not bound to thread and 0 tasks, display 21 as shown in screenshot
-  const tasksCount = backgroundTasks.length === 0 && !threadId ? 21 : backgroundTasks.length;
+  const tasksCount = backgroundTasks.length;
   const goalsCount = combinedGoals.length;
 
   return (
-    <div
-      className={cn(
-        "select-none font-sans text-slate-200",
-        cardStyle
-          ? "w-full rounded-2xl bg-[#1b1e2e] border border-[#272b3d] p-3 shadow-xl backdrop-blur-sm"
-          : "flex flex-col gap-1 py-0.5 px-0.5",
-        className,
-      )}
-    >
-      {/* 1. Optional / Top Overview Section */}
-      {overview && (
-        <div className="flex flex-col">
-          <div className="flex items-center justify-between px-2.5 pb-2 text-xs font-medium text-slate-400">
-            <span>Overview</span>
-            <button
-              type="button"
-              onClick={onMoreOptions}
-              className="text-slate-500 hover:text-slate-300 transition-colors p-0.5 rounded"
-              aria-label="More options"
-            >
-              <MoreVerticalIcon className="size-3.5" />
-            </button>
-          </div>
-
-          <div className="flex flex-col gap-0.5">
-            {/* Review */}
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={() => {
-                onOpenReview?.();
-                if (typeof window !== "undefined") {
-                  window.dispatchEvent(new CustomEvent("open-overview-review"));
-                }
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  onOpenReview?.();
-                }
-              }}
-              className="flex h-8 items-center gap-2.5 px-2.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/[0.05] transition-colors cursor-pointer group"
-            >
-              <FilePlus2Icon className="size-4 text-slate-400 group-hover:text-slate-200 shrink-0 transition-colors" />
-              <span className="text-[13px] font-normal leading-none">Review</span>
-            </div>
-
-            {/* Files */}
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={() => {
-                onOpenFiles?.();
-                if (typeof window !== "undefined") {
-                  window.dispatchEvent(new CustomEvent("open-overview-files"));
-                }
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  onOpenFiles?.();
-                }
-              }}
-              className="flex h-8 items-center gap-2.5 px-2.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/[0.05] transition-colors cursor-pointer group"
-            >
-              <FileTextIcon className="size-4 text-slate-400 group-hover:text-slate-200 shrink-0 transition-colors" />
-              <span className="text-[13px] font-normal leading-none">Files</span>
-            </div>
-
-            {/* Terminal */}
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={() => {
-                onOpenTerminal?.();
-                if (typeof window !== "undefined") {
-                  window.dispatchEvent(new CustomEvent("open-overview-terminal"));
-                }
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  onOpenTerminal?.();
-                }
-              }}
-              className="flex h-8 items-center gap-2.5 px-2.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/[0.05] transition-colors cursor-pointer group"
-            >
-              <TerminalIcon className="size-4 text-slate-400 group-hover:text-slate-200 shrink-0 transition-colors" />
-              <span className="text-[13px] font-normal leading-none">Terminal</span>
-            </div>
-
-            {/* Plugins */}
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={() => {
-                onOpenPlugins?.();
-                if (typeof window !== "undefined") {
-                  window.dispatchEvent(new CustomEvent("open-overview-plugins"));
-                }
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  onOpenPlugins?.();
-                }
-              }}
-              className="flex h-8 items-center justify-between gap-2.5 px-2.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/[0.05] transition-colors cursor-pointer group"
-            >
-              <div className="flex items-center gap-2.5 min-w-0">
-                <PuzzleIcon className="size-4 text-slate-400 group-hover:text-slate-200 shrink-0 transition-colors" />
-                <span className="text-[13px] font-normal leading-none">Plugins</span>
-              </div>
-              <ChevronRightIcon className="size-3.5 text-slate-500 group-hover:text-slate-300 transition-colors shrink-0" />
-            </div>
-          </div>
-
-          <div className="my-2 border-b border-white/[0.07]" />
-        </div>
-      )}
-
-      {/* 2. Subagents Section */}
+    <div className={cn("flex flex-col gap-1 py-0.5 px-0.5 select-none", className)}>
+      {/* 1. Subagents Section */}
       <div className="flex flex-col">
         <div
           role="button"
@@ -713,45 +562,45 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
               setSubagentsExpanded(!subagentsExpanded);
             }
           }}
-          className="flex h-7 items-center justify-between px-2.5 rounded-lg hover:bg-white/[0.04] transition-colors cursor-pointer group/header"
+          className="flex h-7 items-center justify-between px-2 rounded-lg hover:bg-black/[0.035] dark:hover:bg-white/[0.08] transition-colors cursor-pointer group/header"
           aria-expanded={subagentsExpanded}
         >
           <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-slate-400 group-hover/header:text-slate-200 transition-colors">
+            <span className="text-xs font-medium text-foreground/85 group-hover/header:text-foreground transition-colors">
               Subagents
             </span>
-            <span className="rounded-full bg-[#272a3e] px-2 py-0.5 text-[11px] font-mono font-medium text-slate-400 leading-none">
+            <span className="rounded-full bg-muted/60 px-1.5 py-0.5 text-[11px] font-mono text-muted-foreground leading-none">
               {subagentsCount}
             </span>
           </div>
           <ChevronDownIcon
             className={cn(
-              "size-3.5 text-slate-500 transition-transform duration-200",
+              "size-3.5 text-muted-foreground transition-transform duration-200",
               !subagentsExpanded && "-rotate-90",
             )}
           />
         </div>
 
         {subagentsExpanded && (
-          <div className="flex flex-col gap-0.5 pt-1">
+          <div className="flex flex-col gap-0.5 pt-0.5 pl-1">
             {combinedSubagents.length === 0 ? (
-              <div className="py-1 px-2.5 text-xs text-slate-500 font-normal">
+              <div className="py-1 px-2 text-[11px] text-muted-foreground font-mono">
                 No active subagents
               </div>
             ) : (
               combinedSubagents.map((agent) => (
                 <div
                   key={agent.id}
-                  className="flex h-7 items-center justify-between gap-2.5 px-2.5 rounded-lg hover:bg-white/[0.04] transition-colors group cursor-default"
+                  className="flex h-7 items-center justify-between gap-2 px-2 rounded-md hover:bg-black/[0.035] dark:hover:bg-white/[0.08] transition-colors group cursor-default"
                 >
-                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                    <SleekSpinnerRing className="size-3.5 text-slate-400 shrink-0" />
-                    <span className="text-[13px] text-slate-200 group-hover:text-white font-normal truncate">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <SleekSpinnerRing className="size-3.5 text-muted-foreground shrink-0" />
+                    <span className="text-xs text-foreground/85 group-hover:text-foreground font-normal truncate">
                       {agent.title}
                     </span>
                   </div>
                   {agent.status && agent.status !== "running" && (
-                    <span className="text-2xs font-mono text-slate-500 uppercase shrink-0">
+                    <span className="text-2xs font-mono text-muted-foreground uppercase shrink-0">
                       {agent.status}
                     </span>
                   )}
@@ -761,10 +610,10 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
           </div>
         )}
 
-        <div className="my-2 border-b border-white/[0.07]" />
+        <div className="my-1 border-b border-border/40" />
       </div>
 
-      {/* 3. Background Tasks Section */}
+      {/* 2. Background Tasks Section */}
       <div className="flex flex-col">
         <div
           role="button"
@@ -776,29 +625,29 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
               setTasksExpanded(!tasksExpanded);
             }
           }}
-          className="flex h-7 items-center justify-between px-2.5 rounded-lg hover:bg-white/[0.04] transition-colors cursor-pointer group/header"
+          className="flex h-7 items-center justify-between px-2 rounded-lg hover:bg-black/[0.035] dark:hover:bg-white/[0.08] transition-colors cursor-pointer group/header"
           aria-expanded={tasksExpanded}
         >
           <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-slate-400 group-hover/header:text-slate-200 transition-colors">
+            <span className="text-xs font-medium text-foreground/85 group-hover/header:text-foreground transition-colors">
               Background Tasks
             </span>
-            <span className="rounded-full bg-[#272a3e] px-2 py-0.5 text-[11px] font-mono font-medium text-slate-400 leading-none">
+            <span className="rounded-full bg-muted/60 px-1.5 py-0.5 text-[11px] font-mono text-muted-foreground leading-none">
               {tasksCount}
             </span>
           </div>
           <ChevronDownIcon
             className={cn(
-              "size-3.5 text-slate-500 transition-transform duration-200",
+              "size-3.5 text-muted-foreground transition-transform duration-200",
               !tasksExpanded && "-rotate-90",
             )}
           />
         </div>
 
         {tasksExpanded && (
-          <div className="flex flex-col gap-0.5 pt-1 max-h-56 overflow-y-auto pr-0.5">
+          <div className="flex flex-col gap-0.5 pt-0.5 max-h-60 overflow-y-auto pr-0.5">
             {backgroundTasks.length === 0 ? (
-              <div className="py-1 px-2.5 text-xs text-slate-500 font-normal">
+              <div className="py-1 px-2 text-[11px] text-muted-foreground font-mono">
                 No active background tasks
               </div>
             ) : (
@@ -811,24 +660,24 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
                 return (
                   <div
                     key={task.id}
-                    className="flex h-7 items-center justify-between gap-2 px-2.5 rounded-md hover:bg-white/[0.04] transition-colors group cursor-default"
+                    className="flex h-7 items-center justify-between gap-2 px-2 rounded-md hover:bg-black/[0.035] dark:hover:bg-white/[0.08] transition-colors group cursor-default"
                   >
                     <div className="flex items-center gap-2 min-w-0 flex-1">
                       {task.kind === "cancelled" ? (
-                        <CancelledCircleIcon className="size-3.5 shrink-0 text-slate-400" />
+                        <CancelledCircleIcon className="size-3.5 shrink-0 text-muted-foreground" />
                       ) : task.kind === "timer" ? (
-                        <TimerIcon className="size-3.5 shrink-0 text-slate-400" />
+                        <TimerIcon className="size-3.5 shrink-0 text-muted-foreground" />
                       ) : isRunning ? (
                         <div className="relative flex items-center justify-center shrink-0">
-                          <TerminalBoxIcon className="size-3.5 text-slate-300" />
+                          <TerminalBoxIcon className="size-3.5 text-foreground/80" />
                           <span className="absolute -top-0.5 -right-0.5 size-1.5 rounded-full bg-emerald-400 animate-pulse" />
                         </div>
                       ) : (
-                        <TerminalBoxIcon className="size-3.5 shrink-0 text-slate-400" />
+                        <TerminalBoxIcon className="size-3.5 shrink-0 text-muted-foreground" />
                       )}
 
                       <span
-                        className="text-[13px] text-slate-200 group-hover:text-white font-normal truncate leading-normal"
+                        className="text-xs text-foreground/85 group-hover:text-foreground font-normal truncate leading-normal"
                         title={task.title}
                       >
                         {task.title}
@@ -874,7 +723,7 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
                                   e.stopPropagation();
                                   handleRunTask(task.rawTask!);
                                 }}
-                                className="size-5 rounded hover:bg-white/10 text-slate-400 hover:text-slate-200 flex items-center justify-center transition-colors"
+                                className="size-5 rounded hover:bg-white/10 text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors"
                                 aria-label={`Run ${task.title} now`}
                               >
                                 {isTaskBusy ? (
@@ -896,10 +745,10 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
           </div>
         )}
 
-        <div className="my-2 border-b border-white/[0.07]" />
+        <div className="my-1 border-b border-border/40" />
       </div>
 
-      {/* 4. Goals Section */}
+      {/* 3. Goals Section */}
       <div className="flex flex-col">
         <div
           role="button"
@@ -911,44 +760,46 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
               setGoalsExpanded(!goalsExpanded);
             }
           }}
-          className="flex h-7 items-center justify-between px-2.5 rounded-lg hover:bg-white/[0.04] transition-colors cursor-pointer group/header"
+          className="flex h-7 items-center justify-between px-2 rounded-lg hover:bg-black/[0.035] dark:hover:bg-white/[0.08] transition-colors cursor-pointer group/header"
           aria-expanded={goalsExpanded}
         >
           <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-slate-400 group-hover/header:text-slate-200 transition-colors">
+            <span className="text-xs font-medium text-foreground/85 group-hover/header:text-foreground transition-colors">
               Goals
             </span>
-            <span className="rounded-full bg-[#272a3e] px-2 py-0.5 text-[11px] font-mono font-medium text-slate-400 leading-none">
+            <span className="rounded-full bg-muted/60 px-1.5 py-0.5 text-[11px] font-mono text-muted-foreground leading-none">
               {goalsCount}
             </span>
           </div>
           <ChevronDownIcon
             className={cn(
-              "size-3.5 text-slate-500 transition-transform duration-200",
+              "size-3.5 text-muted-foreground transition-transform duration-200",
               !goalsExpanded && "-rotate-90",
             )}
           />
         </div>
 
         {goalsExpanded && (
-          <div className="flex flex-col gap-0.5 pt-1">
+          <div className="flex flex-col gap-0.5 pt-0.5 pl-1">
             {combinedGoals.length === 0 ? (
-              <div className="py-1 px-2.5 text-xs text-slate-500 font-normal">No active goals</div>
+              <div className="py-1 px-2 text-[11px] text-muted-foreground font-mono">
+                No active goals
+              </div>
             ) : (
               combinedGoals.map((goal) => (
                 <div
                   key={goal.id}
-                  className="flex h-7 items-center justify-between gap-2.5 px-2.5 rounded-lg hover:bg-white/[0.04] transition-colors group cursor-default"
+                  className="flex h-7 items-center justify-between gap-2 px-2 rounded-md hover:bg-black/[0.035] dark:hover:bg-white/[0.08] transition-colors group cursor-default"
                   title={goal.text}
                 >
-                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                    <SleekSpinnerRing className="size-3.5 text-slate-400 shrink-0" />
-                    <span className="text-[13px] text-slate-200 group-hover:text-white font-normal truncate">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <SleekSpinnerRing className="size-3.5 text-muted-foreground shrink-0" />
+                    <span className="text-xs text-foreground/85 group-hover:text-foreground font-normal truncate">
                       {goal.text}
                     </span>
                   </div>
                   {goal.status && goal.status !== "active" && (
-                    <span className="text-2xs font-mono text-slate-500 uppercase shrink-0">
+                    <span className="text-2xs font-mono text-muted-foreground uppercase shrink-0">
                       {goal.status}
                     </span>
                   )}

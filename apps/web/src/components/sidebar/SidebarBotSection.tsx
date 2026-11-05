@@ -25,6 +25,7 @@ import {
 import { Button } from "~/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipPopup } from "~/components/ui/tooltip";
 import { Menu, MenuTrigger, MenuPopup, MenuItem, MenuSeparator } from "~/components/ui/menu";
+import { terminalStore } from "~/components/chat/terminal/terminalStore";
 
 export function SidebarBotSection() {
   const navigate = useNavigate();
@@ -57,6 +58,7 @@ export function SidebarBotSection() {
   const handleCreateNewChat = useCallback(
     (e?: React.MouseEvent) => {
       e?.stopPropagation();
+      terminalStore.setQuickBarOpen(false);
       const newSession = createNewCallSession();
       setActiveSessionId(newSession.id);
       void navigate({ to: "/bot" });
@@ -66,6 +68,7 @@ export function SidebarBotSection() {
 
   const handleOpenSession = useCallback(
     (sessionId: string) => {
+      terminalStore.setQuickBarOpen(false);
       setActiveSessionId(sessionId);
       void navigate({ to: "/bot" });
     },
