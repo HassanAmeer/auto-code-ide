@@ -1,7 +1,7 @@
 {
-  "name": "AutoCode",
-  "short_name": "AC",
-  "description": "Automatically code your project",
+  "name": "BotCode",
+  "short_name": "BotCode",
+  "description": "Autonomous AI Coding Agent",
   "id": "/",
   "start_url": "/",
   "scope": "/",

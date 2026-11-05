@@ -68,23 +68,23 @@
 
   <!-- Typography Section -->
   <g transform="translate(160, 0)">
-    <!-- Main Title: AutoCode in White and Silver -->
+    <!-- Main Title: BotCode in White and Silver -->
     <text x="0" y="74" 
           font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" 
           font-size="48" 
           font-weight="800" 
           letter-spacing="-0.5">
-      <tspan fill="#FFFFFF">Auto</tspan><tspan fill="url(#silverChromeFull)">Code</tspan>
+      <tspan fill="#FFFFFF">Bot</tspan><tspan fill="url(#silverChromeFull)">Code</tspan>
     </text>
 
-    <!-- Subtitle: Automatically code your project in elegant silver -->
+    <!-- Subtitle: Autonomous AI Coding Agent -->
     <text x="2" y="106" 
           font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" 
           font-size="16" 
           font-weight="500" 
           letter-spacing="0.2" 
           fill="#94A3B8">
-      Automatically code your project
+      Autonomous AI Coding Agent
     </text>
   </g>
 </svg>

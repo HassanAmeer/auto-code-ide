@@ -166,19 +166,9 @@ export interface BackgroundServicesWidgetProps {
 }
 
 // Fallback showcase items matching the user's screenshot when no active thread or tasks exist
-const DEMO_SHOWCASE_SUBAGENTS: ReadonlyArray<SubagentItem> = [
-  { id: "demo-sub-1", title: "Server & Deployment Specialist", status: "running" },
-  { id: "demo-sub-2", title: "Android Native Specialist", status: "running" },
-  { id: "demo-sub-3", title: "Web UI & Signaling Specialist", status: "running" },
-];
+const DEMO_SHOWCASE_SUBAGENTS: ReadonlyArray<SubagentItem> = [];
 
-const DEMO_SHOWCASE_GOALS: ReadonlyArray<GoalItem> = [
-  {
-    id: "demo-goal-1",
-    text: "please parallel worker chala k kar lo jaldi ...",
-    status: "active",
-  },
-];
+const DEMO_SHOWCASE_GOALS: ReadonlyArray<GoalItem> = [];
 
 function readStoredWorkers(): SubagentItem[] {
   if (typeof window === "undefined" || !window.localStorage) return [];
@@ -345,12 +335,8 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
     for (const item of apiWorkers) if (!map.has(item.id)) map.set(item.id, item);
     for (const item of storedWorkers) if (!map.has(item.id)) map.set(item.id, item);
 
-    const list = Array.from(map.values());
-    if (list.length === 0 && !threadId) {
-      return [...DEMO_SHOWCASE_SUBAGENTS];
-    }
-    return list;
-  }, [propSubagents, projectionSubagents, apiWorkers, storedWorkers, threadId]);
+    return Array.from(map.values());
+  }, [propSubagents, projectionSubagents, apiWorkers, storedWorkers]);
 
   // Map thread projection provider goals
   const projectionGoals = useMemo<GoalItem[]>(() => {
@@ -376,12 +362,8 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
     for (const item of projectionGoals) map.set(item.id, item);
     for (const item of storedGoals) if (!map.has(item.id)) map.set(item.id, item);
 
-    const list = Array.from(map.values());
-    if (list.length === 0 && !threadId) {
-      return [...DEMO_SHOWCASE_GOALS];
-    }
-    return list;
-  }, [propGoals, projectionGoals, storedGoals, threadId]);
+    return Array.from(map.values());
+  }, [propGoals, projectionGoals, storedGoals]);
 
   // 2. Scheduled Tasks / Timers query
   const tasksQuery = useEnvironmentQuery(

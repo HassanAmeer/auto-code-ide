@@ -203,85 +203,11 @@ export function updateGoalTelemetryStatus(
 }
 
 /**
- * Seeds initial standing baseline specialist subagents if registry is currently empty
+ * Clear all worker telemetry
  */
-function ensureSeededSpecialists(projectName: string = "autojobs"): void {
-  if (activeWorkers.size === 0) {
-    const now = Date.now();
-    const defaultWorkers: ActiveWorkerTelemetry[] = [
-      {
-        id: "worker-specialist-server",
-        role: "Server & Deployment Specialist",
-        status: "completed",
-        model: "DeepSeek / Gemini",
-        cwd: process.cwd(),
-        goal: "Server-side active subagents & goals telemetry endpoints",
-        progress: 100,
-        startedAt: now - 360000,
-        completedAt: now - 120000,
-        projectName,
-      },
-      {
-        id: "worker-specialist-ui",
-        role: "Web UI & Signaling Specialist",
-        status: "running",
-        model: "DeepSeek / Gemini",
-        cwd: `${process.cwd()}/apps/web`,
-        goal: "Real-time Bot Chat Subagent & Goals Card Telemetry",
-        progress: 75,
-        startedAt: now - 180000,
-        projectName,
-      },
-      {
-        id: "worker-specialist-android",
-        role: "Android Native Specialist",
-        status: "completed",
-        model: "DeepSeek / Gemini",
-        cwd: `${process.cwd()}/apps/android`,
-        goal: "Direct Audio Stream & WebRTC Signaling Bridge",
-        progress: 100,
-        startedAt: now - 480000,
-        completedAt: now - 240000,
-        projectName,
-      },
-    ];
-
-    defaultWorkers.forEach((w) => activeWorkers.set(w.id, w));
-
-    const defaultGoals: ActiveGoalTelemetry[] = [
-      {
-        id: "goal-telemetry-endpoint",
-        title: "Expose /api/super-agent/workers & /api/subagents/status endpoints",
-        status: "completed",
-        workerId: "worker-specialist-server",
-        order: 1,
-        projectName,
-        createdAt: now - 360000,
-        completedAt: now - 120000,
-      },
-      {
-        id: "goal-bot-card-widget",
-        title: "Connect Subagents & Goals card widget to Bot Chat screen",
-        status: "running",
-        workerId: "worker-specialist-ui",
-        order: 2,
-        projectName,
-        createdAt: now - 180000,
-      },
-      {
-        id: "goal-android-bridge",
-        title: "Audio stream connection to Android Native client",
-        status: "completed",
-        workerId: "worker-specialist-android",
-        order: 3,
-        projectName,
-        createdAt: now - 480000,
-        completedAt: now - 240000,
-      },
-    ];
-
-    defaultGoals.forEach((g) => activeGoals.set(g.id, g));
-  }
+export function clearWorkerTelemetry(): void {
+  activeWorkers.clear();
+  activeGoals.clear();
 }
 
 /**
@@ -291,8 +217,6 @@ export function getTelemetrySnapshot(filter?: {
   projectName?: string | undefined;
   projectId?: string | undefined;
 }): TelemetrySnapshot {
-  ensureSeededSpecialists(filter?.projectName || "autojobs");
-
   let workers = Array.from(activeWorkers.values());
   let goals = Array.from(activeGoals.values());
 

@@ -142,9 +142,9 @@ function SidebarBrand({ onBackdrop }: { onBackdrop: boolean }) {
 function SidebarBrandMark({ onBackdrop }: { onBackdrop: boolean }) {
   return (
     <span className="inline-flex min-w-0 items-center gap-1.5 text-sm font-semibold tracking-tight">
-      <AutoCodeIcon aria-label="AutoCode" className="h-4 w-4 shrink-0 text-foreground" />
+      <AutoCodeIcon aria-label="BotCode" className="h-4 w-4 shrink-0 text-foreground" />
       <span className="inline-flex items-baseline font-bold tracking-tight">
-        <span className={onBackdrop ? "text-white" : "text-foreground"}>Auto</span>
+        <span className={onBackdrop ? "text-white" : "text-foreground"}>Bot</span>
         <span
           className={cn(
             "truncate [text-box:trim-both_cap_alphabetic]",
