@@ -966,10 +966,10 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
           return captured;
         });
 
-      it.effect("defaults T3CODE_BUNDLED_DEV=1 for a shared run", () =>
+      it.effect("leaves T3CODE_BUNDLED_DEV unset when tailscale is disabled", () =>
         Effect.gen(function* () {
           const env = yield* shareSpawnedEnv({ ambientBundledDev: undefined });
-          assert.equal(env?.T3CODE_BUNDLED_DEV, "1");
+          assert.equal(env?.T3CODE_BUNDLED_DEV, undefined);
         }),
       );
 
