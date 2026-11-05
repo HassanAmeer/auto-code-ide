@@ -1035,7 +1035,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                       onPointerDown={stopPropagationOnPointerDown}
                       onClick={handleStartArchiveConfirmation}
                     >
-                      <Trash2 className="size-2.5" />
+                      <ArchiveIcon className="size-2.5" />
                     </button>
                   ) : (
                     <Tooltip>
@@ -1050,7 +1050,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                             onPointerDown={stopPropagationOnPointerDown}
                             onClick={handleArchiveImmediateClick}
                           >
-                            <Trash2 className="size-2.5" />
+                            <ArchiveIcon className="size-2.5" />
                           </button>
                         }
                       />
