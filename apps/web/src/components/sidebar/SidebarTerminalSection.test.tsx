@@ -7,6 +7,8 @@ import {
   isTerminalThreadId,
   clearAllTerminalThreadIds,
   SEED_TERMINAL_THREAD_IDS,
+  getTerminalThreadProject,
+  setTerminalThreadProject,
 } from "~/components/chat/terminal/terminalThreadRegistry";
 
 const storage = new Map<string, string>();
@@ -206,5 +208,19 @@ describe("SidebarTerminalSection chat management", () => {
 
     expect(filtered).toHaveLength(2);
     expect(filtered.filter((t) => t.id === threadId)).toHaveLength(1);
+  });
+
+  it("defaults terminal thread project to null (root) and saves selected project", () => {
+    const threadId = "term-scope-thread-1";
+    // By default, unmapped terminal thread returns null (root scope)
+    expect(getTerminalThreadProject(threadId)).toBeNull();
+
+    // Select project "project1"
+    setTerminalThreadProject(threadId, "project-123");
+    expect(getTerminalThreadProject(threadId)).toBe("project-123");
+
+    // Switching back to root sets it to null
+    setTerminalThreadProject(threadId, null);
+    expect(getTerminalThreadProject(threadId)).toBeNull();
   });
 });
