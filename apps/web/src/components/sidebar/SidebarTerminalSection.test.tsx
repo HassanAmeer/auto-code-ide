@@ -46,4 +46,36 @@ describe("SidebarTerminalSection chat management", () => {
     expect(chats.some((c) => c.id === chat1.id)).toBe(false);
     expect(chats.some((c) => c.id === chat2.id)).toBe(true);
   });
+
+  it("switches chat and updates terminal screen with that chat's history", () => {
+    const chatA = terminalStore.createTerminalChat({ title: "Session A" });
+    terminalStore.recordAiToolRun({
+      id: "run_a_1",
+      command: "echo 'hello from session A'",
+      stdout: "hello from session A\n",
+    });
+
+    const chatB = terminalStore.createTerminalChat({ title: "Session B" });
+    terminalStore.recordAiToolRun({
+      id: "run_b_1",
+      command: "echo 'hello from session B'",
+      stdout: "hello from session B\n",
+    });
+
+    // When switching to Session A, runs must reflect Session A's history
+    terminalStore.setActiveChatId(chatA.id);
+    let state = terminalStore.getState();
+    expect(state.activeChatId).toBe(chatA.id);
+    expect(state.runs.some((r) => r.command.includes("Session A") || r.id === "run_a_1")).toBe(
+      true,
+    );
+    expect(state.runs.some((r) => r.id === "run_b_1")).toBe(false);
+
+    // When switching back to Session B, runs must reflect Session B's history
+    terminalStore.setActiveChatId(chatB.id);
+    state = terminalStore.getState();
+    expect(state.activeChatId).toBe(chatB.id);
+    expect(state.runs.some((r) => r.id === "run_b_1")).toBe(true);
+    expect(state.runs.some((r) => r.id === "run_a_1")).toBe(false);
+  });
 });

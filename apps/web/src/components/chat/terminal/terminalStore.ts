@@ -61,6 +61,23 @@ const STORAGE_KEY_LAST_PROJECT_PATH = "adc_terminal_last_project_path";
 const STORAGE_KEY_PERMISSION_MODE = "adc_terminal_permission_mode";
 const STORAGE_KEY_ALWAYS_ALLOWED_COMMANDS = "adc_terminal_always_allowed_commands";
 const STORAGE_KEY_RUNS = "adc_terminal_latest_runs";
+const STORAGE_KEY_RUNS_BY_CHAT = "adc_terminal_runs_by_chat";
+
+function saveRunsByChatToStorage(runsByChat: Record<string, TerminalCommandRun[]>) {
+  if (typeof window !== "undefined") {
+    try {
+      const trimmed: Record<string, TerminalCommandRun[]> = {};
+      for (const [k, v] of Object.entries(runsByChat)) {
+        if (Array.isArray(v)) {
+          trimmed[k] = v.slice(0, 30);
+        }
+      }
+      window.localStorage.setItem(STORAGE_KEY_RUNS_BY_CHAT, JSON.stringify(trimmed));
+    } catch {
+      // ignore storage quota errors
+    }
+  }
+}
 
 const initialPermissionMode: "full-access" | "ask" =
   typeof window !== "undefined" &&
@@ -162,13 +179,50 @@ if (typeof window !== "undefined") {
   }
 }
 
+let initialRunsByChat: Record<string, TerminalCommandRun[]> = {};
+if (typeof window !== "undefined") {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY_RUNS_BY_CHAT);
+    if (raw) initialRunsByChat = JSON.parse(raw);
+  } catch {
+    // ignore
+  }
+}
+
+// Ensure each initial chat has its runs populated
+for (const chat of initialTerminalChats) {
+  if (!initialRunsByChat[chat.id] || initialRunsByChat[chat.id].length === 0) {
+    if (chat.id === initialTerminalChats[0]?.id && initialRuns.length > 0) {
+      initialRunsByChat[chat.id] = initialRuns;
+    } else {
+      initialRunsByChat[chat.id] = [
+        {
+          id: `run_init_${chat.id}`,
+          command: chat.lastPrompt || `# Session: ${chat.title}`,
+          cwd: "/root",
+          stdout: `[AI Terminal Session: ${chat.title}]\nTarget: ${chat.sshKeyName || "Local"} | Project: ${chat.projectName || "Workspace"}\nCreated: ${new Date(chat.createdAt).toLocaleString()}\nReady for commands.`,
+          exitCode: 0,
+          status: "success",
+          timestamp: chat.createdAt || Date.now(),
+          tabId: "term_tab_1",
+        },
+      ];
+    }
+  }
+}
+
 const initialTerminalTabs: TerminalTab[] = [
   { id: "term_tab_1", name: "Terminal 1", type: "bash", createdAt: Date.now() },
 ];
 
+const initialActiveChatId = initialTerminalChats[0]?.id ?? null;
+const initialActiveRuns = initialActiveChatId
+  ? (initialRunsByChat[initialActiveChatId] ?? initialRuns)
+  : initialRuns;
+
 let state: TerminalState = {
-  runs: initialRuns,
-  runsByChat: {},
+  runs: initialActiveRuns,
+  runsByChat: initialRunsByChat,
   activeCwd: initialCwd,
   scopeMode: initialScopeMode,
   lastProjectPath: initialLastProjectPath,
@@ -184,7 +238,7 @@ let state: TerminalState = {
   sshProfiles: initialSshProfiles,
   accessKeys: initialAccessKeys,
   terminalChats: initialTerminalChats,
-  activeChatId: initialTerminalChats[0]?.id ?? null,
+  activeChatId: initialActiveChatId,
   terminalTabs: initialTerminalTabs,
   activeTabId: initialTerminalTabs[0]?.id || "term_tab_1",
   inputMode: "bash",
@@ -372,7 +426,10 @@ export const terminalStore = {
 
   clearRuns(tabId?: string) {
     const nextRuns = tabId ? state.runs.filter((r) => r.tabId && r.tabId !== tabId) : [];
-    state = { ...state, runs: nextRuns };
+    const nextRunsByChat = state.activeChatId
+      ? { ...state.runsByChat, [state.activeChatId]: nextRuns }
+      : state.runsByChat;
+    state = { ...state, runs: nextRuns, runsByChat: nextRunsByChat };
     if (typeof window !== "undefined") {
       if (nextRuns.length === 0) {
         window.localStorage.removeItem(STORAGE_KEY_RUNS);
@@ -380,6 +437,7 @@ export const terminalStore = {
         window.localStorage.setItem(STORAGE_KEY_RUNS, JSON.stringify(nextRuns.slice(0, 20)));
       }
     }
+    saveRunsByChatToStorage(nextRunsByChat);
     notify();
   },
 
@@ -422,19 +480,34 @@ export const terminalStore = {
         ? state.unreadAiToolsCount + 1
         : state.unreadAiToolsCount;
 
-    state = { ...state, runs: updatedRuns, unreadAiToolsCount: nextUnreadCount };
+    const nextRunsByChat = state.activeChatId
+      ? { ...state.runsByChat, [state.activeChatId]: updatedRuns }
+      : state.runsByChat;
+
+    state = {
+      ...state,
+      runs: updatedRuns,
+      runsByChat: nextRunsByChat,
+      unreadAiToolsCount: nextUnreadCount,
+    };
+    saveRunsByChatToStorage(nextRunsByChat);
     notify();
   },
 
   removeRun(id: string) {
     const nextRuns = state.runs.filter((r) => r.id !== id);
+    const nextRunsByChat = state.activeChatId
+      ? { ...state.runsByChat, [state.activeChatId]: nextRuns }
+      : state.runsByChat;
     state = {
       ...state,
       runs: nextRuns,
+      runsByChat: nextRunsByChat,
     };
     if (typeof window !== "undefined") {
       window.localStorage.setItem(STORAGE_KEY_RUNS, JSON.stringify(nextRuns.slice(0, 20)));
     }
+    saveRunsByChatToStorage(nextRunsByChat);
     notify();
   },
 
@@ -595,8 +668,52 @@ export const terminalStore = {
   },
 
   setActiveChatId(id: string | null) {
-    const sessionRuns = id ? (state.runsByChat[id] ?? []) : [];
-    state = { ...state, activeChatId: id, runs: sessionRuns };
+    if (!id) {
+      state = { ...state, activeChatId: null, runs: [] };
+      notify();
+      return;
+    }
+    const targetChat = state.terminalChats.find((c) => c.id === id);
+    let sessionRuns = state.runsByChat[id] ?? [];
+
+    if (sessionRuns.length === 0 && targetChat) {
+      sessionRuns = [
+        {
+          id: `run_session_${targetChat.id}`,
+          command: targetChat.lastPrompt || `# Session: ${targetChat.title}`,
+          cwd: state.activeCwd || "/root",
+          stdout: `[AI Terminal Session: ${targetChat.title}]\nTarget: ${targetChat.sshKeyName || "Local"} | Project: ${targetChat.projectName || "Workspace"}\nCreated: ${new Date(targetChat.createdAt).toLocaleString()}\nReady for commands.`,
+          exitCode: 0,
+          status: "success",
+          timestamp: targetChat.createdAt || Date.now(),
+          tabId: state.activeTabId,
+        },
+      ];
+      state.runsByChat = { ...state.runsByChat, [id]: sessionRuns };
+      saveRunsByChatToStorage(state.runsByChat);
+    }
+
+    // Map tabId so all runs in this chat immediately render on the active terminal tab
+    const mappedRuns = sessionRuns.map((r) => ({
+      ...r,
+      tabId: state.activeTabId,
+    }));
+
+    state = {
+      ...state,
+      activeChatId: id,
+      runs: mappedRuns,
+      selectedProjectId: targetChat?.projectId ?? state.selectedProjectId,
+      selectedProjectTitle: targetChat?.projectName ?? state.selectedProjectTitle,
+      selectedKeyId: targetChat?.sshKeyId ?? state.selectedKeyId,
+    };
+
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem(STORAGE_KEY_RUNS, JSON.stringify(mappedRuns.slice(0, 30)));
+      } catch {}
+    }
+
     notify();
   },
 
@@ -622,18 +739,21 @@ export const terminalStore = {
     };
 
     const updated = [newChat, ...state.terminalChats];
+    const nextRunsByChat = { ...state.runsByChat, [newChat.id]: [] };
     state = {
       ...state,
       terminalChats: updated,
       activeChatId: newChat.id,
       runs: [], // Fresh new chat screen is completely clear!
-      runsByChat: { ...state.runsByChat, [newChat.id]: [] },
+      runsByChat: nextRunsByChat,
       isQuickBarOpen: true,
     };
 
     if (typeof window !== "undefined") {
       window.localStorage.setItem(STORAGE_KEY_TERMINAL_CHATS, JSON.stringify(updated));
+      window.localStorage.setItem(STORAGE_KEY_RUNS, JSON.stringify([]));
     }
+    saveRunsByChatToStorage(nextRunsByChat);
     notify();
     return newChat;
   },
@@ -656,16 +776,19 @@ export const terminalStore = {
     const nextRunsByChat = { ...state.runsByChat };
     delete nextRunsByChat[id];
     const sessionRuns = nextActive ? (nextRunsByChat[nextActive] ?? []) : [];
+    const mappedRuns = sessionRuns.map((r) => ({ ...r, tabId: state.activeTabId }));
     state = {
       ...state,
       terminalChats: updated,
       activeChatId: nextActive,
       runsByChat: nextRunsByChat,
-      runs: sessionRuns,
+      runs: mappedRuns,
     };
     if (typeof window !== "undefined") {
       window.localStorage.setItem(STORAGE_KEY_TERMINAL_CHATS, JSON.stringify(updated));
+      window.localStorage.setItem(STORAGE_KEY_RUNS, JSON.stringify(mappedRuns.slice(0, 30)));
     }
+    saveRunsByChatToStorage(nextRunsByChat);
     notify();
   },
 
@@ -944,6 +1067,7 @@ export const terminalStore = {
       runsByChat: updatedInitialRunsByChat,
       history: nextHistory,
     };
+    saveRunsByChatToStorage(updatedInitialRunsByChat);
     notify();
 
     // Execute via server using fast direct JSON execution with stream fallback
@@ -1066,8 +1190,17 @@ export const terminalStore = {
         }
       : state.runsByChat;
 
+    const updatedTerminalChats = state.activeChatId
+      ? state.terminalChats.map((c) =>
+          c.id === state.activeChatId
+            ? { ...c, lastPrompt: actualCommand.slice(0, 100), updatedAt: Date.now() }
+            : c,
+        )
+      : state.terminalChats;
+
     state = {
       ...state,
+      terminalChats: updatedTerminalChats,
       runs: updatedCompletedRuns,
       runsByChat: updatedCompletedRunsByChat,
     };
@@ -1077,10 +1210,15 @@ export const terminalStore = {
           STORAGE_KEY_RUNS,
           JSON.stringify(updatedCompletedRuns.slice(0, 20)),
         );
+        window.localStorage.setItem(
+          STORAGE_KEY_TERMINAL_CHATS,
+          JSON.stringify(updatedTerminalChats),
+        );
       } catch {
         // ignore storage quota errors
       }
     }
+    saveRunsByChatToStorage(updatedCompletedRunsByChat);
     notify();
 
     return completedRun;
