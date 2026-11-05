@@ -6,6 +6,7 @@ import {
   ArchiveIcon,
   ArrowUpDownIcon,
   CheckIcon,
+  CircleDashed,
   DownloadCloudIcon,
   EraserIcon,
   FileArchiveIcon,
@@ -795,7 +796,8 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
         data-size="sm"
         data-testid={`thread-row-${thread.id}`}
         className={cn(
-          "relative isolate flex h-8 w-full min-w-0 cursor-pointer select-none items-center gap-2 overflow-hidden rounded-lg px-2.5 text-left text-[13px] tracking-[-0.01em] outline-hidden focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring group-data-[collapsible=icon]:hidden transition-all duration-150 [&>span:last-child]:truncate [&>svg:not([class*='size-'])]:size-4 [&>svg]:shrink-0 [&>svg]:text-sidebar-muted-foreground",
+          "relative isolate flex w-full min-w-0 cursor-pointer select-none items-center gap-2 overflow-hidden rounded-lg px-2.5 text-left text-[13px] tracking-[-0.01em] outline-hidden focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring group-data-[collapsible=icon]:hidden transition-all duration-150 [&>span:last-child]:truncate [&>svg:not([class*='size-'])]:size-4 [&>svg]:shrink-0 [&>svg]:text-sidebar-muted-foreground",
+          threadStatus ? "min-h-[38px] py-1" : "h-8",
           isActive
             ? "bg-primary/10 font-medium text-primary shadow-[inset_0_0_0_1px_rgba(var(--primary),0.12)] hover:bg-primary/15"
             : isSelected
@@ -808,112 +810,116 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
         onKeyDown={handleRowKeyDown}
         onContextMenu={handleRowContextMenu}
       >
-        <div className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
-          {renamingThreadKey !== threadKey && prStatus && pr && (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <a
-                    href={prStatus.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label={prStatus.tooltip}
-                    className={`inline-flex items-center justify-center ${prStatus.colorClass} cursor-pointer rounded-sm outline-hidden focus-visible:ring-1 focus-visible:ring-ring`}
-                    onPointerDown={(event) => event.stopPropagation()}
-                    onClick={handlePrClick}
+        <div className="flex min-w-0 flex-1 flex-col justify-center text-left py-0.5">
+          <div className="flex items-center min-w-0 gap-1.5">
+            {renamingThreadKey !== threadKey && prStatus && pr && (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <a
+                      href={prStatus.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={prStatus.tooltip}
+                      className={`inline-flex items-center justify-center ${prStatus.colorClass} cursor-pointer rounded-sm outline-hidden focus-visible:ring-1 focus-visible:ring-ring`}
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onClick={handlePrClick}
+                    >
+                      <ChangeRequestStatusIcon
+                        state={pr.state}
+                        isDraft={pr.isDraft}
+                        className="size-3"
+                      />
+                    </a>
+                  }
+                />
+                <TooltipPopup side="top">
+                  <PrStatusTooltipContent status={prStatus} />
+                </TooltipPopup>
+              </Tooltip>
+            )}
+            {renamingThreadKey !== threadKey && !pr && currentLinkedPr ? (
+              <a
+                href={currentLinkedPr.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={handlePrClick}
+                className="text-muted-foreground"
+                aria-label={`PR #${currentLinkedPr.number}, status pending`}
+              >
+                <PullRequestGlyph.pullRequest className="size-3" />
+              </a>
+            ) : null}
+            {canOperateThread && renamingThreadKey === threadKey ? (
+              <div
+                className="relative flex min-w-0 flex-1 items-center w-full"
+                onClick={(e) => e.stopPropagation()}
+                onDoubleClick={(e) => e.stopPropagation()}
+              >
+                <input
+                  ref={handleRenameInputRef}
+                  className="w-full min-w-0 truncate rounded border border-ring bg-background pl-2 pr-12 py-0.5 text-xs text-foreground outline-none shadow-xs"
+                  value={renamingTitle}
+                  onChange={handleRenameInputChange}
+                  onKeyDown={handleRenameInputKeyDown}
+                  onBlur={handleRenameInputBlur}
+                  onClick={handleRenameInputClick}
+                  onDoubleClick={handleRenameInputClick}
+                />
+                <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 z-10 pointer-events-auto">
+                  <button
+                    type="button"
+                    title="Save (Enter)"
+                    aria-label="Save rename"
+                    className="inline-flex size-4.5 shrink-0 items-center justify-center rounded text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/20 active:scale-95 transition-all cursor-pointer"
+                    onPointerDown={(e) => e.preventDefault()}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      renamingCommittedRef.current = true;
+                      void commitRename(threadRef, renamingTitle, thread.title);
+                    }}
                   >
-                    <ChangeRequestStatusIcon
-                      state={pr.state}
-                      isDraft={pr.isDraft}
-                      className="size-3"
-                    />
-                  </a>
-                }
-              />
-              <TooltipPopup side="top">
-                <PrStatusTooltipContent status={prStatus} />
-              </TooltipPopup>
-            </Tooltip>
-          )}
-          {renamingThreadKey !== threadKey && !pr && currentLinkedPr ? (
-            <a
-              href={currentLinkedPr.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              onPointerDown={(event) => event.stopPropagation()}
-              onClick={handlePrClick}
-              className="text-muted-foreground"
-              aria-label={`PR #${currentLinkedPr.number}, status pending`}
-            >
-              <PullRequestGlyph.pullRequest className="size-3" />
-            </a>
-          ) : null}
-          {renamingThreadKey !== threadKey && threadStatus && (
-            <ThreadStatusLabel status={threadStatus} />
-          )}
-          {canOperateThread && renamingThreadKey === threadKey ? (
-            <div
-              className="relative flex min-w-0 flex-1 items-center w-full"
-              onClick={(e) => e.stopPropagation()}
-              onDoubleClick={(e) => e.stopPropagation()}
-            >
-              <input
-                ref={handleRenameInputRef}
-                className="w-full min-w-0 truncate rounded border border-ring bg-background pl-2 pr-12 py-0.5 text-xs text-foreground outline-none shadow-xs"
-                value={renamingTitle}
-                onChange={handleRenameInputChange}
-                onKeyDown={handleRenameInputKeyDown}
-                onBlur={handleRenameInputBlur}
-                onClick={handleRenameInputClick}
-                onDoubleClick={handleRenameInputClick}
-              />
-              <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 z-10 pointer-events-auto">
-                <button
-                  type="button"
-                  title="Save (Enter)"
-                  aria-label="Save rename"
-                  className="inline-flex size-4.5 shrink-0 items-center justify-center rounded text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/20 active:scale-95 transition-all cursor-pointer"
-                  onPointerDown={(e) => e.preventDefault()}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    renamingCommittedRef.current = true;
-                    void commitRename(threadRef, renamingTitle, thread.title);
-                  }}
-                >
-                  <CheckIcon className="size-3.5" />
-                </button>
-                <button
-                  type="button"
-                  title="Cancel (Esc)"
-                  aria-label="Cancel rename"
-                  className="inline-flex size-4.5 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted active:scale-95 transition-all cursor-pointer"
-                  onPointerDown={(e) => e.preventDefault()}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    renamingCommittedRef.current = true;
-                    cancelRename();
-                  }}
-                >
-                  <XIcon className="size-3.5" />
-                </button>
+                    <CheckIcon className="size-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    title="Cancel (Esc)"
+                    aria-label="Cancel rename"
+                    className="inline-flex size-4.5 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted active:scale-95 transition-all cursor-pointer"
+                    onPointerDown={(e) => e.preventDefault()}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      renamingCommittedRef.current = true;
+                      cancelRename();
+                    }}
+                  >
+                    <XIcon className="size-3.5" />
+                  </button>
+                </div>
               </div>
+            ) : (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <span
+                      className="min-w-0 flex-1 truncate text-[13px] leading-snug"
+                      data-testid={`thread-title-${thread.id}`}
+                    >
+                      {thread.title}
+                    </span>
+                  }
+                />
+                <TooltipPopup side="top">{thread.title}</TooltipPopup>
+              </Tooltip>
+            )}
+          </div>
+          {renamingThreadKey !== threadKey && threadStatus && (
+            <div className="flex items-center min-w-0 mt-0.5">
+              <ThreadStatusLabel status={threadStatus} />
             </div>
-          ) : (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <span
-                    className="min-w-0 flex-1 truncate text-[13px]"
-                    data-testid={`thread-title-${thread.id}`}
-                  >
-                    {thread.title}
-                  </span>
-                }
-              />
-              <TooltipPopup side="top">{thread.title}</TooltipPopup>
-            </Tooltip>
           )}
         </div>
         {renamingThreadKey !== threadKey && (
@@ -3033,7 +3039,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
                 title="Working / Processing..."
                 className="inline-flex shrink-0 items-center justify-center"
               >
-                <Spinner size="xs" className="size-3.5 text-sky-500 animate-spin" />
+                <CircleDashed className="size-3.5 text-emerald-400 animate-spin shrink-0" />
               </span>
             ) : null}
             {project.groupedProjectCount > 1 ? (

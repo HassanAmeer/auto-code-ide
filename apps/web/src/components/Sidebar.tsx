@@ -5368,7 +5368,7 @@ export default function Sidebar() {
                       <ProjectFavicon project={group} className="size-3.5 shrink-0" />
                       <span className="truncate">{group.displayName}</span>
                       {isWorking ? (
-                        <Spinner size="xs" className="size-3 shrink-0 text-sky-400 animate-spin" />
+                        <CircleDashedIcon className="size-3 shrink-0 text-emerald-400 animate-spin" />
                       ) : null}
                     </button>
                   );
@@ -5868,10 +5868,7 @@ export default function Sidebar() {
                             <ProjectFavicon project={group} className="size-4 shrink-0" />
                             <span className="truncate">{group.displayName}</span>
                             {isWorking ? (
-                              <Spinner
-                                size="xs"
-                                className="size-3 shrink-0 text-sky-400 animate-spin"
-                              />
+                              <CircleDashedIcon className="size-3 shrink-0 text-emerald-400 animate-spin" />
                             ) : null}
                           </div>
                           <span
