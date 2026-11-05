@@ -940,15 +940,25 @@ const ConversationTimeline = memo(function ConversationTimeline({
     for (let i = rows.length - 1; i >= 0; i--) {
       const r = rows[i];
       if (!r) continue;
-      if (r.kind === "event" && r.projectedItem.item.type === "error") {
+      if (r.kind === "event" && (r as any).projectedItem?.item?.type === "error") {
         return r.id;
       }
       if (
-        r.kind === "work" &&
-        r.entry.structuredPayload &&
-        (r.entry.structuredPayload as any).type === "error"
+        r.kind === "work-live" &&
+        ((r as any).entry?.structuredPayload?.type === "error" ||
+          (r as any).entry?.projectedItem?.item?.type === "error")
       ) {
-        return r.id;
+        return (r as any).entry?.id || r.id;
+      }
+      if (r.kind === "work" && Array.isArray((r as any).groupedEntries)) {
+        for (const entry of (r as any).groupedEntries) {
+          if (
+            entry?.structuredPayload?.type === "error" ||
+            entry?.projectedItem?.item?.type === "error"
+          ) {
+            return entry?.id || r.id;
+          }
+        }
       }
     }
     return null;
