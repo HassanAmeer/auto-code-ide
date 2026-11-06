@@ -117,27 +117,37 @@ export const make = Effect.gen(function* () {
       // If the checkpoint for requested turn count is not ready yet because the turn
       // was just completed and is currently finalizing (common right when assistant finishes),
       // wait briefly and reload context instead of failing immediately.
-      for (let attempt = 0; attempt < 5; attempt++) {
-        const completedRunIds = new Set(
-          projection.runs.filter((run) => run.status === "completed").map((run) => run.id),
+      for (let attempt = 0; attempt < 6; attempt++) {
+        const rolledBackRunIds = new Set(
+          projection.runs.filter((run) => run.status === "rolled_back").map((run) => run.id),
         );
         const hasReadyCheckpoint = projection.checkpoints.some(
           (checkpoint) =>
             checkpoint.status === "ready" &&
             checkpoint.appRunOrdinal === input.toTurnCount &&
             checkpoint.runId !== null &&
-            completedRunIds.has(checkpoint.runId),
+            !rolledBackRunIds.has(checkpoint.runId),
         );
         if (hasReadyCheckpoint) {
           break;
         }
 
         const matchingRun = projection.runs.find((run) => (run.ordinal ?? 0) >= input.toTurnCount);
-        if (!matchingRun) {
+        if (!matchingRun || matchingRun.status === "rolled_back") {
           break;
         }
 
-        yield* Effect.sleep(350);
+        const matchingCheckpoint = projection.checkpoints.find(
+          (checkpoint) => checkpoint.appRunOrdinal === input.toTurnCount,
+        );
+        if (
+          matchingRun.status === "completed" &&
+          (!matchingCheckpoint || matchingCheckpoint.status !== "capturing")
+        ) {
+          if (attempt >= 1) break;
+        }
+
+        yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 150)));
         projection = yield* threads.getCheckpointContext(input.threadId).pipe(
           Effect.mapError(
             () =>
@@ -149,15 +159,15 @@ export const make = Effect.gen(function* () {
         );
       }
 
-      const completedRunIds = new Set(
-        projection.runs.filter((run) => run.status === "completed").map((run) => run.id),
+      const rolledBackRunIds = new Set(
+        projection.runs.filter((run) => run.status === "rolled_back").map((run) => run.id),
       );
       const readyCheckpoints = projection.checkpoints.filter(
         (checkpoint) =>
           checkpoint.status === "ready" &&
           checkpoint.appRunOrdinal !== null &&
           checkpoint.runId !== null &&
-          completedRunIds.has(checkpoint.runId),
+          !rolledBackRunIds.has(checkpoint.runId),
       );
       const maxTurnCount = readyCheckpoints.reduce(
         (max, checkpoint) => Math.max(max, checkpoint.appRunOrdinal ?? 0),
@@ -184,9 +194,10 @@ export const make = Effect.gen(function* () {
         });
       }
 
-      const toScope = projection.checkpointScopes.find(
-        (scope) => scope.id === toCheckpoint.scopeId,
-      );
+      const toScope =
+        projection.checkpointScopes.find((scope) => scope.id === toCheckpoint.scopeId) ??
+        projection.checkpointScopes.find((scope) => scope.kind === "root_run") ??
+        projection.checkpointScopes[0];
       if (toScope === undefined) {
         return yield* new CheckpointWorkspacePathMissingError({
           operation,
@@ -200,7 +211,7 @@ export const make = Effect.gen(function* () {
         input.fromTurnCount === 0
           ? projection.checkpointScopes.find((scope) => scope.kind === "root_run")
           : undefined;
-      const fromCheckpointRef =
+      let fromCheckpointRef =
         input.fromTurnCount === 0
           ? firstScope === undefined
             ? undefined
@@ -210,6 +221,30 @@ export const make = Effect.gen(function* () {
               }).pipe(Effect.provideService(Crypto.Crypto, crypto))
           : readyCheckpoints.find((checkpoint) => checkpoint.appRunOrdinal === input.fromTurnCount)
               ?.ref;
+
+      // Resilient fallback: if the exact fromTurnCount checkpoint is not found
+      // (e.g. an intermediate turn did not modify files, or user requested diff across non-adjacent turns),
+      // look for the most recent valid checkpoint before toTurnCount.
+      if (fromCheckpointRef === undefined && input.fromTurnCount > 0) {
+        const candidate = readyCheckpoints
+          .filter((checkpoint) => (checkpoint.appRunOrdinal ?? 0) < input.toTurnCount)
+          .sort((a, b) => (b.appRunOrdinal ?? 0) - (a.appRunOrdinal ?? 0))[0];
+        if (candidate?.ref) {
+          fromCheckpointRef = candidate.ref;
+        } else {
+          // If no previous checkpoint exists, fall back to baseline of the root scope or toScope
+          const rootScope =
+            projection.checkpointScopes.find((scope) => scope.kind === "root_run") ?? toScope;
+          fromCheckpointRef = yield* checkpointRefForScopeOrdinal({
+            scopeId: rootScope.id,
+            ordinalWithinScope: 0,
+          }).pipe(
+            Effect.provideService(Crypto.Crypto, crypto),
+            Effect.orElseSucceed(() => undefined),
+          );
+        }
+      }
+
       if (fromCheckpointRef === undefined) {
         return yield* new CheckpointRefUnavailableError({
           operation,
@@ -231,7 +266,7 @@ export const make = Effect.gen(function* () {
           Effect.catch(() =>
             checkpointStore.diffCheckpoints({
               cwd: toScope.cwd,
-              fromCheckpointRef,
+              fromCheckpointRef: fromCheckpointRef ?? toCheckpoint.ref,
               toCheckpointRef: toCheckpoint.ref,
               fallbackFromToHead: true,
               ignoreWhitespace,

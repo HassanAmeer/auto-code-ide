@@ -195,3 +195,23 @@ it.effect("preserves the typed missing-baseline-ref error contract", () => {
     );
   }).pipe(Effect.provide(layer));
 });
+
+it.effect("falls back gracefully when intermediate fromTurnCount has no checkpoint", () => {
+  const diffCheckpoints = vi.fn((_input: CheckpointStore.DiffCheckpointsInput) =>
+    Effect.succeed("diff --git a/fallback b/fallback"),
+  );
+  // Turn 2 is ready, but Turn 1 was never captured
+  const layer = layerFor({ projection: Effect.succeed(makeProjection()), diffCheckpoints });
+
+  return Effect.gen(function* () {
+    const query = yield* CheckpointDiffQuery.CheckpointDiffQuery;
+    const result = yield* query.getTurnDiff({ threadId, fromTurnCount: 1, toTurnCount: 2 });
+
+    assert.deepEqual(result, {
+      threadId,
+      fromTurnCount: 1,
+      toTurnCount: 2,
+      diff: "diff --git a/fallback b/fallback",
+    });
+  }).pipe(Effect.provide(layer));
+});

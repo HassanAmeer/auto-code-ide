@@ -340,7 +340,10 @@ export default function DiffPanel({
     { enabled: isGitRepo && selectedTurn !== undefined },
   );
   const primaryBranchDiffPreview = useEnvironmentQuery(
-    canReadFiles && selectedRunId === null && activeThread && activeCwd
+    canReadFiles &&
+      (selectedRunId === null || Boolean(activeCheckpointDiff.error)) &&
+      activeThread &&
+      activeCwd
       ? reviewEnvironment.diffPreview({
           environmentId: activeThread.environmentId,
           input: {
@@ -352,7 +355,7 @@ export default function DiffPanel({
       : null,
   );
   const shouldRetryBranchDiffAtEnvironmentCwd =
-    selectedRunId === null &&
+    (selectedRunId === null || Boolean(activeCheckpointDiff.error)) &&
     primaryBranchDiffPreview.error?.includes("configured workspace root") === true &&
     serverConfig?.cwd !== undefined &&
     serverConfig.cwd !== activeCwd;
@@ -372,7 +375,10 @@ export default function DiffPanel({
     ? fallbackBranchDiffPreview
     : primaryBranchDiffPreview;
   const canRefreshGitDiff =
-    isGitRepo && selectedRunId === null && activeThread != null && activeCwd != null;
+    isGitRepo &&
+    (selectedRunId === null || Boolean(activeCheckpointDiff.error)) &&
+    activeThread != null &&
+    activeCwd != null;
   const activeThreadRefreshKey = routeThreadRef
     ? `${routeThreadRef.environmentId}:${routeThreadRef.threadId}`
     : null;
@@ -385,7 +391,12 @@ export default function DiffPanel({
 
   const currentLoadDiffFiles = useMemo<FileDiffContentsLoader | undefined>(() => {
     const preview = branchDiffPreview.data;
-    if (selectedRunId !== null || !activeThread || !preview || !selectedGitSource) {
+    if (
+      (selectedRunId !== null && !activeCheckpointDiff.error) ||
+      !activeThread ||
+      !preview ||
+      !selectedGitSource
+    ) {
       return undefined;
     }
 
@@ -465,11 +476,12 @@ export default function DiffPanel({
   const retryCountRef = useRef(0);
   useEffect(() => {
     if (selectedTurn && activeCheckpointDiff.error && !activeCheckpointDiff.isPending) {
-      if (retryCountRef.current < 4) {
+      if (retryCountRef.current < 6) {
         retryCountRef.current += 1;
+        const delay = Math.min(500 * retryCountRef.current, 2500);
         const timer = setTimeout(() => {
           activeCheckpointDiff.refresh?.();
-        }, 800);
+        }, delay);
         return () => clearTimeout(timer);
       }
     } else if (activeCheckpointDiff.data) {
@@ -485,15 +497,27 @@ export default function DiffPanel({
 
   const gitDiff = selectedGitSource?.diff;
 
+  const isUsingFallbackGitDiff =
+    Boolean(selectedTurn) &&
+    !activeCheckpointDiff.data?.diff &&
+    Boolean(activeCheckpointDiff.error) &&
+    !activeCheckpointDiff.isPending &&
+    typeof gitDiff === "string";
+
   const selectedPatch = selectedTurn
     ? (activeCheckpointDiff.data?.diff ??
       (activeCheckpointDiff.error && !activeCheckpointDiff.isPending ? gitDiff : undefined))
     : gitDiff;
   const isSelectedPatchTruncated = !selectedTurn && selectedGitSource?.truncated === true;
   const isLoadingSelectedPatch = selectedTurn
-    ? activeCheckpointDiff.isPending
+    ? activeCheckpointDiff.isPending ||
+      (Boolean(activeCheckpointDiff.error) && branchDiffPreview.isPending)
     : branchDiffPreview.isPending;
-  const selectedPatchError = selectedTurn ? activeCheckpointDiff.error : branchDiffPreview.error;
+  const selectedPatchError = selectedTurn
+    ? selectedPatch
+      ? undefined
+      : activeCheckpointDiff.error
+    : branchDiffPreview.error;
   const hasResolvedPatch = typeof selectedPatch === "string";
   const hasNoNetChanges = hasResolvedPatch && selectedPatch.trim().length === 0;
   const lazySource =
@@ -1116,9 +1140,35 @@ export default function DiffPanel({
                 {selectedGitSource?.files ? " Totals include all changes." : ""}
               </p>
             )}
+            {isUsingFallbackGitDiff && renderablePatch && (
+              <div className="shrink-0 border-b border-warning/20 bg-warning/5 px-3 py-1 text-3xs text-warning/90 flex items-center justify-between">
+                <span>
+                  Displaying current workspace diff (turn checkpoint snapshot was pending or
+                  unavailable).
+                </span>
+                {selectedTurn && activeCheckpointDiff.refresh && (
+                  <button
+                    type="button"
+                    className="underline hover:text-foreground ml-2"
+                    onClick={() => {
+                      retryCountRef.current = 0;
+                      activeCheckpointDiff.refresh?.();
+                    }}
+                  >
+                    Check checkpoint
+                  </button>
+                )}
+              </div>
+            )}
             {selectedPatchError && !renderablePatch && (
-              <div className="mx-3 my-2 flex items-center justify-between gap-2 rounded border border-error/20 bg-error/5 p-2.5">
-                <p className="text-2xs text-error/80">{selectedPatchError}</p>
+              <div className="mx-3 my-2 flex items-center justify-between gap-2 rounded border border-warning/30 bg-warning/5 p-2.5">
+                <div className="flex flex-col gap-0.5">
+                  <p className="text-2xs font-medium text-warning/90">{selectedPatchError}</p>
+                  <p className="text-3xs text-muted-foreground">
+                    Turn diff checkpoint is finalizing or unavailable. You can click Retry or
+                    inspect uncommitted changes.
+                  </p>
+                </div>
                 {selectedTurn && activeCheckpointDiff.refresh && (
                   <Button
                     variant="outline"
