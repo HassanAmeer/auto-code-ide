@@ -7,25 +7,25 @@ export interface ActiveWorkerTelemetry {
   model: string;
   cwd: string;
   goal: string;
-  progress?: number;
+  progress?: number | undefined;
   startedAt: number;
-  completedAt?: number;
-  projectName?: string;
-  projectId?: string;
-  filesModified?: string[];
-  logs?: string[];
+  completedAt?: number | undefined;
+  projectName?: string | undefined;
+  projectId?: string | undefined;
+  filesModified?: string[] | undefined;
+  logs?: string[] | undefined;
 }
 
 export interface ActiveGoalTelemetry {
   id: string;
   title: string;
   status: "running" | "completed" | "failed";
-  workerId?: string;
-  order?: number;
-  projectName?: string;
-  projectId?: string;
+  workerId?: string | undefined;
+  order?: number | undefined;
+  projectName?: string | undefined;
+  projectId?: string | undefined;
   createdAt: number;
-  completedAt?: number;
+  completedAt?: number | undefined;
 }
 
 export interface TelemetrySnapshot {

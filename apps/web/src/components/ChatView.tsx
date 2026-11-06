@@ -2555,19 +2555,20 @@ export default function ChatView(props: ChatViewProps) {
     activeComposerTasksProgress && activePlan ? activePlan.steps : null;
   const terminalStoreState = useTerminalStore();
   const isTerminalQuickBarOpen = terminalStoreState.isQuickBarOpen;
-  const isTerminalThread = isTerminalThreadId(activeThread.id);
+  const isTerminalThread = activeThread ? isTerminalThreadId(activeThread.id) : false;
   const showTerminalSplitPane = isTerminalQuickBarOpen;
 
   // Ensure right terminal pane is strictly active ONLY for AI Terminal chats.
   // For project chats or any other section, right terminal pane automatically closes.
   useEffect(() => {
+    if (!activeThread) return;
     if (isTerminalThread) {
       terminalStore.setQuickBarOpen(true);
       terminalStore.setActiveChatId(activeThread.id);
     } else {
       terminalStore.setQuickBarOpen(false);
     }
-  }, [activeThread.id, isTerminalThread]);
+  }, [activeThread?.id, isTerminalThread]);
 
   const [terminalPaneWidth, setTerminalPaneWidth] = useState<number>(() => {
     if (typeof window !== "undefined") {

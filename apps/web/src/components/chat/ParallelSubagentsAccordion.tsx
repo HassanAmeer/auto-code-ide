@@ -26,9 +26,9 @@ export interface TelemetryWorker {
 }
 
 export interface ParallelSubagentsAccordionProps {
-  activeProjectName?: string;
-  activeProjectId?: string;
-  className?: string;
+  activeProjectName?: string | undefined;
+  activeProjectId?: string | undefined;
+  className?: string | undefined;
 }
 
 export const ParallelSubagentsAccordion = memo(function ParallelSubagentsAccordion({

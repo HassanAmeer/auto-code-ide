@@ -95,7 +95,12 @@ export function mergeWorkerWorktree(
   worktreePath: string,
   branchName: string,
   taskTitle: string,
-): { ok: boolean; error?: string | undefined } {
+): {
+  ok: boolean;
+  error?: string | undefined;
+  autoHealed?: boolean | undefined;
+  resolvedFiles?: string[] | undefined;
+} {
   try {
     if (worktreePath === projectRoot || branchName === "main") {
       return { ok: true };

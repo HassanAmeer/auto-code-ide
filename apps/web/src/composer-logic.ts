@@ -24,7 +24,8 @@ export type ComposerSlashCommand =
   | "pr"
   | "db"
   | "web"
-  | "fetch";
+  | "fetch"
+  | "teamwork-preview";
 export type ComposerSubmissionIntent = "foreground" | "background" | "alternate";
 
 export interface ComposerTrigger {

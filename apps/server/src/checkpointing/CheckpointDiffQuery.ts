@@ -142,12 +142,12 @@ export const make = Effect.gen(function* () {
         );
         if (
           matchingRun.status === "completed" &&
-          (!matchingCheckpoint || matchingCheckpoint.status !== "capturing")
+          (!matchingCheckpoint || matchingCheckpoint.status === "ready")
         ) {
           if (attempt >= 1) break;
         }
 
-        yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 150)));
+        yield* Effect.sleep(150);
         projection = yield* threads.getCheckpointContext(input.threadId).pipe(
           Effect.mapError(
             () =>

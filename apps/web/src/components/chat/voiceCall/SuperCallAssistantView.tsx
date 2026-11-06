@@ -630,8 +630,8 @@ function ThoughtTimelineRow({
   defaultExpanded = false,
 }: {
   thought: string;
-  durationMs?: number;
-  defaultExpanded?: boolean;
+  durationMs?: number | undefined;
+  defaultExpanded?: boolean | undefined;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   if (!thought || !thought.trim()) return null;

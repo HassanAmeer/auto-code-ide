@@ -2784,22 +2784,22 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
             "Dispatch autonomous parallel workers (frontend, backend, QA) via DeepSeek supervisor",
         },
         ...(planModeUiEnabled
-          ? ([
+          ? [
               {
-                id: "slash:plan",
-                type: "slash-command",
-                command: "plan",
-                label: "/plan",
-                description: "Switch this thread into architect / plan mode",
+                id: "slash:plan" as const,
+                type: "slash-command" as const,
+                command: "plan" as const,
+                label: "/plan" as const,
+                description: "Switch this thread into architect / plan mode" as const,
               },
               {
-                id: "slash:default",
-                type: "slash-command",
-                command: "default",
-                label: "/default",
-                description: "Switch this thread back to normal build mode",
+                id: "slash:default" as const,
+                type: "slash-command" as const,
+                command: "default" as const,
+                label: "/default" as const,
+                description: "Switch this thread back to normal build mode" as const,
               },
-            ] as const)
+            ]
           : []),
       ] satisfies ReadonlyArray<Extract<ComposerCommandItem, { type: "slash-command" }>>;
       const slashMenuSkills = getProviderSkillsForSlashMenu(
