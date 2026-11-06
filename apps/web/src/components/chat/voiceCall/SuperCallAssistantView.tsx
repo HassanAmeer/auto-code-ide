@@ -63,6 +63,7 @@ import {
   Wrench,
 } from "lucide-react";
 import ChatMarkdown from "~/components/ChatMarkdown";
+import { RevertBackArrowIcon } from "~/components/Icons";
 import { ReadAloudButton } from "~/components/chat/ReadAloudButton";
 import {
   PageReviewCard,
@@ -2634,7 +2635,7 @@ export function SuperCallAssistantView() {
                         className="opacity-50 hover:opacity-100 transition-opacity p-0.5 rounded hover:text-amber-400 cursor-pointer disabled:opacity-20"
                         title="Revert from this message (Rewinds conversation & puts text back in input)"
                       >
-                        <RotateCcw className="size-3" />
+                        <RevertBackArrowIcon className="size-3" />
                       </button>
                     </div>
                   </div>
@@ -3020,7 +3021,7 @@ export function SuperCallAssistantView() {
                       className="opacity-60 hover:opacity-100 transition-opacity p-0.5 rounded text-zinc-400 hover:text-rose-400 cursor-pointer disabled:opacity-20"
                       title="Revert to before this response (ریورٹ کریں)"
                     >
-                      <RotateCcw className="size-3" />
+                      <RevertBackArrowIcon className="size-3" />
                     </button>
 
                     <button
@@ -3232,7 +3233,7 @@ export function SuperCallAssistantView() {
                 className="p-1 rounded text-zinc-400 hover:text-amber-400 disabled:opacity-20 disabled:cursor-not-allowed transition-colors cursor-pointer"
                 title="Revert last message / Undo turn (پچھلا میسج ریورٹ کریں)"
               >
-                <RotateCcw className="size-3.5" />
+                <RevertBackArrowIcon className="size-3.5" />
               </button>
 
               {/* Sparkles / Undo Transliteration (Only visible when focused, tapped or user is editing text) */}

@@ -777,3 +777,29 @@ export const ComputerUseAppIcon: Icon = (props) => {
     </svg>
   );
 };
+
+/**
+ * Classic Arrow Back / Revert U-Turn icon matching user reference screenshot.
+ * Features a solid left-pointing arrow head at the top and a smooth 180° rounded turn returning left at the bottom.
+ */
+export const RevertBackArrowIcon: Icon = (props) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2.4"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+    {...props}
+  >
+    <path
+      d="M9 3.5L2.8 8.5L9 13.5Z"
+      fill="currentColor"
+      stroke="currentColor"
+      strokeWidth="1"
+      strokeLinejoin="round"
+    />
+    <path d="M8.5 8.5H15C18.3 8.5 21 11.2 21 14.5C21 17.8 18.3 20.5 15 20.5H5.5" fill="none" />
+  </svg>
+);

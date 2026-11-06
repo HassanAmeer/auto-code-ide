@@ -1,7 +1,7 @@
 import { ThreadFindTimelineContext } from "./ThreadFindProvider";
 import { shouldPreserveAssistantLineBreaks } from "@t3tools/shared/markdownPipeline";
 import { MarkdownFindContext, useFindRevealRef } from "./markdownFindContext";
-import { ComputerUseAppIcon } from "~/components/Icons";
+import { ComputerUseAppIcon, RevertBackArrowIcon } from "~/components/Icons";
 import { useChatCanvas } from "./ChatCanvasContext";
 import { WorkLogBlock, WorkLogButton, WorkLogDetails, WorkLogList, WorkLogRow } from "./WorkLog";
 import { PullRequestGlyph } from "../pullRequest/pullRequestIcons";
@@ -2731,7 +2731,7 @@ function RevertUserMessageButton({
           />
         }
       >
-        <Undo2Icon className="size-3" />
+        <RevertBackArrowIcon className="size-3" />
       </TooltipTrigger>
       <TooltipPopup side="top">Edit from here / Revert changes</TooltipPopup>
     </Tooltip>
