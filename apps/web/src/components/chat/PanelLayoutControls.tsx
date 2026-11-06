@@ -18,10 +18,12 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { Button } from "../ui/button";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
 import { useTerminalStore, terminalStore } from "./terminal/terminalStore";
+import { isTerminalThreadId, useTerminalThreadIds } from "./terminal/terminalThreadRegistry";
 import { toastManager } from "../ui/toast";
 import { cn } from "../../lib/utils";
 
 export interface PanelLayoutControlsProps {
+  activeThreadId?: string | null | undefined;
   showThreadPanelControl?: boolean;
   showTerminalControl?: boolean;
   showRightPanelControl?: boolean;
@@ -46,6 +48,7 @@ export interface PanelLayoutControlsProps {
 }
 
 export const PanelLayoutControls = memo(function PanelLayoutControls({
+  activeThreadId,
   showThreadPanelControl = true,
   showTerminalControl = true,
   showRightPanelControl = true,
@@ -68,6 +71,16 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
   onExportCurrentThread,
 }: PanelLayoutControlsProps) {
   const terminalState = useTerminalStore();
+  const terminalThreadIds = useTerminalThreadIds();
+  const isTerminalThread = Boolean(
+    activeThreadId &&
+    (isTerminalThreadId(activeThreadId) ||
+      terminalThreadIds.includes(activeThreadId) ||
+      terminalState.activeChatId === activeThreadId ||
+      terminalState.terminalChats.some((chat) => chat.id === activeThreadId)),
+  );
+  const showTerminalControls = terminalState.isQuickBarOpen || isTerminalThread;
+
   const threadPanelToggle = (
     <Toggle
       className="relative shrink-0 [-webkit-app-region:no-drag] h-7 w-7 min-w-7 p-0 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/50 data-pressed:bg-accent data-pressed:text-accent-foreground"
@@ -97,86 +110,95 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
       className="flex h-full shrink-0 items-center gap-1 [-webkit-app-region:no-drag]"
       data-panel-layout-controls
     >
-      {/* 1. Permission Mode Control (Permitted / Ask) */}
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <button
-              type="button"
-              onClick={() => {
-                const nextMode =
-                  terminalState.permissionMode === "full-access" ? "ask" : "full-access";
-                terminalStore.setPermissionMode(nextMode);
-                toastManager.add({
-                  type: nextMode === "full-access" ? "success" : "info",
-                  title:
-                    nextMode === "full-access" ? "Full Permission Enabled" : "Ask Permission Mode",
-                  description:
-                    nextMode === "full-access"
-                      ? "Commands have full execution permissions (auto-allowed)."
-                      : "Terminal will prompt for approval before running elevated commands.",
-                });
-              }}
-              className={cn(
-                "h-5 px-1.5 gap-1 text-[10px] rounded-[4px] shrink-0 flex items-center justify-center cursor-pointer transition-all border select-none active:scale-[0.96]",
+      {/* 1 & 2: Permission Mode & Terminal Studio Toggle Buttons - Only visible when AI Terminal is active or in AI Terminal chat history */}
+      {showTerminalControls && (
+        <>
+          {/* 1. Permission Mode Control (Permitted / Ask) */}
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextMode =
+                      terminalState.permissionMode === "full-access" ? "ask" : "full-access";
+                    terminalStore.setPermissionMode(nextMode);
+                    toastManager.add({
+                      type: nextMode === "full-access" ? "success" : "info",
+                      title:
+                        nextMode === "full-access"
+                          ? "Full Permission Enabled"
+                          : "Ask Permission Mode",
+                      description:
+                        nextMode === "full-access"
+                          ? "Commands have full execution permissions (auto-allowed)."
+                          : "Terminal will prompt for approval before running elevated commands.",
+                    });
+                  }}
+                  className={cn(
+                    "h-5 px-1.5 gap-1 text-[10px] rounded-[4px] shrink-0 flex items-center justify-center cursor-pointer transition-all border select-none active:scale-[0.96]",
+                    terminalState.permissionMode === "full-access"
+                      ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/25 shadow-xs font-medium"
+                      : "bg-amber-500/15 text-amber-300 border-amber-500/40 hover:bg-amber-500/25 shadow-xs font-medium",
+                  )}
+                  aria-label="Toggle execution permission mode"
+                >
+                  <ShieldCheck className="size-2.5 shrink-0" />
+                  <span>
+                    {terminalState.permissionMode === "full-access" ? "Permitted" : "Ask"}
+                  </span>
+                </button>
+              }
+            />
+            <TooltipPopup side="bottom">
+              {`Permission Mode: ${
                 terminalState.permissionMode === "full-access"
-                  ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/25 shadow-xs font-medium"
-                  : "bg-amber-500/15 text-amber-300 border-amber-500/40 hover:bg-amber-500/25 shadow-xs font-medium",
-              )}
-              aria-label="Toggle execution permission mode"
-            >
-              <ShieldCheck className="size-2.5 shrink-0" />
-              <span>{terminalState.permissionMode === "full-access" ? "Permitted" : "Ask"}</span>
-            </button>
-          }
-        />
-        <TooltipPopup side="bottom">
-          {`Permission Mode: ${
-            terminalState.permissionMode === "full-access"
-              ? "Full Access (Permitted)"
-              : "Ask Permission"
-          }. Click to toggle.`}
-        </TooltipPopup>
-      </Tooltip>
+                  ? "Full Access (Permitted)"
+                  : "Ask Permission"
+              }. Click to toggle.`}
+            </TooltipPopup>
+          </Tooltip>
 
-      {/* 2. Terminal Studio Toggle Button (Icon Only - Compact) */}
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <button
-              type="button"
-              onClick={() => terminalStore.toggleQuickBar()}
-              className={cn(
-                "size-5 rounded-[4px] shrink-0 flex items-center justify-center relative cursor-pointer transition-all border select-none active:scale-[0.96]",
-                terminalState.isQuickBarOpen
-                  ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-xs"
-                  : "bg-white/[0.04] text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.08] border-white/[0.08]",
-              )}
-              aria-label="Toggle Terminal Studio"
-            >
-              <Terminal
-                className={cn(
-                  "size-2.5 shrink-0",
-                  terminalState.isQuickBarOpen ? "text-emerald-400" : "text-zinc-400",
-                )}
-              />
-              <span
-                className={cn(
-                  "absolute top-0.5 right-0.5 size-1 rounded-full",
-                  terminalState.isQuickBarOpen
-                    ? "bg-emerald-400 shadow-[0_0_4px_rgba(52,211,153,0.9)] animate-pulse"
-                    : "bg-zinc-600/70",
-                )}
-              />
-            </button>
-          }
-        />
-        <TooltipPopup side="bottom">
-          {terminalState.isQuickBarOpen
-            ? "Terminal Studio Open (Click to hide)"
-            : "Terminal Studio Hidden (Click to open)"}
-        </TooltipPopup>
-      </Tooltip>
+          {/* 2. Terminal Studio Toggle Button (Icon Only - Compact) */}
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  type="button"
+                  onClick={() => terminalStore.toggleQuickBar()}
+                  className={cn(
+                    "size-5 rounded-[4px] shrink-0 flex items-center justify-center relative cursor-pointer transition-all border select-none active:scale-[0.96]",
+                    terminalState.isQuickBarOpen
+                      ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-xs"
+                      : "bg-white/[0.04] text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.08] border-white/[0.08]",
+                  )}
+                  aria-label="Toggle Terminal Studio"
+                >
+                  <Terminal
+                    className={cn(
+                      "size-2.5 shrink-0",
+                      terminalState.isQuickBarOpen ? "text-emerald-400" : "text-zinc-400",
+                    )}
+                  />
+                  <span
+                    className={cn(
+                      "absolute top-0.5 right-0.5 size-1 rounded-full",
+                      terminalState.isQuickBarOpen
+                        ? "bg-emerald-400 shadow-[0_0_4px_rgba(52,211,153,0.9)] animate-pulse"
+                        : "bg-zinc-600/70",
+                    )}
+                  />
+                </button>
+              }
+            />
+            <TooltipPopup side="bottom">
+              {terminalState.isQuickBarOpen
+                ? "Terminal Studio Open (Click to hide)"
+                : "Terminal Studio Hidden (Click to open)"}
+            </TooltipPopup>
+          </Tooltip>
+        </>
+      )}
 
       {/* Fork Session Button */}
       {isServerThread && onForkCurrentThread && (

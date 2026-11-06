@@ -12024,6 +12024,7 @@ export default function ChatView(props: ChatViewProps) {
     onDeleteProjectScript: deleteProjectScript,
   };
   const panelToggleControlProps = {
+    activeThreadId,
     terminalAvailable: activeProject !== null,
     terminalOpen: terminalUiState.terminalOpen,
     terminalShortcutLabel: shortcutLabelForCommand(keybindings, "terminal.toggle"),
