@@ -4,6 +4,8 @@
 
 import * as NodeChildProcess from "node:child_process";
 import * as NodeFs from "node:fs";
+import * as NodeOs from "node:os";
+import * as NodePath from "node:path";
 import * as Stream from "effect/Stream";
 import * as Effect from "effect/Effect";
 
@@ -57,14 +59,27 @@ export function runBashCommandOnHost(
     let finalCwd = safeCwd;
     let cwdBuffer = "";
 
+    const userHome = NodeOs.homedir();
+    const enrichedPath = [
+      NodePath.join(userHome, ".local", "bin"),
+      NodePath.join(userHome, "bin"),
+      "/usr/local/bin",
+      "/usr/bin",
+      "/bin",
+      process.env.PATH || "",
+    ]
+      .filter(Boolean)
+      .join(":");
+
     // Trap EXIT to always write pwd -P to file descriptor 3 without polluting stdout/stderr
-    const wrappedScript = `trap "pwd -P >&3 2>/dev/null" EXIT ; cd ${JSON.stringify(safeCwd)} 2>/dev/null || cd / ; ${command}`;
+    const wrappedScript = `export PATH="${enrichedPath}:$PATH"; trap "pwd -P >&3 2>/dev/null" EXIT ; cd ${JSON.stringify(safeCwd)} 2>/dev/null || cd / ; ${command}`;
 
     const child = NodeChildProcess.spawn("/bin/bash", ["-c", wrappedScript], {
       cwd: safeCwd,
       stdio: ["pipe", "pipe", "pipe", "pipe"],
       env: {
         ...process.env,
+        PATH: enrichedPath,
         TERM: "xterm-256color",
         PAGER: "cat",
         SYSTEMD_PAGER: "cat",

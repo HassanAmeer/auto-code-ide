@@ -11,6 +11,7 @@ import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
+import * as NodePath from "node:path";
 
 function logPathHydrationWarning(message: string, error?: unknown): void {
   process.stderr.write(
@@ -31,9 +32,28 @@ function hydratePosixPath(env: NodeJS.ProcessEnv, platform: NodeJS.Platform): vo
   }
 
   const launchctlPath = platform === "darwin" && !shellPath ? readPathFromLaunchctl() : undefined;
-  const mergedPath = mergePathEntries(shellPath ?? launchctlPath, env.PATH, platform);
+  let mergedPath = mergePathEntries(shellPath ?? launchctlPath, env.PATH, platform);
+
+  const homeDir =
+    env.HOME ?? (typeof process !== "undefined" ? process.env.HOME : undefined) ?? NodeOS.homedir();
+  const standardExtra = [
+    homeDir ? NodePath.posix.join(homeDir, ".local", "bin") : undefined,
+    homeDir ? NodePath.posix.join(homeDir, "bin") : undefined,
+    "/usr/local/bin",
+    "/usr/bin",
+    "/bin",
+    "/usr/local/sbin",
+    "/usr/sbin",
+  ]
+    .filter(Boolean)
+    .join(":");
+
+  mergedPath = mergePathEntries(mergedPath ?? env.PATH, standardExtra, platform);
   if (mergedPath) {
     env.PATH = mergedPath;
+    if (typeof process !== "undefined" && process.env) {
+      process.env.PATH = mergedPath;
+    }
   }
 }
 

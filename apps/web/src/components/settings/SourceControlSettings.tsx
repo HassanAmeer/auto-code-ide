@@ -292,18 +292,20 @@ const CLI_TOOL_ACTIONS: Partial<
   gitlab: {
     name: "GitLab CLI (glab)",
     installCommand:
-      'mkdir -p ~/.local/bin && curl -sL "https://gitlab.com/gitlab-org/cli/-/releases/v1.122.0/downloads/glab_1.122.0_linux_amd64.tar.gz" | tar -xz -C /tmp && (cp /tmp/bin/glab ~/.local/bin/glab 2>/dev/null || cp /tmp/glab ~/.local/bin/glab 2>/dev/null); chmod +x ~/.local/bin/glab',
+      'mkdir -p ~/.local/bin && curl -sL "https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/packages/generic/glab/1.128.0/glab_1.128.0_linux_amd64.tar.gz" | tar -xz -C /tmp && (cp /tmp/bin/glab ~/.local/bin/glab 2>/dev/null || cp /tmp/glab ~/.local/bin/glab 2>/dev/null) && chmod +x ~/.local/bin/glab',
     uninstallCommand: "rm -f ~/.local/bin/glab",
   },
   "azure-devops": {
-    name: "Azure CLI (az)",
-    installCommand: "pip3 install --user --break-system-packages azure-cli",
-    uninstallCommand: "pip3 uninstall -y azure-cli 2>/dev/null; rm -f ~/.local/bin/az",
+    name: "Azure CLI (az + devops)",
+    installCommand:
+      "if command -v az >/dev/null 2>&1; then az extension add --name azure-devops --yes --allow-preview true || true; else (which apt-get >/dev/null 2>&1 && curl -sL https://aka.ms/InstallAzureCLIDeb | bash) || pip3 install --user --break-system-packages azure-cli; az extension add --name azure-devops --yes --allow-preview true || true; fi",
+    uninstallCommand:
+      "az extension remove --name azure-devops 2>/dev/null || true; pip3 uninstall -y azure-cli 2>/dev/null || true; rm -f ~/.local/bin/az",
   },
   jj: {
     name: "Jujutsu (jj)",
     installCommand:
-      'mkdir -p ~/.local/bin && curl -sL "https://github.com/martinvonz/jj/releases/latest/download/jj-v0.25.0-x86_64-unknown-linux-musl.tar.gz" | tar -xz -C ~/.local/bin 2>/dev/null; chmod +x ~/.local/bin/jj 2>/dev/null || true',
+      'mkdir -p ~/.local/bin && curl -sL "https://github.com/jj-vcs/jj/releases/download/v0.47.1/jj-v0.47.1-x86_64-unknown-linux-musl.tar.gz" | tar -xz -C ~/.local/bin 2>/dev/null; chmod +x ~/.local/bin/jj 2>/dev/null || true',
     uninstallCommand: "rm -f ~/.local/bin/jj",
   },
 };
