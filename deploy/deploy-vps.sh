@@ -130,19 +130,20 @@ if ! ssh -o BatchMode=yes -o ConnectTimeout=5 "${VPS_USER}@${VPS_HOST}" "true" 2
 fi
 
 # Rsync web and server dist for zero-downtime, fast asset delivery
+RSYNC_SSH="ssh -o ConnectTimeout=15 -o ServerAliveInterval=5"
 if [ -d "apps/web/dist" ]; then
   echo -e "  ${C_DIM}Syncing web dist...${C_RESET}"
-  rsync -az --exclude="*.map" apps/web/dist/ "${VPS_USER}@${VPS_HOST}:${VPS_DIR}/apps/web/dist/"
+  rsync -az --exclude="*.map" -e "${RSYNC_SSH}" apps/web/dist/ "${VPS_USER}@${VPS_HOST}:${VPS_DIR}/apps/web/dist/"
 fi
 
 if [ -d "apps/server/dist" ]; then
   echo -e "  ${C_DIM}Syncing server dist...${C_RESET}"
-  rsync -az --exclude="*.map" apps/server/dist/ "${VPS_USER}@${VPS_HOST}:${VPS_DIR}/apps/server/dist/"
+  rsync -az --exclude="*.map" -e "${RSYNC_SSH}" apps/server/dist/ "${VPS_USER}@${VPS_HOST}:${VPS_DIR}/apps/server/dist/"
 fi
 
 if [ -d "bot" ]; then
   echo -e "  ${C_DIM}Syncing bot directory...${C_RESET}"
-  rsync -az bot/ "${VPS_USER}@${VPS_HOST}:${VPS_DIR}/bot/"
+  rsync -az -e "${RSYNC_SSH}" bot/ "${VPS_USER}@${VPS_HOST}:${VPS_DIR}/bot/"
 fi
 
 # Sync git state on VPS
