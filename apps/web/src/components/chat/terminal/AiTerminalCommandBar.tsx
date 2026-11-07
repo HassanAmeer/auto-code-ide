@@ -771,12 +771,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
       {/* ============================================================== */}
       {/* 0. AI TERMINAL HEADER STRIP (Projects, SSH Keys & New Chat)    */}
       {/* ============================================================== */}
-      <AiTerminalHeaderStrip
-        activeProject={activeProject ?? null}
-        onNewTerminalThread={() => {
-          terminalStore.createTerminalChat();
-        }}
-      />
+      <AiTerminalHeaderStrip activeProject={activeProject ?? null} />
 
       {/* ============================================================== */}
       {/* 1. AUTHENTIC TERMINAL WINDOW TOP BAR & TABS                    */}

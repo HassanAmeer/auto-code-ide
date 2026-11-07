@@ -40,6 +40,7 @@ export function runBashCommandOnHost(
   command: string,
   cwd: string = process.cwd(),
   timeoutMs: number = 120_000,
+  executionId?: string,
 ): Promise<TerminalExecutionPayload> {
   return new Promise<TerminalExecutionPayload>((resolve) => {
     const startTime = Date.now();
@@ -90,6 +91,30 @@ export function runBashCommandOnHost(
       },
     });
 
+    const unregisterExecution = () => {
+      if (executionId) activeTerminalProcesses.delete(executionId);
+    };
+    if (executionId) {
+      activeTerminalProcesses.set(executionId, {
+        child,
+        kill: () => {
+          unregisterExecution();
+          try {
+            child.kill("SIGTERM");
+            setTimeout(() => {
+              try {
+                child.kill("SIGKILL");
+              } catch {
+                // ignore
+              }
+            }, 800);
+          } catch {
+            // ignore
+          }
+        },
+      });
+    }
+
     const cwdStream = (child.stdio as any)?.[3];
     if (cwdStream?.on) {
       cwdStream.on("data", (chunk: { toString(encoding: string): string }) => {
@@ -100,6 +125,7 @@ export function runBashCommandOnHost(
     const timer = setTimeout(() => {
       if (!finished) {
         finished = true;
+        unregisterExecution();
         try {
           child.kill("SIGKILL");
         } catch {
@@ -134,6 +160,7 @@ export function runBashCommandOnHost(
     child.on("error", (err: Error) => {
       if (finished) return;
       finished = true;
+      unregisterExecution();
       clearTimeout(timer);
       resolve({
         ok: false,
@@ -149,6 +176,7 @@ export function runBashCommandOnHost(
     child.on("close", (code: number | null) => {
       if (finished) return;
       finished = true;
+      unregisterExecution();
       clearTimeout(timer);
       const reportedCwd = cwdBuffer.trim();
       if (reportedCwd && NodeFs.existsSync(reportedCwd)) {

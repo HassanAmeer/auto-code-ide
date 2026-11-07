@@ -5,13 +5,20 @@ export const STORAGE_KEY_TERMINAL_THREAD_IDS = "adc_terminal_thread_ids";
 export const STORAGE_KEY_TERMINAL_DELETED_THREAD_IDS = "adc_terminal_deleted_thread_ids";
 export const STORAGE_KEY_TERMINAL_THREAD_PROJECT_MAP = "adc_terminal_thread_project_map";
 
-// Seed known terminal thread IDs from user activity
-export const SEED_TERMINAL_THREAD_IDS = [
+// No hardcoded seed IDs — registry only tracks terminal chats the user created
+// on this device. (Seeding remote thread UUIDs left stale/phantom entries.)
+export const SEED_TERMINAL_THREAD_IDS: string[] = [];
+
+// Known-stale IDs that were previously hardcoded as seeds or point at threads
+// that no longer exist. Filtered out of stored registries so the sidebar stops
+// carrying phantom entries.
+const STALE_TERMINAL_THREAD_IDS = new Set([
   "264e216e-2596-46d3-bb51-6aa51a70f5c4",
   "ed3093f0-3414-49c7-81a2-381e0fbeb589",
   "e81cf360-194d-4f01-af60-ce317dea07c3",
   "9859c2e3-998f-46ad-893f-c7262b53ea5c",
-];
+  "52492881-cc19-4089-9548-713d3d12e885",
+]);
 
 function getDeletedTerminalThreadIds(): Set<string> {
   if (typeof window === "undefined") return new Set();
@@ -67,7 +74,9 @@ export function getTerminalThreadIds(): string[] {
     if (Array.isArray(parsed)) {
       // LocalStorage is authoritative once initialized.
       // Never merge SEED_TERMINAL_THREAD_IDS back into parsed.
-      return parsed.filter((id) => typeof id === "string" && !deleted.has(id));
+      return parsed.filter(
+        (id) => typeof id === "string" && !deleted.has(id) && !STALE_TERMINAL_THREAD_IDS.has(id),
+      );
     }
     return [];
   } catch {

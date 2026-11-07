@@ -12,6 +12,7 @@ export async function executeTerminalCommand(
   command: string,
   cwd: string = "/",
   timeoutMs: number = 120_000,
+  executionId?: string,
 ): Promise<TerminalExecResult> {
   const startTime = Date.now();
   try {
@@ -33,6 +34,7 @@ export async function executeTerminalCommand(
         command,
         cwd,
         timeoutMs,
+        executionId,
       }),
     });
 
@@ -224,8 +226,8 @@ export async function killTerminalExecution(executionId: string): Promise<boolea
       body: JSON.stringify({ executionId }),
     });
     if (!response.ok) return false;
-    const data = (await response.json()) as { ok: boolean };
-    return Boolean(data.ok);
+    const data = (await response.json()) as { ok: boolean; killed?: boolean };
+    return data.killed === undefined ? Boolean(data.ok) : Boolean(data.ok && data.killed);
   } catch {
     return false;
   }

@@ -838,6 +838,7 @@ export const layerTerminalExecRoute = HttpRouter.add(
       command?: string;
       cwd?: string;
       timeoutMs?: number;
+      executionId?: string;
     };
 
     const command = bodyJson?.command?.trim();
@@ -855,8 +856,11 @@ export const layerTerminalExecRoute = HttpRouter.add(
     const targetCwd =
       bodyJson?.cwd && bodyJson.cwd.trim().length > 0 ? bodyJson.cwd.trim() : process.cwd();
     const timeout = bodyJson?.timeoutMs || 120_000;
+    const executionId = bodyJson?.executionId?.trim() || undefined;
 
-    const result = yield* Effect.promise(() => runBashCommandOnHost(command, targetCwd, timeout));
+    const result = yield* Effect.promise(() =>
+      runBashCommandOnHost(command, targetCwd, timeout, executionId),
+    );
     return HttpServerResponse.jsonUnsafe(result);
   }),
 );

@@ -15,19 +15,16 @@ import {
 import { cn } from "../../../lib/utils";
 import { useTerminalStore, terminalStore } from "./terminalStore";
 import { useProjects } from "../../../state/entities";
-import { SshKeysSheet } from "./SshKeysSheet";
 import { toastManager } from "../../ui/toast";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 
 export interface AiTerminalHeaderStripProps {
   activeProject?: EnvironmentProject | null;
-  onNewTerminalThread?: () => void;
   className?: string;
 }
 
 export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
   activeProject,
-  onNewTerminalThread,
   className = "",
 }: AiTerminalHeaderStripProps) {
   const store = useTerminalStore();
@@ -222,9 +219,6 @@ export const AiTerminalHeaderStrip = memo(function AiTerminalHeaderStrip({
           <ChevronRight className="size-3" />
         </button>
       </div>
-
-      {/* 90% Width SSH Keys Management Sheet */}
-      <SshKeysSheet />
     </>
   );
 });

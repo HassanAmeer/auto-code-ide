@@ -15,6 +15,7 @@ import {
   generateAiExplanation,
   translatePromptToBashCommand,
   isNaturalLanguagePrompt,
+  scanCommandSafety,
 } from "./terminalClient";
 
 interface TerminalState {
@@ -49,6 +50,16 @@ interface TerminalState {
 }
 
 import { saveServerSetting } from "~/lib/serverSettingsSync";
+
+// Execution IDs cancelled by the user via the Kill button. When the direct
+// `/api/terminal/exec` call resolves afterwards (killed processes resolve with
+// code null), runCommand must not overwrite the cancelled run with the kill
+// result, or the user sees a fake "success" for a killed process.
+const recentlyCancelledExecutionIds = new Set<string>();
+function rememberExecutionCancelled(executionId: string) {
+  recentlyCancelledExecutionIds.add(executionId);
+  if (recentlyCancelledExecutionIds.size > 500) recentlyCancelledExecutionIds.clear();
+}
 
 const STORAGE_KEY_CWD = "adc_terminal_active_cwd";
 const STORAGE_KEY_OPEN = "adc_terminal_quickbar_open";
@@ -91,7 +102,12 @@ let initialRuns: TerminalCommandRun[] = [];
 if (typeof window !== "undefined") {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY_RUNS);
-    if (raw) initialRuns = JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      initialRuns = Array.isArray(parsed)
+        ? parsed.filter((r: TerminalCommandRun) => !SYNTHETIC_RUN_IDS.has(r?.id))
+        : [];
+    }
   } catch {
     // ignore
   }
@@ -115,9 +131,20 @@ const initialSelectedKey =
   typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY_SELECTED_KEY) : null;
 const initialLastProjectPath =
   typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY_LAST_PROJECT_PATH) : null;
-const initialScopeMode: "root" | "project" = "root";
+const initialScopeMode: "root" | "project" =
+  typeof window !== "undefined" && window.localStorage.getItem(STORAGE_KEY_SCOPE_MODE) === "project"
+    ? "project"
+    : "root";
 
-const initialCwd = "/";
+const initialCwd = (() => {
+  if (typeof window === "undefined") return "/";
+  try {
+    const saved = window.localStorage.getItem(STORAGE_KEY_CWD);
+    return saved && saved.startsWith("/") ? saved : "/";
+  } catch {
+    return "/";
+  }
+})();
 
 const initialOpen =
   typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY_OPEN) === "true" : false;
@@ -132,6 +159,8 @@ if (typeof window !== "undefined") {
   }
 }
 
+const SYNTHETIC_RUN_IDS = new Set(["run_init_term_chat_init_1", "run_session_term_chat_init_1"]);
+
 let initialAccessKeys: TerminalAccessKey[] = [
   {
     id: "key_vps_default",
@@ -144,14 +173,6 @@ let initialAccessKeys: TerminalAccessKey[] = [
     enabled: true,
     notes: "Direct VPS Host Execution",
   },
-  {
-    id: "key_api_default",
-    name: "API Secret Key",
-    type: "api",
-    secret: "sk-proj-demo-token",
-    enabled: false,
-    notes: "Main API Secret",
-  },
 ];
 if (typeof window !== "undefined") {
   try {
@@ -162,20 +183,20 @@ if (typeof window !== "undefined") {
   }
 }
 
-let initialTerminalChats: TerminalChatSession[] = [
-  {
-    id: "term_chat_init_1",
-    title: "VPS Production Auto-Deploy",
-    createdAt: Date.now() - 1000 * 60 * 45,
-    projectName: "autojobs",
-    sshKeyName: "Production Server (SSH)",
-    lastPrompt: "Check git status, pull latest changes, and restart service",
-  },
-];
+// Real terminal sessions only — no seeded demo/fake chats.
+let initialTerminalChats: TerminalChatSession[] = [];
 if (typeof window !== "undefined") {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY_TERMINAL_CHATS);
-    if (raw) initialTerminalChats = JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      initialTerminalChats = Array.isArray(parsed)
+        ? parsed.filter(
+            (c: TerminalChatSession) =>
+              c?.id !== "term_chat_init_1" && c?.title !== "VPS Production Auto-Deploy",
+          )
+        : [];
+    }
   } catch {
     // ignore
   }
@@ -185,33 +206,20 @@ let initialRunsByChat: Record<string, TerminalCommandRun[]> = {};
 if (typeof window !== "undefined") {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY_RUNS_BY_CHAT);
-    if (raw) initialRunsByChat = JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") {
+        for (const key of Object.keys(parsed)) {
+          const list = parsed[key];
+          parsed[key] = Array.isArray(list)
+            ? list.filter((r: TerminalCommandRun) => !SYNTHETIC_RUN_IDS.has(r?.id))
+            : list;
+        }
+        initialRunsByChat = parsed;
+      }
+    }
   } catch {
     // ignore
-  }
-}
-
-// Ensure each initial chat has its runs populated
-for (const chat of initialTerminalChats) {
-  if (!initialRunsByChat[chat.id] || (initialRunsByChat[chat.id]?.length ?? 0) === 0) {
-    if (chat.id === initialTerminalChats[0]?.id && initialRuns.length > 0) {
-      initialRunsByChat[chat.id] = initialRuns;
-    } else {
-      initialRunsByChat[chat.id] = [
-        {
-          id: `run_init_${chat.id}`,
-          command: chat.lastPrompt || `# Session: ${chat.title}`,
-          cwd: "/root",
-          stdout: `[AI Terminal Session: ${chat.title}]\nTarget: ${chat.sshKeyName || "Local"} | Project: ${chat.projectName || "Workspace"}\nCreated: ${new Date(chat.createdAt).toLocaleString()}\nReady for commands.`,
-          stderr: "",
-          durationMs: 0,
-          exitCode: 0,
-          status: "success",
-          timestamp: chat.createdAt || Date.now(),
-          tabId: "term_tab_1",
-        },
-      ];
-    }
   }
 }
 
@@ -252,7 +260,7 @@ let state: TerminalState = {
   unreadAiToolsCount: 0,
   runningChatIds: {},
   isAnyTerminalRunning: false,
-  history: ["ls -la /", "df -h", "free -m", "uname -a"],
+  history: [],
 };
 
 const listeners = new Set<() => void>();
@@ -696,26 +704,7 @@ export const terminalStore = {
       return;
     }
     const targetChat = state.terminalChats.find((c) => c.id === id);
-    let sessionRuns = state.runsByChat[id] ?? [];
-
-    if (sessionRuns.length === 0 && targetChat) {
-      sessionRuns = [
-        {
-          id: `run_session_${targetChat.id}`,
-          command: targetChat.lastPrompt || `# Session: ${targetChat.title}`,
-          cwd: state.activeCwd || "/root",
-          stdout: `[AI Terminal Session: ${targetChat.title}]\nTarget: ${targetChat.sshKeyName || "Local"} | Project: ${targetChat.projectName || "Workspace"}\nCreated: ${new Date(targetChat.createdAt).toLocaleString()}\nReady for commands.`,
-          stderr: "",
-          durationMs: 0,
-          exitCode: 0,
-          status: "success",
-          timestamp: targetChat.createdAt || Date.now(),
-          tabId: state.activeTabId,
-        },
-      ];
-      state.runsByChat = { ...state.runsByChat, [id]: sessionRuns };
-      saveRunsByChatToStorage(state.runsByChat);
-    }
+    const sessionRuns = state.runsByChat[id] ?? [];
 
     // Map tabId so all runs in this chat immediately render on the active terminal tab
     const mappedRuns = sessionRuns.map((r) => ({
@@ -925,6 +914,7 @@ export const terminalStore = {
     if (!target || !target.executionId) return false;
     const ok = await killTerminalExecution(target.executionId);
     if (ok) {
+      rememberExecutionCancelled(target.executionId);
       state = {
         ...state,
         runs: state.runs.map((r) => {
@@ -1064,6 +1054,56 @@ export const terminalStore = {
         commandToExecute = effectiveCommand;
       }
 
+      // ASK mode: refuse dangerous commands unless explicitly always-allowed.
+      // (Full Access runs everything; Ask blocks the catastrophic ones.)
+      if (state.permissionMode === "ask") {
+        const safety = scanCommandSafety(commandToExecute);
+        if (safety && !terminalStore.isCommandAlwaysAllowed(actualCommand)) {
+          const blockedRun: TerminalCommandRun = {
+            id: runId,
+            tabId: state.activeTabId,
+            executionId,
+            command: actualCommand,
+            cwd,
+            status: "error",
+            exitCode: 2,
+            stdout: "",
+            stderr: `[Blocked by Ask mode: ${safety.reason}]\nThis command was NOT executed. Switch to Full Access, or add it to Always-Allowed commands, then run it again.`,
+            durationMs: 0,
+            timestamp: Date.now(),
+            targetHost: targetLabel,
+            mode: resolvedMode,
+            aiPrompt: isNatural ? trimmedInput : undefined,
+            activeKeys: activeKeys.length > 0 ? activeKeys : undefined,
+          };
+          const blockedRuns = [blockedRun, ...state.runs];
+          const blockedRunsByChat = state.activeChatId
+            ? {
+                ...state.runsByChat,
+                [state.activeChatId]: [blockedRun, ...(state.runsByChat[state.activeChatId] || [])],
+              }
+            : state.runsByChat;
+          state = {
+            ...state,
+            runs: blockedRuns,
+            runsByChat: blockedRunsByChat,
+          };
+          saveRunsByChatToStorage(blockedRunsByChat);
+          if (typeof window !== "undefined") {
+            try {
+              window.localStorage.setItem(
+                STORAGE_KEY_RUNS,
+                JSON.stringify(blockedRuns.slice(0, 20)),
+              );
+            } catch {
+              // ignore storage quota errors
+            }
+          }
+          notify();
+          return blockedRun;
+        }
+      }
+
       // Update history
       const nextHistory = [
         trimmedInput,
@@ -1108,7 +1148,7 @@ export const terminalStore = {
       // Execute via server using fast direct JSON execution with stream fallback
       let result: TerminalExecResult;
       try {
-        result = await executeTerminalCommand(commandToExecute, cwd, 60_000);
+        result = await executeTerminalCommand(commandToExecute, cwd, 60_000, executionId);
         // Auto-fallback: If SSH wrapper failed, automatically fallback to direct local host execution!
         if (
           !result.ok &&
@@ -1120,7 +1160,7 @@ export const terminalStore = {
           console.warn(
             "SSH command wrapper failed, automatically falling back to direct host execution...",
           );
-          result = await executeTerminalCommand(effectiveCommand, cwd, 60_000);
+          result = await executeTerminalCommand(effectiveCommand, cwd, 60_000, executionId);
         }
         if (result.stdout) {
           terminalStore.appendRunChunk(runId, result.stdout, "stdout");
@@ -1148,6 +1188,13 @@ export const terminalStore = {
             durationMs: 0,
           };
         }
+      }
+
+      // The user killed this execution — keep the cancelled run state and drop the kill result.
+      if (recentlyCancelledExecutionIds.has(executionId)) {
+        recentlyCancelledExecutionIds.delete(executionId);
+        const cancelledRun = state.runs.find((r) => r.executionId === executionId);
+        if (cancelledRun) return cancelledRun;
       }
 
       // Auto-update CWD on successful command execution (e.g. `cd <dir>`, `cd ..`)

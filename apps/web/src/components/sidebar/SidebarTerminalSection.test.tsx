@@ -6,7 +6,6 @@ import {
   removeTerminalThreadId,
   isTerminalThreadId,
   clearAllTerminalThreadIds,
-  SEED_TERMINAL_THREAD_IDS,
   getTerminalThreadProject,
   setTerminalThreadProject,
 } from "~/components/chat/terminal/terminalThreadRegistry";
@@ -115,25 +114,40 @@ describe("SidebarTerminalSection chat management", () => {
     expect(isTerminalThreadId(testThreadId)).toBe(false);
   });
 
-  it("permanently removes deleted seed thread ID and never resurrects it", () => {
-    const initialIds = getTerminalThreadIds();
-    expect(initialIds.length).toBeGreaterThan(0);
-    const seedToDelete = SEED_TERMINAL_THREAD_IDS[0]!;
-    expect(initialIds).toContain(seedToDelete);
-    expect(isTerminalThreadId(seedToDelete)).toBe(true);
+  it("filters known-stale hardcoded seed thread IDs from stored registries", () => {
+    storage.set(
+      "adc_terminal_thread_ids",
+      JSON.stringify([
+        "264e216e-2596-46d3-bb51-6aa51a70f5c4",
+        "9859c2e3-998f-46ad-893f-c7262b53ea5c",
+        "52492881-cc19-4089-9548-713d3d12e885",
+        "user-created-thread-1",
+      ]),
+    );
+    const ids = getTerminalThreadIds();
+    expect(ids).toEqual(["user-created-thread-1"]);
+    expect(isTerminalThreadId("264e216e-2596-46d3-bb51-6aa51a70f5c4")).toBe(false);
+    expect(isTerminalThreadId("52492881-cc19-4089-9548-713d3d12e885")).toBe(false);
+    expect(isTerminalThreadId("user-created-thread-1")).toBe(true);
+  });
 
-    removeTerminalThreadId(seedToDelete);
+  it("permanently removes deleted thread ID and never resurrects it", () => {
+    const threadToDelete = "user-created-thread-delete-me";
+    addTerminalThreadId(threadToDelete);
+    expect(isTerminalThreadId(threadToDelete)).toBe(true);
+
+    removeTerminalThreadId(threadToDelete);
 
     // Verify it is immediately removed
-    expect(isTerminalThreadId(seedToDelete)).toBe(false);
-    expect(getTerminalThreadIds()).not.toContain(seedToDelete);
+    expect(isTerminalThreadId(threadToDelete)).toBe(false);
+    expect(getTerminalThreadIds()).not.toContain(threadToDelete);
 
     // Call getTerminalThreadIds multiple times to verify no resurrection
     const idsAfterCall1 = getTerminalThreadIds();
     const idsAfterCall2 = getTerminalThreadIds();
-    expect(idsAfterCall1).not.toContain(seedToDelete);
-    expect(idsAfterCall2).not.toContain(seedToDelete);
-    expect(isTerminalThreadId(seedToDelete)).toBe(false);
+    expect(idsAfterCall1).not.toContain(threadToDelete);
+    expect(idsAfterCall2).not.toContain(threadToDelete);
+    expect(isTerminalThreadId(threadToDelete)).toBe(false);
   });
 
   it("synchronizes thread removal with terminalStore.deleteChat", () => {
@@ -148,8 +162,9 @@ describe("SidebarTerminalSection chat management", () => {
   });
 
   it("clears both registries with clearAllTerminalThreadIds", () => {
-    const seedToDelete = SEED_TERMINAL_THREAD_IDS[0]!;
-    removeTerminalThreadId(seedToDelete);
+    const threadToDelete = "user-created-thread-clear-me";
+    addTerminalThreadId(threadToDelete);
+    removeTerminalThreadId(threadToDelete);
 
     clearAllTerminalThreadIds();
     expect(storage.get("adc_terminal_thread_ids")).toBeUndefined();

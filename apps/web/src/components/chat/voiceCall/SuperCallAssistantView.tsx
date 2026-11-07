@@ -1790,8 +1790,8 @@ export function SuperCallAssistantView() {
               </button>
             </div>
 
-            {/* Navigation Tabs (6 Tabs: Board, Memory, Ledger, Tasks, Voice, Settings) - Single Compact Line */}
-            <div className="grid grid-cols-6 border-b border-border/50 px-1 bg-muted/20 text-center">
+            {/* Navigation Tabs (Board, Memory, Ledger, Tasks, Voice) - Single Compact Line */}
+            <div className="grid grid-cols-5 border-b border-border/50 px-1 bg-muted/20 text-center">
               <button
                 type="button"
                 onClick={() => setCommandCenterTab("board")}
@@ -1887,8 +1887,8 @@ export function SuperCallAssistantView() {
               {commandCenterTab === "board" && (
                 <div className="space-y-4">
                   <AutonomousTaskBoard
-                    projectName={activeProject?.name || "Workspace"}
-                    activeModel={effectiveSelectedModel}
+                    projectName={activeProjectName || "Workspace"}
+                    activeModel={effectiveModel || "opencode/beam-free"}
                     onOpenPreview={(url) => window.open(url, "_blank")}
                   />
                 </div>
@@ -2486,9 +2486,9 @@ export function SuperCallAssistantView() {
             <button
               type="button"
               onClick={() => {
-                const pages = loadSpacePages(activeProjId || "Workspace");
+                const pages = loadSpacePages(activeProjectName || "Workspace");
                 if (pages.length > 0) {
-                  setActiveCanvasPage(pages[0]);
+                  setActiveCanvasPage(pages[0]!);
                 } else {
                   setActiveCanvasPage({
                     id: `page_${Date.now().toString(36)}`,
@@ -2502,7 +2502,7 @@ export function SuperCallAssistantView() {
                     ],
                     content:
                       "# Workspace Overview & System Specs\n\nWelcome to your Living Document Space! You can draft specs, track architecture, and collaborate with your Super Bot here.\n\n### Project Milestones\n- [x] Initial workspace inspection & auto-healing\n- [ ] Database schema review\n- [ ] High-speed WebRTC audio call bridge\n- [ ] Multi-channel deploy setup",
-                    projectName: activeProjId || "Workspace",
+                    projectName: activeProjectName || "Workspace",
                     createdAt: Date.now(),
                     updatedAt: Date.now(),
                   });

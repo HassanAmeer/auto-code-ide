@@ -2,24 +2,18 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   FolderGit2,
   GitBranch,
-  GitCommit,
   ShieldCheck,
-  Zap,
   Play,
   CheckCircle2,
   Clock,
   Sparkles,
   ExternalLink,
-  Plus,
   Trash2,
   RefreshCw,
-  Layers,
-  ArrowRight,
-  Terminal,
   Activity,
   Check,
-  AlertCircle,
 } from "lucide-react";
+import { useRef } from "react";
 import { cn } from "~/lib/utils";
 
 export interface BoardTask {
@@ -98,7 +92,7 @@ export function AutonomousTaskBoard({
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch {}
     return DEFAULT_BOARD_TASKS;
@@ -106,7 +100,10 @@ export function AutonomousTaskBoard({
 
   const [newGoalInput, setNewGoalInput] = useState("");
   const [isDecomposing, setIsDecomposing] = useState(false);
-  const [copiedTaskUrl, setCopiedTaskUrl] = useState<string | null>(null);
+  const [previewHealth, setPreviewHealth] = useState<
+    Record<string, { ok: boolean; label: string }>
+  >({});
+  const requestedPreviewUrls = useRef(new Set<string>());
 
   // Sync to local storage
   useEffect(() => {
@@ -195,11 +192,44 @@ export function AutonomousTaskBoard({
     }, 800);
   }, [newGoalInput, activeModel]);
 
-  const handleCopyUrl = (url: string) => {
-    navigator.clipboard?.writeText(url);
-    setCopiedTaskUrl(url);
-    setTimeout(() => setCopiedTaskUrl(null), 2000);
-  };
+  // Real best-effort health check of each task's preview URL (same-origin HEAD).
+  useEffect(() => {
+    for (const t of tasks) {
+      const url = t.previewUrl;
+      if (!url || requestedPreviewUrls.current.has(url)) continue;
+      requestedPreviewUrls.current.add(url);
+      // GET (preview route is GET-only) — cancel the body immediately, we only need status.
+      fetch(url, { method: "GET", cache: "no-store" })
+        .then((res) => {
+          try {
+            void res.body?.cancel();
+          } catch {
+            // ignore
+          }
+          return res;
+        })
+        .then((res) =>
+          setPreviewHealth((prev) => ({
+            ...prev,
+            [url]: { ok: res.ok, label: res.ok ? `HTTP ${res.status} OK` : `HTTP ${res.status}` },
+          })),
+        )
+        .catch(() =>
+          setPreviewHealth((prev) => ({
+            ...prev,
+            [url]: { ok: false, label: "Unreachable" },
+          })),
+        );
+    }
+  }, [tasks]);
+
+  const openPreview = useCallback(
+    (url: string) => {
+      if (onOpenPreview) onOpenPreview(url);
+      else window.open(url, "_blank", "noreferrer");
+    },
+    [onOpenPreview],
+  );
 
   const columns: Array<{
     key: BoardTask["status"];
@@ -400,22 +430,44 @@ export function AutonomousTaskBoard({
                         </div>
                       )}
 
-                      {/* Preview Button if available */}
+                      {/* Preview Button if available (real health check) */}
                       {t.previewUrl && (
                         <div className="pt-1 flex items-center justify-between gap-1 text-[10px]">
-                          <span className="text-emerald-400 font-medium flex items-center gap-1">
-                            <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                            HTTP 200 OK
-                          </span>
-                          <a
-                            href={t.previewUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-1 text-primary hover:underline font-semibold"
+                          {(() => {
+                            const health = t.previewUrl ? previewHealth[t.previewUrl] : undefined;
+                            if (!health) {
+                              return (
+                                <span className="text-muted-foreground font-medium flex items-center gap-1">
+                                  <span className="size-1.5 rounded-full bg-zinc-500" />
+                                  Checking…
+                                </span>
+                              );
+                            }
+                            return (
+                              <span
+                                className={cn(
+                                  "font-medium flex items-center gap-1",
+                                  health.ok ? "text-emerald-400" : "text-rose-400",
+                                )}
+                              >
+                                <span
+                                  className={cn(
+                                    "size-1.5 rounded-full",
+                                    health.ok ? "bg-emerald-400 animate-pulse" : "bg-rose-400",
+                                  )}
+                                />
+                                {health.label}
+                              </span>
+                            );
+                          })()}
+                          <button
+                            type="button"
+                            onClick={() => openPreview(t.previewUrl!)}
+                            className="inline-flex items-center gap-1 text-primary hover:underline font-semibold cursor-pointer"
                           >
                             <span>Preview</span>
                             <ExternalLink className="size-2.5" />
-                          </a>
+                          </button>
                         </div>
                       )}
 
@@ -476,10 +528,7 @@ export function AutonomousTaskBoard({
                           <div className="w-full flex items-center justify-between text-emerald-400 font-semibold text-[9.5px]">
                             <span className="flex items-center gap-1">
                               <CheckCircle2 className="size-3 text-emerald-400" />
-                              <span>Merged to main</span>
-                            </span>
-                            <span className="text-[9px] text-muted-foreground font-mono">
-                              Verified
+                              <span>Done</span>
                             </span>
                           </div>
                         )}
