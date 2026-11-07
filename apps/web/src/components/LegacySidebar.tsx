@@ -3,8 +3,10 @@ import { resolvePrimaryEnvironmentHttpUrl } from "~/environments/primary";
 import { resolveThreadCurrentPullRequestLink } from "@t3tools/shared/threadPullRequests";
 import { Spinner } from "~/components/ui/spinner";
 import {
+  AlertCircle,
   ArchiveIcon,
   ArrowUpDownIcon,
+  CheckCircle2,
   CheckIcon,
   CircleDashed,
   DownloadCloudIcon,
@@ -1088,6 +1090,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
 
 interface SidebarProjectThreadListProps {
   projectKey: string;
+  projectName?: string | undefined;
   projectExpanded: boolean;
   hasOverflowingThreads: boolean;
   hiddenThreadStatus: ThreadStatusPill | null;
@@ -1144,6 +1147,7 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
 ) {
   const {
     projectKey,
+    projectName,
     projectExpanded,
     hasOverflowingThreads,
     hiddenThreadStatus,
@@ -1182,6 +1186,36 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
   const showMoreButtonRender = useMemo(() => <button type="button" />, []);
   const showLessButtonRender = useMemo(() => <button type="button" />, []);
 
+  const [projectWorkers, setProjectWorkers] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!projectName) return;
+    let mounted = true;
+    const fetchWorkers = async () => {
+      try {
+        const res = await fetch(
+          `/api/super-agent/workers?projectName=${encodeURIComponent(projectName)}`,
+        );
+        if (!res.ok) return;
+        const data = await res.json();
+        const raw = Array.isArray(data) ? data : Array.isArray(data?.workers) ? data.workers : [];
+        if (mounted) {
+          setProjectWorkers(raw);
+        }
+      } catch {}
+    };
+
+    void fetchWorkers();
+    const handleUpdate = () => void fetchWorkers();
+    window.addEventListener("super-agent-state-updated", handleUpdate);
+    const interval = setInterval(fetchWorkers, 5000);
+    return () => {
+      mounted = false;
+      window.removeEventListener("super-agent-state-updated", handleUpdate);
+      clearInterval(interval);
+    };
+  }, [projectName]);
+
   if (!shouldShowThreadPanel) {
     return null;
   }
@@ -1191,7 +1225,39 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
       ref={attachThreadListAutoAnimateRef}
       className="relative ml-4 mr-0 my-0 py-1.5 w-auto translate-x-0 overflow-hidden border-l-[1.5px] border-zinc-400 dark:border-zinc-500 pl-3 space-y-0.5"
     >
-      {shouldShowThreadPanel && showEmptyThreadState ? (
+      {/* 🎭 DeepSeek Harness Parallel Subagent Workers in Project Sidebar */}
+      {projectWorkers.map((worker: any, idx: number) => (
+        <SidebarMenuSubItem key={worker.id || `worker-${idx}`} className="relative w-full">
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute -left-3 top-1/2 h-[1.5px] w-3 -translate-y-1/2 bg-amber-500/60 dark:bg-amber-400/60"
+          />
+          <div
+            title={`[Parallel Worker #${idx + 1}] ${worker.role || "Specialist"}: ${worker.goal || "Task"}`}
+            className="group relative flex h-7.5 w-full items-center gap-1.5 rounded-md px-2 text-left text-xs bg-amber-500/10 text-amber-300 border border-amber-500/25 hover:bg-amber-500/20 transition-all cursor-default"
+          >
+            <span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-amber-500/25 text-[10px] font-bold text-amber-200">
+              {idx + 1}
+            </span>
+            <span className="text-xs">🎭</span>
+            <span className="truncate font-medium flex-1 text-[11px]">
+              {worker.role ? `Parallel Worker #${idx + 1}` : `Worker #${idx + 1}`}
+            </span>
+            {worker.status === "running" ? (
+              <span className="flex items-center gap-1 text-[10px] text-amber-400">
+                <CircleDashed className="size-3 animate-spin shrink-0" />
+                <span>{worker.progress ? `${worker.progress}%` : "busy"}</span>
+              </span>
+            ) : worker.status === "completed" ? (
+              <CheckCircle2 className="size-3.5 text-emerald-400 shrink-0" />
+            ) : (
+              <AlertCircle className="size-3.5 text-rose-400 shrink-0" />
+            )}
+          </div>
+        </SidebarMenuSubItem>
+      ))}
+
+      {shouldShowThreadPanel && showEmptyThreadState && projectWorkers.length === 0 ? (
         <SidebarMenuSubItem className="relative w-full" data-thread-selection-safe>
           <span
             aria-hidden="true"
@@ -3204,6 +3270,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
 
       <SidebarProjectThreadList
         projectKey={project.projectKey}
+        projectName={project.displayName || project.title}
         projectExpanded={projectExpanded}
         hasOverflowingThreads={hasOverflowingThreads}
         hiddenThreadStatus={hiddenThreadStatus}
