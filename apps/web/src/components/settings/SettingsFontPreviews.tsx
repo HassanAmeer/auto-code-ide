@@ -1,12 +1,13 @@
-import { preloadPatchFile } from "@pierre/diffs/ssr";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ComposerPromptEditor, type ComposerPromptEditorHandle } from "../ComposerPromptEditor";
-import { EMPTY_COMPOSER_CONTEXT_RECORDS } from "../composerContextPresentation";
+import { EMPTY_COMPOSER_CONTEXT_RECORDS } from "~/lib/composerContextEmptyRecords";
 import { terminalThemeFromApp } from "../ThreadTerminalDrawer";
 import { useTheme } from "../../hooks/useTheme";
 import { DISCONNECTED_COMPOSER_PLACEHOLDER } from "../../composerPlaceholder";
 import { resolveDiffThemeName, type DiffThemeName } from "../../lib/diffRendering";
-import { PREFERRED_HIGHLIGHTER } from "../../lib/syntaxHighlighting";
+import type { HighlighterTypes } from "@pierre/diffs";
+
+const PREFERRED_HIGHLIGHTER: HighlighterTypes = "shiki-wasm";
 import { GhosttyTerminalSurface } from "~/terminal/ghostty/surface";
 
 // The font previews are the real surfaces, not lookalikes: the composer's
@@ -78,10 +79,15 @@ const diffPreviewHtmlByTheme = new Map<DiffThemeName, Promise<readonly string[]>
 function loadDiffPreviewHtml(theme: DiffThemeName): Promise<readonly string[]> {
   let promise = diffPreviewHtmlByTheme.get(theme);
   if (promise === undefined) {
-    promise = preloadPatchFile({
-      patch: DIFF_PREVIEW_PATCH,
-      options: { diffStyle: "unified", theme, preferredHighlighter: PREFERRED_HIGHLIGHTER },
-    }).then((results) => results.map((result) => result.prerenderedHTML));
+    // Loaded lazily so every settings tab doesn't pay for the diff/highlighter pipeline.
+    promise = import("@pierre/diffs/ssr")
+      .then((module) =>
+        module.preloadPatchFile({
+          patch: DIFF_PREVIEW_PATCH,
+          options: { diffStyle: "unified", theme, preferredHighlighter: PREFERRED_HIGHLIGHTER },
+        }),
+      )
+      .then((results) => results.map((result) => result.prerenderedHTML));
     diffPreviewHtmlByTheme.set(theme, promise);
   }
   return promise;

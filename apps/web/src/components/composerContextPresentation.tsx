@@ -86,7 +86,9 @@ export const ComposerContextActionsContext = createContext<ComposerContextAction
 
 export type ComposerDraftContextRecords = ReadonlyMap<string, ComposerDraftContextRecord>;
 
-export const EMPTY_COMPOSER_CONTEXT_RECORDS: ComposerDraftContextRecords = new Map();
+import { EMPTY_COMPOSER_CONTEXT_RECORDS } from "~/lib/composerContextEmptyRecords";
+
+export { EMPTY_COMPOSER_CONTEXT_RECORDS };
 
 export function uploadedContextRecordFromDraft(entry: ComposerDraftContextRecord) {
   if (entry.kind !== "image" && entry.kind !== "file") return null;
