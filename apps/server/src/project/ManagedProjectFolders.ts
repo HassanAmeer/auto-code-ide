@@ -113,6 +113,14 @@ export class ManagedProjectFolders extends Context.Service<
     /** The folder that holds projects started from just a name. */
     readonly namedProjectsRoot: string;
     /**
+     * The storage root currently resolved for named projects: the storage
+     * location selected in Settings -> Storage (settings.json) first, then the
+     * `*STORAGE_DIR`/`*PROJECTS_DIR` env vars, then the default. Reads fresh
+     * settings on every call so it always reflects the latest configured
+     * location.
+     */
+    readonly resolveNamedProjectsRoot: Effect.Effect<string>;
+    /**
      * Starts a project from just a name: claims `<namedProjectsRoot>/<slug>`
      * (adding `-2`, `-3`, ... when taken), makes it a Git repository with a
      * README, an icon, and a first commit, then creates the project. A failed
@@ -420,21 +428,8 @@ const make = Effect.gen(function* () {
   };
 
   const resolveNamedProjectsRoot = Effect.gen(function* () {
-    // 1. Explicit env vars
-    if (procEnv?.AUTOCODE_STORAGE_DIR && procEnv.AUTOCODE_STORAGE_DIR.trim().length > 0) {
-      return normalizeStorageRoot(procEnv.AUTOCODE_STORAGE_DIR);
-    }
-    if (procEnv?.AUTOCODE_PROJECTS_DIR && procEnv.AUTOCODE_PROJECTS_DIR.trim().length > 0) {
-      return normalizeStorageRoot(procEnv.AUTOCODE_PROJECTS_DIR);
-    }
-    if (procEnv?.AUTODESK_PROJECTS_DIR && procEnv.AUTODESK_PROJECTS_DIR.trim().length > 0) {
-      return normalizeStorageRoot(procEnv.AUTODESK_PROJECTS_DIR);
-    }
-    if (procEnv?.T3CODE_PROJECTS_DIR && procEnv.T3CODE_PROJECTS_DIR.trim().length > 0) {
-      return normalizeStorageRoot(procEnv.T3CODE_PROJECTS_DIR);
-    }
-
-    // 2. Read settings.json if exists
+    // 1. The storage location selected in Settings -> Storage (settings.json)
+    // always wins: it is an explicit user action, taken after the app shipped.
     const settingsRaw = yield* fileSystem.readFileString(config.settingsPath).pipe(Effect.option);
     if (Option.isSome(settingsRaw)) {
       try {
@@ -449,6 +444,20 @@ const make = Effect.gen(function* () {
       } catch {
         // ignore parse error
       }
+    }
+
+    // 2. Explicit env vars (deployment default when no storage is selected)
+    if (procEnv?.AUTOCODE_STORAGE_DIR && procEnv.AUTOCODE_STORAGE_DIR.trim().length > 0) {
+      return normalizeStorageRoot(procEnv.AUTOCODE_STORAGE_DIR);
+    }
+    if (procEnv?.AUTOCODE_PROJECTS_DIR && procEnv.AUTOCODE_PROJECTS_DIR.trim().length > 0) {
+      return normalizeStorageRoot(procEnv.AUTOCODE_PROJECTS_DIR);
+    }
+    if (procEnv?.AUTODESK_PROJECTS_DIR && procEnv.AUTODESK_PROJECTS_DIR.trim().length > 0) {
+      return normalizeStorageRoot(procEnv.AUTODESK_PROJECTS_DIR);
+    }
+    if (procEnv?.T3CODE_PROJECTS_DIR && procEnv.T3CODE_PROJECTS_DIR.trim().length > 0) {
+      return normalizeStorageRoot(procEnv.T3CODE_PROJECTS_DIR);
     }
 
     // 3. Default: autocode-storage in user's home or root directory
@@ -1223,6 +1232,9 @@ header('Content-Type: text/html; charset=utf-8');
     ensureScratchProject,
     folderForThread,
     namedProjectsRoot: defaultAutocodeStorageDir,
+    resolveNamedProjectsRoot: resolveNamedProjectsRoot.pipe(
+      Effect.orElseSucceed(() => defaultAutocodeStorageDir),
+    ),
     createNamedProject,
     importUploadedProject,
     importZipProject,

@@ -136,6 +136,7 @@ import {
   isExplicitRelativeProjectPath,
   isUnsupportedWindowsProjectPath,
   resolveProjectPathForDispatch,
+  resolveStorageRootPath,
 } from "../lib/projectPaths";
 import { onOpenCommandPalette } from "../commandPaletteBus";
 import { isPreviewFocused } from "../lib/previewFocus";
@@ -1159,11 +1160,15 @@ function OpenCommandPaletteDialog(props: {
         (candidate) => candidate.environmentId === environmentId,
       );
       const environmentSettings = environment?.serverConfig?.settings ?? null;
-      const baseDirectory = environmentSettings?.addProjectBaseDirectory?.trim() ?? "";
-      if (baseDirectory.length === 0) {
-        return "~/";
+      // Settings -> Storage wins: the clone and "Local folder on server" flows
+      // open there. The picker already stores the normalized absolute path, so
+      // a hand-typed parent gets its fixed `autocode-storage` child appended,
+      // exactly like the server resolves it. Nothing selected -> root `/`.
+      const storageDirectory = environmentSettings?.projectsDirectory?.trim() ?? "";
+      if (storageDirectory.length > 0) {
+        return ensureBrowseDirectoryPath(resolveStorageRootPath(storageDirectory));
       }
-      return ensureBrowseDirectoryPath(baseDirectory);
+      return "/";
     },
     [environments],
   );
@@ -1633,12 +1638,24 @@ function OpenCommandPaletteDialog(props: {
 
   /** Folder that holds an environment's name-only projects, or null when it has none. */
   const newProjectsRootFor = useCallback(
-    (environmentId: EnvironmentId | null): string | null =>
-      // Return the configured root, or an empty string as a fallback so the
-      // new-project flow is still reachable when serverConfig hasn't loaded yet.
-      // The server-side /api/project/create-direct endpoint uses its own default.
-      environments.find((environment) => environment.environmentId === environmentId)?.serverConfig
-        ?.newProjectsRoot ?? "",
+    (environmentId: EnvironmentId | null): string | null => {
+      const environment = environments.find(
+        (candidate) => candidate.environmentId === environmentId,
+      );
+      // A storage path saved via Settings -> Storage lives in the shared settings,
+      // which the live settingsUpdated event refreshes; honoring it here keeps the
+      // preview pointed at the new location before any reconnect. The server creates
+      // projects there regardless (or replies with its own preview via newProjectsRoot).
+      const configured = environment?.serverConfig?.settings?.projectsDirectory?.trim() ?? "";
+      if (configured.length > 0 && !configured.startsWith("~")) {
+        return resolveStorageRootPath(configured);
+      }
+      // ~-prefixed or nothing selected: fall back to the server-resolved root it
+      // advertised (env vars included), or an empty string so the new-project flow
+      // is still reachable when serverConfig hasn't loaded yet. The server-side
+      // /api/project/create-direct endpoint uses its own default.
+      return environment?.serverConfig?.newProjectsRoot ?? "";
+    },
     [environments],
   );
 
