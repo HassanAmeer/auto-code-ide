@@ -313,6 +313,7 @@ export function PreviewDrawOverlay({
     setStrokes((prev) => {
       if (prev.length === 0) return prev;
       const last = prev[prev.length - 1];
+      if (!last) return prev;
       setUndoStack((u) => [...u, last]);
       return prev.slice(0, prev.length - 1);
     });

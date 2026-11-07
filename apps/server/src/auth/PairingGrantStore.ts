@@ -1,5 +1,4 @@
 import {
-  AuthAdministrativeScopes,
   AuthStandardClientScopes,
   type AuthEnvironmentScope,
   type AuthPairingLink,
@@ -384,8 +383,6 @@ export const make = Effect.gen(function* () {
       id,
     }).pipe(Effect.asVoid);
 
-  const consumeRotatingDesktopToken = (_credential: string, _nowMs: number) => false;
-
   const listActive: PairingGrantStore["Service"]["listActive"] = Effect.fn(
     "PairingGrantStore.listActive",
   )(
@@ -491,16 +488,6 @@ export const make = Effect.gen(function* () {
   const consume: PairingGrantStore["Service"]["consume"] = Effect.fn("PairingGrantStore.consume")(
     function* (credential, input) {
       const now = yield* DateTime.now;
-      if (consumeRotatingDesktopToken(credential, now.epochMilliseconds)) {
-        return {
-          method: "desktop-bootstrap",
-          scopes: AuthAdministrativeScopes,
-          subject: "desktop-bootstrap",
-          expiresAt: DateTime.add(now, {
-            milliseconds: DESKTOP_BOOTSTRAP_TOKEN_WINDOW_MS,
-          }),
-        } satisfies BootstrapGrant;
-      }
       const seededResult: ConsumeResult = yield* Ref.modify(
         seededGrantsRef,
         (current): readonly [ConsumeResult, Map<string, StoredBootstrapGrant>] => {

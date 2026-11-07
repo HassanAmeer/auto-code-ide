@@ -45,7 +45,7 @@ export function buildSuperAgentSystemPrompt(context: SuperAgentPromptContext): s
           .slice(0, 8)
           .map(
             (p, idx) =>
-              `${idx + 1}. [${p.title || String(p.projectId)}] (${activeProjectName && (p.title === activeProjectName || p.projectId === activeProjectName) ? "ACTIVE" : "branch: " + (p.branch || "main")})`,
+              `${idx + 1}. [${p.title || String(p.id)}] (${activeProjectName && (p.title === activeProjectName || String(p.id) === activeProjectName) ? "ACTIVE" : "cwd: " + (p.workspaceRoot || "~")})`,
           )
           .join("\n")
       : "No active projects found in workspace.";

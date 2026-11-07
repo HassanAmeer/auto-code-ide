@@ -671,20 +671,25 @@ function ThoughtTimelineRow({
 function MessageExecutionTimeline({
   meta,
 }: {
-  meta?: {
-    thought?: string;
-    durationMs?: number;
-    toolsCalled?: ToolCallRecord[];
-    timelineEvents?: Array<
-      | { kind: "tool"; tool: ToolCallRecord }
-      | { kind: "thought"; text: string; durationMs?: number }
-    >;
-  };
+  meta?:
+    | {
+        thought?: string | undefined;
+        durationMs?: number | undefined;
+        toolsCalled?: ToolCallRecord[] | undefined;
+        timelineEvents?:
+          | Array<
+              | { kind: "tool"; tool: ToolCallRecord }
+              | { kind: "thought"; text: string; durationMs?: number | undefined }
+            >
+          | undefined;
+      }
+    | undefined;
 }) {
   if (!meta) return null;
 
   const events: Array<
-    { kind: "tool"; tool: ToolCallRecord } | { kind: "thought"; text: string; durationMs?: number }
+    | { kind: "tool"; tool: ToolCallRecord }
+    | { kind: "thought"; text: string; durationMs?: number | undefined }
   > = [];
 
   if (meta.timelineEvents && meta.timelineEvents.length > 0) {
@@ -2861,7 +2866,7 @@ export function SuperCallAssistantView() {
                               className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-border bg-background/80 hover:bg-muted text-[11px] font-medium transition-all cursor-pointer"
                               title="Copy Preview URL"
                             >
-                              {copiedPreviewUrl === msg.meta.delegatedTask.previewUrl ? (
+                              {copiedPreviewUrl === msg.meta?.delegatedTask?.previewUrl ? (
                                 <>
                                   <Check className="size-3 text-emerald-400" />
                                   <span className="text-emerald-400">Copied</span>
@@ -2898,8 +2903,8 @@ export function SuperCallAssistantView() {
                               type="button"
                               onClick={() =>
                                 handleSendPreviewToWhatsApp(
-                                  msg.meta.delegatedTask.taskTitle,
-                                  msg.meta.delegatedTask.previewUrl,
+                                  msg.meta?.delegatedTask?.taskTitle ?? "Delegated task",
+                                  msg.meta?.delegatedTask?.previewUrl ?? "",
                                   msg.id,
                                 )
                               }

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach } from "vite-plus/test";
 import {
   addVoiceCallLog,
   getVoiceCallLogs,
@@ -20,11 +20,11 @@ describe("voiceCallLogger", () => {
 
     const logs = getVoiceCallLogs();
     expect(logs.length).toBe(1);
-    expect(logs[0].category).toBe("STT");
-    expect(logs[0].title).toBe("Recognized Speech");
-    expect(logs[0].detail).toBe("Hello test");
-    expect(logs[0].id).toBeDefined();
-    expect(logs[0].timestamp).toBeGreaterThan(0);
+    expect(logs[0]?.category).toBe("STT");
+    expect(logs[0]?.title).toBe("Recognized Speech");
+    expect(logs[0]?.detail).toBe("Hello test");
+    expect(logs[0]?.id).toBeDefined();
+    expect(logs[0]?.timestamp).toBeGreaterThan(0);
   });
 
   it("notifies subscribers when new log is added", () => {

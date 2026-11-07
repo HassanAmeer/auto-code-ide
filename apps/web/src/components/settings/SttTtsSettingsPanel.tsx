@@ -136,14 +136,15 @@ export function SttTtsSettingsPanel() {
     const updated: TtsSettings = {
       ...tts,
       language: lang as TtsLanguageMode,
-      voiceURI: newVoiceURI,
+      voiceURI: newVoiceURI ?? tts.voiceURI ?? "roman-urdu-male",
     };
     setTts(updated);
     saveTtsSettings(updated);
   };
 
   const updateTtsPreset = (presetId: TtsVoiceId) => {
-    const chosen = TTS_ACCENTS.find((a) => a.id === presetId) || TTS_ACCENTS[0];
+    const chosen = TTS_ACCENTS.find((a) => a.id === presetId) ?? TTS_ACCENTS[0];
+    if (!chosen) return;
     let newLanguage: TtsLanguageMode = chosen.category;
     if (tts.language === "auto-male" && chosen.gender === "male") {
       newLanguage = "auto-male";

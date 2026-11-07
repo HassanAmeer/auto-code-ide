@@ -322,8 +322,15 @@ export const make = Effect.fn("cloud.server_self_update.make")(function* () {
 
   return ServerSelfUpdate.of({
     update,
-    commitDesktopUpdate: (requestId, onHandoffAccepted) =>
-      desktopAppUpdate.commit(requestId, onHandoffAccepted),
+    // This process hosts the boot-service updater (no desktop app integration).
+    // Fail gracefully instead of crashing the RPC handler when a client asks to
+    // commit a desktop-managed update.
+    commitDesktopUpdate: (_requestId, _onHandoffAccepted) =>
+      Effect.fail(
+        new ServerSelfUpdateError({
+          reason: "Desktop-managed updates are not available on this host.",
+        }),
+      ),
   });
 });
 

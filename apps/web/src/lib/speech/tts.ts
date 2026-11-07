@@ -91,7 +91,8 @@ export const VOICE_DELIVERY_STYLES = VOCAL_STYLES;
 
 export function getGeminiActingPrefix(styleId?: string): string {
   const style =
-    (styleId && (VOCAL_STYLES[styleId] || VOICE_DELIVERY_STYLES[styleId])) || VOCAL_STYLES.natural;
+    (styleId ? (VOCAL_STYLES[styleId] ?? VOICE_DELIVERY_STYLES[styleId]) : undefined) ??
+    VOCAL_STYLES.natural!;
   return style.geminiActingPrefix || "";
 }
 
@@ -101,22 +102,23 @@ export function getDeliveryStyleMultipliers(styleId?: string): {
   volumeMultiplier: number;
 } {
   const style =
-    (styleId && (VOCAL_STYLES[styleId] || VOICE_DELIVERY_STYLES[styleId])) || VOCAL_STYLES.natural;
+    (styleId ? (VOCAL_STYLES[styleId] ?? VOICE_DELIVERY_STYLES[styleId]) : undefined) ??
+    VOCAL_STYLES.natural!;
 
   const rateStr = style.edgePreset?.rate || style.rate || "+0%";
   const pitchStr = style.edgePreset?.pitch || style.pitch || "+0Hz";
   const volStr = style.edgePreset?.volume || style.volume || "+0%";
 
   const rateMatch = rateStr.match(/([+-]?\d+)%/);
-  const ratePct = rateMatch ? parseInt(rateMatch[1], 10) : 0;
+  const ratePct = rateMatch?.[1] ? parseInt(rateMatch[1], 10) : 0;
   const rateMultiplier = 1 + ratePct / 100;
 
   const pitchMatch = pitchStr.match(/([+-]?\d+)Hz/);
-  const pitchHz = pitchMatch ? parseInt(pitchMatch[1], 10) : 0;
+  const pitchHz = pitchMatch?.[1] ? parseInt(pitchMatch[1], 10) : 0;
   const pitchMultiplier = 1 + pitchHz / 200;
 
   const volMatch = volStr.match(/([+-]?\d+)%/);
-  const volPct = volMatch ? parseInt(volMatch[1], 10) : 0;
+  const volPct = volMatch?.[1] ? parseInt(volMatch[1], 10) : 0;
   const volumeMultiplier = 1 + volPct / 100;
 
   return { rateMultiplier, pitchMultiplier, volumeMultiplier };
@@ -252,6 +254,12 @@ export const DEFAULT_TTS_SETTINGS: TtsSettings = {
 /**
  * Returns the active TTS voice preset matching settings or fallbacks.
  */
+const accentAt = (index: number): TtsAccentPreset => {
+  const preset = TTS_ACCENTS[index] ?? TTS_ACCENTS[0];
+  if (!preset) throw new Error("TTS_ACCENTS must not be empty");
+  return preset;
+};
+
 export function getActiveTtsPreset(settings?: Partial<TtsSettings>): TtsAccentPreset {
   const current = settings || loadTtsSettings();
   const uri = current.voiceURI || "";
@@ -263,24 +271,24 @@ export function getActiveTtsPreset(settings?: Partial<TtsSettings>): TtsAccentPr
   // 2. Legacy / fuzzy match by URI
   const lowerUri = uri.toLowerCase();
   if (lowerUri.includes("english")) {
-    return lowerUri.includes("female") ? TTS_ACCENTS[1] : TTS_ACCENTS[0];
+    return accentAt(lowerUri.includes("female") ? 1 : 0);
   }
   if (lowerUri.includes("natural")) {
-    return lowerUri.includes("female") ? TTS_ACCENTS[5] : TTS_ACCENTS[4];
+    return accentAt(lowerUri.includes("female") ? 5 : 4);
   }
   if (lowerUri.includes("roman")) {
-    return lowerUri.includes("female") ? TTS_ACCENTS[3] : TTS_ACCENTS[2];
+    return accentAt(lowerUri.includes("female") ? 3 : 2);
   }
 
   // 3. Fallback based on language mode
   const lang = current.language;
-  if (lang === "english" || lang === "english-male") return TTS_ACCENTS[0];
-  if (lang === "english-female") return TTS_ACCENTS[1];
-  if (lang === "natural-urdu" || lang === "natural-urdu-male") return TTS_ACCENTS[4];
-  if (lang === "natural-urdu-female") return TTS_ACCENTS[5];
-  if (lang === "auto-female" || lang === "roman-urdu-female") return TTS_ACCENTS[3];
+  if (lang === "english" || lang === "english-male") return accentAt(0);
+  if (lang === "english-female") return accentAt(1);
+  if (lang === "natural-urdu" || lang === "natural-urdu-male") return accentAt(4);
+  if (lang === "natural-urdu-female") return accentAt(5);
+  if (lang === "auto-female" || lang === "roman-urdu-female") return accentAt(3);
 
-  return TTS_ACCENTS[2]; // Default: roman-urdu-male
+  return accentAt(2); // Default: roman-urdu-male
 }
 
 export function normalizeTtsLanguage(

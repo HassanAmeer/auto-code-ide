@@ -33,50 +33,6 @@ export interface BoardTask {
 
 const STORAGE_KEY = "t3code:autonomous-tasks-board:v1";
 
-const DEFAULT_BOARD_TASKS: BoardTask[] = [
-  {
-    id: "task-101",
-    title: "1. Core API & Database Schema Setup",
-    description: "Design SQLite tables, data models, and REST endpoints for data persistence.",
-    status: "done",
-    branch: "feat/db-schema",
-    worktreePath: "worktrees/db-schema",
-    workerModel: "opencode/beam-free",
-    progress: 100,
-    filesModified: ["server/db.ts", "schema.sql"],
-    previewUrl: "/api/projects/preview/op/index.html",
-    autoHealedErrors: 1,
-    updatedAt: new Date(Date.now() - 3600000).toISOString(),
-  },
-  {
-    id: "task-102",
-    title: "2. Interactive UI Layout & Reactive State",
-    description: "Build component hierarchy, clean Tailwind widgets, and live state store.",
-    status: "verifying",
-    branch: "feat/ui-components",
-    worktreePath: "worktrees/ui-components",
-    workerModel: "opencode/beam-free",
-    progress: 85,
-    filesModified: ["src/App.tsx", "src/components/Widget.tsx"],
-    previewUrl: "/api/projects/preview/op/index.html",
-    autoHealedErrors: 0,
-    updatedAt: new Date(Date.now() - 1800000).toISOString(),
-  },
-  {
-    id: "task-103",
-    title: "3. Background Watchdog & Self-Healing Service",
-    description: "Run automated health checks on port 13773 and auto-heal syntax discrepancies.",
-    status: "in_progress",
-    branch: "feat/watchdog-worker",
-    worktreePath: "worktrees/watchdog-worker",
-    workerModel: "opencode/beam-free",
-    progress: 45,
-    filesModified: ["src/services/watchdog.ts"],
-    autoHealedErrors: 0,
-    updatedAt: new Date().toISOString(),
-  },
-];
-
 export function AutonomousTaskBoard({
   projectName = "Workspace",
   activeModel = "opencode/beam-free",
@@ -87,7 +43,6 @@ export function AutonomousTaskBoard({
   onOpenPreview?: (url: string) => void;
 }) {
   const [tasks, setTasks] = useState<BoardTask[]>(() => {
-    if (typeof window === "undefined") return DEFAULT_BOARD_TASKS;
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
@@ -95,7 +50,8 @@ export function AutonomousTaskBoard({
         if (Array.isArray(parsed)) return parsed;
       }
     } catch {}
-    return DEFAULT_BOARD_TASKS;
+    // Fresh installs start with an honest empty board.
+    return [];
   });
 
   const [newGoalInput, setNewGoalInput] = useState("");

@@ -9,8 +9,8 @@ export interface MemoryRecord {
   title: string;
   description: string;
   source: "manual" | "imported_from_notes";
-  sourceNoteId?: string;
-  sourceNoteTitle?: string;
+  sourceNoteId?: string | undefined;
+  sourceNoteTitle?: string | undefined;
   createdAt: number;
   updatedAt: number;
 }

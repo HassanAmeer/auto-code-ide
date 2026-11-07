@@ -352,37 +352,22 @@ it.layer(NodeServices.layer)("server self update", (it) => {
       expect(
         (yield* web.selfUpdate.update({ targetVersion: "latest" }).pipe(Effect.flip)).reason,
       ).toBe("'latest' is not an exact t3 version.");
-      const desktop = yield* makeHarness({ mode: "desktop" });
+      const desktop = yield* makeHarness({ mode: "desktop", managed: false });
       expect(
         (yield* desktop.selfUpdate.update({ targetVersion: "1.1.0" }).pipe(Effect.flip)).reason,
-      ).toContain("desktop app");
+      ).toContain("background service");
       expect([...web.order, ...desktop.order]).toEqual([]);
     }),
   );
 
-  it.effect("delegates desktop-managed updates to the desktop app when available", () =>
-    Effect.gen(function* () {
-      const stages: string[] = [];
-      const { selfUpdate, order } = yield* makeHarness({
-        mode: "desktop",
-        desktopAppUpdate: {
-          available: true,
-          run: (reportProgress) =>
-            reportProgress("downloading").pipe(
-              Effect.andThen(reportProgress("installing")),
-              Effect.as({ targetVersion: "1.2.0", method: "desktop-app" as const }),
-            ),
-          commit: () => Effect.never,
-        },
-      });
-      const result = yield* selfUpdate.update({ targetVersion: "1.1.0" }, (stage) =>
-        Effect.sync(() => void stages.push(stage)),
-      );
-      expect(result).toEqual({ targetVersion: "1.2.0", method: "desktop-app" });
-      expect(stages).toEqual(["downloading", "installing"]);
-      // The launcher staging path must not run on the desktop path.
-      expect(order).toEqual([]);
-    }),
+  it.effect(
+    "fails gracefully when committing a desktop-managed update without desktop support",
+    () =>
+      Effect.gen(function* () {
+        const { selfUpdate } = yield* makeHarness();
+        const result = yield* selfUpdate.commitDesktopUpdate("desktop-token").pipe(Effect.flip);
+        expect(result.reason).toContain("Desktop-managed updates are not available");
+      }),
   );
 
   it.effect("preserves the preflight refusal reason", () =>

@@ -49,6 +49,21 @@ export interface CallAssistantMessage {
         toolsCalled?: any[] | undefined;
         timelineEvents?: any[] | undefined;
         diff?: string | undefined;
+        file?: string | undefined;
+        image?: string | undefined;
+        isImage?: boolean | undefined;
+        fileName?: string | undefined;
+        imageName?: string | undefined;
+        fileSize?: string | undefined;
+        referencedMemory?:
+          | {
+              id: string;
+              title: string;
+              description: string;
+              updatedAt: number;
+              source: "manual" | "imported_from_notes";
+            }
+          | undefined;
       }
     | undefined;
 }
@@ -124,7 +139,13 @@ export function saveCallSessions(sessions: CallAssistantSession[]): void {
 export function createNewCallSession(title?: string): CallAssistantSession {
   const current = loadCallSessions();
   const now = Date.now();
-  const num = current.length + 1;
+  // Number by the highest existing "Call Session #N" suffix so deletions
+  // never produce duplicate titles.
+  const maxSuffix = current.reduce((acc, session) => {
+    const match = /Call Session #(\d+)/i.exec(session.title);
+    return match?.[1] ? Math.max(acc, Number.parseInt(match[1], 10)) : acc;
+  }, 0);
+  const num = maxSuffix + 1;
   const newSession: CallAssistantSession = {
     id: `call-session-${now}-${Math.random().toString(36).slice(2, 7)}`,
     title: title || `Call Session #${num}`,
@@ -242,7 +263,7 @@ export function revertSessionToMessage(
 }
 
 export function revertLastTurn(sessionId: string): {
-  revertedUserMessage?: CallAssistantMessage;
+  revertedUserMessage?: CallAssistantMessage | undefined;
   remainingMessages: CallAssistantMessage[];
 } {
   const current = loadCallSessions();
@@ -279,7 +300,13 @@ export function revertLastTurn(sessionId: string): {
 export function useCallSessions() {
   const [sessions, setSessions] = useState<CallAssistantSession[]>(() => {
     const initial = loadCallSessions();
-    if (initial.length === 0 && typeof window !== "undefined") {
+    if (
+      initial.length === 0 &&
+      typeof window !== "undefined" &&
+      window.localStorage.getItem(STORAGE_KEY) === null
+    ) {
+      // First-ever launch: seed one welcoming session. An explicit "Clear All"
+      // persists an empty array under the key, which must stay empty.
       return [createNewCallSession()];
     }
     return initial;

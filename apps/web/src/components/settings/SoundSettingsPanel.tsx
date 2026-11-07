@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, type ChangeEvent, type CSSProperties } from "react";
+import { useState, useEffect, useRef, useMemo, type ChangeEvent, type CSSProperties } from "react";
 import {
   Volume2,
   VolumeX,
