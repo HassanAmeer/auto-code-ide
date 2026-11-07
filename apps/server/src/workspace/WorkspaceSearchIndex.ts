@@ -1,5 +1,3 @@
-import * as NodeModule from "node:module";
-
 import type {
   DirItem,
   DirSearchResult,
@@ -28,11 +26,11 @@ import type {
 import { isWorkspaceImagePreviewPath } from "@t3tools/shared/filePreview";
 
 // fff-node stays external to the CLI bundle because it dlopens a native
-// library. A static `import` of an external package is a hard error inside a
-// Node single-executable (only built-ins resolve there), so load it through
-// `require`, which reads from the real filesystem in every runtime.
-const requireForFff = NodeModule.createRequire(import.meta.url);
-const { FileFinder } = requireForFff("@ff-labs/fff-node") as typeof import("@ff-labs/fff-node");
+// library. Load it through a dynamic `import()` — the package publishes only an
+// `import` export, so a CJS `require()` throws ERR_PACKAGE_PATH_NOT_EXPORTED on
+// every Node version. Dynamic import reads from the real filesystem, which is
+// what the self-hosted deployment does.
+const { FileFinder } = await import("@ff-labs/fff-node");
 
 const WORKSPACE_INDEX_MAX_ENTRIES = 25_000;
 const WORKSPACE_INDEX_PAGE_SIZE = WORKSPACE_INDEX_MAX_ENTRIES + 2;

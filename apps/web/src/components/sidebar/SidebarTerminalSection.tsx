@@ -23,6 +23,9 @@ import { Button } from "~/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipPopup } from "~/components/ui/tooltip";
 import { Menu, MenuTrigger, MenuPopup, MenuItem, MenuSeparator } from "~/components/ui/menu";
 import { useThreadShells, useProjects } from "~/state/entities";
+import { useScratchProject } from "~/hooks/useScratchProject";
+import { usePrimaryEnvironmentId } from "~/state/environments";
+import { toastManager } from "~/components/ui/toast";
 import { useNewThreadHandler } from "~/hooks/useHandleNewThread";
 import { useThreadActions } from "~/hooks/useThreadActions";
 import { useOrchestrationCommand } from "~/state/use-orchestration-command";
@@ -30,6 +33,7 @@ import { scopeThreadRef, scopeProjectRef } from "@t3tools/client-runtime/environ
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import { threadEnvironment } from "~/state/threads";
 import { buildThreadRouteParams, resolveThreadRouteTarget } from "~/threadRoutes";
+import { useComposerDraftStore } from "~/composerDraftStore";
 import { isSidebarThreadWorking } from "~/components/Sidebar.logic";
 import { isLatestRunSettled } from "~/session-logic";
 
@@ -38,6 +42,8 @@ export function SidebarTerminalSection() {
   const store = useTerminalStore();
   const sidebarThreads = useThreadShells();
   const projects = useProjects();
+  const { scratchEnvironmentId, openScratchProject } = useScratchProject();
+  const primaryEnvironmentId = usePrimaryEnvironmentId();
   const handleNewThread = useNewThreadHandler();
   const { deleteThread } = useThreadActions();
   const updateThreadMetadata = useOrchestrationCommand(threadEnvironment.updateMetadata, {
@@ -171,22 +177,45 @@ export function SidebarTerminalSection() {
           projects.find((p) => p.title?.toLowerCase().includes("temp")) ||
           projects[0];
 
-        if (targetProj) {
-          const res = await handleNewThread(
-            scopeProjectRef(targetProj.environmentId, targetProj.id),
-          );
-          if (res?.threadId) {
-            addTerminalThreadId(res.threadId);
-            // Default to root unless the user specifically had a project selected
-            if (store.selectedProjectId) {
-              setTerminalThreadProject(res.threadId, store.selectedProjectId);
-            } else {
-              setTerminalThreadProject(res.threadId, null);
-              terminalStore.setSelectedProject(null, null, "/");
-              terminalStore.setActiveCwd("/");
-            }
-            terminalStore.setActiveChatId(res.threadId);
+        // With no projects at all, fall back to the scratch project (same as the
+        // "Start without a project" flow) so the terminal button never dead-ends.
+        let effectiveProject = targetProj ?? null;
+        if (!effectiveProject) {
+          const envId = scratchEnvironmentId(primaryEnvironmentId) ?? scratchEnvironmentId(null);
+          if (envId) {
+            effectiveProject = await openScratchProject(envId, "Could not open AI Terminal");
           }
+        }
+        if (!effectiveProject) {
+          toastManager.add({
+            type: "info",
+            title: "Add a project first",
+            description:
+              "AI Terminal chats need a workspace. Use Add project or Start without a project.",
+          });
+          return;
+        }
+
+        const projectRef = scopeProjectRef(effectiveProject.environmentId, effectiveProject.id);
+        const res = await handleNewThread(projectRef);
+        // handleNewThread can bail out late (route raced) without surfacing the
+        // threadId it reserved for the draft it just registered — fall back to
+        // the draft session it wrote so the terminal chat still registers.
+        const threadId =
+          res?.threadId ??
+          useComposerDraftStore.getState().getDraftSessionByProjectRef(projectRef)?.threadId ??
+          null;
+        if (threadId) {
+          addTerminalThreadId(threadId);
+          // Default to root unless the user specifically had a project selected
+          if (store.selectedProjectId) {
+            setTerminalThreadProject(threadId, store.selectedProjectId);
+          } else {
+            setTerminalThreadProject(threadId, null);
+            terminalStore.setSelectedProject(null, null, "/");
+            terminalStore.setActiveCwd("/");
+          }
+          terminalStore.setActiveChatId(threadId);
         }
       } finally {
         setTimeout(() => {
@@ -194,7 +223,14 @@ export function SidebarTerminalSection() {
         }, 500);
       }
     },
-    [handleNewThread, projects, store.selectedProjectId],
+    [
+      handleNewThread,
+      openScratchProject,
+      projects,
+      scratchEnvironmentId,
+      primaryEnvironmentId,
+      store.selectedProjectId,
+    ],
   );
 
   const handleDeleteThread = useCallback(

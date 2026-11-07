@@ -75,9 +75,12 @@ export function runBashCommandOnHost(
     // Trap EXIT to always write pwd -P to file descriptor 3 without polluting stdout/stderr
     const wrappedScript = `export PATH="${enrichedPath}:$PATH"; trap "pwd -P >&3 2>/dev/null" EXIT ; cd ${JSON.stringify(safeCwd)} 2>/dev/null || cd / ; ${command}`;
 
+    // Detach into its own process group so the kill path can signal the whole
+    // tree (e.g. `bash -c 'sleep 30'` -> bash + sleep), not just the wrapper.
     const child = NodeChildProcess.spawn("/bin/bash", ["-c", wrappedScript], {
       cwd: safeCwd,
       stdio: ["pipe", "pipe", "pipe", "pipe"],
+      detached: true,
       env: {
         ...process.env,
         PATH: enrichedPath,
@@ -99,18 +102,20 @@ export function runBashCommandOnHost(
         child,
         kill: () => {
           unregisterExecution();
-          try {
-            child.kill("SIGTERM");
-            setTimeout(() => {
+          const pid = child.pid;
+          const signalTree = (signal: "SIGTERM" | "SIGKILL") => {
+            try {
+              process.kill(-pid, signal);
+            } catch {
               try {
-                child.kill("SIGKILL");
+                child.kill(signal);
               } catch {
-                // ignore
+                // already gone
               }
-            }, 800);
-          } catch {
-            // ignore
-          }
+            }
+          };
+          signalTree("SIGTERM");
+          setTimeout(() => signalTree("SIGKILL"), 800);
         },
       });
     }
@@ -127,9 +132,13 @@ export function runBashCommandOnHost(
         finished = true;
         unregisterExecution();
         try {
-          child.kill("SIGKILL");
+          process.kill(-child.pid, "SIGKILL");
         } catch {
-          // ignore
+          try {
+            child.kill("SIGKILL");
+          } catch {
+            // ignore
+          }
         }
         resolve({
           ok: false,
@@ -240,6 +249,7 @@ export function createTerminalEventStream(
   const child = NodeChildProcess.spawn("/bin/bash", ["-c", wrappedScript], {
     cwd: safeCwd,
     stdio: ["pipe", "pipe", "pipe", "pipe"],
+    detached: true,
     env: {
       ...process.env,
       TERM: "xterm-256color",
@@ -275,12 +285,20 @@ export function createTerminalEventStream(
         finished = true;
         activeTerminalProcesses.delete(executionId);
         try {
-          child.kill("SIGTERM");
+          try {
+            process.kill(-child.pid, "SIGTERM");
+          } catch {
+            child.kill("SIGTERM");
+          }
           setTimeout(() => {
             try {
-              child.kill("SIGKILL");
+              process.kill(-child.pid, "SIGKILL");
             } catch {
-              // ignore
+              try {
+                child.kill("SIGKILL");
+              } catch {
+                // ignore
+              }
             }
           }, 800);
         } catch {
