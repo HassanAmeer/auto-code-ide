@@ -3044,8 +3044,13 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
             ) : (
               <FolderIcon className="size-4 shrink-0 text-muted-foreground group-hover/project-header:text-foreground transition-all duration-150 animate-in fade-in-50 zoom-in-95" />
             )}
-            <span className="truncate text-[13px] font-semibold tracking-[-0.015em] text-sidebar-foreground">
-              {project.displayName}
+            <span
+              className="truncate text-[13px] font-semibold tracking-[-0.015em] text-sidebar-foreground"
+              title={project.displayName}
+            >
+              {project.displayName.includes("/")
+                ? project.displayName.split("/").filter(Boolean).pop() || project.displayName
+                : project.displayName}
             </span>
             {isProjectWorking ? (
               <span
@@ -3053,11 +3058,6 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
                 className="inline-flex shrink-0 items-center justify-center"
               >
                 <CircleDashed className="size-3.5 text-emerald-400 animate-spin shrink-0" />
-              </span>
-            ) : null}
-            {project.groupedProjectCount > 1 ? (
-              <span className="shrink-0 rounded-full bg-sidebar-muted/30 px-1.5 py-0.5 text-[10px] font-medium text-sidebar-muted-foreground/90">
-                {project.groupedProjectCount} projects
               </span>
             ) : null}
           </span>
@@ -3659,9 +3659,16 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
         <SidebarTerminalSection />
         <SidebarBotSection />
         <div className="flex items-center justify-between px-3 py-1.5 border-b border-sidebar-border/30 dark:border-zinc-700/30">
-          <span className="text-xs font-semibold tracking-wide uppercase text-sidebar-muted-foreground/80">
-            Projects
-          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-semibold tracking-wide uppercase text-sidebar-muted-foreground/80">
+              Projects
+            </span>
+            {sortedProjects.length > 0 && (
+              <span className="text-xs italic text-zinc-500 dark:text-zinc-400 font-normal">
+                {sortedProjects.length}
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-1">
             <ProjectSortMenu
               projectSortOrder={projectSortOrder}

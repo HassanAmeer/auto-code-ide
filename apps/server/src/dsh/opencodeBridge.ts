@@ -70,8 +70,93 @@ export async function executeOpenCodeTask(opts: {
     const existingFiles = executeGlobTool({ pattern: "**/*" }, worktreePath);
     onLog?.(`📂 Scanned ${existingFiles.length} files in worktree.`);
 
+    const modelToUse = model && model.includes("deepseek") ? model : "deepseek-v4.1-flash-free";
+    onLog?.(
+      `⚡ Standalone Engine: Invoking DeepSeek Harness model (${modelToUse}) for real code synthesis...`,
+    );
+
+    let filesWrittenCount = 0;
+    try {
+      const bypassMod = await import(
+        "../../../../opencode-bypass-api/src/server/bypass/client.ts" as string
+      );
+      const bypassChat = bypassMod.bypassChat;
+
+      const codingSkillsPrompt = getProjectChatEngineSkillPrompt(worktreePath);
+      const systemMsg = [
+        "You are an autonomous AI coding subagent within an isolated Git worktree.",
+        "Your task is to write real, production-ready, clean code without placeholder comments.",
+        codingSkillsPrompt || "",
+        "When outputting code, enclose each file inside a markdown block with the relative file path like:",
+        "```filepath:src/index.ts",
+        "// file contents here",
+        "```",
+        "Or for web apps with single page, provide full HTML in:",
+        "```filepath:index.html",
+        "<!DOCTYPE html>...",
+        "```",
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+
+      const response = await bypassChat({
+        model: modelToUse,
+        messages: [
+          { role: "system", content: systemMsg },
+          {
+            role: "user",
+            content: `[PROJECT: ${projectName} in ${worktreePath}]\nTask: ${taskTitle}\n\nRequirements:\n${prompt}\n\nPlease generate full implementation files.`,
+          },
+        ],
+        maxTokens: 4096,
+      });
+
+      if (response && response.content) {
+        onLog?.(
+          `✓ DeepSeek response received (${response.content.length} chars). Parsing files...`,
+        );
+
+        // Match ```filepath:relative/path/file.ext or ```path/to/file.ext
+        const fileBlockRegex =
+          /```(?:filepath:)?([a-zA-Z0-9_\-./\\]+\.[a-zA-Z0-9]+)\n([\s\S]*?)```/g;
+        let match;
+        while ((match = fileBlockRegex.exec(response.content)) !== null) {
+          const rawRelPath = match[1]?.trim();
+          const fileContent = match[2];
+          if (
+            rawRelPath &&
+            fileContent &&
+            !rawRelPath.startsWith("http") &&
+            !["json", "js", "ts", "tsx", "html", "css", "bash", "sh"].includes(
+              rawRelPath.toLowerCase(),
+            )
+          ) {
+            try {
+              executeWriteTool({ path: rawRelPath, content: fileContent }, worktreePath);
+              filesWrittenCount++;
+              onLog?.(`   📝 Generated: ${rawRelPath}`);
+            } catch (wErr: any) {
+              onLog?.(`   ⚠️ Write error for ${rawRelPath}: ${wErr?.message}`);
+            }
+          }
+        }
+
+        // If no file blocks matched but raw HTML is present
+        if (filesWrittenCount === 0 && /<!DOCTYPE\s+html>/i.test(response.content)) {
+          const htmlMatch = response.content.match(/<!DOCTYPE html>[\s\S]*?<\/html>/i);
+          if (htmlMatch) {
+            executeWriteTool({ path: "index.html", content: htmlMatch[0] }, worktreePath);
+            filesWrittenCount++;
+            onLog?.(`   📝 Generated: index.html (from full HTML document)`);
+          }
+        }
+      }
+    } catch (llmErr: any) {
+      onLog?.(`ℹ️ DeepSeek synthesis note: ${llmErr?.message || "fallback to starter template"}.`);
+    }
+
     const indexPath = NodePath.join(worktreePath, "index.html");
-    if (!NodeFS.existsSync(indexPath)) {
+    if (!NodeFS.existsSync(indexPath) && filesWrittenCount === 0) {
       onLog?.(`📝 Creating initial index.html via executeWriteTool...`);
       const starterContent = `<!DOCTYPE html>
 <html lang="en">
@@ -105,7 +190,7 @@ export async function executeOpenCodeTask(opts: {
     return {
       ok: true,
       filesModified: finalFiles,
-      outputSummary: `OpenCode Full Engine (Standalone) executed task across ${finalFiles.length} files without external daemon.`,
+      outputSummary: `OpenCode Full Engine (Standalone) executed task across ${finalFiles.length} files.`,
     };
   }
 

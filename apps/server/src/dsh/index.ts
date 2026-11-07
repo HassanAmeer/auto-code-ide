@@ -138,134 +138,164 @@ export async function runAutonomousHarnessWorkflow(
     logStep("plan", `📋 Task confirmed as single atomic milestone: "${taskTitle}".`);
   }
 
-  // 2. Spawn isolated Git Worktree
-  logStep("worktree", `🌿 Spawning isolated Git Worktree for safe execution...`);
-  const allocation = createWorkerWorktree(projectRoot, taskId);
+  // 2. Concurrency Pool: Spawn isolated Git Worktree(s) for true parallel execution
+  const isMultiTask = subtasks.length > 1;
   logStep(
     "worktree",
-    allocation.isIsolated
-      ? `✓ Isolated Worktree allocated at: ${allocation.worktreePath} (Branch: ${allocation.branchName}).`
-      : `ℹ️ Running directly in project root (${allocation.error || "standard mode"}).`,
+    isMultiTask
+      ? `🌿 Concurrency Pool: Spawning ${subtasks.length} parallel isolated Git Worktrees for concurrent subagents...`
+      : `🌿 Spawning isolated Git Worktree for safe execution...`,
   );
 
-  // 3. Sequential Subtask Execution via OpenCode Engine
-  const filesModifiedSet = new Set<string>();
-  for (let i = 0; i < subtasks.length; i++) {
-    const st = subtasks[i]!;
-    st.status = "in_progress";
-    logStep("subtask", `⚙️ [Milestone ${st.order}/${subtasks.length}] Executing: "${st.title}"...`);
-
-    const milestoneEnvelope = createSupervisorWorkerEnvelope({
-      task:
-        subtasks.length > 1
-          ? `[Milestone ${st.order}/${subtasks.length} for ${projectName}]: ${st.title}`
-          : taskTitle,
-      requirements: [st.description, ...(params.envelope?.rules || [])],
-      constraints: [
-        `Focus strictly on milestone ${st.order} deliverables without breaking existing code.`,
-      ],
-      expectedOutput:
-        st.category === "frontend_ui"
-          ? "Clean HTML/TSX/CSS UI implementation verified for live preview rendering."
-          : "Complete, production-ready implementation of types, state models, and business logic.",
-      projectName,
-      targetPath: allocation.worktreePath,
-    });
-
-    const basePrompt = formatSupervisorWorkerPrompt(milestoneEnvelope);
-
-    const subtaskPrompt = parallelSkillPrompt
-      ? `${parallelSkillPrompt}\n\n${basePrompt}`
-      : basePrompt;
-
-    const currentWorkerId = `worker-${taskId}-${st.order}`;
-    const specialistRole = deriveSpecialistRole(st.title, st.category);
-
-    // Register active worker telemetry for live dashboard / bot chat screen
-    registerWorkerTelemetry({
-      id: currentWorkerId,
-      role: specialistRole,
-      status: "running",
-      model: model.includes("deepseek") ? "DeepSeek / Gemini" : model || "DeepSeek / Gemini",
-      cwd: allocation.worktreePath,
-      goal: st.title,
-      projectName,
-      projectId,
-      startedAt: Date.now(),
-      progress: 25,
-    });
-
+  const workerAllocations = subtasks.map((st) => {
+    const workerSubId = isMultiTask ? `${taskId}-${st.order}` : taskId;
+    const allocation = createWorkerWorktree(projectRoot, workerSubId);
     logStep(
       `worker-${st.order}`,
-      `✉️ Dispatched Supervisor-to-Worker Task Envelope (${milestoneEnvelope.rules.length} strict bounds).`,
+      allocation.isIsolated
+        ? `✓ [Parallel Worker #${st.order}] Isolated Worktree allocated at: ${allocation.worktreePath} (Branch: ${allocation.branchName}).`
+        : `ℹ️ [Parallel Worker #${st.order}] Running in project root (${allocation.error || "standard mode"}).`,
     );
+    return {
+      st,
+      allocation,
+      workerId: `worker-${workerSubId}`,
+    };
+  });
 
-    const subtaskRes = await executeOpenCodeTask({
-      worktreePath: allocation.worktreePath,
-      projectName,
-      taskTitle: st.title,
-      prompt: subtaskPrompt,
-      model,
-      onLog: (m) => logStep(`worker-${st.order}`, m),
-    });
+  // 3. Concurrent Subtask Execution via OpenCode Engine & DeepSeek Harness (Promise.all)
+  const filesModifiedSet = new Set<string>();
 
-    if (subtaskRes.ok) {
-      st.status = "completed";
-      subtaskRes.filesModified.forEach((f) => filesModifiedSet.add(f));
-      updateWorkerTelemetryStatus(currentWorkerId, "completed", {
-        progress: 100,
-        completedAt: Date.now(),
-        filesModified: subtaskRes.filesModified,
-      });
-      updateGoalTelemetryStatus(`goal-${taskId}-${st.order}`, "completed", {
-        completedAt: Date.now(),
-      });
+  const parallelResults = await Promise.all(
+    workerAllocations.map(async ({ st, allocation, workerId }) => {
+      st.status = "in_progress";
+      const specialistRole = deriveSpecialistRole(st.title, st.category);
       logStep(
-        "subtask",
-        `✓ [Milestone ${st.order}/${subtasks.length}] "${st.title}" completed (${subtaskRes.filesModified.length} files).`,
+        `worker-${st.order}`,
+        `⚙️ [Parallel Worker #${st.order}: ${specialistRole}] Started executing: "${st.title}"...`,
       );
-    } else {
-      st.status = "failed";
-      updateWorkerTelemetryStatus(currentWorkerId, "failed", {
-        completedAt: Date.now(),
+
+      const milestoneEnvelope = createSupervisorWorkerEnvelope({
+        task:
+          subtasks.length > 1
+            ? `[Milestone ${st.order}/${subtasks.length} for ${projectName}]: ${st.title}`
+            : taskTitle,
+        requirements: [st.description, ...(params.envelope?.rules || [])],
+        constraints: [
+          `Focus strictly on milestone ${st.order} deliverables without breaking existing code.`,
+        ],
+        expectedOutput:
+          st.category === "frontend_ui"
+            ? "Clean HTML/TSX/CSS UI implementation verified for live preview rendering."
+            : "Complete, production-ready implementation of types, state models, and business logic.",
+        projectName,
+        targetPath: allocation.worktreePath,
       });
-      updateGoalTelemetryStatus(`goal-${taskId}-${st.order}`, "failed", {
-        completedAt: Date.now(),
+
+      const basePrompt = formatSupervisorWorkerPrompt(milestoneEnvelope);
+      const subtaskPrompt = parallelSkillPrompt
+        ? `${parallelSkillPrompt}\n\n${basePrompt}`
+        : basePrompt;
+
+      // Register active worker telemetry for live dashboard / bot chat screen
+      registerWorkerTelemetry({
+        id: workerId,
+        role: specialistRole,
+        status: "running",
+        model: model.includes("deepseek") ? "DeepSeek V4.1" : model || "DeepSeek V4.1",
+        cwd: allocation.worktreePath,
+        goal: st.title,
+        projectName,
+        projectId,
+        startedAt: Date.now(),
+        progress: 30,
       });
+
       logStep(
-        "subtask",
-        `⚠️ [Milestone ${st.order}/${subtasks.length}] warning: continuing to next milestone.`,
+        `worker-${st.order}`,
+        `✉️ Dispatched Supervisor-to-Worker Task Envelope (${milestoneEnvelope.rules.length} strict bounds).`,
       );
+
+      const subtaskRes = await executeOpenCodeTask({
+        worktreePath: allocation.worktreePath,
+        projectName,
+        taskTitle: st.title,
+        prompt: subtaskPrompt,
+        model,
+        onLog: (m) => logStep(`worker-${st.order}`, m),
+      });
+
+      if (subtaskRes.ok) {
+        st.status = "completed";
+        subtaskRes.filesModified.forEach((f) => filesModifiedSet.add(f));
+        updateWorkerTelemetryStatus(workerId, "completed", {
+          progress: 100,
+          completedAt: Date.now(),
+          filesModified: subtaskRes.filesModified,
+        });
+        updateGoalTelemetryStatus(`goal-${taskId}-${st.order}`, "completed", {
+          completedAt: Date.now(),
+        });
+        logStep(
+          `worker-${st.order}`,
+          `✓ [Parallel Worker #${st.order}] "${st.title}" completed (${subtaskRes.filesModified.length} files).`,
+        );
+      } else {
+        st.status = "failed";
+        updateWorkerTelemetryStatus(workerId, "failed", {
+          completedAt: Date.now(),
+        });
+        updateGoalTelemetryStatus(`goal-${taskId}-${st.order}`, "failed", {
+          completedAt: Date.now(),
+        });
+        logStep(
+          `worker-${st.order}`,
+          `⚠️ [Parallel Worker #${st.order}] Notice: finished with status failed, proceeding to merge.`,
+        );
+      }
+
+      return { st, allocation, workerId, subtaskRes };
+    }),
+  );
+
+  // 4. Sequential Merge of Parallel Worktree Branches into Main Workspace with Conflict Auto-Resolution
+  logStep("merge", `🔀 Merging parallel worker branches back into main workspace...`);
+  for (const { st, allocation } of parallelResults) {
+    if (allocation.isIsolated) {
+      logStep("merge", `🔀 Merging [Worker #${st.order}] branch (${allocation.branchName})...`);
+      const mergeRes = mergeWorkerWorktree(
+        projectRoot,
+        allocation.worktreePath,
+        allocation.branchName,
+        st.title,
+      );
+      if (mergeRes.ok) {
+        logStep(
+          "merge",
+          mergeRes.autoHealed
+            ? `✓ [Worker #${st.order}] Merged and auto-healed conflicts (${mergeRes.resolvedFiles?.length || 0} files).`
+            : `✓ [Worker #${st.order}] Merged cleanly into main.`,
+        );
+      } else {
+        logStep(
+          "merge",
+          `⚠️ Merge notice for [Worker #${st.order}]: ${mergeRes.error || "unresolved"}`,
+        );
+      }
+      cleanupWorkerWorktree(projectRoot, allocation.worktreePath, allocation.branchName);
     }
   }
 
-  // 4. Autonomous 3-Level Review & Auto-Heal Loop
-  logStep("review", `🔍 Beginning 3-Level Autonomous Review Loop across all files...`);
+  // 5. Autonomous 3-Level Review & Auto-Heal Loop on Merged Workspace
+  logStep("review", `🔍 Beginning 3-Level Autonomous Review Loop across merged workspace...`);
   const reviewResult = await executeAutonomousReviewLoop({
-    worktreePath: allocation.worktreePath,
+    worktreePath: projectRoot,
     projectName,
     taskTitle,
     prompt,
     selectedModel: model,
     onLog: (m) => logStep("review", m),
   });
-
-  // 5. Safe Local Git Merge
-  if (allocation.isIsolated) {
-    logStep("merge", `🔀 Safely merging verified code into main branch...`);
-    const mergeRes = mergeWorkerWorktree(
-      projectRoot,
-      allocation.worktreePath,
-      allocation.branchName,
-      taskTitle,
-    );
-    if (mergeRes.ok) {
-      logStep("merge", `✓ Worktree successfully merged to main branch.`);
-      cleanupWorkerWorktree(projectRoot, allocation.worktreePath, allocation.branchName);
-    } else {
-      logStep("merge", `⚠️ Merge note: ${mergeRes.error || "Cleaned up"}`);
-    }
-  }
 
   // 6. Optional Auto WhatsApp Notification to Priority Client (e.g. 0349)
   let clientNotified = false;

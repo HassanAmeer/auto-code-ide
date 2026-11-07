@@ -1,6 +1,5 @@
 import {
   DownloadIcon,
-  GitForkIcon,
   PanelBottomIcon,
   PanelRightIcon,
   SquareMenuIcon,
@@ -198,28 +197,6 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
             </TooltipPopup>
           </Tooltip>
         </>
-      )}
-
-      {/* Fork Session Button */}
-      {isServerThread && onForkCurrentThread && (
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                type="button"
-                variant="ghost"
-                size="compact"
-                onClick={onForkCurrentThread}
-                className="h-7 w-7 min-w-7 sm:w-auto p-0 sm:px-2 gap-1 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 cursor-pointer rounded-md shrink-0 flex items-center justify-center"
-                aria-label="Fork session into a new branch"
-              >
-                <GitForkIcon className="size-3.5 text-primary shrink-0" />
-                <span className="hidden sm:inline">Fork</span>
-              </Button>
-            }
-          />
-          <TooltipPopup side="bottom">Fork session (Shakha) into a new branch</TooltipPopup>
-        </Tooltip>
       )}
 
       {/* Export Session Menu Button */}

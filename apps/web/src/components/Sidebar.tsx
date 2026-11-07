@@ -5366,7 +5366,11 @@ export default function Sidebar() {
                       title={group.displayName}
                     >
                       <ProjectFavicon project={group} className="size-3.5 shrink-0" />
-                      <span className="truncate">{group.displayName}</span>
+                      <span className="truncate">
+                        {group.displayName.includes("/")
+                          ? group.displayName.split("/").filter(Boolean).pop() || group.displayName
+                          : group.displayName}
+                      </span>
                       {isWorking ? (
                         <CircleDashedIcon className="size-3 shrink-0 text-emerald-400 animate-spin" />
                       ) : null}
@@ -5863,10 +5867,16 @@ export default function Sidebar() {
                               ? "bg-primary/15 text-primary font-medium border border-primary/25"
                               : "hover:bg-sidebar-row-hover text-sidebar-foreground/90 border border-transparent",
                           )}
+                          title={group.displayName}
                         >
                           <div className="flex items-center gap-2 min-w-0">
                             <ProjectFavicon project={group} className="size-4 shrink-0" />
-                            <span className="truncate">{group.displayName}</span>
+                            <span className="truncate">
+                              {group.displayName.includes("/")
+                                ? group.displayName.split("/").filter(Boolean).pop() ||
+                                  group.displayName
+                                : group.displayName}
+                            </span>
                             {isWorking ? (
                               <CircleDashedIcon className="size-3 shrink-0 text-emerald-400 animate-spin" />
                             ) : null}
