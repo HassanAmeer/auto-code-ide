@@ -26,6 +26,25 @@ interface ActiveProcessEntry {
 
 const activeTerminalProcesses = new Map<string, ActiveProcessEntry>();
 
+/** Signal a spawned bash (detached, own process group) *and* its children. */
+function killProcessTree(child: NodeChildProcess.ChildProcess, signal: "SIGTERM" | "SIGKILL") {
+  const pid = child.pid;
+  if (pid !== undefined) {
+    try {
+      process.kill(-pid, signal);
+      return;
+    } catch {
+      // The group is gone (or the child is not a group leader here).
+      // Fall back to signalling the direct child only.
+    }
+  }
+  try {
+    child.kill(signal);
+  } catch {
+    // already gone
+  }
+}
+
 export function killTerminalProcess(executionId: string): boolean {
   const entry = activeTerminalProcesses.get(executionId);
   if (entry) {
@@ -102,20 +121,8 @@ export function runBashCommandOnHost(
         child,
         kill: () => {
           unregisterExecution();
-          const pid = child.pid;
-          const signalTree = (signal: "SIGTERM" | "SIGKILL") => {
-            try {
-              process.kill(-pid, signal);
-            } catch {
-              try {
-                child.kill(signal);
-              } catch {
-                // already gone
-              }
-            }
-          };
-          signalTree("SIGTERM");
-          setTimeout(() => signalTree("SIGKILL"), 800);
+          killProcessTree(child, "SIGTERM");
+          setTimeout(() => killProcessTree(child, "SIGKILL"), 800);
         },
       });
     }
@@ -131,15 +138,7 @@ export function runBashCommandOnHost(
       if (!finished) {
         finished = true;
         unregisterExecution();
-        try {
-          process.kill(-child.pid, "SIGKILL");
-        } catch {
-          try {
-            child.kill("SIGKILL");
-          } catch {
-            // ignore
-          }
-        }
+        killProcessTree(child, "SIGKILL");
         resolve({
           ok: false,
           command,
@@ -285,22 +284,8 @@ export function createTerminalEventStream(
         finished = true;
         activeTerminalProcesses.delete(executionId);
         try {
-          try {
-            process.kill(-child.pid, "SIGTERM");
-          } catch {
-            child.kill("SIGTERM");
-          }
-          setTimeout(() => {
-            try {
-              process.kill(-child.pid, "SIGKILL");
-            } catch {
-              try {
-                child.kill("SIGKILL");
-              } catch {
-                // ignore
-              }
-            }
-          }, 800);
+          killProcessTree(child, "SIGTERM");
+          setTimeout(() => killProcessTree(child, "SIGKILL"), 800);
         } catch {
           // ignore
         }
