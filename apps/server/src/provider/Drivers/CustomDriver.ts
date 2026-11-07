@@ -2333,46 +2333,10 @@ export function syncCustomProviderToOpenCode(
     }
 
     const apiKey = (config.apiKey ?? "").trim() || "no-key";
-    const modelsObj: Record<string, { name: string }> = {};
-
-    if (config.models && Array.isArray(config.models)) {
-      for (const m of config.models) {
-        if (m.id) {
-          const rawId = m.id.trim();
-          const name = m.name?.trim() || rawId;
-          modelsObj[rawId] = { name };
-
-          // Aliases:
-          // 1. Lowercase slug (spaces/underscores to dashes)
-          const slug1 = rawId.toLowerCase().replace(/[\s_]+/g, "-");
-          modelsObj[slug1] = { name };
-
-          // 2. Dots to dashes: e.g. claude-sonnet-4.6 -> claude-sonnet-4-6
-          const slug2 = slug1.replace(/\./g, "-");
-          modelsObj[slug2] = { name };
-
-          // 3. Dashes to dots: e.g. 4-6 -> 4.6
-          const slug3 = slug1.replace(/-(\d+)-(\d+)/g, "-$1.$2");
-          modelsObj[slug3] = { name };
-
-          // 4. Strip prefix if present: e.g. "oc/claude-sonnet-4-6" -> "claude-sonnet-4-6"
-          if (rawId.includes("/")) {
-            const stripped = rawId.split("/").pop()!;
-            modelsObj[stripped] = { name };
-            const strippedSlug = stripped.toLowerCase().replace(/[\s_]+/g, "-");
-            modelsObj[strippedSlug] = { name };
-            modelsObj[strippedSlug.replace(/\./g, "-")] = { name };
-          }
-
-          // 5. If name is different from rawId, register name slugs too
-          if (name !== rawId) {
-            const nameSlug = name.toLowerCase().replace(/[\s_]+/g, "-");
-            modelsObj[nameSlug] = { name };
-            modelsObj[nameSlug.replace(/\./g, "-")] = { name };
-          }
-        }
-      }
-    }
+    // Models are never expanded or hard-coded into opencode.json.
+    // The app's storage layer keeps the real catalog (SQLite `app_custom_providers`
+    // + `custom-providers-cache.json`) and refreshes it from the provider's
+    // /models endpoint whenever the provider is saved or refreshed.
 
     const headersObj: Record<string, string> = {};
     if (config.headers && Array.isArray(config.headers)) {
@@ -2388,10 +2352,16 @@ export function syncCustomProviderToOpenCode(
       name: displayName || cleanId,
       options: {
         baseURL: baseUrl,
-        apiKey: apiKey,
+        apiKey,
         ...(Object.keys(headersObj).length > 0 ? { headers: headersObj } : {}),
       },
-      models: Object.keys(modelsObj).length > 0 ? modelsObj : { default: { name: cleanId } },
+      // Keep a single stub — the real catalog lives in app storage.
+      models: { default: { name: displayName || cleanId } },
+    };
+    // Credentialed entry — only for the runtime path, never the git checkout.
+    const sharedProviderEntry = {
+      ...providerEntry,
+      options: { ...providerEntry.options, apiKey: "no-key" },
     };
 
     const cleanName = displayName
@@ -2417,10 +2387,11 @@ export function syncCustomProviderToOpenCode(
       });
     }
 
+    const RUNTIME_CONFIG_PATH = "/root/all-ai-clis/third-party-provider/opencode.json";
     const targetPaths = [
-      "/root/all-ai-clis/third-party-provider/opencode.json",
       NodePath.join(NodeOS.homedir(), ".config/opencode/opencode.json"),
       NodePath.join(process.cwd(), "opencode.json"),
+      RUNTIME_CONFIG_PATH,
     ];
 
     for (const p of targetPaths) {
@@ -2443,9 +2414,10 @@ export function syncCustomProviderToOpenCode(
           json.permission = { "*": "allow" };
         }
         if (!json.provider) json.provider = {};
-        json.provider[cleanId] = providerEntry;
+        const entry = p === RUNTIME_CONFIG_PATH ? providerEntry : sharedProviderEntry;
+        json.provider[cleanId] = entry;
         if (cleanName && cleanName !== cleanId) {
-          json.provider[cleanName] = providerEntry;
+          json.provider[cleanName] = entry;
         }
         NodeFS.writeFileSync(p, JSON.stringify(json, null, 2), "utf-8");
       } catch {

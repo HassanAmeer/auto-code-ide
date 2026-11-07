@@ -31,77 +31,8 @@
         }
       },
       "models": {
-        "meta-llama/llama-3.3-70b-instruct:free": {
-          "name": "Llama 3.3 70B (Free)"
-        },
-        "meta-llama/llama-3-3-70b-instruct:free": {
-          "name": "Llama 3.3 70B (Free)"
-        },
-        "llama-3.3-70b-instruct:free": {
-          "name": "Llama 3.3 70B (Free)"
-        },
-        "llama-3-3-70b-instruct:free": {
-          "name": "Llama 3.3 70B (Free)"
-        },
-        "llama-3.3-70b-(free)": {
-          "name": "Llama 3.3 70B (Free)"
-        },
-        "llama-3-3-70b-(free)": {
-          "name": "Llama 3.3 70B (Free)"
-        },
-        "google/gemini-2.0-flash-exp:free": {
-          "name": "Gemini 2.0 Flash Exp (Free)"
-        },
-        "google/gemini-2-0-flash-exp:free": {
-          "name": "Gemini 2.0 Flash Exp (Free)"
-        },
-        "gemini-2.0-flash-exp:free": {
-          "name": "Gemini 2.0 Flash Exp (Free)"
-        },
-        "gemini-2-0-flash-exp:free": {
-          "name": "Gemini 2.0 Flash Exp (Free)"
-        },
-        "gemini-2.0-flash-exp-(free)": {
-          "name": "Gemini 2.0 Flash Exp (Free)"
-        },
-        "gemini-2-0-flash-exp-(free)": {
-          "name": "Gemini 2.0 Flash Exp (Free)"
-        },
-        "deepseek/deepseek-r1:free": {
-          "name": "DeepSeek R1 (Free)"
-        },
-        "deepseek-r1:free": {
-          "name": "DeepSeek R1 (Free)"
-        },
-        "deepseek-r1-(free)": {
-          "name": "DeepSeek R1 (Free)"
-        },
-        "anthropic/claude-3.5-sonnet": {
-          "name": "Claude 3.5 Sonnet"
-        },
-        "anthropic/claude-3-5-sonnet": {
-          "name": "Claude 3.5 Sonnet"
-        },
-        "claude-3.5-sonnet": {
-          "name": "Claude 3.5 Sonnet"
-        },
-        "claude-3-5-sonnet": {
-          "name": "Claude 3.5 Sonnet"
-        },
-        "openai/gpt-4o": {
-          "name": "GPT-4o"
-        },
-        "gpt-4o": {
-          "name": "GPT-4o"
-        },
-        "deepseek/deepseek-chat": {
-          "name": "DeepSeek V3"
-        },
-        "deepseek-chat": {
-          "name": "DeepSeek V3"
-        },
-        "deepseek-v3": {
-          "name": "DeepSeek V3"
+        "default": {
+          "name": "OpenRouter"
         }
       }
     },
@@ -117,77 +48,155 @@
         }
       },
       "models": {
-        "meta-llama/llama-3.3-70b-instruct:free": {
-          "name": "Llama 3.3 70B (Free)"
-        },
-        "meta-llama/llama-3-3-70b-instruct:free": {
-          "name": "Llama 3.3 70B (Free)"
-        },
-        "llama-3.3-70b-instruct:free": {
-          "name": "Llama 3.3 70B (Free)"
-        },
-        "llama-3-3-70b-instruct:free": {
-          "name": "Llama 3.3 70B (Free)"
-        },
-        "llama-3.3-70b-(free)": {
-          "name": "Llama 3.3 70B (Free)"
-        },
-        "llama-3-3-70b-(free)": {
-          "name": "Llama 3.3 70B (Free)"
-        },
-        "google/gemini-2.0-flash-exp:free": {
-          "name": "Gemini 2.0 Flash Exp (Free)"
-        },
-        "google/gemini-2-0-flash-exp:free": {
-          "name": "Gemini 2.0 Flash Exp (Free)"
-        },
-        "gemini-2.0-flash-exp:free": {
-          "name": "Gemini 2.0 Flash Exp (Free)"
-        },
-        "gemini-2-0-flash-exp:free": {
-          "name": "Gemini 2.0 Flash Exp (Free)"
-        },
-        "gemini-2.0-flash-exp-(free)": {
-          "name": "Gemini 2.0 Flash Exp (Free)"
-        },
-        "gemini-2-0-flash-exp-(free)": {
-          "name": "Gemini 2.0 Flash Exp (Free)"
-        },
-        "deepseek/deepseek-r1:free": {
-          "name": "DeepSeek R1 (Free)"
-        },
-        "deepseek-r1:free": {
-          "name": "DeepSeek R1 (Free)"
-        },
-        "deepseek-r1-(free)": {
-          "name": "DeepSeek R1 (Free)"
-        },
-        "anthropic/claude-3.5-sonnet": {
-          "name": "Claude 3.5 Sonnet"
-        },
-        "anthropic/claude-3-5-sonnet": {
-          "name": "Claude 3.5 Sonnet"
-        },
-        "claude-3.5-sonnet": {
-          "name": "Claude 3.5 Sonnet"
-        },
-        "claude-3-5-sonnet": {
-          "name": "Claude 3.5 Sonnet"
-        },
-        "openai/gpt-4o": {
-          "name": "GPT-4o"
-        },
-        "gpt-4o": {
-          "name": "GPT-4o"
-        },
-        "deepseek/deepseek-chat": {
-          "name": "DeepSeek V3"
-        },
-        "deepseek-chat": {
-          "name": "DeepSeek V3"
-        },
-        "deepseek-v3": {
-          "name": "DeepSeek V3"
+        "default": {
+          "name": "OpenRouter"
+        }
+      }
+    },
+    "custom_1791799377096_f1x8o": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "vpsm",
+      "options": {
+        "baseURL": "http://187.52.117.2:8377/v1",
+        "apiKey": "no-key"
+      },
+      "models": {
+        "default": {
+          "name": "vpsm"
+        }
+      }
+    },
+    "vpsm": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "vpsm",
+      "options": {
+        "baseURL": "http://187.52.117.2:8377/v1",
+        "apiKey": "no-key"
+      },
+      "models": {
+        "default": {
+          "name": "vpsm"
+        }
+      }
+    },
+    "custom_1791915195512_k2o7q": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "OpenRouter",
+      "options": {
+        "baseURL": "https://openrouter.ai/api/v1",
+        "apiKey": "no-key",
+        "headers": {
+          "HTTP-Referer": "https://t3.codes",
+          "X-Title": "T3 Code"
+        }
+      },
+      "models": {
+        "default": {
+          "name": "OpenRouter"
+        }
+      }
+    },
+    "custom_1792333307552_d2pwo": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "td",
+      "options": {
+        "baseURL": "https://api.tokendeal.cloud/api/v1",
+        "apiKey": "no-key"
+      },
+      "models": {
+        "default": {
+          "name": "td"
+        }
+      }
+    },
+    "td": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "td",
+      "options": {
+        "baseURL": "https://api.tokendeal.cloud/api/v1",
+        "apiKey": "no-key"
+      },
+      "models": {
+        "default": {
+          "name": "td"
+        }
+      }
+    },
+    "custom_1792834090439_8bbsv": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "oxionai",
+      "options": {
+        "baseURL": "https://oxionai.com/v1",
+        "apiKey": "no-key"
+      },
+      "models": {
+        "default": {
+          "name": "oxionai"
+        }
+      }
+    },
+    "oxionai": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "oxionai",
+      "options": {
+        "baseURL": "https://oxionai.com/v1",
+        "apiKey": "no-key"
+      },
+      "models": {
+        "default": {
+          "name": "oxionai"
+        }
+      }
+    },
+    "custom_1793955563716_17rft": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "wus",
+      "options": {
+        "baseURL": "https://wusrouter.com/v1",
+        "apiKey": "no-key"
+      },
+      "models": {
+        "default": {
+          "name": "wus"
+        }
+      }
+    },
+    "wus": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "wus",
+      "options": {
+        "baseURL": "https://wusrouter.com/v1",
+        "apiKey": "no-key"
+      },
+      "models": {
+        "default": {
+          "name": "wus"
+        }
+      }
+    },
+    "custom_1793957253155_vlrb7": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "wusrouter",
+      "options": {
+        "baseURL": "https://wusrouter.com/v1",
+        "apiKey": "no-key"
+      },
+      "models": {
+        "default": {
+          "name": "wusrouter"
+        }
+      }
+    },
+    "wusrouter": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "wusrouter",
+      "options": {
+        "baseURL": "https://wusrouter.com/v1",
+        "apiKey": "no-key"
+      },
+      "models": {
+        "default": {
+          "name": "wusrouter"
         }
       }
     }
