@@ -3649,6 +3649,7 @@ interface SidebarProjectsContentProps {
 const SidebarProjectsContent = memo(function SidebarProjectsContent(
   props: SidebarProjectsContentProps,
 ) {
+  const { isMobile: isSidebarMobile, setOpenMobile } = useSidebar();
   const {
     projectSortOrder,
     threadSortOrder,
@@ -3710,13 +3711,30 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
         <SidebarGroup className="z-[1]">
           <SidebarMenu>
             <SidebarMenuItem>
-              <CommandDialogTrigger
-                render={<SidebarMenuButton data-testid="command-palette-trigger" />}
-              >
-                <SearchIcon />
-                <span className="flex-1 truncate">Search</span>
-                {commandPaletteShortcutLabel ? <Kbd>{commandPaletteShortcutLabel}</Kbd> : null}
-              </CommandDialogTrigger>
+              {isSidebarMobile ? (
+                // On mobile the sidebar lives inside a Sheet (its own Dialog.Root), so a
+                // nested Dialog.Trigger would bind to the sheet and close it instead of
+                // opening the command palette. Open it imperatively like every other
+                // programmatic palette trigger.
+                <SidebarMenuButton
+                  data-testid="command-palette-trigger"
+                  onClick={() => {
+                    setOpenMobile(false);
+                    openCommandPalette();
+                  }}
+                >
+                  <SearchIcon />
+                  <span className="flex-1 truncate">Search</span>
+                </SidebarMenuButton>
+              ) : (
+                <CommandDialogTrigger
+                  render={<SidebarMenuButton data-testid="command-palette-trigger" />}
+                >
+                  <SearchIcon />
+                  <span className="flex-1 truncate">Search</span>
+                  {commandPaletteShortcutLabel ? <Kbd>{commandPaletteShortcutLabel}</Kbd> : null}
+                </CommandDialogTrigger>
+              )}
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarGroup>
