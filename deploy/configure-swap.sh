@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# T3ForWeb - Automated NVMe Swap Configuration Script
+# BotCode - Automated NVMe Swap Configuration Script
 # Usage:
 #   sudo ./configure-swap.sh [SIZE]
 # Example:
@@ -15,7 +15,7 @@ SWAP_FILE="/swapfile"
 NEW_SWAP_FILE="/swapfile.new"
 
 echo "=========================================================="
-echo "  T3ForWeb: Configuring NVMe Swap (${SWAP_SIZE})"
+echo "  BotCode: Configuring NVMe Swap (${SWAP_SIZE})"
 echo "=========================================================="
 
 if [[ $EUID -ne 0 ]]; then

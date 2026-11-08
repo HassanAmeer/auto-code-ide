@@ -43,8 +43,8 @@
         "baseURL": "https://openrouter.ai/api/v1",
         "apiKey": "no-key",
         "headers": {
-          "HTTP-Referer": "https://autojobs.tokendeal.cloud",
-          "X-Title": "Jobi Code"
+          "HTTP-Referer": "https://t3.codes",
+          "X-Title": "T3 Code"
         }
       },
       "models": {

@@ -2,7 +2,7 @@
  * Web Search & TinyFish Engine Service
  *
  * Provides real-time internet search and stealth Chromium web URL content
- * extraction for AI models running in T3 Code.
+ * extraction for AI models running in Bot Code.
  */
 
 export interface TinyFishConfig {

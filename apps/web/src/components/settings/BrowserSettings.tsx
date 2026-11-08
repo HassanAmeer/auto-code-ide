@@ -131,7 +131,7 @@ export function BrowserSettingsPanel() {
           fi
         done
 
-        # 2. Chrome binary check (checks standard AutoCode/T3 locations and data folder)
+        # 2. Chrome binary check (checks standard AutoCode/Bot locations and data folder)
         CHROME_PATH="$(find ~/.autocode/tools/chrome-headless-shell/ ~/.t3/tools/chrome-headless-shell/ /root/autojobs/data/tools/chrome-headless-shell/ "$ROOT_DIR/data/tools/chrome-headless-shell/" -type f -name "chrome-headless-shell" 2>/dev/null | head -n 1)"
         if [ -z "$CHROME_PATH" ]; then
           CHROME_PATH="$(find "$HOME" -path "*/tools/chrome-headless-shell/*" -name "chrome-headless-shell" 2>/dev/null | head -n 1)"
@@ -1433,7 +1433,7 @@ $CHROME --no-sandbox --headless --dump-dom about:blank | head -5
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  T3 Code ka official Chrome binary jo <code>tools/</code> me rehta hai. AI agents
+                  Bot Code ka official Chrome binary jo <code>tools/</code> me rehta hai. AI agents
                   ke automated previews ke liye best hai.
                 </p>
               </div>

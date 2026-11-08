@@ -173,7 +173,7 @@ export const MuseDelta = Schema.Struct({
   field: Schema.optional(Schema.String),
 });
 
-/** The T3 decision for one native Muse choice, or none when T3 has no equivalent. */
+/** The Bot decision for one native Muse choice, or none when Bot has no equivalent. */
 export function museApprovalDecision(
   choice: Pick<MuseApproval["availableChoices"][number], "decision" | "scope">,
 ): ProviderApprovalDecision | undefined {

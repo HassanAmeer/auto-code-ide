@@ -55,7 +55,7 @@ function causeMessage(cause: unknown): string | undefined {
         case "ClaudeBackgroundWorkBlocksQueryReplacementError":
           return stringField(cause, "message");
         case "ContextHandoffDeliveryUncertainError":
-          return "T3 could not confirm whether conversation history reached the provider. Retry the turn to recover the session.";
+          return "Bot could not confirm whether conversation history reached the provider. Retry the turn to recover the session.";
         case "ProviderAdapterTurnStartError": {
           const innerMsg = extractUnderlyingErrorMessage((cause as any).cause);
           if (innerMsg) {

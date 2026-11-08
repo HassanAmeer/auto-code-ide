@@ -152,7 +152,7 @@ function ChatRouteGlobalShortcuts() {
             stackedThreadToast({
               type: "info",
               title: "Preview is not available on the web",
-              description: "The in-app preview only runs inside the T3 Code web app.",
+              description: "The in-app preview only runs inside the Bot Code web app.",
             }),
           );
           return;

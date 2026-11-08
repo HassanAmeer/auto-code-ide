@@ -96,7 +96,7 @@ it("publishes unique tool names with reference-free object-root inputs", () => {
         definition?.labels.every((label) => label.trim().length > 0),
         tool.name,
       ).toBe(true);
-      for (const name of [tool.name, `mcp__t3-code__${tool.name}`, `T3-code.${tool.name}`]) {
+      for (const name of [tool.name, `mcp__t3-code__${tool.name}`, `Bot-code.${tool.name}`]) {
         expect(resolveT3McpToolPresentation(name)?.logo, name).toBe("t3-code");
         expect(resolveT3McpToolSummaryAction(name), name).not.toBeNull();
       }

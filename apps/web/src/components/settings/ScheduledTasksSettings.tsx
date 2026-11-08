@@ -757,7 +757,7 @@ function WebhookEndpointField({
 }
 
 /**
- * Whether T3 Connect forwards requests live or holds them while the
+ * Whether Bot Connect forwards requests live or holds them while the
  * environment is offline. The setting is per environment and only readable
  * for this machine's own environment, so other environments show nothing.
  */

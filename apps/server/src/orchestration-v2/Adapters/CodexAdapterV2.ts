@@ -802,7 +802,7 @@ export function buildCodexTurnStartParams(input: {
       cwd: input.runtimePolicy.cwd,
       model: input.modelSelection.model,
       // Model catalogues can default summaries to "none". Request them on every
-      // turn, including resumed threads, for T3's reasoning timeline.
+      // turn, including resumed threads, for Bot's reasoning timeline.
       summary: "detailed",
       // Always explicit: omitting this on resume leaves Codex's previous
       // reviewer sticky after switching away from Auto mode.
@@ -1311,7 +1311,7 @@ export class CodexAppServerClientFactory extends Context.Service<
 
 /**
  * Config overrides sent with every `thread/start`, `thread/resume` and `thread/fork`.
- * Codex 0.152 made the `update_plan` checklist tool opt-in; T3 renders it as the
+ * Codex 0.152 made the `update_plan` checklist tool opt-in; Bot renders it as the
  * todo list. Codex layers these above the user's and project's `config.toml`.
  */
 export const CODEX_THREAD_CONFIG = { "tools.update_plan.enabled": true } as const;
@@ -1696,7 +1696,7 @@ export interface CodexAdapterV2Options {
   readonly onUsageLimits?: ServerProviderShape["applyUsageLimits"];
   /**
    * Resolves launch settings when each session opens, replacing `settings` and
-   * `environment`. Managed ChatGPT sign-in uses it to launch the T3-installed
+   * `environment`. Managed ChatGPT sign-in uses it to launch the Bot-installed
    * Codex with a current access token.
    */
   readonly resolveRuntime?: Effect.Effect<CodexEffectiveRuntime, ProviderSetupError, Scope.Scope>;
@@ -6368,7 +6368,7 @@ export function makeCodexAdapterV2(adapterOptions: CodexAdapterV2Options): Provi
           );
 
         // MCP Apps reach their server through Codex's own MCP client, so any
-        // server the user configured for Codex works without T3 connecting to it.
+        // server the user configured for Codex works without Bot connecting to it.
         const mcpAppsError = (detail: string) => (cause: unknown) =>
           new ProviderAdapterProtocolError({ driver: CODEX_PROVIDER, detail, payload: cause });
         const mcpApps: ProviderAdapterV2McpApps = {

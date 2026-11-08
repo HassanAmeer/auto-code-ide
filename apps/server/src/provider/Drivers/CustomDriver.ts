@@ -2457,7 +2457,7 @@ export function createCustomProviderInstance(
     enabled: input.enabled,
     snapshot,
     // The custom endpoint has no skill runtime, so the workspace snapshot
-    // carries the skills T3 discovered on disk. The composer lists them and
+    // carries the skills Bot discovered on disk. The composer lists them and
     // `$name` mentions dispatch through the request builder.
     snapshotForCwd: (cwd: string) =>
       Effect.sync(() => ({

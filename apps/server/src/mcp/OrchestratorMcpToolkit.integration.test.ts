@@ -3952,7 +3952,7 @@ describe("orchestrator MCP toolkit", () => {
             delegated.resultContextTransferId,
           );
 
-          // Delegated children are subagent threads too, but T3 owns them, so
+          // Delegated children are subagent threads too, but Bot owns them, so
           // they keep taking follow-ups (provider-native children do not).
           const delegatedChild = yield* orchestrator.getThreadProjection(delegated.childThreadId);
           expect(delegatedChild.thread.lineage.relationshipToParent).toBe("subagent");

@@ -29,7 +29,7 @@ export class BearerConnectionProfile extends Schema.TaggedClass<BearerConnection
      */
     learned: Schema.optionalKey(Schema.Literal(true)),
     /**
-     * "t3-connect" when the route authenticates with the environment's T3
+     * "t3-connect" when the route authenticates with the environment's Bot
      * Connect credential instead of a stored bearer token.
      */
     authorization: Schema.optionalKey(Schema.Literal("t3-connect")),
@@ -47,7 +47,7 @@ export class SshConnectionProfile extends Schema.TaggedClass<SshConnectionProfil
 export const ConnectionProfile = Schema.Union([BearerConnectionProfile, SshConnectionProfile]);
 export type ConnectionProfile = typeof ConnectionProfile.Type;
 
-/** One way to reach an environment: T3 Connect, a direct URL, or SSH. */
+/** One way to reach an environment: Bot Connect, a direct URL, or SSH. */
 export interface ConnectionRoute {
   readonly target: ConnectionTarget;
   readonly profile: Option.Option<ConnectionProfile>;

@@ -14,14 +14,14 @@ import * as Effect from "effect/Effect";
 const ALL_MCP_CAPABILITIES = ["preview", "orchestration", "worktree", "pull-requests"] as const;
 export type McpCapability = (typeof ALL_MCP_CAPABILITIES)[number];
 
-/** A provider session T3 Code launched for one thread. */
+/** A provider session Bot Code launched for one thread. */
 export interface McpThreadCaller {
   readonly threadId: ThreadId;
   readonly providerSessionId: string;
   readonly providerInstanceId: ProviderInstanceId;
 }
 
-/** An agent T3 Code did not launch, signed in through MCP OAuth. */
+/** An agent Bot Code did not launch, signed in through MCP OAuth. */
 export interface McpClientCaller {
   readonly sessionId: string;
   readonly label: string;

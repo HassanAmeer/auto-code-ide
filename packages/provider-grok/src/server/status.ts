@@ -87,7 +87,7 @@ export function buildInitialGrokProviderSnapshot(
           version: null,
           status: "warning",
           auth: { status: "unknown" },
-          message: "Grok is disabled in T3 Code settings.",
+          message: "Grok is disabled in Bot Code settings.",
         },
       });
     }
@@ -331,7 +331,7 @@ export function grokSlashCommandsFromInitialize(
     if (Option.isNone(decoded)) continue;
     const command = decoded.value;
     const name = command.name.trim();
-    // Permission changes must go through T3 so the client and provider agree.
+    // Permission changes must go through Bot so the client and provider agree.
     if (!name || name.toLowerCase() === "always-approve") continue;
     // Grok advertises /context, but its ACP handler completes without emitting output.
     if (name.toLowerCase() === "context") continue;
@@ -393,7 +393,7 @@ export const checkGrokProviderStatus = Effect.fn("checkGrokProviderStatus")(func
         version: null,
         status: "warning",
         auth: { status: "unknown" },
-        message: "Grok is disabled in T3 Code settings.",
+        message: "Grok is disabled in Bot Code settings.",
       },
     });
   }

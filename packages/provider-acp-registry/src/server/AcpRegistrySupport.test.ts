@@ -416,7 +416,7 @@ describe("AcpRegistrySupport", () => {
     );
   });
 
-  it.effect("installs into T3 home a package and launches its exposed command", () => {
+  it.effect("installs into Bot home a package and launches its exposed command", () => {
     const agent = makeAgent({
       npx: { package: "@example/acp@V1.2.3", args: ["--stdio"] },
     });
@@ -494,7 +494,7 @@ describe("AcpRegistrySupport", () => {
     );
   });
 
-  it.effect("installs into T3 home a uv tool and launches its exposed command", () => {
+  it.effect("installs into Bot home a uv tool and launches its exposed command", () => {
     const agent = makeAgent({
       uvx: { package: "fast-agent-acp==V0.10.1", args: ["--acp"] },
     });
@@ -1081,7 +1081,7 @@ describe("AcpRegistrySupport", () => {
     );
   });
 
-  it.effect("installs into T3 home package recipes during preparation", () => {
+  it.effect("installs into Bot home package recipes during preparation", () => {
     const agent = makeAgent({ npx: { package: "@example/acp@1.2.3", args: ["--stdio"] } });
     const requests: string[] = [];
 

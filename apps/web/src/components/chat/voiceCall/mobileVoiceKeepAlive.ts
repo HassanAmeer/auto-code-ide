@@ -83,9 +83,9 @@ function setupMediaSession(onHangup?: () => void): void {
   }
   try {
     navigator.mediaSession.metadata = new MediaMetadata({
-      title: "T3 Agent Voice Call",
+      title: "Bot Agent Voice Call",
       artist: "Active Voice Assistant",
-      album: "T3 Code Call Session",
+      album: "Bot Code Call Session",
     });
     navigator.mediaSession.playbackState = "playing";
 

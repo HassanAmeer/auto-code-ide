@@ -202,7 +202,7 @@ describe("resolveOnboardingTargetEnvironment", () => {
 });
 
 describe("isOnboardingRelayEnvironment", () => {
-  it("includes only T3 Connect relay targets", () => {
+  it("includes only Bot Connect relay targets", () => {
     expect(
       [olderRelay, pairedRemote, sshEnvironment, desktopLocalEnvironment].filter(
         isOnboardingRelayEnvironment,

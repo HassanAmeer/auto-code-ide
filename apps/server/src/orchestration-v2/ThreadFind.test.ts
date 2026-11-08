@@ -525,8 +525,8 @@ describe("V2 thread find", () => {
       yield* putItems([item("skill", 1, "Use $test-t3-app now")]);
       const input = {
         threadId,
-        query: "T3 App Testing",
-        skills: [{ name: "test-t3-app", displayName: "T3 App Testing" }],
+        query: "Bot App Testing",
+        skills: [{ name: "test-t3-app", displayName: "Bot App Testing" }],
       };
       assert.equal((yield* projection.searchThread(input)).totalMatches, 1);
       assert.equal((yield* projection.searchThread({ ...input, skills: [] })).totalMatches, 0);
@@ -540,7 +540,7 @@ describe("V2 thread find", () => {
         (yield* projection.searchThread({ ...input, query: "$test-t3-app" })).totalMatches,
         1,
       );
-      // The message label "T3 App Testing" plus the plan's literal "$test-t3-app".
+      // The message label "Bot App Testing" plus the plan's literal "$test-t3-app".
       assert.equal((yield* projection.searchThread({ ...input, query: "App" })).totalMatches, 2);
     }).pipe(Effect.provide(layerTest)),
   );

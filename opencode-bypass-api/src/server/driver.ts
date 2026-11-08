@@ -162,7 +162,7 @@ const OpenCodeBypassCapabilitiesV2 = {
     nativeRequestIds: "none",
   },
   // The bypass runs no sandboxed work of its own; runtime policy is applied
-  // only where T3 mediates it.
+  // only where Bot mediates it.
   runtimePolicy: {
     enforcement: "client-boundary",
   },
@@ -1051,7 +1051,7 @@ export const OpenCodeBypassSetupDriver: ProviderDriver<
         enabled,
         snapshot,
         // The free lane has no skill runtime of its own, so the workspace
-        // snapshot carries the skills T3 discovered on disk. The composer lists
+        // snapshot carries the skills Bot discovered on disk. The composer lists
         // them and a `$name` mention dispatches through the request builder.
         snapshotForCwd: (cwd: string) =>
           Effect.gen(function* () {

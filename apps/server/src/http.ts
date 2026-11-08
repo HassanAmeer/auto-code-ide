@@ -961,7 +961,7 @@ export const layerCustomProviderFetchModelsRoute = HttpRouter.add(
           .replace(/\/+$/, "");
         const requestHeaders: Record<string, string> = {
           Accept: "application/json",
-          "User-Agent": "T3-Code/1.0",
+          "User-Agent": "Bot-Code/1.0",
         };
 
         if (bodyJson.apiKey && bodyJson.apiKey.trim().length > 0) {

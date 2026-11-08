@@ -1,5 +1,5 @@
 /**
- * Source for the T3-owned Pi extension that consumes T3's HTTP MCP server.
+ * Source for the Bot-owned Pi extension that consumes Bot's HTTP MCP server.
  *
  * Pi 0.99+ discovers optional HTTP bridge tools on demand. Older versions
  * keep them directly available. Pi loads this TypeScript via `--extension`; the
@@ -110,8 +110,8 @@ function formatMcpContent(result: unknown): string {
       if (part?.type === "text" && typeof part.text === "string") texts.push(part.text);
     }
   }
-  // Most T3 tools mirror structuredContent in a text block. Repeating it would
-  // leave T3's own output parsing two JSON documents instead of one.
+  // Most Bot tools mirror structuredContent in a text block. Repeating it would
+  // leave Bot's own output parsing two JSON documents instead of one.
   if (record.structuredContent !== undefined) {
     const structured = JSON.stringify(record.structuredContent);
     if (!texts.includes(structured)) texts.push(structured);
@@ -265,7 +265,7 @@ export default async function t3McpExtension(pi: ExtensionAPI) {
     if (changed) return replacement;
   });
 
-  // Pi deliberately leaves permission policy to extensions. T3's injected
+  // Pi deliberately leaves permission policy to extensions. Bot's injected
   // bridge uses Pi's public blocking tool hook so the shared runtime modes
   // keep their normal meaning without replacing or shadowing Pi's runtime.
   // Only Pi's own search is known to be read-only. An extension that replaces
@@ -288,7 +288,7 @@ export default async function t3McpExtension(pi: ExtensionAPI) {
       toolInputSummary(event.input),
     );
     if (!approved) {
-      return { block: true, reason: \`\${event.toolName} was declined in T3 Code.\` };
+      return { block: true, reason: \`\${event.toolName} was declined in Bot Code.\` };
     }
   });
 
@@ -363,7 +363,7 @@ export default async function t3McpExtension(pi: ExtensionAPI) {
   };
 
   // CLI extensions load before builtins, and Pi keeps the first registration
-  // of a tool name. Register now so the bridge owns the T3 namespace even when
+  // of a tool name. Register now so the bridge owns the Bot namespace even when
   // mcp.json configures it; retry a failed connection at session_start.
   await ensureStarted().catch(() => undefined);
 

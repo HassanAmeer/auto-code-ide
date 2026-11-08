@@ -2760,7 +2760,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
               `Delete project "${member.title}"?`,
               `Path: ${member.workspaceRoot}`,
               ...(member.environmentLabel ? [`Environment: ${member.environmentLabel}`] : []),
-              "This permanently removes this project from T3 Code.",
+              "This permanently removes this project from Bot Code.",
             ].join("\n");
 
       const confirmed = await api.dialogs.confirm(message, { variant: "destructive" });
