@@ -167,8 +167,8 @@ export function NotificationSettingsPanel() {
       <SettingsSection id="notification-channels" title="Delivery Surfaces">
         <SettingsRow
           id="notification-desktop-channel"
-          title="Desktop / Background System Alerts"
-          description="Send native OS notifications when this browser tab or app is minimized or running in the background."
+          title="Browser / OS Notification Alerts"
+          description="Send OS-level notifications from the browser when this tab is minimized or the app runs in the background."
           control={
             <div className="flex items-center gap-3">
               {permissionState === "granted" ? (
@@ -184,7 +184,7 @@ export function NotificationSettingsPanel() {
                   onClick={requestDesktopPermission}
                   className="text-xs"
                 >
-                  Grant OS Permission
+                  Grant Browser Permission
                 </Button>
               )}
               <Switch
@@ -196,7 +196,7 @@ export function NotificationSettingsPanel() {
                     notificationMode: checked ? "notifications-and-sound" : "sound",
                   });
                 }}
-                aria-label="Desktop system alerts"
+                aria-label="Browser system alerts"
               />
             </div>
           }
