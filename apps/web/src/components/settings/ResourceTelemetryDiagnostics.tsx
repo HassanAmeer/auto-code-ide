@@ -976,6 +976,55 @@ export function ResourceTelemetryDiagnostics({
       snapshot.power.locked !== "unknown" ||
       snapshot.power.thermalState !== "unknown");
 
+  // The resource monitor is a native helper (t3-resource-monitor) that only ships
+  // with the packaged desktop app. On web servers it is absent and every counter
+  // reads 0/unavailable, so collapse this panel into a single honest explanation.
+  const nativeMonitorUnavailable = snapshot?.health.native.status === "unavailable";
+  if (nativeMonitorUnavailable) {
+    return (
+      <SettingsSection
+        title="Resource monitor"
+        icon={<ActivityIcon className="size-4 text-muted-foreground" />}
+        headerAction={
+          <Button
+            size="xs"
+            variant="outline"
+            disabled={telemetry.isPending}
+            onClick={telemetry.refresh}
+            aria-label="Refresh resource telemetry"
+          >
+            <RefreshIcon size="xs" refreshing={telemetry.isPending} />
+            Retry
+          </Button>
+        }
+      >
+        <div className="overflow-hidden rounded-2xl border border-border/70 bg-card px-5 py-6 shadow-sm/5">
+          <div className="flex items-start gap-3">
+            <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted/60">
+              <ActivityIcon className="size-4 text-muted-foreground" />
+            </span>
+            <div className="min-w-0">
+              <div className="text-sm font-medium text-foreground">
+                Live resource monitoring isn&apos;t available on this server
+              </div>
+              <p className="mt-1 max-w-md text-2xs leading-relaxed text-muted-foreground/80">
+                The process monitor (<code>t3-resource-monitor</code>) ships with the packaged
+                desktop app only. On this web server it is not present, so CPU, memory, I/O and
+                process counters can&apos;t be shown.
+              </p>
+              {telemetry.error ? (
+                <p className="mt-2 text-2xs text-destructive">{telemetry.error}</p>
+              ) : null}
+              <p className="mt-2 text-2xs text-muted-foreground/60">
+                Trace Diagnostics below works fully on this server.
+              </p>
+            </div>
+          </div>
+        </div>
+      </SettingsSection>
+    );
+  }
+
   return (
     <>
       <SettingsSection
