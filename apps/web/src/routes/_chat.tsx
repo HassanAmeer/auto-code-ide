@@ -151,8 +151,8 @@ function ChatRouteGlobalShortcuts() {
           toastManager.add(
             stackedThreadToast({
               type: "info",
-              title: "Preview is desktop-only",
-              description: "Open AutoCode in the desktop app to use the in-app preview.",
+              title: "Preview is not available on the web",
+              description: "The in-app preview only runs inside the T3 Code web app.",
             }),
           );
           return;

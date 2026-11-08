@@ -263,7 +263,7 @@ describe("ServerUpdateAction", () => {
       />,
     );
 
-    expect(markup).toContain("Update the desktop app on that machine to update this server.");
+    expect(markup).toContain("Update the app on that machine to update this server.");
     expect(markup).not.toContain("<button");
   });
 
@@ -292,7 +292,7 @@ describe("ServerUpdateAction", () => {
     expect(testState.toast).toHaveBeenCalledWith({
       type: "success",
       title: "Test server updated",
-      description: "Desktop app relaunched on 0.0.34.",
+      description: "App relaunched on 0.0.34.",
     });
   });
 

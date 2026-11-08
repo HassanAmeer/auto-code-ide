@@ -1131,7 +1131,7 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
           <AlertDialogHeader>
             <AlertDialogTitle>Remove “{profilePendingRemoval?.name}”?</AlertDialogTitle>
             <AlertDialogDescription>
-              Its cookies and logins are deleted. Desktop tabs already open in this profile stay
+              Its cookies and logins are deleted. Browser tabs already open in this profile stay
               open until you close them; server browser tabs close now.
             </AlertDialogDescription>
             {profileRemovalError ? (

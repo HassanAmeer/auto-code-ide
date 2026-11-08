@@ -41,7 +41,7 @@ export function NotificationSettings() {
             if (hasDesktopNotifications(value)) {
               if (typeof Notification === "undefined" || !window.isSecureContext) {
                 setPermissionMessage(
-                  "Notifications need a supported browser over HTTPS, or the desktop app. Sound only is still available.",
+                  "Notifications need a supported browser over HTTPS. Sound only is still available.",
                 );
                 return;
               }

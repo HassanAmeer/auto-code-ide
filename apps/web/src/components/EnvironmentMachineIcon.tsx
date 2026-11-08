@@ -57,7 +57,7 @@ export const ENVIRONMENT_MACHINE_KIND_LABELS: Record<EnvironmentMachineKind, str
   server: "Server",
   cloud: "Cloud VM",
   linux: "Linux/WSL",
-  desktop: "Desktop",
+  desktop: "Web",
   laptop: "Laptop",
   "mac-mini": "Mini PC",
   "mac-studio": "Workstation",

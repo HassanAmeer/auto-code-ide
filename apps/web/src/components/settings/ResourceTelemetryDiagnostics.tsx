@@ -324,7 +324,7 @@ function HealthSource({ label, health }: { label: string; health: ResourceTeleme
         <div className="text-sm font-medium text-foreground">{label}</div>
         <div className="mt-1 text-2xs leading-relaxed text-muted-foreground/65">
           {expectedInBrowser
-            ? "Available when this page runs inside the desktop app."
+            ? "Available on servers that include the process monitor."
             : Option.match(health.lastError, {
                 onNone: () => "No reported errors",
                 onSome: (error) => error,
@@ -337,7 +337,7 @@ function HealthSource({ label, health }: { label: string; health: ResourceTeleme
         presentation={
           expectedInBrowser
             ? {
-                label: "Desktop only",
+                label: "Packaged only",
                 tone: "neutral",
               }
             : undefined
@@ -977,7 +977,7 @@ export function ResourceTelemetryDiagnostics({
       snapshot.power.thermalState !== "unknown");
 
   // The resource monitor is a native helper (t3-resource-monitor) that only ships
-  // with the packaged desktop app. On web servers it is absent and every counter
+  // with the packaged app. On web servers it is absent and every counter
   // reads 0/unavailable, so collapse this panel into a single honest explanation.
   const nativeMonitorUnavailable = snapshot?.health.native.status === "unavailable";
   if (nativeMonitorUnavailable) {
@@ -1009,7 +1009,7 @@ export function ResourceTelemetryDiagnostics({
               </div>
               <p className="mt-1 max-w-md text-2xs leading-relaxed text-muted-foreground/80">
                 The process monitor (<code>t3-resource-monitor</code>) ships with the packaged
-                desktop app only. On this web server it is not present, so CPU, memory, I/O and
+                packaged app only. On this web server it is not present, so CPU, memory, I/O and
                 process counters can&apos;t be shown.
               </p>
               {telemetry.error ? (
@@ -1062,7 +1062,7 @@ export function ResourceTelemetryDiagnostics({
                 T3 system footprint
               </div>
               <p className="mt-1 max-w-xl text-xs leading-relaxed text-muted-foreground">
-                Live native counters for the server, providers, terminals, desktop processes, and
+                Live native counters for the server, providers, terminals, background processes, and
                 the monitor itself.
               </p>
             </div>
@@ -1137,7 +1137,7 @@ export function ResourceTelemetryDiagnostics({
                 aggregate={snapshot.groups.backend}
               />
               <AggregateCard
-                label="Desktop"
+                label="Host"
                 accentClass="bg-info/80"
                 aggregate={snapshot.groups.electron}
               />
@@ -1223,10 +1223,10 @@ export function ResourceTelemetryDiagnostics({
             ) : (
               <div className="rounded-xl border border-dashed border-border/70 bg-muted/20 px-4 py-5">
                 <div className="text-sm font-medium text-foreground">
-                  Desktop host signals not connected
+                  Host signals not connected
                 </div>
                 <p className="mt-1.5 max-w-sm text-2xs leading-relaxed text-muted-foreground/70">
-                  Power, idle, lock, and thermal state are supplied by the desktop host. Process
+                  Power, idle, lock, and thermal state are supplied by the host machine. Process
                   telemetry remains fully active in this browser session.
                 </p>
               </div>
@@ -1242,7 +1242,7 @@ export function ResourceTelemetryDiagnostics({
             {snapshot ? (
               <>
                 <HealthSource label="Native process monitor" health={snapshot.health.native} />
-                <HealthSource label="Electron main process" health={snapshot.health.desktop} />
+                <HealthSource label="Host process" health={snapshot.health.desktop} />
                 <DetailRow
                   label="Collection time"
                   value={formatDurationMicros(snapshot.health.collectionDurationMicros)}

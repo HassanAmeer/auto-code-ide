@@ -963,12 +963,12 @@ export function DiagnosticsSettingsPanel() {
               <StatBlock
                 label="CPU"
                 value={processData ? `${processData.totalCpuPercent.toFixed(1)}%` : "..."}
-                tooltip="Total CPU across live child processes of the current server process. The desktop shell and other parent processes are not included."
+                tooltip="Total CPU across live child processes of the current server process. The web shell and other parent processes are not included."
               />
               <StatBlock
                 label="Memory"
                 value={processData ? formatBytes(processData.totalRssBytes) : "..."}
-                tooltip="Total resident memory across live child processes of the current server process. The desktop shell and other parent processes are not included."
+                tooltip="Total resident memory across live child processes of the current server process. The web shell and other parent processes are not included."
               />
               <StatBlock
                 label="Server PID"

@@ -43,7 +43,7 @@ export function NotificationSettingsPanel() {
       toastManager.add({
         type: "error",
         title: "Notifications Unavailable",
-        description: "Desktop notifications are not supported in this environment.",
+        description: "Browser notifications are not supported in this environment.",
       });
       return;
     }
@@ -58,7 +58,7 @@ export function NotificationSettingsPanel() {
           type: "info",
           title: "OS Notifications Enabled",
           description:
-            "You will now receive native desktop alerts when tasks complete in the background.",
+            "You will now receive OS-level alerts when tasks complete in the background.",
         });
       } else if (result === "denied") {
         toastManager.add({
