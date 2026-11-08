@@ -1666,7 +1666,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
               keyExtractor={keyExtractor}
               getItemType={getItemType}
               renderItem={renderItem}
-              estimatedItemSize={90}
+              estimatedItemSize={180}
               initialScrollAtEnd={
                 !findActive && citationRequest === null && rememberedPosition?.atEnd !== false
               }
