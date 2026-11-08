@@ -241,10 +241,40 @@ function resolveProjectRoot(encoded: string | undefined): string {
 /**
  * OpenCode skills are retained directly in `.opencode/skills`.
  */
+/**
+ * Sync the committed `.agents/skills` tree into the `.opencode/skills` mirror
+ * the engine (and the Skills settings page) reads. The Superpower default
+ * skills ship in `.agents/skills` so a moved or freshly cloned project keeps
+ * them; without this copy they never appear, hence "no skills" everywhere.
+ * Missing entries are copied; existing mirror files are never overwritten so
+ * local edits in `.opencode/skills` survive.
+ */
 function mirrorProjectSkills(projectRoot: string): void {
   const source = NodePath.join(projectRoot, ".opencode", "skills");
   if (!NodeFS.existsSync(source)) {
     NodeFS.mkdirSync(source, { recursive: true });
+  }
+  const seeded = NodePath.join(projectRoot, ".agents", "skills");
+  if (!NodeFS.existsSync(seeded)) {
+    return;
+  }
+  for (const entry of NodeFS.readdirSync(seeded, { withFileTypes: true })) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+    const skillMarkdown = NodePath.join(seeded, entry.name, "SKILL.md");
+    if (!NodeFS.existsSync(skillMarkdown)) {
+      continue;
+    }
+    const target = NodePath.join(source, entry.name);
+    if (NodeFS.existsSync(target)) {
+      continue;
+    }
+    try {
+      copyDirectory(NodePath.join(seeded, entry.name), target);
+    } catch {
+      // Best effort: a partial seed must not break the skills list.
+    }
   }
 }
 
