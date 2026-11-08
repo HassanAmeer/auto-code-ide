@@ -1,5 +1,26 @@
 import { loadSoundSettings } from "./soundSettings";
 
+/**
+ * Browsers throttle or tear down audio once the tab is hidden, and an ambient
+ * wave loop would keep playing while the user has switched to another app.
+ * Sound is only produced while the tab is actually in front of the user.
+ */
+function tabVisible(): boolean {
+  if (typeof document === "undefined") return true;
+  return document.visibilityState === "visible";
+}
+
+function silenceOnHide(): void {
+  if (typeof document === "undefined") return;
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible") {
+      stopWaitingWaveSound();
+    }
+  });
+}
+
+silenceOnHide();
+
 let globalAudioCtx: AudioContext | null = null;
 
 function getAudioContext(): AudioContext | null {
@@ -37,6 +58,7 @@ let lastErrorAt = 0;
  * Pleasant 3-note harmonic chime (C5 -> E5 -> G5)
  */
 export function playResponseDoneSound(force = false): void {
+  if (!tabVisible()) return;
   const now = Date.now();
   if (!force && now - lastResponseDoneAt < 1200) return;
 
@@ -81,6 +103,7 @@ export function playResponseDoneSound(force = false): void {
  * Snappy pleasant dual-tone ping (D5 -> A5)
  */
 export function playNotificationSound(force = false): void {
+  if (!tabVisible()) return;
   const now = Date.now();
   if (!force && now - lastNotificationAt < 1200) return;
 
@@ -124,6 +147,7 @@ export function playNotificationSound(force = false): void {
  * Gentle subtle warning tone (E4 -> C4 warm triangle/sine)
  */
 export function playErrorSound(force = false): void {
+  if (!tabVisible()) return;
   const now = Date.now();
   if (!force && now - lastErrorAt < 1200) return;
 
@@ -172,6 +196,7 @@ export function playErrorSound(force = false): void {
  * Dual staccato woodblock ping (440 Hz -> 370 Hz)
  */
 export function playTimeoutSound(force = false): void {
+  if (!tabVisible()) return;
   const settings = loadSoundSettings();
   if (!force && (!settings.masterSoundEnabled || !settings.timeoutSound)) return;
 
@@ -240,6 +265,7 @@ function createNoiseBuffer(ctx: AudioContext, seconds = 4): AudioBuffer {
 }
 
 export function startWaitingWaveSound(force = false): void {
+  if (!tabVisible()) return;
   const settings = loadSoundSettings();
   if (!force && (!settings.masterSoundEnabled || !settings.waitingWaveSound)) return;
   if (activeWaitingSource) return; // already playing
