@@ -1258,11 +1258,12 @@ function KeybindingsGroups(props: KeybindingsGroupsProps) {
   ));
 }
 
-/** Shown in the browser build only; the desktop app receives every shortcut. */
+/** Shown in the web build only; the browser may reserve a few shortcuts. */
 function BrowserKeybindingNotice() {
   // The label carries the whole sentence so assistive tech reads it without
   // opening the tooltip.
-  const message = "The browser may claim some shortcuts first. The desktop app receives them all.";
+  const message =
+    "On the web the browser may reserve some shortcuts, so a few keys cannot be captured here.";
   return (
     <Tooltip>
       <TooltipTrigger
