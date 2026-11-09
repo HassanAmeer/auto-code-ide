@@ -12,7 +12,6 @@ import {
   Loader2,
   ListTodo,
   Clock,
-  StickyNote,
   PhoneCall,
   PhoneOff,
   Mic,
@@ -42,13 +41,10 @@ import {
   ShieldCheck,
   ChevronDown,
   ChevronUp,
-  LayoutGrid,
   List,
   ArrowRight,
-  RotateCcw,
   Brain,
   Bookmark,
-  BookOpen,
   ExternalLink,
   Globe,
   Terminal,
@@ -61,6 +57,10 @@ import {
   History,
   Calendar,
   Wrench,
+  Sheet,
+  Phone,
+  MoonStar,
+  Cpu,
 } from "lucide-react";
 import ChatMarkdown from "~/components/ChatMarkdown";
 import { RevertBackArrowIcon } from "~/components/Icons";
@@ -79,17 +79,8 @@ import {
   WorkLogList,
   WorkLogRow,
 } from "~/components/chat/WorkLog";
-import {
-  loadSessionLedger,
-  subscribeSessionLedger,
-  addDecisionPoint,
-  clearSessionLedger,
-  formatLedgerAsBulletSummary,
-  pruneDecisionsAfterTimestamp,
-  type SessionLedgerData,
-} from "~/lib/speech/multiTurnSessionLedger";
+import { pruneDecisionsAfterTimestamp } from "~/lib/speech/multiTurnSessionLedger";
 import { useAutoRetrySettings, findNextFallbackModel } from "~/lib/autoRetrySettings";
-import { AutonomousTaskBoard } from "./AutonomousTaskBoard";
 import { SubagentsAndGoalsCard } from "./SubagentsAndGoalsCard";
 import { executeTerminalCommand } from "~/components/chat/terminal/terminalClient";
 import { Link } from "@tanstack/react-router";
@@ -104,7 +95,6 @@ import {
   type BotAttachment,
 } from "../../../lib/botAttachmentStore";
 import { useProjects } from "~/state/entities";
-import { useNotes, openNotesSheet, addNote, type NoteItem } from "~/lib/notesStore";
 import {
   useChatMemories,
   pruneChatMemoriesAfterTimestamp,
@@ -113,6 +103,8 @@ import {
 import { ChatMemorySection } from "~/components/memory/MemorySheet";
 import { useScheduledTasks } from "~/lib/scheduledTasksStore";
 import { useProjectActivities } from "~/lib/projectActivityLedger";
+import { saveServerSetting, fetchServerAppSettings } from "~/lib/serverSettingsSync";
+import { AutonomousTaskBoard } from "./AutonomousTaskBoard";
 import { WhatsAppHeaderButton } from "~/components/whatsapp/WhatsAppHeaderButton";
 import {
   useCallSessions,
@@ -797,7 +789,6 @@ function LiveProcessingActivityView({
 
 export function SuperCallAssistantView() {
   const projects = useProjects();
-  const { notes } = useNotes();
   const {
     sessions,
     activeSession,
@@ -814,7 +805,71 @@ export function SuperCallAssistantView() {
 
   const { tasks: scheduledTasks, toggle: toggleTask, remove: removeTask } = useScheduledTasks();
   const { activities, deleteActivity } = useProjectActivities();
-  const [tasksSheetTab, setTasksSheetTab] = useState<"scheduled" | "history">("scheduled");
+  const [tasksSheetTab, setTasksSheetTab] = useState<"board" | "scheduled" | "history">("board");
+  // Master Assistant Sheet — Settings tab state (persisted via server app-settings)
+  const [primaryClientPhone, setPrimaryClientPhone] = useState("");
+  const [phoneSaved, setPhoneSaved] = useState(false);
+  const [absenceMode, setAbsenceMode] = useState(false);
+  const [activeEngine, setActiveEngine] = useState<string>("opencode-full-engine");
+  const [engineSwitching, setEngineSwitching] = useState(false);
+
+  const projectChipNames = useMemo(
+    () => projects.map((p) => p?.title || (p?.id ? String(p.id) : "")).filter(Boolean),
+    [projects],
+  );
+
+  // Load persisted master-sheet settings (primary client phone, absence mode, engine)
+  useEffect(() => {
+    let cancelled = false;
+    void fetchServerAppSettings().then((settings) => {
+      if (cancelled || !settings) return;
+      if (typeof settings.primary_client_phone === "string") {
+        setPrimaryClientPhone(settings.primary_client_phone);
+      }
+      setAbsenceMode(
+        settings.autonomous_absence_mode === true || settings.autonomous_absence_mode === "true",
+      );
+      if (
+        typeof settings.active_core_engine === "string" &&
+        settings.active_core_engine.trim().length > 0
+      ) {
+        setActiveEngine(settings.active_core_engine);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleSavePrimaryClientPhone = useCallback(() => {
+    saveServerSetting("primary_client_phone", primaryClientPhone.trim());
+    setPhoneSaved(true);
+    window.setTimeout(() => setPhoneSaved(false), 2000);
+  }, [primaryClientPhone]);
+
+  const handleToggleAbsenceMode = useCallback(() => {
+    setAbsenceMode((prev) => {
+      saveServerSetting("autonomous_absence_mode", !prev);
+      return !prev;
+    });
+  }, []);
+
+  const handleSwitchEngine = useCallback(async (engine: string) => {
+    setEngineSwitching(true);
+    try {
+      const res = await fetch("/api/engine/switch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ engine }),
+      });
+      if (res.ok) setActiveEngine(engine);
+    } catch {
+      // keep previous engine selection on failure
+    } finally {
+      setEngineSwitching(false);
+    }
+  }, []);
   const [inputText, setInputText] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [activeDispatchStartTime, setActiveDispatchStartTime] = useState<number>(0);
@@ -897,24 +952,12 @@ export function SuperCallAssistantView() {
   const [activeCanvasPage, setActiveCanvasPage] = useState<SpacePage | null>(null);
   const [isCanvasOpen, setIsCanvasOpen] = useState(false);
 
-  // Command Center / Right Sidebar Drawer
+  // Command Center / Right Sidebar Sheet
   const [isCommandCenterOpen, setIsCommandCenterOpen] = useState(false);
-  const [commandCenterTab, setCommandCenterTab] = useState<
-    "board" | "memory" | "ledger" | "tasks" | "voice"
-  >("board");
-  const [isInputFocused, setIsInputFocused] = useState(false);
-
-  // Multi-Turn Session Ledger State (Lambay Mashwaray ke liye Memory)
-  const [sessionLedger, setSessionLedger] = useState<SessionLedgerData>(() =>
-    loadSessionLedger(activeSessionId || "default"),
+  const [commandCenterTab, setCommandCenterTab] = useState<"memory" | "tasks" | "settings">(
+    "memory",
   );
-  const [newDecisionInput, setNewDecisionInput] = useState("");
-  const [isCopiedSummary, setIsCopiedSummary] = useState(false);
-
-  useEffect(() => {
-    setSessionLedger(loadSessionLedger(activeSessionId || "default"));
-    return subscribeSessionLedger(activeSessionId || "default", setSessionLedger);
-  }, [activeSessionId]);
+  const [isInputFocused, setIsInputFocused] = useState(false);
 
   // Bot Attachment from File Manager / Ask AI (Folder or File)
   const [botAttachment, setLocalBotAttachment] = useState<BotAttachment | null>(() =>
@@ -1746,22 +1789,6 @@ export function SuperCallAssistantView() {
     handleCancelProcessing();
   }, [handleCancelProcessing, isDictating]);
 
-  const [isTranscriptCopied, setIsTranscriptCopied] = useState(false);
-
-  const handleCopyTranscript = useCallback(() => {
-    if (!activeSession?.messages.length) return;
-    const text = activeSession.messages
-      .map(
-        (m) =>
-          `[${new Date(m.timestamp).toLocaleTimeString()}] ${m.role === "user" ? "User" : "Super Bot"}:\n${m.text}`,
-      )
-      .join("\n\n");
-    void navigator.clipboard.writeText(text).then(() => {
-      setIsTranscriptCopied(true);
-      setTimeout(() => setIsTranscriptCopied(false), 2000);
-    });
-  }, [activeSession?.messages]);
-
   return (
     <div className="flex h-full w-full bg-background text-foreground overflow-hidden relative">
       {/* Right-Side Command Center / Smart Drawer */}
@@ -1783,10 +1810,8 @@ export function SuperCallAssistantView() {
                   <Sparkles className="size-4 text-primary" />
                 </div>
                 <div>
-                  <h2 className="text-sm font-semibold">Assistant Command Center</h2>
-                  <p className="text-[10px] text-muted-foreground">
-                    Insights, Wishlist, Automated Tasks & Voice Persona
-                  </p>
+                  <h2 className="text-sm font-semibold">Assistant Sheet</h2>
+                  <p className="text-[10px] text-muted-foreground">Memory, Tasks & Settings</p>
                 </div>
               </div>
               <button
@@ -1799,37 +1824,20 @@ export function SuperCallAssistantView() {
               </button>
             </div>
 
-            {/* Navigation Tabs (Board, Memory, Ledger, Tasks, Voice) - Single Compact Line */}
-            <div className="grid grid-cols-5 border-b border-border/50 px-1 bg-muted/20 text-center">
-              <button
-                type="button"
-                onClick={() => setCommandCenterTab("board")}
-                className={cn(
-                  "py-1.5 px-0.5 text-[11px] font-medium border-b-2 transition-colors cursor-pointer flex items-center justify-center gap-1 whitespace-nowrap",
-                  commandCenterTab === "board"
-                    ? "border-primary text-primary"
-                    : "border-transparent text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <LayoutGrid className="size-3.5 shrink-0" />
-                <span className="hidden sm:inline">Board</span>
-                <span className="text-[8px] px-1 py-0.5 rounded-full bg-cyan-500/20 text-cyan-400 font-mono leading-none">
-                  AI
-                </span>
-              </button>
-
+            {/* Navigation Tabs — exactly three: Memory, Tasks, Settings */}
+            <div className="grid grid-cols-3 border-b border-border/50 px-1 bg-muted/20 text-center">
               <button
                 type="button"
                 onClick={() => setCommandCenterTab("memory")}
                 className={cn(
-                  "py-1.5 px-0.5 text-[11px] font-medium border-b-2 transition-colors cursor-pointer flex items-center justify-center gap-1 whitespace-nowrap",
+                  "py-1.5 px-2 text-[11px] font-medium border-b-2 transition-colors cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap",
                   commandCenterTab === "memory"
                     ? "border-primary text-primary"
                     : "border-transparent text-muted-foreground hover:text-foreground",
                 )}
               >
                 <Brain className="size-3.5 shrink-0" />
-                <span className="hidden sm:inline">Memory</span>
+                <span>Memory</span>
                 {chatMemories.length > 0 && (
                   <span className="text-[8px] px-1 py-0.5 rounded-full bg-purple-500/20 text-purple-400 font-mono leading-none">
                     {chatMemories.length}
@@ -1839,35 +1847,16 @@ export function SuperCallAssistantView() {
 
               <button
                 type="button"
-                onClick={() => setCommandCenterTab("ledger")}
-                className={cn(
-                  "py-1.5 px-0.5 text-[11px] font-medium border-b-2 transition-colors cursor-pointer flex items-center justify-center gap-1 whitespace-nowrap",
-                  commandCenterTab === "ledger"
-                    ? "border-primary text-primary"
-                    : "border-transparent text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <BookOpen className="size-3.5 shrink-0" />
-                <span className="hidden sm:inline">Ledger</span>
-                {sessionLedger.decisions.length > 0 && (
-                  <span className="text-[8px] px-1 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-mono leading-none">
-                    {sessionLedger.decisions.length}
-                  </span>
-                )}
-              </button>
-
-              <button
-                type="button"
                 onClick={() => setCommandCenterTab("tasks")}
                 className={cn(
-                  "py-1.5 px-0.5 text-[11px] font-medium border-b-2 transition-colors cursor-pointer flex items-center justify-center gap-1 whitespace-nowrap",
+                  "py-1.5 px-2 text-[11px] font-medium border-b-2 transition-colors cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap",
                   commandCenterTab === "tasks"
                     ? "border-primary text-primary"
                     : "border-transparent text-muted-foreground hover:text-foreground",
                 )}
               >
                 <ListTodo className="size-3.5 shrink-0" />
-                <span className="hidden sm:inline">Tasks</span>
+                <span>Tasks</span>
                 {scheduledTasks.length > 0 && (
                   <span className="text-[8px] px-1 py-0.5 rounded-full bg-primary/20 text-primary font-mono leading-none">
                     {scheduledTasks.length}
@@ -1877,32 +1866,21 @@ export function SuperCallAssistantView() {
 
               <button
                 type="button"
-                onClick={() => setCommandCenterTab("voice")}
+                onClick={() => setCommandCenterTab("settings")}
                 className={cn(
-                  "py-1.5 px-0.5 text-[11px] font-medium border-b-2 transition-colors cursor-pointer flex items-center justify-center gap-1 whitespace-nowrap",
-                  commandCenterTab === "voice"
+                  "py-1.5 px-2 text-[11px] font-medium border-b-2 transition-colors cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap",
+                  commandCenterTab === "settings"
                     ? "border-primary text-primary"
                     : "border-transparent text-muted-foreground hover:text-foreground",
                 )}
               >
                 <SlidersHorizontal className="size-3.5 shrink-0" />
-                <span className="hidden sm:inline">Voice</span>
+                <span>Settings</span>
               </button>
             </div>
 
             {/* Tab Contents */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {/* TAB: AUTONOMOUS WORKTREES TASK BOARD */}
-              {commandCenterTab === "board" && (
-                <div className="space-y-4">
-                  <AutonomousTaskBoard
-                    projectName={activeProjectName || "Workspace"}
-                    activeModel={effectiveModel || "opencode/beam-free"}
-                    onOpenPreview={(url) => window.open(url, "_blank")}
-                  />
-                </div>
-              )}
-
               {/* TAB: WORKSPACE CHAT MEMORY */}
               {commandCenterTab === "memory" && (
                 <div className="space-y-4">
@@ -1911,149 +1889,23 @@ export function SuperCallAssistantView() {
                 </div>
               )}
 
-              {/* TAB: MULTI-TURN SESSION LEDGER (Lambay Mashwaray ke liye Memory) 🧠 */}
-              {commandCenterTab === "ledger" && (
-                <div className="space-y-4">
-                  <div className="bg-gradient-to-r from-emerald-500/10 via-teal-500/5 to-transparent p-3 rounded-lg border border-emerald-500/20">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <BookOpen className="size-4 text-emerald-400" />
-                          <h3 className="text-xs font-semibold text-foreground">
-                            Multi-Turn Session Ledger 🧠
-                          </h3>
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-mono">
-                            {sessionLedger.decisions.length} Decisions
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-muted-foreground leading-relaxed">
-                          Har 5-8 baaton ke baad background mein automatic "Decision Summary"
-                          maintain hoti hai. Lambay mashwaray ke baad agar aap 1 ghante baad bhi
-                          poochen:{" "}
-                          <span className="text-foreground italic font-medium">
-                            "Acha humne shuru mein kya decide kiya tha?"
-                          </span>{" "}
-                          — to bot foran bullet summary dega.
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        {sessionLedger.decisions.length > 0 && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const summary = formatLedgerAsBulletSummary(sessionLedger);
-                                void navigator.clipboard.writeText(summary);
-                                setIsCopiedSummary(true);
-                                setTimeout(() => setIsCopiedSummary(false), 2000);
-                              }}
-                              className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground text-[10px] flex items-center gap-1 cursor-pointer transition-colors"
-                              title="Copy bullet points summary"
-                            >
-                              {isCopiedSummary ? (
-                                <Check className="size-3 text-emerald-400" />
-                              ) : (
-                                <Copy className="size-3" />
-                              )}
-                              <span>{isCopiedSummary ? "Copied" : "Copy"}</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (
-                                  window.confirm(
-                                    "Are you sure you want to clear this session's decision ledger?",
-                                  )
-                                ) {
-                                  clearSessionLedger(activeSessionId || "default");
-                                }
-                              }}
-                              className="p-1 rounded hover:bg-red-500/20 text-muted-foreground hover:text-red-400 text-[10px] flex items-center gap-1 cursor-pointer transition-colors"
-                              title="Clear session ledger"
-                            >
-                              <RotateCcw className="size-3" />
-                              <span>Reset</span>
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Manual Quick Add Decision */}
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      const text = newDecisionInput.trim();
-                      if (!text) return;
-                      addDecisionPoint(activeSessionId || "default", text);
-                      setNewDecisionInput("");
-                    }}
-                    className="flex gap-2"
-                  >
-                    <input
-                      type="text"
-                      value={newDecisionInput}
-                      onChange={(e) => setNewDecisionInput(e.target.value)}
-                      placeholder="Naya faisla ya decision point darj karein..."
-                      className="flex-1 bg-background border border-border/80 rounded-md px-2.5 py-1 text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                    />
-                    <button
-                      type="submit"
-                      disabled={!newDecisionInput.trim()}
-                      className="px-2.5 py-1 text-xs bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-md flex items-center gap-1 font-medium transition-colors cursor-pointer"
-                    >
-                      <Plus className="size-3.5" />
-                      Add
-                    </button>
-                  </form>
-
-                  {/* Decision Points List */}
-                  <div className="space-y-2">
-                    {sessionLedger.decisions.length === 0 ? (
-                      <div className="text-center py-8 px-4 border border-dashed border-border/60 rounded-lg text-muted-foreground space-y-2">
-                        <BookOpen className="size-8 mx-auto opacity-30 text-emerald-400" />
-                        <p className="text-xs font-medium">
-                          Abhi tak koi decision point record nahi hua.
-                        </p>
-                        <p className="text-[10px] max-w-xs mx-auto">
-                          Call ya chat ke doran har 5-8 turns baad automatic bullet points yahan add
-                          hotay jayeinge ya aap upar manual bhi likh sakte hain.
-                        </p>
-                      </div>
-                    ) : (
-                      sessionLedger.decisions.map((decision, idx) => (
-                        <div
-                          key={decision.id || idx}
-                          className="p-2.5 rounded-lg border border-border/60 bg-card/60 hover:border-emerald-500/40 transition-colors flex items-start gap-2.5"
-                        >
-                          <span className="shrink-0 text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
-                            Point {idx + 1}
-                          </span>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs text-foreground font-medium leading-relaxed">
-                              {decision.text}
-                            </p>
-                            <p className="text-[9px] text-muted-foreground mt-0.5">
-                              Turn #{decision.turnIndex} •{" "}
-                              {new Date(decision.timestamp).toLocaleTimeString([], {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}
-                            </p>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              )}
-
               {/* TAB: TASKS & LEDGER */}
               {commandCenterTab === "tasks" && (
                 <div className="space-y-4">
                   {/* Sub-tab switcher */}
-                  <div className="flex border-b border-border/50 pb-2 gap-2">
+                  <div className="flex border-b border-border/50 pb-2 gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => setTasksSheetTab("board")}
+                      className={cn(
+                        "text-xs font-semibold px-2 py-1 rounded-md transition-colors cursor-pointer",
+                        tasksSheetTab === "board"
+                          ? "bg-primary/20 text-primary"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      Task Board
+                    </button>
                     <button
                       type="button"
                       onClick={() => setTasksSheetTab("scheduled")}
@@ -2080,7 +1932,13 @@ export function SuperCallAssistantView() {
                     </button>
                   </div>
 
-                  {tasksSheetTab === "scheduled" ? (
+                  {tasksSheetTab === "board" ? (
+                    <AutonomousTaskBoard
+                      projectName={activeProjectName}
+                      activeModel="deepseek-v4.1-flash-free"
+                      projects={projectChipNames}
+                    />
+                  ) : tasksSheetTab === "scheduled" ? (
                     scheduledTasks.length === 0 ? (
                       <div className="py-12 flex flex-col items-center justify-center text-center text-muted-foreground">
                         <ListTodo className="size-8 mb-2 opacity-50" />
@@ -2177,9 +2035,156 @@ export function SuperCallAssistantView() {
                 </div>
               )}
 
-              {/* TAB 4: PERSONA & VOICE SETTINGS */}
-              {commandCenterTab === "voice" && (
+              {/* TAB: SETTINGS — Master Assistant Sheet */}
+              {commandCenterTab === "settings" && (
                 <div className="space-y-4">
+                  {/* Primary Client Phone Number (WhatsApp inbound filter) */}
+                  <div className="p-3.5 rounded-xl border border-primary/30 bg-primary/5 space-y-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                        <Phone className="size-3.5 text-primary" />
+                        Primary Client Phone Number
+                      </span>
+                      {primaryClientPhone.trim() && (
+                        <span className="text-[9px] font-mono px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                          Inbound filter ON
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">
+                      Sirf is number se aane wale WhatsApp tasks process honge. Baad ke senders ko
+                      politely ignore kiya jayega. Country code ke saath likhein (e.g.
+                      923001234567).
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="tel"
+                        inputMode="tel"
+                        value={primaryClientPhone}
+                        onChange={(e) => setPrimaryClientPhone(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && handleSavePrimaryClientPhone()}
+                        placeholder="923001234567"
+                        className="flex-1 min-w-0 text-xs rounded-lg border border-border/70 bg-background/90 px-3 py-1.5 text-foreground placeholder:text-muted-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary"
+                        aria-label="Primary Client Phone Number"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleSavePrimaryClientPhone}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-all cursor-pointer shrink-0"
+                      >
+                        {phoneSaved ? (
+                          <>
+                            <CheckCircle2 className="size-3.5" />
+                            <span>Saved</span>
+                          </>
+                        ) : (
+                          <>
+                            <Save className="size-3.5" />
+                            <span>Save</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Autonomous Absence Mode Toggle */}
+                  <div className="p-3.5 rounded-xl border border-amber-500/30 bg-amber-500/5 space-y-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                        <MoonStar className="size-3.5 text-amber-400" />
+                        Autonomous Absence Mode
+                      </span>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={absenceMode}
+                        onClick={handleToggleAbsenceMode}
+                        className={cn(
+                          "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors cursor-pointer border",
+                          absenceMode
+                            ? "bg-emerald-500/80 border-emerald-400/50"
+                            : "bg-muted/60 border-border/60",
+                        )}
+                        aria-label="Toggle Autonomous Absence Mode"
+                      >
+                        <span
+                          className={cn(
+                            "inline-block size-3.5 transform rounded-full bg-white shadow transition-transform",
+                            absenceMode ? "translate-x-4.5" : "translate-x-0.5",
+                          )}
+                        />
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground leading-relaxed">
+                      {absenceMode
+                        ? "ON — Main Mojud Nahi Hoon. System bina pooche executive decisions lega, self-heal loop chalayega aur jab tak 3-Level Review pass na ho tab tak rukega nahi."
+                        : "OFF — Interactive / Brainstorming mode. Chahta hai to confirm karega pehle, phir kaam karega."}
+                    </p>
+                    <div
+                      className={cn(
+                        "text-[9px] font-mono font-semibold px-2 py-0.5 rounded-full inline-flex items-center gap-1",
+                        absenceMode
+                          ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
+                          : "bg-muted/40 text-muted-foreground border border-border/40",
+                      )}
+                    >
+                      {absenceMode ? "● ABSENCE MODE ACTIVE" : "○ Interactive Mode"}
+                    </div>
+                  </div>
+
+                  {/* Active AI Core Engine Selector */}
+                  <div className="p-3.5 rounded-xl border border-cyan-500/30 bg-cyan-500/5 space-y-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                        <Cpu className="size-3.5 text-cyan-400" />
+                        Active AI Core Engine
+                      </span>
+                      {engineSwitching && (
+                        <Loader2 className="size-3.5 animate-spin text-cyan-400" />
+                      )}
+                    </div>
+                    <div className="grid grid-cols-1 gap-2">
+                      {[
+                        {
+                          id: "opencode-full-engine",
+                          label: "⚡ OpenCode Full Engine",
+                          desc: "100% in-process standalone runtime. No port/daemon. Recommended.",
+                        },
+                        {
+                          id: "opencode-adapter",
+                          label: "🔌 OpenCode Adapter (External CLI)",
+                          desc: "External CLI daemon par port auto-discovery ke saath.",
+                        },
+                      ].map((engine) => {
+                        const isActive = activeEngine === engine.id;
+                        return (
+                          <button
+                            key={engine.id}
+                            type="button"
+                            disabled={engineSwitching || isActive}
+                            onClick={() => void handleSwitchEngine(engine.id)}
+                            className={cn(
+                              "p-2.5 rounded-lg border text-left transition-all cursor-pointer disabled:cursor-default",
+                              isActive
+                                ? "border-cyan-500/60 bg-cyan-500/10"
+                                : "border-border/60 bg-muted/20 hover:bg-muted/40",
+                            )}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-[11px] font-semibold text-foreground">
+                                {engine.label}
+                              </span>
+                              {isActive && (
+                                <CheckCircle2 className="size-3.5 text-cyan-400 shrink-0" />
+                              )}
+                            </div>
+                            <p className="text-[9px] text-muted-foreground mt-0.5">{engine.desc}</p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
                   {/* Persona Selector Card */}
                   <div className="p-3.5 rounded-xl border border-border/70 bg-card/60 space-y-3">
                     <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
@@ -2456,129 +2461,20 @@ export function SuperCallAssistantView() {
             ) : null}
           </div>
 
-          {/* Right: WhatsApp Bare Icon, Copy Transcript, Notes & Command Center Sheet Button */}
+          {/* Right: WhatsApp icon + Sheet icon only */}
           <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-            {/* WhatsApp Gateway Header Button (Moved to Right, Bare Icon, Compact) */}
+            {/* WhatsApp Gateway Header Button (Bare Icon, Compact) */}
             <WhatsAppHeaderButton />
 
-            {/* Quick Copy Transcript Button */}
-            <button
-              type="button"
-              onClick={handleCopyTranscript}
-              disabled={!activeSession?.messages.length}
-              className="flex items-center gap-1 px-1.5 sm:px-2 py-1 rounded-md border border-border/60 hover:border-border hover:bg-muted/50 text-[11px] font-medium transition-colors disabled:opacity-30 cursor-pointer"
-              title="Copy entire conversation to clipboard"
-            >
-              {isTranscriptCopied ? (
-                <Check className="size-3 text-emerald-400" />
-              ) : (
-                <Copy className="size-3 text-muted-foreground" />
-              )}
-              <span className="hidden md:inline text-[10px]">Copy</span>
-            </button>
-
-            {/* Notes Button */}
-            <button
-              type="button"
-              onClick={() => openNotesSheet()}
-              className="flex items-center gap-1 px-1.5 sm:px-2 py-1 rounded-md border border-border/70 hover:border-border hover:bg-muted/50 text-[11px] font-medium transition-colors cursor-pointer"
-              title="Workspace Notes & Reminders"
-            >
-              <StickyNote className="size-3 text-amber-400" />
-              <span className="hidden xs:inline text-[10px]">Notes</span>
-              <span className="px-1 py-0.2 rounded-full text-[9px] bg-amber-500/15 text-amber-400 font-semibold font-mono">
-                {notes.length}
-              </span>
-            </button>
-
-            {/* OpenDots Spaces & Living Document Canvas Button */}
-            <button
-              type="button"
-              onClick={() => {
-                const pages = loadSpacePages(activeProjectName || "Workspace");
-                if (pages.length > 0) {
-                  setActiveCanvasPage(pages[0]!);
-                } else {
-                  setActiveCanvasPage({
-                    id: `page_${Date.now().toString(36)}`,
-                    title: "Workspace Overview & Specs",
-                    spaceName: "Main",
-                    category: "spec",
-                    status: "approved",
-                    summaryItems: [
-                      "Living Document Canvas ready",
-                      "Notion-like collaborative specs space",
-                    ],
-                    content:
-                      "# Workspace Overview & System Specs\n\nWelcome to your Living Document Space! You can draft specs, track architecture, and collaborate with your Super Bot here.\n\n### Project Milestones\n- [x] Initial workspace inspection & auto-healing\n- [ ] Database schema review\n- [ ] High-speed WebRTC audio call bridge\n- [ ] Multi-channel deploy setup",
-                    projectName: activeProjectName || "Workspace",
-                    createdAt: Date.now(),
-                    updatedAt: Date.now(),
-                  });
-                }
-                setIsCanvasOpen(true);
-              }}
-              className="flex items-center gap-1 px-1.5 sm:px-2 py-1 rounded-md border border-cyan-500/40 bg-cyan-500/10 hover:bg-cyan-500/20 text-[11px] font-semibold text-cyan-300 transition-all cursor-pointer shadow-xs active:scale-95"
-              title="Open Notion-like Spaces & Living Document Canvas"
-            >
-              <FileText className="size-3 text-cyan-400" />
-              <span className="hidden xs:inline text-[10px]">Spaces Canvas</span>
-            </button>
-
-            {/* Autonomous Worktrees Task Board Quick Button */}
-            <button
-              type="button"
-              onClick={() => {
-                setCommandCenterTab("board");
-                setIsCommandCenterOpen(true);
-              }}
-              className="flex items-center gap-1 px-1.5 sm:px-2 py-1 rounded-md border border-cyan-500/40 bg-cyan-500/10 hover:bg-cyan-500/20 text-[11px] font-semibold text-cyan-300 transition-all cursor-pointer shadow-xs active:scale-95"
-              title="Open Autonomous Multi-Agent Worktrees Board"
-            >
-              <LayoutGrid className="size-3 text-cyan-400" />
-              <span className="hidden xs:inline text-[10px]">Task Board</span>
-            </button>
-
-            {/* Command Center Right-Side Sheet Button */}
+            {/* Right-Side Sheet Button — icon only */}
             <button
               type="button"
               onClick={() => setIsCommandCenterOpen(true)}
-              className="flex items-center gap-1 px-2 py-1 rounded-md border border-primary/40 bg-primary/10 hover:bg-primary/20 text-[11px] font-semibold text-primary transition-all cursor-pointer shadow-xs active:scale-95"
-              title="Open Command Center (Memory, Tasks & Persona)"
+              className="pointer-events-auto inline-flex items-center justify-center size-6 sm:size-6.5 shrink-0 cursor-pointer rounded-md p-1 text-zinc-400 hover:text-zinc-100 hover:bg-white/5 transition-all active:scale-90 focus-visible:outline-hidden"
+              title="Open Sheet — Memory, Tasks & Settings"
+              aria-label="Open Sheet"
             >
-              <Sparkles className="size-3" />
-              <span className="hidden xs:inline text-[10px]">Command Center</span>
-              <span className="px-1 py-0.2 rounded-full text-[9px] bg-primary text-primary-foreground font-mono font-bold">
-                {scheduledTasks.length}
-              </span>
-            </button>
-
-            {/* Voice Dictation Button (Top-Right, Compact) — tap to dictate, tap again to stop */}
-            <button
-              type="button"
-              onClick={handleToggleDictation}
-              className={cn(
-                "flex items-center gap-1 px-1.5 sm:px-2 py-1 rounded-md border text-[11px] font-medium transition-all cursor-pointer shadow-xs active:scale-95",
-                isDictating
-                  ? "border-red-500/50 bg-red-500/15 text-red-400 animate-pulse"
-                  : "border-border/60 hover:border-border hover:bg-muted/50 text-zinc-300",
-              )}
-              title={
-                isDictating
-                  ? "Stop dictation (ڈکٹیشن بند کریں)"
-                  : "Dictate message (آواز سے ٹائپ کریں)"
-              }
-              aria-label={isDictating ? "Stop dictation" : "Dictate message"}
-              aria-pressed={isDictating}
-            >
-              {isDictating ? (
-                <MicOff className="size-3.5 text-red-400" />
-              ) : (
-                <Mic className="size-3.5 text-zinc-300" />
-              )}
-              <span className="hidden xs:inline text-[10px]">
-                {isDictating ? "Stop" : "Dictate"}
-              </span>
+              <Sheet className="size-3.5 sm:size-4" />
             </button>
           </div>
         </header>
@@ -2922,14 +2818,14 @@ export function SuperCallAssistantView() {
                             <button
                               type="button"
                               onClick={() => {
-                                setCommandCenterTab("board");
+                                setCommandCenterTab("tasks");
                                 setIsCommandCenterOpen(true);
                               }}
                               className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-cyan-500/30 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 font-medium text-xs transition-all cursor-pointer active:scale-95"
-                              title="View and track this task on the Autonomous Board"
+                              title="View and track this task under Tasks"
                             >
-                              <LayoutGrid className="size-3 text-cyan-400" />
-                              <span>Task Board</span>
+                              <ListTodo className="size-3 text-cyan-400" />
+                              <span>Tasks</span>
                             </button>
                             <button
                               type="button"
@@ -3249,6 +3145,29 @@ export function SuperCallAssistantView() {
 
             {/* Gray Action Buttons: Paperclip Attachment, Revert Last Turn, Sparkles/ArrowLeft (on focus/tap), Stop, and Send */}
             <div className="flex items-center gap-1 shrink-0 pb-0.5">
+              {/* Dictate Message Button (inline mic, next to Send) */}
+              <button
+                type="button"
+                onClick={handleToggleDictation}
+                className={cn(
+                  "p-1 rounded transition-all cursor-pointer active:scale-95",
+                  isDictating ? "text-red-400 animate-pulse" : "text-zinc-400 hover:text-zinc-200",
+                )}
+                title={
+                  isDictating
+                    ? "Stop dictation (ڈکٹیشن بند کریں)"
+                    : "Dictate message (آواز سے ٹائپ کریں)"
+                }
+                aria-label={isDictating ? "Stop dictation" : "Dictate message"}
+                aria-pressed={isDictating}
+              >
+                {isDictating ? (
+                  <MicOff className="size-3.5 text-red-400" />
+                ) : (
+                  <Mic className="size-3.5" />
+                )}
+              </button>
+
               {/* Universal Attachment Button (Paperclip) */}
               <button
                 type="button"

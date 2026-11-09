@@ -1,4 +1,4 @@
-import { memo, useEffect, useState, useCallback } from "react";
+import { memo, useEffect, useState, useCallback, useRef } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -7,6 +7,10 @@ import {
   AlertCircle,
   Terminal,
   Layers,
+  Pause,
+  Play,
+  OctagonX,
+  GitCompareArrows,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 
@@ -38,7 +42,10 @@ export const ParallelSubagentsAccordion = memo(function ParallelSubagentsAccordi
 }: ParallelSubagentsAccordionProps) {
   const [workers, setWorkers] = useState<TelemetryWorker[]>([]);
   const [isOpen, setIsOpen] = useState(true);
+  const [isPaused, setIsPaused] = useState(false);
+  const [isStopping, setIsStopping] = useState(false);
   const [expandedLogWorkerId, setExpandedLogWorkerId] = useState<string | null>(null);
+  const wasAnyRunningRef = useRef(false);
 
   const fetchWorkers = useCallback(async () => {
     try {
@@ -71,6 +78,8 @@ export const ParallelSubagentsAccordion = memo(function ParallelSubagentsAccordi
   }, [activeProjectName, activeProjectId]);
 
   useEffect(() => {
+    if (isPaused) return;
+
     void fetchWorkers();
 
     const handleUpdate = () => {
@@ -90,7 +99,30 @@ export const ParallelSubagentsAccordion = memo(function ParallelSubagentsAccordi
       window.removeEventListener("t3-goals-changed", handleUpdate);
       clearInterval(interval);
     };
-  }, [fetchWorkers]);
+  }, [fetchWorkers, isPaused]);
+
+  // Auto-collapse into a compact status pill once every worker finishes.
+  const isAnyRunningNow = workers.some((w) => w.status === "running");
+  useEffect(() => {
+    if (wasAnyRunningRef.current && !isAnyRunningNow && workers.length > 0) {
+      setIsOpen(false);
+    }
+    wasAnyRunningRef.current = isAnyRunningNow;
+  }, [isAnyRunningNow, workers.length]);
+
+  const handleStopAll = useCallback(async () => {
+    if (isStopping) return;
+    setIsStopping(true);
+    try {
+      await fetch("/api/super-agent/workers/stop-all", { method: "POST" });
+      window.dispatchEvent(new CustomEvent("super-agent-state-updated"));
+      await fetchWorkers();
+    } catch {
+      // best effort — telemetry refresh will resync
+    } finally {
+      setIsStopping(false);
+    }
+  }, [fetchWorkers, isStopping]);
 
   // If no workers exist, do not render anything
   if (workers.length === 0) {
@@ -100,6 +132,7 @@ export const ParallelSubagentsAccordion = memo(function ParallelSubagentsAccordi
   const runningWorkers = workers.filter((w) => w.status === "running");
   const isAnyRunning = runningWorkers.length > 0;
   const completedCount = workers.filter((w) => w.status === "completed").length;
+  const totalChangedFiles = new Set(workers.flatMap((w) => w.filesModified ?? [])).size;
 
   return (
     <div
@@ -142,11 +175,67 @@ export const ParallelSubagentsAccordion = memo(function ParallelSubagentsAccordi
 
         <div className="flex items-center gap-2 text-muted-foreground shrink-0">
           <span className="text-[10px] text-muted-foreground/80 hidden sm:inline">
-            Isolated Git Worktrees
+            {isPaused ? "Paused by you" : isAnyRunning ? "Isolated Git Worktrees" : "All Completed"}
           </span>
+          {isAnyRunning && (
+            <>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsPaused((prev) => !prev);
+                }}
+                className="inline-flex items-center gap-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[10px] font-semibold text-amber-300 hover:bg-amber-500/20 transition-colors cursor-pointer"
+                title={isPaused ? "Resume live worker stream" : "Pause live worker stream"}
+              >
+                {isPaused ? (
+                  <>
+                    <Play className="size-3" />
+                    <span>Resume All</span>
+                  </>
+                ) : (
+                  <>
+                    <Pause className="size-3" />
+                    <span>Pause All</span>
+                  </>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void handleStopAll();
+                }}
+                disabled={isStopping}
+                className="inline-flex items-center gap-1 rounded-md border border-rose-500/30 bg-rose-500/10 px-2 py-1 text-[10px] font-semibold text-rose-300 hover:bg-rose-500/20 transition-colors cursor-pointer disabled:opacity-50"
+                title="Abort all running workers and mark them stopped"
+              >
+                <OctagonX className="size-3" />
+                <span>{isStopping ? "Stopping…" : "Stop All"}</span>
+              </button>
+            </>
+          )}
           {isOpen ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
         </div>
       </button>
+
+      {/* Completion & Diff Banner */}
+      {!isAnyRunning && totalChangedFiles > 0 && (
+        <div className="border-t border-emerald-500/20 bg-emerald-500/5 px-3.5 py-1.5 flex items-center justify-between gap-2">
+          <span className="text-[10px] font-medium text-emerald-300 flex items-center gap-1.5 min-w-0">
+            <CheckCircle2 className="size-3 shrink-0" />
+            <span className="truncate">✓ All Completed — {totalChangedFiles} changed files</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent("t3-open-diff-panel"))}
+            className="inline-flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-300 hover:bg-emerald-500/20 transition-colors cursor-pointer shrink-0"
+          >
+            <GitCompareArrows className="size-3" />
+            <span>Open diff</span>
+          </button>
+        </div>
+      )}
 
       {/* Accordion Content */}
       {isOpen && (

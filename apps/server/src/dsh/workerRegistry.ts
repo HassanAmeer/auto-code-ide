@@ -203,6 +203,37 @@ export function updateGoalTelemetryStatus(
 }
 
 /**
+ * Abort every still-running worker and goal. Used by the UI "Stop All" control.
+ * In-process worker loops are cooperative, so this marks the telemetry as
+ * aborted rather than guaranteeing a hard kill; the merged workspace is left
+ * untouched for the user to review.
+ */
+export function stopAllRunningTelemetry(): { stoppedWorkers: number; stoppedGoals: number } {
+  let stoppedWorkers = 0;
+  let stoppedGoals = 0;
+  const now = Date.now();
+  for (const [id, worker] of activeWorkers) {
+    if (worker.status !== "running") continue;
+    activeWorkers.set(id, {
+      ...worker,
+      status: "failed",
+      completedAt: now,
+    });
+    stoppedWorkers += 1;
+  }
+  for (const [id, goal] of activeGoals) {
+    if (goal.status !== "running") continue;
+    activeGoals.set(id, {
+      ...goal,
+      status: "failed",
+      completedAt: now,
+    } as ActiveGoalTelemetry);
+    stoppedGoals += 1;
+  }
+  return { stoppedWorkers, stoppedGoals };
+}
+
+/**
  * Clear all worker telemetry
  */
 export function clearWorkerTelemetry(): void {

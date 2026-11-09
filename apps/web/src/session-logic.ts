@@ -1418,15 +1418,28 @@ export function deriveRevertTurnCountByUserMessageId(input: {
     }
   }
   const byUserMessageId = new Map<ChatMessage["id"], number>();
+  let lastReadyCheckpointTurnCount: number | null = null;
   for (const entry of input.timelineEntries) {
-    if (entry.kind !== "message" || entry.message.role !== "user") continue;
+    if (entry.kind !== "message") continue;
+    if (entry.message.runId !== null) {
+      const checkpoint = readyCheckpointByRunId.get(entry.message.runId);
+      if (checkpoint !== undefined) {
+        lastReadyCheckpointTurnCount = checkpoint.checkpointTurnCount;
+      }
+    }
+    if (entry.message.role !== "user") continue;
     if (entry.message.inputIntent !== "turn_start" && entry.message.inputIntent !== "queued_turn") {
       continue;
     }
     if (entry.message.runId === null) continue;
-    const checkpoint = readyCheckpointByRunId.get(entry.message.runId);
-    if (checkpoint === undefined) continue;
-    byUserMessageId.set(entry.message.id, Math.max(0, checkpoint.checkpointTurnCount - 1));
+    const ownCheckpoint = readyCheckpointByRunId.get(entry.message.runId);
+    // A failed response never produces a ready checkpoint — still offer the
+    // revert arrow by rewinding to the last known-good turn (or the start).
+    const turnCount =
+      ownCheckpoint !== undefined
+        ? ownCheckpoint.checkpointTurnCount
+        : (lastReadyCheckpointTurnCount ?? 1);
+    byUserMessageId.set(entry.message.id, Math.max(0, turnCount - 1));
   }
   return byUserMessageId;
 }

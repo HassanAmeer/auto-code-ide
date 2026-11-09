@@ -3707,6 +3707,10 @@ function CupertinoErrorRow({
     : undefined;
 
   const isLatestError = ctx.latestErrorRowId ? row.id === ctx.latestErrorRowId : true;
+  if (!isLatestError) {
+    // Collapse repeated failures: only the newest "Provider Error / Retry" box stays visible.
+    return null;
+  }
   const effectiveThreadId = sourceThreadId || ctx.threadRef?.threadId || ctx.routeThreadKey || null;
 
   return (
@@ -6032,6 +6036,10 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
         : null;
 
     const isLatestError = ctx.latestErrorRowId ? workEntry.id === ctx.latestErrorRowId : true;
+    if (!isLatestError) {
+      // Collapse repeated failures: only the newest "Provider Error / Retry" box stays visible.
+      return null;
+    }
     const effectiveThreadId =
       workEntry.projectedItem?.sourceThreadId ||
       ctx.threadRef?.threadId ||

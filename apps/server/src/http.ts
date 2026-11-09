@@ -122,6 +122,7 @@ import {
   updateWorkerTelemetryStatus,
   registerGoalTelemetry,
   updateGoalTelemetryStatus,
+  stopAllRunningTelemetry,
 } from "./dsh/index.ts";
 import { isComplexTask } from "./dsh/taskDecomposer.ts";
 import { getProjectChatEngineSkillPrompt } from "@t3tools/shared/superpowerSkills";
@@ -3526,6 +3527,15 @@ export const layerSuperAgentWorkersPostRoute = HttpRouter.add(
       projectId: bodyJson?.projectId,
     });
     return HttpServerResponse.jsonUnsafe(snapshot);
+  }),
+);
+
+export const layerSuperAgentWorkersStopAllRoute = HttpRouter.add(
+  "POST",
+  "/api/super-agent/workers/stop-all",
+  Effect.gen(function* () {
+    const result = stopAllRunningTelemetry();
+    return HttpServerResponse.jsonUnsafe({ ok: true, ...result });
   }),
 );
 

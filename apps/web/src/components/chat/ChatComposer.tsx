@@ -2787,6 +2787,22 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           description:
             "Dispatch autonomous parallel workers (frontend, backend, QA) via DeepSeek supervisor",
         },
+        {
+          id: "slash:parallel-worker",
+          type: "slash-command",
+          command: "parallel-worker",
+          label: "/parallel-worker",
+          description:
+            "Trigger the Parallel Subagents Protocol — decompose into 2-4 domain-isolated workers in isolated Git worktrees",
+        },
+        {
+          id: "slash:parallel-subagents",
+          type: "slash-command",
+          command: "parallel-subagents",
+          label: "/parallel-subagents",
+          description:
+            "Alias of /parallel-worker — trigger Parallel Subagents Protocol in isolated Git worktrees",
+        },
         ...(planModeUiEnabled
           ? [
               {
@@ -4260,7 +4276,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           item.command === "export" ||
           item.command === "coder" ||
           item.command === "review" ||
-          item.command === "teamwork-preview"
+          item.command === "teamwork-preview" ||
+          item.command === "parallel-worker" ||
+          item.command === "parallel-subagents"
         ) {
           const replacement = `/${item.command} `;
           const applied = applyPromptReplacement(

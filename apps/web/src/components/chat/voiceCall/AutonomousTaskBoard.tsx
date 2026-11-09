@@ -29,6 +29,8 @@ export interface BoardTask {
   previewUrl?: string;
   autoHealedErrors?: number;
   updatedAt: string;
+  /** Which project this task belongs to (set when the board dedupes/filters by project). */
+  projectName?: string;
 }
 
 const STORAGE_KEY = "t3code:autonomous-tasks-board:v1";
@@ -37,11 +39,15 @@ export function AutonomousTaskBoard({
   projectName = "Workspace",
   activeModel = "opencode/beam-free",
   onOpenPreview,
+  projects,
 }: {
   projectName?: string;
   activeModel?: string;
   onOpenPreview?: (url: string) => void;
+  /** Project names for the selection chips. When omitted, no chips are shown. */
+  projects?: ReadonlyArray<string>;
 }) {
+  const [projectFilter, setProjectFilter] = useState<string>("__all__");
   const [tasks, setTasks] = useState<BoardTask[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
@@ -68,13 +74,24 @@ export function AutonomousTaskBoard({
     } catch {}
   }, [tasks]);
 
+  const filteredTasks = useMemo(() => {
+    if (projectFilter === "__all__") return tasks;
+    return tasks.filter((t) => (t.projectName ?? projectName) === projectFilter);
+  }, [tasks, projectFilter, projectName]);
+
   const stats = useMemo(() => {
-    const backlog = tasks.filter((t) => t.status === "backlog").length;
-    const inProgress = tasks.filter((t) => t.status === "in_progress").length;
-    const verifying = tasks.filter((t) => t.status === "verifying").length;
-    const done = tasks.filter((t) => t.status === "done").length;
-    return { backlog, inProgress, verifying, done, total: tasks.length };
-  }, [tasks]);
+    const backlog = filteredTasks.filter((t) => t.status === "backlog").length;
+    const inProgress = filteredTasks.filter((t) => t.status === "in_progress").length;
+    const verifying = filteredTasks.filter((t) => t.status === "verifying").length;
+    const done = filteredTasks.filter((t) => t.status === "done").length;
+    return {
+      backlog,
+      inProgress,
+      verifying,
+      done,
+      total: filteredTasks.length,
+    };
+  }, [filteredTasks]);
 
   // Handle task status progression
   const moveTaskStatus = useCallback((taskId: string, nextStatus: BoardTask["status"]) => {
@@ -127,6 +144,7 @@ export function AutonomousTaskBoard({
         filesModified: [`src/${cleanSlug}.ts`],
         autoHealedErrors: 0,
         updatedAt: new Date().toISOString(),
+        projectName,
       };
 
       const subtaskB: BoardTask = {
@@ -140,13 +158,14 @@ export function AutonomousTaskBoard({
         progress: 0,
         autoHealedErrors: 0,
         updatedAt: new Date().toISOString(),
+        projectName,
       };
 
       setTasks((prev) => [subtaskA, subtaskB, ...prev]);
       setNewGoalInput("");
       setIsDecomposing(false);
     }, 800);
-  }, [newGoalInput, activeModel]);
+  }, [newGoalInput, activeModel, projectName]);
 
   // Real best-effort health check of each task's preview URL (same-origin HEAD).
   useEffect(() => {
@@ -297,10 +316,44 @@ export function AutonomousTaskBoard({
         </div>
       </div>
 
+      {/* Project Selection Chips */}
+      {projects && projects.length > 0 && (
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setProjectFilter("__all__")}
+            className={cn(
+              "px-2.5 py-1 rounded-full text-[10px] font-semibold border transition-all cursor-pointer",
+              projectFilter === "__all__"
+                ? "bg-primary/20 text-primary border-primary/40"
+                : "bg-muted/40 text-muted-foreground border-border/50 hover:text-foreground hover:bg-muted/60",
+            )}
+          >
+            All Projects
+          </button>
+          {projects.map((p) => (
+            <button
+              key={p}
+              type="button"
+              onClick={() => setProjectFilter(p)}
+              className={cn(
+                "px-2.5 py-1 rounded-full text-[10px] font-semibold border transition-all cursor-pointer max-w-[140px] truncate",
+                projectFilter === p
+                  ? "bg-primary/20 text-primary border-primary/40"
+                  : "bg-muted/40 text-muted-foreground border-border/50 hover:text-foreground hover:bg-muted/60",
+              )}
+              title={p}
+            >
+              {p}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Kanban Board Columns Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
         {columns.map((col) => {
-          const colTasks = tasks.filter((t) => t.status === col.key);
+          const colTasks = filteredTasks.filter((t) => t.status === col.key);
           const ColIcon = col.icon;
 
           return (

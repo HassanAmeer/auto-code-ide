@@ -5656,6 +5656,12 @@ export default function ChatView(props: ChatViewProps) {
     if (!activeThreadRef || !activeProject) return;
     useRightPanelStore.getState().open(activeThreadRef, "files");
   }, [activeProject, activeThreadRef]);
+  // Parallel subagents accordion "Open diff" banner requests the diff surface here.
+  useEffect(() => {
+    const handler = () => addDiffSurface();
+    window.addEventListener("t3-open-diff-panel", handler);
+    return () => window.removeEventListener("t3-open-diff-panel", handler);
+  }, [addDiffSurface]);
   const supportsThreadPullRequests =
     serverConfig?.environment.capabilities.threadPullRequests === true;
   const visiblePullRequests = visibleThreadPullRequests(
@@ -9643,10 +9649,12 @@ export default function ChatView(props: ChatViewProps) {
       }
     } else if (
       messageTextForSend.startsWith("/teamwork-preview") ||
-      messageTextForSend.startsWith("/teamwork")
+      messageTextForSend.startsWith("/teamwork") ||
+      messageTextForSend.startsWith("/parallel-worker") ||
+      messageTextForSend.startsWith("/parallel-subagents")
     ) {
       const cleanPrompt = messageTextForSend
-        .replace(/^\/(?:teamwork-preview|teamwork)\s*/i, "")
+        .replace(/^\/(?:teamwork-preview|teamwork|parallel-worker|parallel-subagents)\s*/i, "")
         .trim();
       toastManager.add({
         type: "neutral",
@@ -9673,39 +9681,8 @@ export default function ChatView(props: ChatViewProps) {
       messageTextForSend = `[Supervisor Teamwork Dispatch: ${cleanPrompt.slice(0, 50) || "Parallel Subagents"}]\n\n🚀 DeepSeek Supervisor has decomposed this task into parallel domain-isolated milestones. Active workers are running in isolated Git worktrees. Monitor live output in the timeline subagents accordion and background services widget below.\n\n${cleanPrompt}`;
     }
 
-    // Auto-detect multi-requirement prompts (10/10 Protocol / 2+ milestones) and auto-dispatch parallel workers
-    const hasMultipleExplicitRequirements =
-      messageTextForSend.split(/\r?\n/).filter((l) => /^\s*(?:\[\d+\]|\d+[.)]|\*|-|•)\s+/.test(l))
-        .length >= 2;
-    const isExecutionRequest =
-      /\b(banao|create|build|fix|implement|develop|karo|kaam|task|milestone|feature|system|app)\b/i.test(
-        messageTextForSend,
-      );
-
-    if (
-      hasMultipleExplicitRequirements &&
-      isExecutionRequest &&
-      !messageTextForSend.startsWith("/")
-    ) {
-      const targetProjName = activeProject?.title || projectForSend?.title || "Workspace";
-      void fetch(resolvePrimaryEnvironmentHttpUrl("/api/super-agent/dispatch-worker"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          projectIdOrName: targetProjName,
-          taskTitle:
-            messageTextForSend.split(/\r?\n/)[0]?.slice(0, 60) || "Parallel Subagents Task",
-          prompt: messageTextForSend,
-          model: ctxSelectedModel || "deepseek-v4.1-flash-free",
-          stream: true,
-        }),
-      })
-        .then(() => {
-          window.dispatchEvent(new CustomEvent("super-agent-state-updated"));
-          window.dispatchEvent(new CustomEvent("t3-subagents-changed"));
-        })
-        .catch(() => {});
-    }
+    // Per protocol, parallel workers are triggered EXCLUSIVELY by the explicit
+    // /parallel-worker or /parallel-subagents slash commands — never implicitly.
 
     if (isComposerWebSearchEnabled() && messageTextForSend && !messageTextForSend.startsWith("/")) {
       try {
