@@ -187,12 +187,15 @@ function Sidebar({
   resizable = false,
   className,
   children,
+  mobileWidth,
   ...props
 }: React.ComponentProps<"div"> & {
   side?: "left" | "right";
   variant?: "sidebar" | "floating" | "inset";
   collapsible?: "offcanvas" | "icon" | "none";
   resizable?: boolean | SidebarResizableOptions;
+  /** Mobile drawer width (any CSS width). Defaults to 90vw. */
+  mobileWidth?: string;
 }) {
   const { isMobile, state, openMobile, setOpenMobile } = useSidebar();
   const resolvedResizable = React.useMemo<SidebarResolvedResizableOptions | null>(() => {
@@ -237,7 +240,7 @@ function Sidebar({
         <Sheet onOpenChange={setOpenMobile} open={openMobile}>
           <SheetPopup
             className={cn(
-              "w-(--sidebar-width) max-w-[90vw] bg-sidebar surface-grain p-0 text-sidebar-foreground",
+              "w-(--sidebar-width) bg-sidebar surface-grain p-0 text-sidebar-foreground",
               className,
             )}
             data-mobile="true"
@@ -247,7 +250,7 @@ function Sidebar({
             side={side}
             style={
               {
-                "--sidebar-width": SIDEBAR_WIDTH_MOBILE,
+                "--sidebar-width": mobileWidth ?? SIDEBAR_WIDTH_MOBILE,
               } as React.CSSProperties
             }
           >
