@@ -275,6 +275,22 @@ export default defineConfig(() => {
       emptyOutDir: true,
       manifest: true,
       sourcemap: buildSourcemap,
+      rollupOptions: {
+        output: {
+          advancedChunks: {
+            groups: [
+              // Shared lucide icons land in one cached chunk instead of ~275 tiny
+              // per-icon chunks. Route-unique icons stay inside their route chunk.
+              {
+                name: "icons",
+                test: /node_modules[\\/]lucide-react/,
+                priority: 10,
+                minShareCount: 2,
+              },
+            ],
+          },
+        },
+      },
     },
     test: {
       projects: [defineProject(unitTestProject)],

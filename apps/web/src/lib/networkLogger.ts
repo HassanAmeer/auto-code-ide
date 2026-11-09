@@ -52,10 +52,11 @@ class NetworkLoggerService {
   private maxLogs = 300;
   private isInitialized = false;
 
+  private aiLogsInflight: Promise<void> | null = null;
+
   constructor() {
     if (typeof window !== "undefined") {
       this.initInterceptors();
-      this.fetchAiModelLogs();
     }
   }
 
@@ -68,18 +69,24 @@ class NetworkLoggerService {
   }
 
   public async fetchAiModelLogs(): Promise<void> {
-    try {
-      const res = await fetch("/api/ai-model-logs");
-      if (res.ok) {
-        const json = await res.json();
-        if (Array.isArray(json?.logs)) {
-          this.aiLogs = json.logs;
-          this.notify();
+    if (this.aiLogsInflight) return this.aiLogsInflight;
+    this.aiLogsInflight = (async () => {
+      try {
+        const res = await fetch("/api/ai-model-logs");
+        if (res.ok) {
+          const json = await res.json();
+          if (Array.isArray(json?.logs)) {
+            this.aiLogs = json.logs;
+            this.notify();
+          }
         }
+      } catch {
+        // ignore
+      } finally {
+        this.aiLogsInflight = null;
       }
-    } catch {
-      // ignore
-    }
+    })();
+    return this.aiLogsInflight;
   }
 
   public async clearAiModelLogs(): Promise<void> {
@@ -97,6 +104,8 @@ class NetworkLoggerService {
 
   public subscribe(listener: Listener): () => void {
     this.listeners.add(listener);
+    // AI logs are fetched on demand (RequestLogsSheet fetches when opened),
+    // so merely subscribing must not trigger a network call on page load.
     return () => {
       this.listeners.delete(listener);
     };

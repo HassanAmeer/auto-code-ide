@@ -1,21 +1,14 @@
-import { type CustomProvider, normalizeCustomProvider } from "./customProviders";
+import {
+  type CustomProvider,
+  fetchCustomProvidersFromServer,
+  normalizeCustomProvider,
+} from "./customProviders";
 
 let isInitialized = false;
 let isSyncing = false;
 
 export async function fetchServerCustomProviders(): Promise<CustomProvider[] | null> {
-  if (typeof window === "undefined") return null;
-  try {
-    const res = await fetch("/api/custom-provider/list");
-    if (!res.ok) return null;
-    const data = (await res.json()) as { ok?: boolean; providers?: CustomProvider[] };
-    if (data.ok && Array.isArray(data.providers)) {
-      return data.providers;
-    }
-  } catch (err) {
-    console.warn("Failed to fetch custom providers from server:", err);
-  }
-  return null;
+  return fetchCustomProvidersFromServer();
 }
 
 export async function syncCustomProvidersToServer(providers: CustomProvider[]): Promise<void> {

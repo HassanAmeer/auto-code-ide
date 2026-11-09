@@ -313,59 +313,75 @@ export function deleteCustomProvider(id: string): void {
   }
 }
 
+// Module-level shared snapshot of the server provider list. Every caller reuses
+// the same inflight request plus a short TTL cache — previously the app issued
+// three identical /api/custom-provider/list requests on every page load.
+const CUSTOM_PROVIDERS_LIST_TTL_MS = 15_000;
+let customProvidersListInflight: Promise<CustomProvider[] | null> | null = null;
+let customProvidersListCache: { at: number; value: CustomProvider[] } | null = null;
+
+/**
+ * Fetch the persisted providers from the server exactly once per TTL window.
+ * Returns null when the server is unreachable/erroring, a (possibly empty)
+ * normalized list otherwise. Persists non-empty lists to localStorage and
+ * broadcasts the updated list to subscribers.
+ */
+export function fetchCustomProvidersFromServer(): Promise<CustomProvider[] | null> {
+  const cached = customProvidersListCache;
+  if (cached && Date.now() - cached.at < CUSTOM_PROVIDERS_LIST_TTL_MS) {
+    return Promise.resolve(cached.value);
+  }
+  if (customProvidersListInflight) {
+    return customProvidersListInflight;
+  }
+  customProvidersListInflight = (async () => {
+    if (typeof window === "undefined") return null;
+    try {
+      const res = await fetch("/api/custom-provider/list");
+      if (!res.ok) return null;
+      const data = (await res.json()) as { ok?: boolean; providers?: CustomProvider[] };
+      if (!data.ok || !Array.isArray(data.providers)) return null;
+      const normalized = data.providers
+        .map(normalizeCustomProvider)
+        .filter((p): p is CustomProvider => p !== null);
+      if (normalized.length > 0) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+        window.dispatchEvent(new CustomEvent(EVENT_KEY, { detail: normalized }));
+      }
+      customProvidersListCache = { at: Date.now(), value: normalized };
+      return normalized;
+    } catch {
+      // Server offline/unreachable — callers fall back to localStorage.
+      return null;
+    } finally {
+      customProvidersListInflight = null;
+    }
+  })();
+  return customProvidersListInflight;
+}
+
 // Fetch persisted custom providers from the server database on load
 if (typeof window !== "undefined") {
   void (async () => {
-    try {
-      const res = await fetch("/api/custom-provider/list");
-      if (res.ok) {
-        const data = (await res.json()) as { ok?: boolean; providers?: CustomProvider[] };
-        if (data.ok && Array.isArray(data.providers) && data.providers.length > 0) {
-          const normalized = data.providers
-            .map(normalizeCustomProvider)
-            .filter((p): p is CustomProvider => p !== null);
-          if (normalized.length > 0) {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
-            window.dispatchEvent(new CustomEvent(EVENT_KEY, { detail: normalized }));
-            return;
-          }
-        }
-      }
-    } catch {
-      // server may be offline or connecting
-    }
-
-    // If server is empty, seed with current local non-empty providers
+    const list = await fetchCustomProvidersFromServer();
     const currentList = getCustomProviders();
-    if (currentList.length > 0) {
-      void fetch("/api/custom-provider/sync", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ providers: currentList }),
-      }).catch(() => {});
+    if (!list || list.length === 0) {
+      // If server is empty (or unreachable), seed with current local providers
+      if (currentList.length > 0) {
+        void fetch("/api/custom-provider/sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ providers: currentList }),
+        }).catch(() => {});
+      }
     }
   })();
 }
 
 export async function fetchCustomProviders(): Promise<CustomProvider[]> {
   if (typeof window === "undefined") return getCustomProviders();
-  try {
-    const res = await fetch("/api/custom-provider/list");
-    if (res.ok) {
-      const data = (await res.json()) as { ok?: boolean; providers?: CustomProvider[] };
-      if (data.ok && Array.isArray(data.providers) && data.providers.length > 0) {
-        const normalized = data.providers
-          .map(normalizeCustomProvider)
-          .filter((p): p is CustomProvider => p !== null);
-        if (normalized.length > 0) {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
-          window.dispatchEvent(new CustomEvent(EVENT_KEY, { detail: normalized }));
-          return normalized;
-        }
-      }
-    }
-  } catch {}
-  return getCustomProviders();
+  const list = await fetchCustomProvidersFromServer();
+  return list && list.length > 0 ? list : getCustomProviders();
 }
 
 export function subscribeCustomProviders(
