@@ -160,9 +160,9 @@ function SkillTile({
   trailing?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-3 border-b border-border/40 px-3 py-2 last:border-b-0">
+    <div className="flex flex-col gap-1.5 border-b border-border/40 px-3 py-2 last:border-b-0 sm:flex-row sm:items-center sm:gap-3">
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
           <span className="truncate text-xs font-medium text-foreground">{skill.name}</span>
           {badges}
         </div>
@@ -172,7 +172,7 @@ function SkillTile({
         <code className="truncate font-mono text-[10px] text-muted-foreground/80">{path}</code>
         {footnote}
       </div>
-      <div className="flex shrink-0 items-center gap-1">
+      <div className="flex w-full shrink-0 items-center justify-between gap-1 border-t border-border/30 pt-1.5 sm:w-auto sm:justify-end sm:gap-1.5 sm:border-t-0 sm:pt-0">
         {actions.map((action) => (
           <Tooltip key={action.label}>
             <TooltipTrigger
