@@ -1119,15 +1119,15 @@ export function IpRotationSettingsPage() {
                         {/* IP Shift Indicator & Remove Action */}
                         <div className="flex flex-wrap items-center gap-2 self-end sm:self-auto">
                           {/* IP Shift Pill: Old IP in Muted Gray, New IP in Green (or Orange if paused) */}
-                          <div className="flex items-center gap-1 rounded-lg border border-border/50 bg-muted/40 px-2 py-0.5 font-mono text-[11px]">
-                            <span className="text-muted-foreground">
+                          <div className="flex max-w-full flex-wrap items-center gap-1 rounded-lg border border-border/50 bg-muted/40 px-2 py-0.5 font-mono text-[11px]">
+                            <span className="text-muted-foreground break-all">
                               {item.oldIp ? formatIpPort(item.oldIp, "8118") : "Direct"}
                             </span>
                             <ArrowRightIcon
-                              className={`size-3 ${isPaused ? "text-amber-500" : "text-emerald-500"}`}
+                              className={`size-3 shrink-0 ${isPaused ? "text-amber-500" : "text-emerald-500"}`}
                             />
                             <span
-                              className={`font-bold ${
+                              className={`font-bold break-all ${
                                 isPaused ? "text-amber-500" : "text-emerald-500"
                               }`}
                             >
