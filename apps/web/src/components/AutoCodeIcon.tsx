@@ -8,7 +8,7 @@ export function AutoCodeIcon(props: SVGProps<SVGSVGElement>) {
           <rect x="0" y="0" width="512" height="512" rx="112" />
         </clipPath>
       </defs>
-      <image width="512" height="512" href="/logo-512.png" clipPath="url(#botcodeSquircleClip)" />
+      <image width="512" height="512" href="/logo-512.webp" clipPath="url(#botcodeSquircleClip)" />
     </svg>
   );
 }

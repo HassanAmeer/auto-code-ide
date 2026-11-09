@@ -25,9 +25,9 @@
       "type": "image/png"
     },
     {
-      "src": "/logo-512.png",
+      "src": "/logo-512.webp",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/webp"
     }
   ]
 }
