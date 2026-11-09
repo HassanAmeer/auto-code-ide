@@ -107,7 +107,7 @@ describe("ComposerPrimaryActions", () => {
     expect(markup).not.toContain("stage-nightly");
   });
 
-  it("renders mic button when there is no sendable content and thread is idle", () => {
+  it("renders the send button (dictation mic floats inside the input box)", () => {
     const markup = renderToStaticMarkup(
       createElement(ComposerPrimaryActions, {
         compact: true,
@@ -129,8 +129,8 @@ describe("ComposerPrimaryActions", () => {
       }),
     );
 
-    expect(markup).toContain("Dictate message");
-    expect(markup).not.toContain("Submit message");
+    expect(markup).toContain("Submit message");
+    expect(markup).not.toContain("Dictate message");
   });
 
   it("renders send button when input field has sendable content", () => {

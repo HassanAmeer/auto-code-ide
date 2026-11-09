@@ -1,8 +1,6 @@
 import {
   memo,
   useState,
-  useRef,
-  useEffect,
   type MouseEventHandler,
   type PointerEventHandler,
   type ReactNode,
@@ -13,8 +11,6 @@ import {
   ChevronLeftIcon,
   Minimize2Icon,
   PlayIcon,
-  Mic,
-  MicOff,
   Globe,
   Sparkles,
   Undo2,
@@ -25,7 +21,7 @@ import { MorphIcon } from "~/components/MorphIcon";
 import { useEnvironmentIdentificationMode } from "~/hooks/useSettings";
 import { formatContextWindowTokens } from "~/lib/contextWindow";
 import { cn } from "~/lib/utils";
-import { createSttSession, type SttController, loadSttSettings } from "~/lib/speech/stt";
+import { useComposerDictation } from "./composerDictation";
 import { isComposerWebSearchEnabled, setComposerWebSearchEnabled } from "~/lib/webSearchService";
 import { useShortcutModifierState } from "../../shortcutModifierState";
 import { StageBackdropButtonArt, useSidebarStageBackdropVariant } from "../SidebarStageBackdrop";
@@ -82,6 +78,8 @@ interface ComposerPrimaryActionsProps {
   /** The Compact chip is turned off, so the next send keeps full history. */
   keepFullHistory?: boolean;
   onToggleKeepFullHistory?: () => void;
+  /** Collapsed (resting) composer: show ONLY a muted ghost send — every other icon hides. */
+  restingSend?: boolean;
 }
 
 const formatPendingPrimaryActionLabel = (input: {
@@ -117,6 +115,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
   pendingAction,
   isRunning,
   canInterrupt,
+  restingSend = false,
   followUpBehavior = "steer",
   alternateShortcutLabel = null,
   showPlanFollowUpPrompt,
@@ -148,50 +147,10 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
     : undefined;
   const environmentIdentificationMode = useEnvironmentIdentificationMode();
   const shortcutModifiers = useShortcutModifierState();
-  const [isDictating, setIsDictating] = useState(false);
+  const { isDictating, stop: stopDictation } = useComposerDictation();
   const [isWebSearchActive, setIsWebSearchActive] = useState<boolean>(() =>
     isComposerWebSearchEnabled(),
   );
-  const sttSessionRef = useRef<SttController | null>(null);
-
-  useEffect(() => {
-    return () => {
-      sttSessionRef.current?.stop();
-    };
-  }, []);
-
-  const handleToggleDictation = () => {
-    if (isDictating) {
-      sttSessionRef.current?.stop();
-      setIsDictating(false);
-      window.dispatchEvent(new CustomEvent("t3:speech-stream", { detail: { finalize: true } }));
-      window.dispatchEvent(new CustomEvent("t3:speech-stream", { detail: { reset: true } }));
-    } else {
-      const session = createSttSession({
-        onResult: (text, isFinal, cumulative) => {
-          window.dispatchEvent(
-            new CustomEvent("t3:speech-stream", {
-              detail: { text: text.trim(), isFinal, cumulative: cumulative?.trim() },
-            }),
-          );
-        },
-        onStateChange: (active) => {
-          setIsDictating(active);
-          if (!active) {
-            window.dispatchEvent(new CustomEvent("t3:speech-stream", { detail: { reset: true } }));
-          }
-        },
-        onError: (err) => {
-          console.warn("STT error:", err);
-          setIsDictating(false);
-          window.dispatchEvent(new CustomEvent("t3:speech-stream", { detail: { reset: true } }));
-        },
-      });
-      sttSessionRef.current = session;
-      session.start();
-      setIsDictating(true);
-    }
-  };
 
   const isQueuing =
     !isEditingQueuedMessage &&
@@ -213,8 +172,8 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
           <button
             type="button"
             className={cn(
-              "flex cursor-pointer items-center justify-center rounded-full bg-destructive/90 text-white shadow-xs shadow-destructive/24 inset-shadow-control-highlight transition-all duration-150 hover:bg-destructive hover:scale-105 active:inset-shadow-control-pressed active:shadow-none [&_svg]:pointer-events-none",
-              insidePendingAction ? "size-8 sm:size-7" : "size-8 sm:h-8 sm:w-8",
+              "flex cursor-pointer items-center justify-center rounded-full border border-rose-400/40 bg-transparent text-rose-400 opacity-60 transition-all duration-150 hover:opacity-100 hover:border-rose-400/70 hover:bg-rose-500/10 hover:scale-105 active:opacity-80 [&_svg]:pointer-events-none",
+              insidePendingAction ? "size-8 sm:size-7" : "size-8",
             )}
             {...pointerFocusProps}
             disabled={!canOperateThread}
@@ -225,8 +184,8 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
           />
         }
       >
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
-          <rect x="2" y="2" width="8" height="8" rx="1.5" />
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+          <rect x="2" y="2" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.6" />
         </svg>
       </TooltipTrigger>
       <TooltipPopup>Interrupt</TooltipPopup>
@@ -339,10 +298,6 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
     );
   }
 
-  if (canInterrupt && !hasSendableContent && !isEditingQueuedMessage) {
-    return renderStopGenerationButton(false);
-  }
-
   const showResume = canResume && !hasSendableContent && !isEditingQueuedMessage;
 
   const compactTokens =
@@ -384,9 +339,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
 
   const handleSendClick: MouseEventHandler<HTMLButtonElement> = (e) => {
     if (isDictating) {
-      sttSessionRef.current?.stop();
-      setIsDictating(false);
-      window.dispatchEvent(new CustomEvent("t3:speech-stream", { detail: { reset: true } }));
+      stopDictation({ finalize: false });
     }
     if (showResume) {
       onResume?.();
@@ -444,6 +397,36 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
     });
   };
 
+  /** Collapsed/resting composer: a muted ghost up-arrow — nothing else is shown. */
+  const sendButtonResting = (
+    <button
+      type={showResume ? "button" : "submit"}
+      className={cn(
+        "relative isolate flex size-8 cursor-pointer items-center justify-center overflow-hidden rounded-full border border-border/60 bg-muted/25 text-muted-foreground opacity-[0.35] transition-all duration-150 enabled:hover:opacity-70 enabled:hover:text-foreground enabled:hover:bg-muted/40 disabled:pointer-events-none disabled:hover:opacity-[0.35] sm:size-8 [&_svg]:pointer-events-none",
+      )}
+      {...pointerFocusProps}
+      onClick={handleSendClick}
+      disabled={isSendBusy || (!hasSendableContent && !showResume)}
+      aria-label={submitStatus ?? submitLabel}
+    >
+      {isConnecting || isSendBusy ? (
+        <Spinner size="sm" aria-hidden="true" />
+      ) : showResume ? (
+        <PlayIcon className="size-4 fill-current" aria-hidden="true" />
+      ) : (
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+          <path
+            d="M7 11.5V2.5M7 2.5L3 6.5M7 2.5L11 6.5"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      )}
+    </button>
+  );
+
   const webSearchButton = (
     <Tooltip key="web-search-toggle">
       <TooltipTrigger
@@ -477,43 +460,6 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
     </Tooltip>
   );
 
-  const sttSettings = loadSttSettings();
-  const currentLang = sttSettings.language.replace("-", " ");
-
-  const micButton = (
-    <Tooltip key="mic-dictate">
-      <TooltipTrigger
-        render={
-          <button
-            type="button"
-            className={cn(
-              "relative isolate flex size-8 items-center justify-center overflow-hidden rounded-full shadow-xs transition-all duration-150 cursor-pointer sm:size-8",
-              isDictating
-                ? "border border-red-400/60 bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 hover:scale-105 active:scale-95"
-                : "bg-muted/70 text-muted-foreground hover:bg-muted hover:text-foreground hover:scale-105 active:scale-95",
-            )}
-            {...pointerFocusProps}
-            onClick={handleToggleDictation}
-            aria-label={
-              isDictating
-                ? "Stop voice dictation (Listening continuously)"
-                : `Dictate message (${currentLang})`
-            }
-          >
-            {isDictating ? (
-              <MicOff className="size-4 animate-bounce" aria-hidden="true" />
-            ) : (
-              <Mic className="size-4" aria-hidden="true" />
-            )}
-          </button>
-        }
-      />
-      <TooltipPopup>
-        {isDictating ? "Listening continuously... Click to stop" : `Voice typing (${currentLang})`}
-      </TooltipPopup>
-    </Tooltip>
-  );
-
   const sendButtonElement = (
     <Tooltip key="submit">
       <TooltipTrigger render={<span className="inline-flex" />}>{sendButton}</TooltipTrigger>
@@ -521,11 +467,12 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
     </Tooltip>
   );
 
-  const unifiedPrimaryButton = isDictating
-    ? micButton
-    : hasSendableContent || showResume || isEditingQueuedMessage
-      ? sendButtonElement
-      : micButton;
+  const sendButtonRestingElement = (
+    <Tooltip key="submit">
+      <TooltipTrigger render={<span className="inline-flex" />}>{sendButtonResting}</TooltipTrigger>
+      <TooltipPopup>{submitTooltip}</TooltipPopup>
+    </Tooltip>
+  );
 
   const polishDisabled =
     !canOperateThread ||
@@ -575,9 +522,16 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
 
   const actions = (
     <div className="flex items-center gap-1 sm:gap-1.5">
-      {webSearchButton}
-      {polishButton}
-      {unifiedPrimaryButton}
+      {restingSend ? (
+        sendButtonRestingElement
+      ) : (
+        <>
+          {webSearchButton}
+          {promptHasText || canUndoPolish ? polishButton : null}
+          {canInterrupt ? renderStopGenerationButton(false) : null}
+          {sendButtonElement}
+        </>
+      )}
     </div>
   );
 

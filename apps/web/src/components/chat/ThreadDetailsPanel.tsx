@@ -185,6 +185,8 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
                 threadId={props.threadId}
                 compact={density !== "full"}
                 showOpenSheetButton={true}
+                scope="project"
+                projectRoot={props.gitCwd}
               />
             </ThreadDetailsSection>
           ) : null}

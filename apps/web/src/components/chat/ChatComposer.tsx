@@ -271,6 +271,7 @@ import { ComposerPendingApprovalActions } from "./ComposerPendingApprovalActions
 import { CompactComposerControlsMenu } from "./CompactComposerControlsMenu";
 import { ComposerImageThumbnail } from "./ComposerImageThumbnail";
 import { ComposerPrimaryActions } from "./ComposerPrimaryActions";
+import { ComposerDictationMicButton } from "./ComposerDictationMicButton";
 import { ComposerPendingApprovalPanel } from "./ComposerPendingApprovalPanel";
 import { ComposerPendingUserInputPanel } from "./ComposerPendingUserInputPanel";
 import { ComposerPlanFollowUpBanner } from "./ComposerPlanFollowUpBanner";
@@ -1405,10 +1406,12 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
   compactBeforeSendTokens: number | null;
   keepFullHistory: boolean;
   onToggleKeepFullHistory: () => void;
+  /** Collapsed (resting) composer: ONLY a ghost up-arrow send is shown. */
+  restingSend?: boolean;
 }) {
   return (
     <>
-      {props.activeContextWindow ? (
+      {!props.restingSend && props.activeContextWindow ? (
         <ContextWindowMeter
           usage={props.activeContextWindow}
           modelDisplayName={props.activeThreadModelDisplayName}
@@ -1416,7 +1419,7 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
           compactDisabled={props.compactDisabled}
           compactDisabledReason={props.compactDisabledReason}
         />
-      ) : props.reserveContextWindowMeter ? (
+      ) : !props.restingSend && props.reserveContextWindowMeter ? (
         <ContextWindowMeterPlaceholder />
       ) : null}
       <ComposerPrimaryActions
@@ -1450,6 +1453,7 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
         compactBeforeSendTokens={props.compactBeforeSendTokens}
         keepFullHistory={props.keepFullHistory}
         onToggleKeepFullHistory={props.onToggleKeepFullHistory}
+        restingSend={props.restingSend}
       />
     </>
   );
@@ -7240,7 +7244,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
             data-chat-composer-surface="true"
             data-chat-composer-mobile-collapsed={isComposerCollapsedMobile ? "true" : "false"}
             className={cn(
-              "rounded-3xl transition-[background-color] duration-200",
+              "relative rounded-3xl transition-[background-color] duration-200",
               "in-data-[thread-context-over]:bg-accent/45 in-data-[thread-context-over]:ring-1 in-data-[thread-context-over]:ring-primary/70",
               isDragOverComposer ? "bg-accent/45 ring-1 ring-primary/70" : null,
               projectSelectionRequired ? "opacity-75" : null,
@@ -7248,6 +7252,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
               composerProviderState.composerSurfaceClassName,
             )}
           >
+            {!isComposerResting && !isComposerApprovalState ? <ComposerDictationMicButton /> : null}
             {showCollapsedMobilePromptRow ? (
               <div className="flex items-center justify-between gap-2 px-3 py-2">
                 <button
@@ -7918,7 +7923,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   }
                   className="flex shrink-0 flex-nowrap items-center justify-end gap-1 sm:gap-1.5"
                 >
-                  {showComposerAttachAction ? (
+                  {!isComposerResting && showComposerAttachAction ? (
                     <>
                       <input
                         ref={attachmentInputRef}
@@ -7957,6 +7962,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   ) : null}
                   <ComposerFooterPrimaryActions
                     compact={isComposerResting || isComposerPrimaryActionsCompact}
+                    restingSend={isComposerResting}
                     canOperateThread={canOperateThread}
                     activeContextWindow={
                       settings.contextWindowMeterEnabled ? activeContextWindow : null

@@ -137,6 +137,14 @@ export interface UnifiedBackgroundTaskItem {
     readonly threadId: string;
     readonly terminalId: string;
   };
+  /** Working directory the service/command runs in (terminals). */
+  readonly path?: string;
+  /** PID of the running subprocess (terminals). */
+  readonly pid?: number | null;
+  /** Exit code from a finished command execution. */
+  readonly exitCode?: number | null;
+  /** Full command text or scheduled-task prompt for the expanded detail. */
+  readonly detail?: string;
 }
 
 export interface SubagentItem {
@@ -159,6 +167,14 @@ export interface BackgroundServicesWidgetProps {
   readonly initialExpanded?: boolean;
   readonly showOpenSheetButton?: boolean;
   readonly className?: string;
+  /**
+   * "project" scope (thread details panel): only this project's services —
+   * this thread's terminal sessions and this thread's commands; environment-wide
+   * scheduled tasks are hidden. "all" keeps the full background-sheet list.
+   */
+  readonly scope?: "all" | "project";
+  /** Project root the "project" scope filters by (falls back to thread scoping). */
+  readonly projectRoot?: string | null;
   /** Explicit subagents override or initial list */
   readonly subagents?: ReadonlyArray<SubagentItem>;
   /** Explicit goals override or initial list */
@@ -222,6 +238,8 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
   className,
   subagents: propSubagents,
   goals: propGoals,
+  scope = "all",
+  projectRoot = null,
 }: BackgroundServicesWidgetProps) {
   const activeEnvId = useActiveEnvironmentId();
   const primaryEnvId = usePrimaryEnvironmentId();
@@ -234,6 +252,7 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
 
   const [busyTaskId, setBusyTaskId] = useState<string | null>(null);
   const [stoppingTerminalId, setStoppingTerminalId] = useState<string | null>(null);
+  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
 
   // Stored & API state for workers and goals
   const [storedWorkers, setStoredWorkers] = useState<SubagentItem[]>(() => readStoredWorkers());
@@ -458,6 +477,15 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
       for (const session of terminalSessions) {
         const summary = session.state.summary;
         if (!summary) continue;
+        if (scope === "project" && projectRoot) {
+          const inProject = (cwd: string) => {
+            const norm = (p: string) => (p.replace(/\/+$/, "") || "/") + "/";
+            const c = norm(cwd);
+            const r = norm(projectRoot);
+            return c === r || c.startsWith(r);
+          };
+          if (!inProject(summary.cwd ?? "")) continue;
+        }
         const isRunning = summary.hasRunningSubprocess;
         list.push({
           id: `term-${summary.terminalId}`,
@@ -468,12 +496,14 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
             threadId: summary.threadId,
             terminalId: summary.terminalId,
           },
+          path: summary.cwd,
+          pid: summary.pid ?? null,
         });
       }
     }
 
-    // B. Scheduled Tasks & Timers
-    const tasks = tasksQuery.data?.tasks ?? [];
+    // B. Scheduled Tasks & Timers (environment-wide — hidden in project scope)
+    const tasks = scope === "project" ? [] : (tasksQuery.data?.tasks ?? []);
     for (const task of tasks) {
       const isTimer =
         task.prompt?.toLowerCase().includes("timer") ||
@@ -488,12 +518,17 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
         kind: isFailed ? "cancelled" : isTimer ? "timer" : "scheduled",
         status: isRunning ? "running" : isFailed ? "failed" : "pending",
         rawTask: task,
+        detail:
+          typeof task.prompt === "string"
+            ? task.prompt.replace(/\s+/g, " ").trim().slice(0, 240)
+            : undefined,
       });
     }
 
     // C. Turn Items from Thread Projection (command executions & searches)
     const turnItems = threadDetails?.projection?.turnItems ?? [];
-    for (let i = turnItems.length - 1; i >= 0; i--) {
+    let addedTurnItems = 0;
+    for (let i = turnItems.length - 1; i >= 0 && addedTurnItems < 25; i--) {
       const item = turnItems[i];
       if (!item) continue;
 
@@ -504,16 +539,19 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
           (item.exitCode !== undefined && item.exitCode !== 0);
         const isRunning = item.status === "running";
         const cleanCmd = (item.input || "").replace(/\s+/g, " ").trim();
-
+        addedTurnItems += 1;
         list.push({
           id: `turn-cmd-${item.id}`,
           title: cleanCmd || "Command execution",
           kind: isFailed ? "cancelled" : "command",
           status: isRunning ? "running" : isFailed ? "failed" : "completed",
+          detail: (item.input || "").trim().slice(0, 400),
+          exitCode: item.exitCode ?? null,
         });
       } else if (item.type === "web_search" || item.type === "file_search") {
         const isFailed = item.status === "failed";
         const queryText = (item as any).query || (item as any).pattern || item.type;
+        addedTurnItems += 1;
         list.push({
           id: `turn-search-${item.id}`,
           title: `Search ${queryText} in codebase`,
@@ -524,10 +562,27 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
     }
 
     return list;
-  }, [terminalSessions, tasksQuery.data?.tasks, threadDetails?.projection?.turnItems]);
+  }, [
+    terminalSessions,
+    tasksQuery.data?.tasks,
+    threadDetails?.projection?.turnItems,
+    scope,
+    projectRoot,
+  ]);
+
+  const visibleBackgroundTasks = useMemo(() => {
+    if (scope !== "project") return backgroundTasks;
+    const running = backgroundTasks.filter((t) => t.status === "running");
+    const rest = backgroundTasks.filter((t) => t.status !== "running");
+    return [...running, ...rest].slice(0, 30);
+  }, [backgroundTasks, scope]);
+
+  const runningBackgroundTasks = useMemo(
+    () => visibleBackgroundTasks.filter((t) => t.status === "running").length,
+    [visibleBackgroundTasks],
+  );
 
   const subagentsCount = combinedSubagents.length;
-  const tasksCount = backgroundTasks.length;
   const goalsCount = combinedGoals.length;
 
   return (
@@ -614,8 +669,16 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
             <span className="text-xs font-medium text-foreground/85 group-hover/header:text-foreground transition-colors">
               Background Tasks
             </span>
-            <span className="rounded-full bg-muted/60 px-1.5 py-0.5 text-[11px] font-mono text-muted-foreground leading-none">
-              {tasksCount}
+            <span
+              title={`${runningBackgroundTasks} running background service${runningBackgroundTasks === 1 ? "" : "s"}`}
+              className={cn(
+                "rounded-full px-1.5 py-0.5 text-[11px] font-mono leading-none",
+                runningBackgroundTasks > 0
+                  ? "bg-emerald-500/15 text-emerald-400"
+                  : "bg-muted/60 text-muted-foreground",
+              )}
+            >
+              {runningBackgroundTasks}
             </span>
           </div>
           <ChevronDownIcon
@@ -627,99 +690,206 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
         </div>
 
         {tasksExpanded && (
-          <div className="flex flex-col gap-0.5 pt-0.5 max-h-60 overflow-y-auto pr-0.5">
-            {backgroundTasks.length === 0 ? (
+          <div className="flex flex-col gap-0.5 pt-0.5 max-h-72 overflow-y-auto pr-0.5">
+            {visibleBackgroundTasks.length === 0 ? (
               <div className="py-1 px-2 text-[11px] text-muted-foreground font-mono">
-                No active background tasks
+                No background services running for this project
               </div>
             ) : (
-              backgroundTasks.map((task) => {
+              visibleBackgroundTasks.map((task) => {
                 const isRunning = task.status === "running";
                 const isTaskBusy = task.rawTask && busyTaskId === task.rawTask.id;
                 const isTermBusy =
                   task.terminalTarget && stoppingTerminalId === task.terminalTarget.terminalId;
+                const isExpanded = expandedTaskId === task.id;
+                const hasDetails = isRunning || task.kind !== "scheduled" || Boolean(task.detail);
 
                 return (
                   <div
                     key={task.id}
-                    className="flex h-7 items-center justify-between gap-2 px-2 rounded-md hover:bg-black/[0.035] dark:hover:bg-white/[0.08] transition-colors group cursor-default"
+                    className="flex flex-col rounded-md hover:bg-black/[0.035] dark:hover:bg-white/[0.08] transition-colors"
                   >
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      {task.kind === "cancelled" ? (
-                        <CancelledCircleIcon className="size-3.5 shrink-0 text-muted-foreground" />
-                      ) : task.kind === "timer" ? (
-                        <TimerIcon className="size-3.5 shrink-0 text-muted-foreground" />
-                      ) : isRunning ? (
-                        <div className="relative flex items-center justify-center shrink-0">
-                          <TerminalBoxIcon className="size-3.5 text-foreground/80" />
-                          <span className="absolute -top-0.5 -right-0.5 size-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                        </div>
-                      ) : (
-                        <TerminalBoxIcon className="size-3.5 shrink-0 text-muted-foreground" />
-                      )}
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      aria-expanded={isExpanded}
+                      onClick={() => setExpandedTaskId(isExpanded ? null : task.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setExpandedTaskId(isExpanded ? null : task.id);
+                        }
+                      }}
+                      className="flex h-7 items-center justify-between gap-2 px-2 rounded-md cursor-pointer group"
+                    >
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        {task.kind === "cancelled" ? (
+                          <CancelledCircleIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                        ) : task.kind === "timer" ? (
+                          <TimerIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                        ) : isRunning ? (
+                          <div className="relative flex items-center justify-center shrink-0">
+                            <TerminalBoxIcon className="size-3.5 text-foreground/80" />
+                            <span className="absolute -top-0.5 -right-0.5 size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                          </div>
+                        ) : (
+                          <TerminalBoxIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                        )}
 
-                      <span
-                        className="text-xs text-foreground/85 group-hover:text-foreground font-normal truncate leading-normal"
-                        title={task.title}
-                      >
-                        {task.title}
-                      </span>
+                        <span
+                          className="text-xs text-foreground/85 group-hover:text-foreground font-normal truncate leading-normal"
+                          title={task.title}
+                        >
+                          {task.title}
+                        </span>
+                      </div>
+
+                      {/* Actions (Stop terminal / Run scheduled task) */}
+                      <div className="flex items-center gap-1 shrink-0">
+                        {task.terminalTarget && canOperateTerminal && isRunning && (
+                          <Tooltip>
+                            <TooltipTrigger
+                              render={
+                                <button
+                                  type="button"
+                                  disabled={isTermBusy}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    void handleStopTerminal(task.terminalTarget!, task.title);
+                                  }}
+                                  className="size-5 rounded hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 flex items-center justify-center transition-colors"
+                                  aria-label={`Stop ${task.title}`}
+                                >
+                                  {isTermBusy ? (
+                                    <Loader2Icon className="size-3 animate-spin text-rose-400" />
+                                  ) : (
+                                    <SquareIcon className="size-3 fill-current" />
+                                  )}
+                                </button>
+                              }
+                            />
+                            <TooltipPopup side="left">Stop service</TooltipPopup>
+                          </Tooltip>
+                        )}
+
+                        {task.rawTask && canOperate && (
+                          <Tooltip>
+                            <TooltipTrigger
+                              render={
+                                <button
+                                  type="button"
+                                  disabled={isTaskBusy}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    void handleRunTask(task.rawTask!);
+                                  }}
+                                  className="size-5 rounded hover:bg-white/10 text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors"
+                                  aria-label={`Run ${task.title} now`}
+                                >
+                                  {isTaskBusy ? (
+                                    <Loader2Icon className="size-3 animate-spin text-sky-400" />
+                                  ) : (
+                                    <PlayIcon className="size-3 text-emerald-400" />
+                                  )}
+                                </button>
+                              }
+                            />
+                            <TooltipPopup side="left">Run now</TooltipPopup>
+                          </Tooltip>
+                        )}
+
+                        {hasDetails && (
+                          <ChevronDownIcon
+                            aria-hidden="true"
+                            className={cn(
+                              "size-3.5 text-muted-foreground transition-transform duration-200",
+                              isExpanded && "rotate-180",
+                            )}
+                          />
+                        )}
+                      </div>
                     </div>
 
-                    {/* Actions on hover (Stop terminal / Run scheduled task) */}
-                    <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 shrink-0">
-                      {task.terminalTarget && canOperateTerminal && isRunning && (
-                        <Tooltip>
-                          <TooltipTrigger
-                            render={
+                    {/* Uncollapsed detail: server, path, pid or command + exit code */}
+                    {isExpanded && hasDetails && (
+                      <div className="mx-2 mb-1.5 rounded-md border border-border/40 bg-muted/20 px-2 py-1.5 font-mono text-[10.5px] leading-relaxed text-muted-foreground">
+                        {task.terminalTarget ? (
+                          <>
+                            <div>
+                              <span className="text-foreground/60">server: </span>
+                              <span className="break-all text-foreground/85">{task.title}</span>
+                            </div>
+                            {task.path ? (
+                              <div>
+                                <span className="text-foreground/60">path: </span>
+                                <span className="break-all">{task.path}</span>
+                              </div>
+                            ) : null}
+                            {task.pid != null ? (
+                              <div>
+                                <span className="text-foreground/60">pid: </span>
+                                {task.pid}
+                              </div>
+                            ) : null}
+                            <div>
+                              <span className="text-foreground/60">status: </span>
+                              {isRunning ? (
+                                <span className="text-emerald-400">running</span>
+                              ) : (
+                                task.status
+                              )}
+                            </div>
+                            {canOperateTerminal && isRunning ? (
                               <button
                                 type="button"
                                 disabled={isTermBusy}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleStopTerminal(task.terminalTarget!, task.title);
-                                }}
-                                className="size-5 rounded hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 flex items-center justify-center transition-colors"
-                                aria-label={`Stop ${task.title}`}
+                                onClick={() =>
+                                  void handleStopTerminal(task.terminalTarget!, task.title)
+                                }
+                                className="mt-1 inline-flex cursor-pointer items-center gap-1.5 rounded border border-rose-400/40 bg-rose-500/10 px-2 py-0.5 text-[10.5px] text-rose-400 hover:bg-rose-500/20 hover:text-rose-300 disabled:opacity-50"
                               >
                                 {isTermBusy ? (
-                                  <Loader2Icon className="size-3 animate-spin text-rose-400" />
+                                  <Loader2Icon className="size-3 animate-spin" />
                                 ) : (
                                   <SquareIcon className="size-3 fill-current" />
                                 )}
+                                Stop service
                               </button>
-                            }
-                          />
-                          <TooltipPopup side="left">Stop command</TooltipPopup>
-                        </Tooltip>
-                      )}
-
-                      {task.rawTask && canOperate && (
-                        <Tooltip>
-                          <TooltipTrigger
-                            render={
-                              <button
-                                type="button"
-                                disabled={isTaskBusy}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleRunTask(task.rawTask!);
-                                }}
-                                className="size-5 rounded hover:bg-white/10 text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors"
-                                aria-label={`Run ${task.title} now`}
-                              >
-                                {isTaskBusy ? (
-                                  <Loader2Icon className="size-3 animate-spin text-sky-400" />
-                                ) : (
-                                  <PlayIcon className="size-3 text-emerald-400" />
-                                )}
-                              </button>
-                            }
-                          />
-                          <TooltipPopup side="left">Run now</TooltipPopup>
-                        </Tooltip>
-                      )}
-                    </div>
+                            ) : null}
+                          </>
+                        ) : task.detail ? (
+                          <>
+                            <div className="whitespace-pre-wrap break-all">
+                              <span className="text-foreground/60">command: </span>
+                              <span className="text-foreground/85">{task.detail}</span>
+                            </div>
+                            {typeof task.exitCode === "number" ? (
+                              <div>
+                                <span className="text-foreground/60">exit code: </span>
+                                {task.exitCode}
+                              </div>
+                            ) : null}
+                            <div>
+                              <span className="text-foreground/60">status: </span>
+                              {task.status}
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            {task.detail ? (
+                              <div className="whitespace-pre-wrap break-all">
+                                <span className="text-foreground/60">prompt: </span>
+                                {task.detail}
+                              </div>
+                            ) : null}
+                            <div>
+                              <span className="text-foreground/60">last run: </span>
+                              {String(task.rawTask?.lastRunStatus ?? "pending")}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })

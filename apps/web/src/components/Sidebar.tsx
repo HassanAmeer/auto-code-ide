@@ -5372,7 +5372,7 @@ export default function Sidebar() {
                           : group.displayName}
                       </span>
                       {isWorking ? (
-                        <CircleDashedIcon className="size-3 shrink-0 text-emerald-400 animate-spin" />
+                        <CircleDashedIcon className="size-3 shrink-0 text-muted-foreground/70 animate-spin" />
                       ) : null}
                     </button>
                   );
@@ -5878,7 +5878,7 @@ export default function Sidebar() {
                                 : group.displayName}
                             </span>
                             {isWorking ? (
-                              <CircleDashedIcon className="size-3 shrink-0 text-emerald-400 animate-spin" />
+                              <CircleDashedIcon className="size-3 shrink-0 text-muted-foreground/70 animate-spin" />
                             ) : null}
                           </div>
                           <span

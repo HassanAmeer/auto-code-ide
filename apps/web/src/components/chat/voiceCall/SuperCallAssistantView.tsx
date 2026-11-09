@@ -1698,11 +1698,6 @@ export function SuperCallAssistantView() {
     }
   }, [activeSession, activeSessionId, handleRevertLastTurn, isProcessing, adjustTextareaHeight]);
 
-  // Barge-in / Stop Speaking Helper
-  const handleStopSpeaking = useCallback(() => {
-    handleCancelProcessing();
-  }, [handleCancelProcessing]);
-
   // Unified Dictation / Voice-to-Text STT Session
   const [isDictating, setIsDictating] = useState(false);
   const dictationSessionRef = useRef<SttController | null>(null);
@@ -1741,6 +1736,15 @@ export function SuperCallAssistantView() {
       setIsDictating(true);
     }
   }, [isDictating, sttSettings.language]);
+
+  // Barge-in / Stop Speaking Helper (also stops live dictation)
+  const handleStopSpeaking = useCallback(() => {
+    if (isDictating) {
+      dictationSessionRef.current?.stop();
+      setIsDictating(false);
+    }
+    handleCancelProcessing();
+  }, [handleCancelProcessing, isDictating]);
 
   const [isTranscriptCopied, setIsTranscriptCopied] = useState(false);
 
@@ -2548,6 +2552,34 @@ export function SuperCallAssistantView() {
                 {scheduledTasks.length}
               </span>
             </button>
+
+            {/* Voice Dictation Button (Top-Right, Compact) — tap to dictate, tap again to stop */}
+            <button
+              type="button"
+              onClick={handleToggleDictation}
+              className={cn(
+                "flex items-center gap-1 px-1.5 sm:px-2 py-1 rounded-md border text-[11px] font-medium transition-all cursor-pointer shadow-xs active:scale-95",
+                isDictating
+                  ? "border-red-500/50 bg-red-500/15 text-red-400 animate-pulse"
+                  : "border-border/60 hover:border-border hover:bg-muted/50 text-zinc-300",
+              )}
+              title={
+                isDictating
+                  ? "Stop dictation (ڈکٹیشن بند کریں)"
+                  : "Dictate message (آواز سے ٹائپ کریں)"
+              }
+              aria-label={isDictating ? "Stop dictation" : "Dictate message"}
+              aria-pressed={isDictating}
+            >
+              {isDictating ? (
+                <MicOff className="size-3.5 text-red-400" />
+              ) : (
+                <Mic className="size-3.5 text-zinc-300" />
+              )}
+              <span className="hidden xs:inline text-[10px]">
+                {isDictating ? "Stop" : "Dictate"}
+              </span>
+            </button>
           </div>
         </header>
 
@@ -3270,48 +3302,28 @@ export function SuperCallAssistantView() {
                   </button>
                 ))}
 
-              {/* Stop Speaking / Stop AI Button (Right next to Send button) */}
-              {(callStatus === "speaking" || isProcessing) && (
+              {/* Stop Button (Stop AI / Dictation) — outlined icon, muted 60% opacity */}
+              {(callStatus === "speaking" || isProcessing || isDictating) && (
                 <button
                   type="button"
                   onClick={handleStopSpeaking}
-                  className="p-1 rounded text-rose-400 hover:text-rose-300 hover:bg-rose-500/15 transition-colors cursor-pointer animate-pulse"
-                  title="Stop AI Response / Speaking (روکیں)"
+                  className="p-1 rounded-full border border-rose-400/40 bg-transparent opacity-60 text-rose-400 hover:opacity-100 hover:border-rose-400/70 hover:text-rose-300 hover:bg-rose-500/10 transition-all cursor-pointer"
+                  title="Stop AI Response / Speaking / Dictation (روکیں)"
                 >
-                  <Square className="size-3.5 fill-rose-400 text-rose-400" />
+                  <Square className="size-3.5 text-rose-400" strokeWidth={2.2} />
                 </button>
               )}
 
-              {/* Dynamic Mic Dictation / Send Button (Exact project chat design) */}
-              {isDictating ? (
-                <button
-                  type="button"
-                  onClick={handleToggleDictation}
-                  className="p-1 rounded text-red-400 bg-red-500/15 hover:bg-red-500/25 transition-all cursor-pointer animate-pulse"
-                  title="Stop dictation (Click to finish)"
-                >
-                  <MicOff className="size-3.5 animate-bounce" />
-                </button>
-              ) : inputText.trim().length > 0 || attachedFile || botAttachment ? (
-                <button
-                  type="button"
-                  onClick={handleSendNow}
-                  disabled={isProcessing}
-                  className="p-1 rounded text-zinc-200 hover:text-white hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
-                  title="Send Message"
-                >
-                  <Send className="size-3.5" />
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={handleToggleDictation}
-                  className="p-1 rounded text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
-                  title={`Dictate message (${sttSettings.language.replace("-", " ")})`}
-                >
-                  <Mic className="size-3.5" />
-                </button>
-              )}
+              {/* Send Button (always just Send — dictation mic lives in the top-right header) */}
+              <button
+                type="button"
+                onClick={handleSendNow}
+                disabled={isProcessing || (!inputText.trim() && !attachedFile && !botAttachment)}
+                className="p-1 rounded text-zinc-200 hover:text-white hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                title="Send Message"
+              >
+                <Send className="size-3.5" />
+              </button>
             </div>
           </div>
 

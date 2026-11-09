@@ -179,10 +179,10 @@ export function TerminalCommandBox({
                   type="button"
                   onClick={handleKill}
                   disabled={isKilling}
-                  className="flex items-center gap-1 px-2 py-0.5 rounded bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 text-rose-300 text-2xs font-semibold transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
+                  className="flex items-center gap-1 px-2 py-0.5 rounded-full border border-rose-400/40 bg-transparent text-rose-300 text-2xs font-semibold opacity-60 hover:opacity-100 hover:border-rose-400/70 hover:bg-rose-500/10 transition-all disabled:opacity-30"
                   title="Send SIGTERM / SIGKILL to cancel process (Ctrl+C)"
                 >
-                  <Square className="size-2.5 fill-rose-400 text-rose-400" />
+                  <Square className="size-2.5 text-rose-400" strokeWidth={2} />
                   <span>{isKilling ? "Killing..." : "Kill (Ctrl+C)"}</span>
                 </button>
               </div>
@@ -339,9 +339,9 @@ export function TerminalCommandBox({
                     type="button"
                     onClick={handleKill}
                     disabled={isKilling}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30 text-3xs font-mono not-italic hover:bg-rose-500/30"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-rose-400/40 bg-transparent text-rose-300 text-3xs font-mono not-italic opacity-60 hover:opacity-100 hover:border-rose-400/70 hover:bg-rose-500/10 transition-all"
                   >
-                    <Square className="size-2 fill-rose-400" />
+                    <Square className="size-2 text-rose-400" strokeWidth={2} />
                     <span>{isKilling ? "Sending SIGKILL..." : "Cancel (Ctrl+C)"}</span>
                   </button>
                 </div>

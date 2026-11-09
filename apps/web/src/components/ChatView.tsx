@@ -8530,6 +8530,7 @@ export default function ChatView(props: ChatViewProps) {
     messageId: MessageId;
     routeThreadKey: string;
   } | null>(null);
+  const [revertingMessageId, setRevertingMessageId] = useState<MessageId | null>(null);
 
   if (pendingRevert && pendingRevert.routeThreadKey !== routeThreadKey) {
     setPendingRevert(null);
@@ -8594,6 +8595,7 @@ export default function ChatView(props: ChatViewProps) {
         useComposerDraftStore.setState((store) => ({
           rewindingThreadKeys: new Set(store.rewindingThreadKeys).add(routeThreadKey),
         }));
+        setRevertingMessageId(messageId);
         setThreadError(activeThread.id, null);
         try {
           const commandId = CommandId.make(randomUUID());
@@ -8624,6 +8626,7 @@ export default function ChatView(props: ChatViewProps) {
             remaining.delete(routeThreadKey);
             return { rewindingThreadKeys: remaining };
           });
+          setRevertingMessageId(null);
         }
         return;
       }
@@ -8631,6 +8634,7 @@ export default function ChatView(props: ChatViewProps) {
       useComposerDraftStore.setState((store) => ({
         rewindingThreadKeys: new Set(store.rewindingThreadKeys).add(routeThreadKey),
       }));
+      setRevertingMessageId(messageId);
       setThreadError(activeThread.id, null);
       try {
         if (composerRef.current?.hasPendingAttachments()) {
@@ -8708,6 +8712,7 @@ export default function ChatView(props: ChatViewProps) {
           remaining.delete(routeThreadKey);
           return { rewindingThreadKeys: remaining };
         });
+        setRevertingMessageId(null);
       }
     },
     [
@@ -12385,6 +12390,7 @@ export default function ChatView(props: ChatViewProps) {
                       }
                     : {})}
                   isRevertingCheckpoint={isRevertingCheckpoint}
+                  revertingMessageId={paintOnlyDisplayedTimeline ? null : revertingMessageId}
                   onImageExpand={onExpandTimelineImage}
                   onFileOpen={paintOnlyDisplayedTimeline ? noopHeldAttachment : openFileAttachment}
                   onFileDownload={

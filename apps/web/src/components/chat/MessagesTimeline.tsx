@@ -383,6 +383,8 @@ interface TimelineRowActivityState {
   isWorking: boolean;
   isCompacting: boolean;
   isRevertingCheckpoint: boolean;
+  /** The message currently being reverted, if any. */
+  revertingMessageId: MessageId | null;
   activeTurnInProgress: boolean;
   /** The agent waits on an approval or an answer from the user. */
   awaitingUser: boolean;
@@ -515,6 +517,8 @@ interface MessagesTimelineProps {
   onSendAppMessage?: (text: string) => Promise<void>;
   onRunShellCommand?: (command: string) => void;
   isRevertingCheckpoint: boolean;
+  /** The message whose "Edit from here" button is currently waiting for the revert to finish. */
+  revertingMessageId?: MessageId | null;
   onImageExpand: (preview: ExpandedImagePreview) => void;
   onFileOpen?: (attachment: ChatFileAttachment) => void;
   onFileDownload?: (attachment: ChatFileAttachment) => void;
@@ -621,6 +625,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
   onSendAppMessage,
   onRunShellCommand,
   isRevertingCheckpoint,
+  revertingMessageId = null,
   onImageExpand,
   onFileOpen = NOOP_OPEN_ATTACHMENT,
   onFileDownload = NOOP_OPEN_ATTACHMENT,
@@ -1471,6 +1476,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
       isWorking,
       isCompacting: compactionAwaitingRow,
       isRevertingCheckpoint,
+      revertingMessageId,
       backgroundWorktreeSetup,
       activeTurnInProgress,
       awaitingUser,
@@ -1486,6 +1492,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
       isRevertingCheckpoint,
       isWorking,
       latestRun?.runId,
+      revertingMessageId,
     ],
   );
   const listHeader = useMemo(() => {
@@ -2716,6 +2723,7 @@ function RevertUserMessageButton({
 }) {
   const ctx = use(TimelineRowCtx);
   const activity = use(TimelineRowActivityCtx);
+  const isPending = activity.revertingMessageId === messageId;
 
   return (
     <Tooltip>
@@ -2731,7 +2739,11 @@ function RevertUserMessageButton({
           />
         }
       >
-        <RevertBackArrowIcon className="size-3" />
+        {isPending ? (
+          <Spinner tone="muted" aria-hidden="true" />
+        ) : (
+          <RevertBackArrowIcon className="size-3" />
+        )}
       </TooltipTrigger>
       <TooltipPopup side="top">Edit from here / Revert changes</TooltipPopup>
     </Tooltip>

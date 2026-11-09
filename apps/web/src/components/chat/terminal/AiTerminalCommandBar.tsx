@@ -1154,9 +1154,9 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
                     void handleKill();
                   }}
                   title="Stop execution (Ctrl+C)"
-                  className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-500/30 hover:bg-rose-500 text-rose-300 hover:text-white transition-all cursor-pointer shrink-0 text-4xs font-mono"
+                  className="flex items-center gap-1 px-1.5 py-0.5 rounded-full border border-rose-400/40 bg-transparent text-rose-400 opacity-60 hover:opacity-100 hover:border-rose-400/70 hover:bg-rose-500/10 hover:text-rose-300 transition-all cursor-pointer shrink-0 text-4xs font-mono"
                 >
-                  <Square className="size-2 fill-current" />
+                  <Square className="size-2" strokeWidth={2.2} />
                   <span>Stop</span>
                 </button>
               )}

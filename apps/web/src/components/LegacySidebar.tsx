@@ -3123,7 +3123,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
                 title="Working / Processing..."
                 className="inline-flex shrink-0 items-center justify-center"
               >
-                <CircleDashed className="size-3.5 text-emerald-400 animate-spin shrink-0" />
+                <CircleDashed className="size-3.5 text-muted-foreground/70 animate-spin shrink-0" />
               </span>
             ) : null}
           </span>
