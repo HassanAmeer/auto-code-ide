@@ -123,6 +123,7 @@ import {
   registerGoalTelemetry,
   updateGoalTelemetryStatus,
   stopAllRunningTelemetry,
+  pruneStaleTelemetry,
 } from "./dsh/index.ts";
 import { isComplexTask } from "./dsh/taskDecomposer.ts";
 import { getProjectChatEngineSkillPrompt } from "@t3tools/shared/superpowerSkills";
@@ -3496,6 +3497,8 @@ export const layerSuperAgentWorkersRoute = HttpRouter.add(
     const projectName =
       url.searchParams.get("project") || url.searchParams.get("projectName") || undefined;
     const projectId = url.searchParams.get("projectId") || undefined;
+
+    pruneStaleTelemetry();
 
     const snapshot = getTelemetrySnapshot({ projectName, projectId });
     return HttpServerResponse.jsonUnsafe(snapshot);

@@ -169,7 +169,7 @@ export async function runAutonomousHarnessWorkflow(
   const parallelResults = await Promise.all(
     workerAllocations.map(async ({ st, allocation, workerId }) => {
       st.status = "in_progress";
-      const specialistRole = deriveSpecialistRole(st.title, st.category);
+      const specialistRole = deriveSpecialistRole(st.title, st.category, st.order);
       logStep(
         `worker-${st.order}`,
         `⚙️ [Parallel Worker #${st.order}: ${specialistRole}] Started executing: "${st.title}"...`,

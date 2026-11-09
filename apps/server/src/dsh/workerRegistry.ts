@@ -49,10 +49,37 @@ const activeWorkers = new Map<string, ActiveWorkerTelemetry>();
 const activeGoals = new Map<string, ActiveGoalTelemetry>();
 
 /**
+ * Automatically prunes completed/failed telemetry older than the TTL so the
+ * in-memory maps never accumulate stale entries across days/restarts.
+ */
+export function pruneStaleTelemetry(): void {
+  const now = Date.now();
+  const TTL_MS = 5 * 60 * 1000; // 5 minutes TTL for completed/failed tasks
+  for (const [id, worker] of activeWorkers.entries()) {
+    if (worker.status !== "running" && worker.completedAt && now - worker.completedAt > TTL_MS) {
+      activeWorkers.delete(id);
+    }
+  }
+  for (const [id, goal] of activeGoals.entries()) {
+    if (goal.status !== "running" && goal.completedAt && now - goal.completedAt > TTL_MS) {
+      activeGoals.delete(id);
+    }
+  }
+}
+
+/**
  * Derives appropriate Specialist Role according to user requirements:
  * e.g. "Server & Deployment Specialist", "Android Native Specialist", "Web UI & Signaling Specialist"
+ *
+ * Workers spawned in a batch receive a `Worker #N: ...` prefix from their
+ * spawn order so every agent in a parallel run is uniquely identifiable.
  */
-export function deriveSpecialistRole(title: string, category?: string): string {
+export function deriveSpecialistRole(title: string, category?: string, order?: number): string {
+  if (order === 1) return "Worker #1: Frontend & UI Specialist";
+  if (order === 2) return "Worker #2: Backend API & Logic Specialist";
+  if (order === 3) return "Worker #3: Database & State Specialist";
+  if (order === 4) return "Worker #4: QA & Verification Specialist";
+
   const lower = title.toLowerCase();
 
   if (
@@ -125,6 +152,7 @@ export function deriveSpecialistRole(title: string, category?: string): string {
  * Register or update a worker in the live telemetry store
  */
 export function registerWorkerTelemetry(worker: ActiveWorkerTelemetry): void {
+  pruneStaleTelemetry();
   activeWorkers.set(worker.id, {
     ...worker,
     startedAt: worker.startedAt || Date.now(),
@@ -168,6 +196,7 @@ export function updateWorkerTelemetryStatus(
  * Register or update a goal in the live telemetry store
  */
 export function registerGoalTelemetry(goal: ActiveGoalTelemetry): void {
+  pruneStaleTelemetry();
   activeGoals.set(goal.id, {
     ...goal,
     createdAt: goal.createdAt || Date.now(),

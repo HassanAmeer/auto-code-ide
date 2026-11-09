@@ -58,20 +58,28 @@ export const ParallelSubagentsAccordion = memo(function ParallelSubagentsAccordi
           ? data.workers
           : [];
 
-      // Filter by active project if available, otherwise show all active/recent
+      // Strict project scoping: only show workers assigned to the active
+      // project; never fall back to other projects' workers.
       const filtered = rawWorkers.filter((w) => {
-        if (!activeProjectName && !activeProjectId) return true;
-        if (
+        if (!activeProjectName && !activeProjectId) return false;
+        const nameMatch =
           w.projectName &&
           activeProjectName &&
-          w.projectName.toLowerCase() === activeProjectName.toLowerCase()
-        ) {
-          return true;
-        }
-        return false;
+          w.projectName.toLowerCase() === activeProjectName.toLowerCase();
+        const idMatch =
+          w.projectId && activeProjectId && String(w.projectId) === String(activeProjectId);
+        return Boolean(nameMatch || idMatch);
       });
 
-      setWorkers(filtered.length > 0 ? filtered : rawWorkers);
+      // Freshness gate: only running workers, or recently finished ones.
+      // Anything older than 90s is stale history and hidden from the card.
+      const FRESH_WINDOW_MS = 90_000;
+      const freshCutoff = Date.now() - FRESH_WINDOW_MS;
+      const freshWorkers = filtered.filter(
+        (w) => w.status === "running" || (w.completedAt ?? 0) > freshCutoff,
+      );
+
+      setWorkers(freshWorkers);
     } catch {
       // Ignore background fetch error
     }
