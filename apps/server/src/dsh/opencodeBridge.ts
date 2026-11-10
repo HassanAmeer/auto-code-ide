@@ -56,8 +56,20 @@ export async function executeOpenCodeTask(opts: {
   prompt: string;
   model: string;
   onLog?: (msg: string) => void;
+  /** Cooperative abort — when it starts returning true, unfinished writes/steps are skipped. */
+  abortCheck?: (() => boolean) | undefined;
 }): Promise<OpenCodeExecutionResult> {
   const { worktreePath, projectName, taskTitle, prompt, model, onLog } = opts;
+  const abortedResult = (): OpenCodeExecutionResult => ({
+    ok: false,
+    filesModified: [],
+    outputSummary: "Task aborted by user — execution stopped before completion.",
+    error: "Aborted by user",
+  });
+  if (opts.abortCheck?.()) {
+    onLog?.("⛔ Aborted by user before execution — nothing written.");
+    return abortedResult();
+  }
   const activeEngine = getActiveCoreEngine();
 
   // 1. STANDALONE EMBEDDED ENGINE (opencode-full-engine)
@@ -117,6 +129,11 @@ export async function executeOpenCodeTask(opts: {
         maxTokens: 4096,
       });
 
+      if (opts.abortCheck?.()) {
+        onLog?.("⛔ Aborted by user — response discarded, no files written.");
+        return abortedResult();
+      }
+
       if (response && response.content) {
         onLog?.(
           `✓ DeepSeek response received (${response.content.length} chars). Parsing files...`,
@@ -127,6 +144,10 @@ export async function executeOpenCodeTask(opts: {
           /```(?:filepath:)?([a-zA-Z0-9_\-./\\]+\.[a-zA-Z0-9]+)\n([\s\S]*?)```/g;
         let match;
         while ((match = fileBlockRegex.exec(response.content)) !== null) {
+          if (opts.abortCheck?.()) {
+            onLog?.("⛔ Aborted by user — stopping file writes.");
+            return abortedResult();
+          }
           const rawRelPath = match[1]?.trim();
           const fileContent = match[2];
           if (
@@ -162,6 +183,10 @@ export async function executeOpenCodeTask(opts: {
     }
 
     const indexPath = NodePath.join(worktreePath, "index.html");
+    if (opts.abortCheck?.()) {
+      onLog?.("⛔ Aborted by user — skipping starter template.");
+      return abortedResult();
+    }
     if (!NodeFS.existsSync(indexPath) && filesWrittenCount === 0) {
       onLog?.(`📝 Creating initial index.html via executeWriteTool...`);
       const starterContent = `<!DOCTYPE html>
@@ -203,6 +228,11 @@ export async function executeOpenCodeTask(opts: {
   // 2. EXTERNAL CLI ADAPTER (opencode-adapter)
   // Only runs when explicitly enabled in settings. Detects port and uses standard /prompt endpoint.
   onLog?.(`🚀 OpenCode External CLI Adapter active. Discovering running daemon port...`);
+
+  if (opts.abortCheck?.()) {
+    onLog?.("⛔ Aborted by user — CLI adapter not started.");
+    return abortedResult();
+  }
 
   let detectedPort = 4099;
   let detectedPassword =

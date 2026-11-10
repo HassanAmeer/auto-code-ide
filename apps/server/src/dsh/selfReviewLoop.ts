@@ -57,6 +57,8 @@ export async function executeAutonomousReviewLoop(opts: {
   selectedModel: string;
   maxRounds?: number;
   onLog?: (msg: string) => void;
+  /** Cooperative abort — checked between review rounds. */
+  abortCheck?: (() => boolean) | undefined;
 }): Promise<ReviewLoopExecutionResult> {
   const { worktreePath, projectName, taskTitle, prompt, maxRounds = 3, onLog } = opts;
   const rounds: ReviewRoundResult[] = [];
@@ -71,6 +73,10 @@ export async function executeAutonomousReviewLoop(opts: {
   let isClean = false;
 
   while (currentRound <= maxRounds) {
+    if (opts.abortCheck?.()) {
+      onLog?.("⛔ Aborted by user — stopping review loop.");
+      break;
+    }
     onLog?.(`🔄 Review Loop Round ${currentRound}: Running 3-Level Verification...`);
     const roundErrors: string[] = [];
     const roundPatches: string[] = [];

@@ -238,6 +238,7 @@ export async function runAutonomousHarnessWorkflow(
         prompt: subtaskPrompt,
         model,
         onLog: (m) => logStep(`worker-${st.order}`, m),
+        abortCheck: () => isWorkerAborted(workerId),
       });
 
       if (isWorkerAborted(workerId)) {
@@ -339,6 +340,7 @@ export async function runAutonomousHarnessWorkflow(
       prompt,
       selectedModel: model,
       onLog: (m) => logStep("review", m),
+      abortCheck: () => workerAllocations.some(({ workerId }) => isWorkerAborted(workerId)),
     });
   } else {
     logStep(

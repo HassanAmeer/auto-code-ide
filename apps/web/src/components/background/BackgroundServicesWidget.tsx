@@ -23,6 +23,7 @@ import { cn } from "../../lib/utils";
 import { useEnvironmentQuery } from "../../state/query";
 import { serverEnvironment } from "../../state/server";
 import { terminalEnvironment } from "../../state/terminal";
+import { threadEnvironment } from "../../state/threads";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { useEnvironmentScope } from "../../state/session";
 import { useActiveEnvironmentId, useThreadProjection } from "../../state/entities";
@@ -161,6 +162,8 @@ export interface SubagentItem {
   readonly status?: string;
   /** Epoch ms when the worker finished, if known — used for freshness pruning. */
   readonly completedAt?: number | undefined;
+  /** Projection subagents run in a child thread — stop goes through interruptTurn for these. */
+  readonly childThreadId?: ThreadId | undefined;
 }
 
 export interface GoalItem {
@@ -381,6 +384,7 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
         "Subagent",
       role: (agent as any).agentRole || agent.driver,
       status: agent.status || "running",
+      childThreadId: agent.childThreadId ?? undefined,
     }));
   }, [rawSubagents]);
 
@@ -478,6 +482,10 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
     label: "stop background command from background services",
   });
 
+  const interruptTurn = useAtomCommand(threadEnvironment.interruptTurn, {
+    label: "stop subagent from background services",
+  });
+
   const handleStopTerminal = useCallback(
     async (target: { threadId: string; terminalId: string }, title: string) => {
       if (!environmentId || !canOperateTerminal || stoppingTerminalId !== null) return;
@@ -510,6 +518,74 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
       }
     },
     [canOperateTerminal, closeTerminalMutation, environmentId, stoppingTerminalId],
+  );
+
+  // Stop a single subagent: projection agents (child threads) go through the
+  // orchestration runtime interrupt; dsh telemetry workers go through the
+  // cooperative abort endpoint. Fleet-wide stop is intentionally not offered per-row.
+  const handleStopSubagent = useCallback(
+    async (agent: SubagentItem) => {
+      if (busyTaskId === agent.id) return;
+      setBusyTaskId(agent.id);
+      try {
+        if (agent.childThreadId) {
+          if (!environmentId) {
+            toastManager.add({
+              type: "error",
+              title: "No environment selected — cannot stop this subagent",
+            });
+            return;
+          }
+          const result = await interruptTurn({
+            environmentId,
+            input: { threadId: agent.childThreadId },
+          });
+          if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+            toastManager.add({
+              type: "error",
+              title: "Could not stop subagent",
+              description: String(squashAtomCommandFailure(result)),
+            });
+            return;
+          }
+          window.dispatchEvent(new CustomEvent("t3-subagents-changed"));
+          window.dispatchEvent(new CustomEvent("super-agent-state-updated"));
+          return;
+        }
+        const res = await fetch("/api/super-agent/workers/stop", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ workerId: agent.id }),
+        });
+        if (!res.ok) {
+          const body = (await res.json().catch(() => null)) as {
+            error?: string;
+          } | null;
+          toastManager.add({
+            type: "error",
+            title: body?.error ?? "Could not stop this subagent",
+          });
+          return;
+        }
+        setApiWorkers((prev) =>
+          prev.map((worker) =>
+            worker.id === agent.id
+              ? { ...worker, status: "cancelled", completedAt: Date.now() }
+              : worker,
+          ),
+        );
+        window.dispatchEvent(new CustomEvent("super-agent-state-updated"));
+        window.dispatchEvent(new CustomEvent("t3-subagents-changed"));
+      } catch {
+        toastManager.add({
+          type: "error",
+          title: "Could not stop this subagent",
+        });
+      } finally {
+        setBusyTaskId(null);
+      }
+    },
+    [busyTaskId, environmentId, interruptTurn],
   );
 
   const handleRunTask = useCallback(
@@ -734,43 +810,9 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
                     {isRunning ? (
                       <button
                         type="button"
-                        onClick={async (e) => {
+                        onClick={(e) => {
                           e.stopPropagation();
-                          if (busyTaskId === agent.id) return;
-                          setBusyTaskId(agent.id);
-                          try {
-                            const res = await fetch("/api/super-agent/workers/stop", {
-                              method: "POST",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ workerId: agent.id }),
-                            });
-                            if (!res.ok) {
-                              const body = (await res.json().catch(() => null)) as {
-                                error?: string;
-                              } | null;
-                              toastManager.add({
-                                type: "error",
-                                title: body?.error ?? "Could not stop this subagent",
-                              });
-                              return;
-                            }
-                            setApiWorkers((prev) =>
-                              prev.map((worker) =>
-                                worker.id === agent.id
-                                  ? { ...worker, status: "cancelled", completedAt: Date.now() }
-                                  : worker,
-                              ),
-                            );
-                            window.dispatchEvent(new CustomEvent("super-agent-state-updated"));
-                            window.dispatchEvent(new CustomEvent("t3-subagents-changed"));
-                          } catch {
-                            toastManager.add({
-                              type: "error",
-                              title: "Could not stop this subagent",
-                            });
-                          } finally {
-                            setBusyTaskId(null);
-                          }
+                          void handleStopSubagent(agent);
                         }}
                         disabled={busyTaskId === agent.id}
                         className="p-1 rounded text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-default"
