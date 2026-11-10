@@ -3452,7 +3452,8 @@ export const layerSuperAgentDispatchWorkerRoute = HttpRouter.add(
     ];
 
     const finalResult = {
-      ok: true,
+      // ok reflects the harness outcome: true only when at least one milestone produced changes.
+      ok: harnessResult.ok,
       workerId: harnessResult.workerId,
       projectId: project.projectId,
       projectName: project.projectName,
