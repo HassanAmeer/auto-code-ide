@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { WhatsAppIcon } from "./WhatsAppHeaderButton";
+import { useDialogA11y } from "../ui/useDialogA11y";
 
 interface WhatsAppSession {
   id: string;
@@ -170,7 +171,7 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
           setChats(data.chats || []);
         }
       } catch {
-        // ignore
+        setErrorMsg("Couldn't refresh chats — WhatsApp service unreachable");
       } finally {
         setChatsLoading(false);
       }
@@ -450,6 +451,8 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
     return true;
   });
 
+  const dialogRef = useDialogA11y<HTMLDivElement>(isOpen, onClose);
+
   if (!isOpen) return null;
 
   return createPortal(
@@ -458,14 +461,22 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
       <div
         className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
         onClick={onClose}
+        aria-hidden="true"
       />
 
       {/* Cupertino iOS Slide-over Sheet (90% width on mobile) */}
-      <div className="relative z-10 flex h-full w-[90vw] sm:w-[440px] max-w-[90vw] sm:max-w-md flex-col bg-[#0d0f12]/95 border-l border-white/10 shadow-2xl backdrop-blur-2xl text-zinc-100 font-sans animate-in slide-in-from-right duration-250">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="WhatsApp Manager"
+        tabIndex={-1}
+        className="relative z-10 flex h-full w-[90vw] sm:w-[440px] max-w-[90vw] sm:max-w-md flex-col bg-popover/95 border-l border-border shadow-2xl backdrop-blur-2xl text-foreground font-sans animate-in slide-in-from-right duration-250 focus:outline-none"
+      >
         {/* iOS Navigation Header - Ultra-compact (py-1, ~2-4px padding) */}
-        <div className="flex items-center justify-between border-b border-white/[0.06] px-3 py-1 bg-zinc-950/80 shrink-0">
+        <div className="flex items-center justify-between border-b border-white/[0.06] px-3 py-1 bg-muted/80 shrink-0">
           <div className="flex items-center gap-1.5 min-w-0">
-            <h2 className="text-[13px] font-semibold tracking-tight text-white truncate">
+            <h2 className="text-[13px] font-semibold tracking-tight text-foreground truncate">
               WhatsApp Manager
             </h2>
           </div>
@@ -478,7 +489,7 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
               className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[10.5px] font-medium border transition-all cursor-pointer ${
                 optimizingRam
                   ? "border-amber-500/40 bg-amber-500/10 text-amber-300 cursor-wait"
-                  : "border-emerald-500/30 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/60 hover:text-white hover:border-emerald-500/60 active:scale-95"
+                  : "border-emerald-500/30 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/60 hover:text-foreground hover:border-emerald-500/60 active:scale-95"
               }`}
               title="Optimize WhatsApp RAM (Restart OpenWA container & free ~1.1GB memory)"
             >
@@ -491,7 +502,7 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
               type="button"
               onClick={handleRefresh}
               disabled={refreshing}
-              className="flex size-6 items-center justify-center rounded-md text-zinc-400 hover:bg-white/10 hover:text-white transition-all cursor-pointer"
+              className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-white/10 hover:text-foreground transition-all cursor-pointer"
               title="Refresh status"
             >
               <RefreshCw
@@ -501,7 +512,7 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
             <button
               type="button"
               onClick={onClose}
-              className="flex size-6 items-center justify-center rounded-md text-zinc-400 hover:bg-white/10 hover:text-white transition-all cursor-pointer"
+              className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-white/10 hover:text-foreground transition-all cursor-pointer"
               title="Close"
             >
               <X className="size-3.5" />
@@ -519,7 +530,7 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
             >
               <div className="flex items-center gap-1.5 min-w-0">
                 <span className="size-1.5 rounded-full bg-emerald-400 shrink-0" />
-                <span className="text-[11px] font-semibold text-white truncate">
+                <span className="text-[11px] font-semibold text-foreground truncate">
                   {activeSessionDisplayName}
                 </span>
                 <span className="text-[10px] font-mono text-emerald-400 truncate">
@@ -527,7 +538,7 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
                 </span>
                 {activeSessionObj.pushName &&
                   activeSessionObj.pushName !== activeSessionDisplayName && (
-                    <span className="hidden sm:inline text-[9.5px] text-zinc-400 truncate">
+                    <span className="hidden sm:inline text-[9.5px] text-muted-foreground truncate">
                       • {activeSessionObj.pushName}
                     </span>
                   )}
@@ -539,25 +550,25 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
                   </span>
                 )}
                 {isSessionExpanded ? (
-                  <ChevronUp className="size-3 text-zinc-400" />
+                  <ChevronUp className="size-3 text-muted-foreground" />
                 ) : (
-                  <ChevronDown className="size-3 text-zinc-400" />
+                  <ChevronDown className="size-3 text-muted-foreground" />
                 )}
               </div>
             </div>
 
             {/* Collapsible expanded section */}
             {isSessionExpanded && (
-              <div className="mt-1 pt-1 border-t border-white/[0.06] flex items-center justify-between text-[10px] text-zinc-400 animate-in fade-in duration-150">
+              <div className="mt-1 pt-1 border-t border-white/[0.06] flex items-center justify-between text-[10px] text-muted-foreground animate-in fade-in duration-150">
                 <div className="truncate">
                   <span>
                     ID:{" "}
-                    <code className="text-zinc-300 font-mono text-[9px]">
+                    <code className="text-foreground/80 font-mono text-[9px]">
                       {activeSessionObj.id}
                     </code>
                   </span>
                   {activeSessionObj.engine && (
-                    <span className="ml-2 text-zinc-400">({activeSessionObj.engine})</span>
+                    <span className="ml-2 text-muted-foreground">({activeSessionObj.engine})</span>
                   )}
                 </div>
                 <button
@@ -579,7 +590,7 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
             <button
               type="button"
               onClick={() => setActiveTab("sessions")}
-              className="text-[10px] underline font-semibold text-white ml-2 shrink-0 cursor-pointer"
+              className="text-[10px] underline font-semibold text-foreground ml-2 shrink-0 cursor-pointer"
             >
               Select
             </button>
@@ -587,15 +598,15 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
         )}
 
         {/* Cupertino Segmented Control Tab Switcher - Ultra-compact */}
-        <div className="px-2 py-0.5 border-b border-white/[0.06] bg-zinc-950/20 shrink-0">
-          <div className="grid grid-cols-4 rounded-lg bg-zinc-900/90 p-0.5 border border-white/[0.06] text-[11px] font-medium">
+        <div className="px-2 py-0.5 border-b border-white/[0.06] bg-background/20 shrink-0">
+          <div className="grid grid-cols-4 rounded-lg bg-muted/90 p-0.5 border border-white/[0.06] text-[11px] font-medium">
             <button
               type="button"
               onClick={() => setActiveTab("sessions")}
               className={`py-0.8 rounded-md transition-all text-center cursor-pointer ${
                 activeTab === "sessions"
-                  ? "bg-zinc-800 text-white shadow-xs font-semibold border border-white/[0.12]"
-                  : "text-zinc-400 hover:text-zinc-200"
+                  ? "bg-muted text-foreground shadow-xs font-semibold border border-white/[0.12]"
+                  : "text-muted-foreground hover:text-foreground/90"
               }`}
             >
               Sessions ({sessions.length})
@@ -608,8 +619,8 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
               }}
               className={`py-0.8 rounded-md transition-all text-center cursor-pointer relative ${
                 activeTab === "chats"
-                  ? "bg-zinc-800 text-white shadow-xs font-semibold border border-white/[0.12]"
-                  : "text-zinc-400 hover:text-zinc-200"
+                  ? "bg-muted text-foreground shadow-xs font-semibold border border-white/[0.12]"
+                  : "text-muted-foreground hover:text-foreground/90"
               }`}
             >
               Chats {chats.length > 0 ? `(${chats.length})` : ""}
@@ -622,8 +633,8 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
               onClick={() => setActiveTab("settings")}
               className={`py-0.8 rounded-md transition-all text-center cursor-pointer ${
                 activeTab === "settings"
-                  ? "bg-zinc-800 text-white shadow-xs font-semibold border border-white/[0.12]"
-                  : "text-zinc-400 hover:text-zinc-200"
+                  ? "bg-muted text-foreground shadow-xs font-semibold border border-white/[0.12]"
+                  : "text-muted-foreground hover:text-foreground/90"
               }`}
             >
               Settings
@@ -633,8 +644,8 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
               onClick={() => setActiveTab("test")}
               className={`py-0.8 rounded-md transition-all text-center cursor-pointer ${
                 activeTab === "test"
-                  ? "bg-zinc-800 text-white shadow-xs font-semibold border border-white/[0.12]"
-                  : "text-zinc-400 hover:text-zinc-200"
+                  ? "bg-muted text-foreground shadow-xs font-semibold border border-white/[0.12]"
+                  : "text-muted-foreground hover:text-foreground/90"
               }`}
             >
               Tester
@@ -668,14 +679,14 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
           {activeTab === "sessions" && (
             <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
               {/* Pinned Header with Add Session button */}
-              <div className="flex items-center justify-between px-2.5 py-1.5 shrink-0 border-b border-white/[0.04] bg-zinc-950/30">
-                <span className="text-[10px] font-semibold tracking-wider text-zinc-400 uppercase">
+              <div className="flex items-center justify-between px-2.5 py-1.5 shrink-0 border-b border-white/[0.04] bg-background/30">
+                <span className="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">
                   Connected Accounts ({sessions.length})
                 </span>
                 <button
                   type="button"
                   onClick={() => setShowNewModal(true)}
-                  className="flex items-center gap-1 rounded-md bg-emerald-600/90 hover:bg-emerald-500 px-2 py-0.5 text-[11px] font-semibold text-white shadow-xs transition-all cursor-pointer"
+                  className="flex items-center gap-1 rounded-md bg-emerald-600/90 hover:bg-emerald-500 px-2 py-0.5 text-[11px] font-semibold text-foreground shadow-xs transition-all cursor-pointer"
                 >
                   <Plus className="size-3" />
                   <span>New Session</span>
@@ -685,19 +696,19 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
               {/* Scrollable Sessions List */}
               <div className="flex-1 overflow-y-auto px-2 py-1.5 space-y-1.5">
                 {sessions.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-white/10 p-4 text-center space-y-1.5 bg-zinc-900/30">
-                    <Smartphone className="mx-auto size-6 text-zinc-500" />
-                    <p className="text-xs font-medium text-zinc-300">
+                  <div className="rounded-xl border border-dashed border-white/10 p-4 text-center space-y-1.5 bg-muted/30">
+                    <Smartphone className="mx-auto size-6 text-muted-foreground" />
+                    <p className="text-xs font-medium text-foreground/80">
                       No WhatsApp sessions connected
                     </p>
-                    <p className="text-[10.5px] text-zinc-500">
+                    <p className="text-[10.5px] text-muted-foreground">
                       Click &quot;New Session&quot; to connect WhatsApp via QR code.
                     </p>
                     <Button
                       type="button"
                       size="sm"
                       onClick={() => setShowNewModal(true)}
-                      className="mt-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs h-7 px-3"
+                      className="mt-1 bg-emerald-600 hover:bg-emerald-500 text-foreground rounded-lg text-xs h-7 px-3"
                     >
                       <Plus className="size-3 mr-1" />
                       Create First Session
@@ -717,7 +728,7 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
                           className={`rounded-xl border p-2 transition-all ${
                             isEnabled
                               ? "border-emerald-500/50 bg-emerald-950/20 shadow-xs ring-1 ring-emerald-500/20"
-                              : "border-white/[0.07] bg-zinc-900/60 hover:border-white/15"
+                              : "border-white/[0.07] bg-muted/60 hover:border-white/15"
                           }`}
                         >
                           <div className="flex items-center justify-between gap-2">
@@ -728,14 +739,14 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
                                     ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-400"
                                     : isScanQr
                                       ? "border-amber-500/30 bg-amber-500/15 text-amber-400"
-                                      : "border-zinc-700 bg-zinc-800 text-zinc-400"
+                                      : "border-border bg-muted text-muted-foreground"
                                 }`}
                               >
                                 <Smartphone className="size-3.5" />
                               </div>
                               <div className="min-w-0">
                                 <div className="flex items-center gap-1.5">
-                                  <span className="text-xs font-semibold text-white truncate">
+                                  <span className="text-xs font-semibold text-foreground truncate">
                                     {sess.name || sess.pushName || sess.id}
                                   </span>
                                   {isEnabled && (
@@ -744,7 +755,7 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
                                     </span>
                                   )}
                                 </div>
-                                <p className="text-[10px] text-zinc-400 truncate">
+                                <p className="text-[10px] text-muted-foreground truncate">
                                   {sess.phone
                                     ? `+${sess.phone}`
                                     : sess.me?.phone
@@ -763,7 +774,7 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
                                 type="button"
                                 onClick={() => handleToggleSession(sess.id)}
                                 className={`relative inline-flex h-4.5 w-8 shrink-0 cursor-pointer rounded-full border border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden ${
-                                  isEnabled ? "bg-[#34C759]" : "bg-zinc-700"
+                                  isEnabled ? "bg-[#34C759]" : "bg-muted"
                                 }`}
                                 title={
                                   isEnabled
@@ -792,7 +803,7 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
                                       : "bg-rose-500"
                                 }`}
                               />
-                              <span className="text-zinc-300 font-medium capitalize">
+                              <span className="text-foreground/80 font-medium capitalize">
                                 {isConnected
                                   ? "Connected"
                                   : isScanQr
@@ -816,7 +827,7 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
                               <button
                                 type="button"
                                 onClick={() => handleDeleteSession(sess.id)}
-                                className="flex size-5 items-center justify-center rounded-md text-zinc-500 hover:bg-rose-950/40 hover:text-rose-400 transition-all cursor-pointer"
+                                className="flex size-5 items-center justify-center rounded-md text-muted-foreground hover:bg-rose-950/40 hover:text-rose-400 transition-all cursor-pointer"
                                 title="Delete Session"
                               >
                                 <Trash2 className="size-3" />
@@ -830,8 +841,8 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
                 )}
 
                 {/* Multi-tenant note */}
-                <div className="rounded-lg border border-white/[0.05] bg-zinc-900/40 p-2 text-[10px] text-zinc-400 space-y-0.5">
-                  <div className="flex items-center gap-1 font-medium text-zinc-300">
+                <div className="rounded-lg border border-white/[0.05] bg-muted/40 p-2 text-[10px] text-muted-foreground space-y-0.5">
+                  <div className="flex items-center gap-1 font-medium text-foreground/80">
                     <ShieldCheck className="size-3 text-emerald-400" />
                     <span>Multi-Session Isolation</span>
                   </div>
@@ -847,9 +858,9 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
           {activeTab === "chats" && (
             <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
               {/* Pinned Controls: Header, Search, Filter Pills & Priority Hint */}
-              <div className="shrink-0 px-2 py-1.5 space-y-1 border-b border-white/[0.06] bg-zinc-950/40">
+              <div className="shrink-0 px-2 py-1.5 space-y-1 border-b border-white/[0.06] bg-background/40">
                 <div className="flex items-center justify-between px-0.5">
-                  <span className="text-[10px] font-semibold tracking-wider text-zinc-400 uppercase">
+                  <span className="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">
                     Users & Groups {chats.length > 0 && `(${chats.length})`}
                   </span>
                   <button
@@ -865,19 +876,19 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
 
                 {/* Search Bar - Compact */}
                 <div className="relative">
-                  <Search className="absolute left-2.5 top-2 size-3 text-zinc-400" />
+                  <Search className="absolute left-2.5 top-2 size-3 text-muted-foreground" />
                   <input
                     type="text"
                     value={chatSearch}
                     onChange={(e) => setChatSearch(e.target.value)}
                     placeholder="Search contacts or groups..."
-                    className="w-full rounded-lg border border-white/10 bg-zinc-900/90 pl-8 pr-7 py-1 text-xs text-white placeholder-zinc-500 focus:border-emerald-500/50 focus:outline-hidden"
+                    className="w-full rounded-lg border border-white/10 bg-muted/90 pl-8 pr-7 py-1 text-xs text-foreground placeholder-muted-foreground focus:border-emerald-500/50 focus:outline-hidden"
                   />
                   {chatSearch && (
                     <button
                       type="button"
                       onClick={() => setChatSearch("")}
-                      className="absolute right-2 top-1.5 text-zinc-400 hover:text-white cursor-pointer"
+                      className="absolute right-2 top-1.5 text-muted-foreground hover:text-foreground cursor-pointer"
                     >
                       <X className="size-3" />
                     </button>
@@ -891,8 +902,8 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
                     onClick={() => setChatFilter("all")}
                     className={`shrink-0 rounded-md px-2 py-0.5 font-medium transition-all cursor-pointer ${
                       chatFilter === "all"
-                        ? "bg-white/20 text-white font-semibold shadow-xs"
-                        : "bg-zinc-900/80 text-zinc-400 hover:text-zinc-200 border border-white/[0.06]"
+                        ? "bg-white/20 text-foreground font-semibold shadow-xs"
+                        : "bg-muted/80 text-muted-foreground hover:text-foreground/90 border border-white/[0.06]"
                     }`}
                   >
                     All ({chats.length})
@@ -903,7 +914,7 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
                     className={`shrink-0 rounded-md px-2 py-0.5 font-medium transition-all cursor-pointer ${
                       chatFilter === "users"
                         ? "bg-blue-500/30 text-blue-300 font-semibold border border-blue-500/40"
-                        : "bg-zinc-900/80 text-zinc-400 hover:text-zinc-200 border border-white/[0.06]"
+                        : "bg-muted/80 text-muted-foreground hover:text-foreground/90 border border-white/[0.06]"
                     }`}
                   >
                     Users ({chats.filter((c) => !c.isGroup).length})
@@ -914,7 +925,7 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
                     className={`shrink-0 rounded-md px-2 py-0.5 font-medium transition-all cursor-pointer ${
                       chatFilter === "groups"
                         ? "bg-purple-500/30 text-purple-300 font-semibold border border-purple-500/40"
-                        : "bg-zinc-900/80 text-zinc-400 hover:text-zinc-200 border border-white/[0.06]"
+                        : "bg-muted/80 text-muted-foreground hover:text-foreground/90 border border-white/[0.06]"
                     }`}
                   >
                     Groups ({chats.filter((c) => c.isGroup).length})
@@ -925,7 +936,7 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
                     className={`shrink-0 rounded-md px-2 py-0.5 font-medium transition-all cursor-pointer flex items-center gap-1 ${
                       chatFilter === "priority"
                         ? "bg-amber-500/30 text-amber-300 font-semibold border border-amber-500/40"
-                        : "bg-zinc-900/80 text-zinc-400 hover:text-zinc-200 border border-white/[0.06]"
+                        : "bg-muted/80 text-muted-foreground hover:text-foreground/90 border border-white/[0.06]"
                     }`}
                   >
                     <Star className="size-2.5 fill-amber-400 text-amber-400" />
@@ -940,7 +951,7 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
                       <Star className="size-3 text-amber-400 shrink-0 mt-0.5 fill-amber-400" />
                       <div className="min-w-0 leading-tight">
                         <span className="font-semibold text-amber-300">Bot Priority Focus: </span>
-                        <span className="text-zinc-300 text-[9.5px]">
+                        <span className="text-foreground/80 text-[9.5px]">
                           Selected targets ko bot first priority par rakhega.
                         </span>
                       </div>
@@ -967,19 +978,21 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
               {/* Scrollable Chats List Only */}
               <div className="flex-1 overflow-y-auto px-2 py-1.5 space-y-1.5">
                 {chatsLoading && chats.length === 0 ? (
-                  <div className="rounded-xl border border-white/[0.08] p-6 text-center space-y-1.5 bg-zinc-900/40">
+                  <div className="rounded-xl border border-white/[0.08] p-6 text-center space-y-1.5 bg-muted/40">
                     <RefreshCw className="mx-auto size-5 text-emerald-400 animate-spin" />
-                    <p className="text-xs text-zinc-400">Loading chats from active session...</p>
+                    <p className="text-xs text-muted-foreground">
+                      Loading chats from active session...
+                    </p>
                   </div>
                 ) : filteredChats.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-white/10 p-5 text-center space-y-1 bg-zinc-900/30">
-                    <MessageSquare className="mx-auto size-6 text-zinc-500" />
-                    <p className="text-xs font-medium text-zinc-300">
+                  <div className="rounded-xl border border-dashed border-white/10 p-5 text-center space-y-1 bg-muted/30">
+                    <MessageSquare className="mx-auto size-6 text-muted-foreground" />
+                    <p className="text-xs font-medium text-foreground/80">
                       {chats.length === 0
                         ? "No chats found in this session"
                         : "No matching contacts or groups"}
                     </p>
-                    <p className="text-[10px] text-zinc-500">
+                    <p className="text-[10px] text-muted-foreground">
                       {chats.length === 0
                         ? "Make sure your WhatsApp session is connected and synced."
                         : "Try switching filter pills or clearing search."}
@@ -997,7 +1010,7 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
                           className={`rounded-xl border p-2 transition-all ${
                             isPriority
                               ? "border-amber-500/50 bg-amber-950/25 shadow-xs ring-1 ring-amber-500/30"
-                              : "border-white/[0.07] bg-zinc-900/60 hover:border-white/15"
+                              : "border-white/[0.07] bg-muted/60 hover:border-white/15"
                           }`}
                         >
                           <div className="flex items-center justify-between gap-2">
@@ -1017,7 +1030,7 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
                               </div>
                               <div className="min-w-0">
                                 <div className="flex items-center gap-1.5">
-                                  <span className="text-xs font-semibold text-white truncate">
+                                  <span className="text-xs font-semibold text-foreground truncate">
                                     {chat.name}
                                   </span>
                                   <span
@@ -1035,7 +1048,7 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
                                     </span>
                                   )}
                                 </div>
-                                <p className="text-[10px] text-zinc-400 font-mono truncate">
+                                <p className="text-[10px] text-muted-foreground font-mono truncate">
                                   {chat.phone ? `+${chat.phone}` : chat.id}
                                 </p>
                               </div>
@@ -1048,7 +1061,7 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
                               className={`flex items-center gap-1 shrink-0 rounded-lg px-2 py-1 text-[11px] font-semibold transition-all cursor-pointer ${
                                 isPriority
                                   ? "bg-amber-500 text-black shadow-xs active:scale-95 font-bold"
-                                  : "bg-zinc-800 text-zinc-300 border border-white/10 hover:bg-zinc-700 hover:text-white"
+                                  : "bg-muted text-foreground/80 border border-white/10 hover:bg-muted hover:text-foreground"
                               }`}
                               title={
                                 isPriority
@@ -1064,8 +1077,8 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
                           </div>
 
                           {chat.lastMessage && (
-                            <div className="mt-1 text-[10px] text-zinc-400 truncate border-t border-white/[0.04] pt-1">
-                              <span className="text-zinc-500">Last: </span>
+                            <div className="mt-1 text-[10px] text-muted-foreground truncate border-t border-white/[0.04] pt-1">
+                              <span className="text-muted-foreground">Last: </span>
                               <span>{chat.lastMessage}</span>
                             </div>
                           )}
@@ -1082,15 +1095,15 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
             <div className="flex-1 overflow-y-auto px-2 py-2 space-y-2.5">
               {/* Cupertino Form Group 1: Bot Automations */}
               <div className="space-y-1">
-                <span className="text-[10px] font-semibold tracking-wider text-zinc-400 uppercase px-1">
+                <span className="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase px-1">
                   AI Bot Automations
                 </span>
-                <div className="rounded-xl border border-white/[0.08] bg-zinc-900/60 divide-y divide-white/[0.06] overflow-hidden">
+                <div className="rounded-xl border border-white/[0.08] bg-muted/60 divide-y divide-white/[0.06] overflow-hidden">
                   {/* Master Bot Switch */}
                   <div className="flex items-center justify-between p-2.5">
                     <div>
-                      <p className="text-xs font-semibold text-white">WhatsApp Bot Active</p>
-                      <p className="text-[10px] text-zinc-400">
+                      <p className="text-xs font-semibold text-foreground">WhatsApp Bot Active</p>
+                      <p className="text-[10px] text-muted-foreground">
                         Enable AI Bot processing for incoming chats
                       </p>
                     </div>
@@ -1098,7 +1111,7 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
                       type="button"
                       onClick={() => handleSaveSettings({ botEnabled: !settings.botEnabled })}
                       className={`relative inline-flex h-4.5 w-8 shrink-0 cursor-pointer rounded-full border border-transparent transition-colors duration-200 ease-in-out ${
-                        settings.botEnabled ? "bg-[#34C759]" : "bg-zinc-700"
+                        settings.botEnabled ? "bg-[#34C759]" : "bg-muted"
                       }`}
                     >
                       <span
@@ -1112,8 +1125,8 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
                   {/* Auto-Reply */}
                   <div className="flex items-center justify-between p-2.5">
                     <div>
-                      <p className="text-xs font-semibold text-white">Auto-Reply to Clients</p>
-                      <p className="text-[10px] text-zinc-400">
+                      <p className="text-xs font-semibold text-foreground">Auto-Reply to Clients</p>
+                      <p className="text-[10px] text-muted-foreground">
                         Automatically reply to deals and client queries
                       </p>
                     </div>
@@ -1121,7 +1134,7 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
                       type="button"
                       onClick={() => handleSaveSettings({ autoReply: !settings.autoReply })}
                       className={`relative inline-flex h-4.5 w-8 shrink-0 cursor-pointer rounded-full border border-transparent transition-colors duration-200 ease-in-out ${
-                        settings.autoReply ? "bg-[#34C759]" : "bg-zinc-700"
+                        settings.autoReply ? "bg-[#34C759]" : "bg-muted"
                       }`}
                     >
                       <span
@@ -1135,8 +1148,8 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
                   {/* Media Support */}
                   <div className="flex items-center justify-between p-2.5">
                     <div>
-                      <p className="text-xs font-semibold text-white">Media Files & Photos</p>
-                      <p className="text-[10px] text-zinc-400">
+                      <p className="text-xs font-semibold text-foreground">Media Files & Photos</p>
+                      <p className="text-[10px] text-muted-foreground">
                         Allow bot to send/receive images & documents
                       </p>
                     </div>
@@ -1144,7 +1157,7 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
                       type="button"
                       onClick={() => handleSaveSettings({ mediaEnabled: !settings.mediaEnabled })}
                       className={`relative inline-flex h-4.5 w-8 shrink-0 cursor-pointer rounded-full border border-transparent transition-colors duration-200 ease-in-out ${
-                        settings.mediaEnabled ? "bg-[#34C759]" : "bg-zinc-700"
+                        settings.mediaEnabled ? "bg-[#34C759]" : "bg-muted"
                       }`}
                     >
                       <span
@@ -1158,8 +1171,8 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
                   {/* Voice Notes */}
                   <div className="flex items-center justify-between p-2.5">
                     <div>
-                      <p className="text-xs font-semibold text-white">Voice Notes (PTT)</p>
-                      <p className="text-[10px] text-zinc-400">
+                      <p className="text-xs font-semibold text-foreground">Voice Notes (PTT)</p>
+                      <p className="text-[10px] text-muted-foreground">
                         Allow bot to send audio voice messages
                       </p>
                     </div>
@@ -1169,7 +1182,7 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
                         handleSaveSettings({ voiceNotesEnabled: !settings.voiceNotesEnabled })
                       }
                       className={`relative inline-flex h-4.5 w-8 shrink-0 cursor-pointer rounded-full border border-transparent transition-colors duration-200 ease-in-out ${
-                        settings.voiceNotesEnabled ? "bg-[#34C759]" : "bg-zinc-700"
+                        settings.voiceNotesEnabled ? "bg-[#34C759]" : "bg-muted"
                       }`}
                     >
                       <span
@@ -1184,12 +1197,12 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
 
               {/* Cupertino Form Group 2: OpenWA Connection */}
               <div className="space-y-1">
-                <span className="text-[10px] font-semibold tracking-wider text-zinc-400 uppercase px-1">
+                <span className="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase px-1">
                   Gateway Connection
                 </span>
-                <div className="rounded-xl border border-white/[0.08] bg-zinc-900/60 p-2.5 space-y-2">
+                <div className="rounded-xl border border-white/[0.08] bg-muted/60 p-2.5 space-y-2">
                   <div>
-                    <label className="text-[10.5px] font-medium text-zinc-400">
+                    <label className="text-[10.5px] font-medium text-muted-foreground">
                       OpenWA Gateway URL
                     </label>
                     <input
@@ -1197,13 +1210,13 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
                       value={settings.gatewayUrl}
                       onChange={(e) => setSettings({ ...settings, gatewayUrl: e.target.value })}
                       onBlur={() => handleSaveSettings({ gatewayUrl: settings.gatewayUrl })}
-                      className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 px-2.5 py-1 text-xs text-white focus:outline-hidden focus:border-emerald-500"
+                      className="mt-1 w-full rounded-lg border border-white/10 bg-muted/50 px-2.5 py-1 text-xs text-foreground focus:outline-hidden focus:border-emerald-500"
                     />
                   </div>
 
                   <div>
                     <div className="flex items-center justify-between">
-                      <label className="text-[10.5px] font-medium text-zinc-400">
+                      <label className="text-[10.5px] font-medium text-muted-foreground">
                         Admin API Key
                       </label>
                       <button
@@ -1224,12 +1237,12 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
                       value={settings.apiKey}
                       onChange={(e) => setSettings({ ...settings, apiKey: e.target.value })}
                       onBlur={() => handleSaveSettings({ apiKey: settings.apiKey })}
-                      className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 px-2.5 py-1 text-xs text-white font-mono focus:outline-hidden focus:border-emerald-500"
+                      className="mt-1 w-full rounded-lg border border-white/10 bg-muted/50 px-2.5 py-1 text-xs text-foreground font-mono focus:outline-hidden focus:border-emerald-500"
                     />
                   </div>
 
                   <div className="pt-0.5 flex items-center justify-between text-[10.5px]">
-                    <span className="text-zinc-400">OpenWA Dashboard:</span>
+                    <span className="text-muted-foreground">OpenWA Dashboard:</span>
                     <a
                       href={settings.gatewayUrl}
                       target="_blank"
@@ -1245,16 +1258,16 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
 
               {/* Cupertino Form Group 3: Memory & RAM Optimization */}
               <div className="space-y-1">
-                <span className="text-[10px] font-semibold tracking-wider text-zinc-400 uppercase px-1">
+                <span className="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase px-1">
                   RAM & Server Health
                 </span>
-                <div className="rounded-xl border border-white/[0.08] bg-zinc-900/60 p-2.5 flex items-center justify-between gap-3">
+                <div className="rounded-xl border border-white/[0.08] bg-muted/60 p-2.5 flex items-center justify-between gap-3">
                   <div className="space-y-0.5">
-                    <p className="text-xs font-semibold text-white flex items-center gap-1.5">
+                    <p className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                       <Zap className="size-3.5 text-amber-400" />
                       <span>WhatsApp RAM Optimization</span>
                     </p>
-                    <p className="text-[10px] text-zinc-400 leading-relaxed">
+                    <p className="text-[10px] text-muted-foreground leading-relaxed">
                       Restarts OpenWA Chrome container to release cached memory (~1.1 GB). Messages
                       re-sync automatically without losing session login.
                     </p>
@@ -1263,7 +1276,7 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
                     type="button"
                     disabled={optimizingRam}
                     onClick={handleOptimizeRam}
-                    className="shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600/90 hover:bg-emerald-500 text-white text-[11px] font-semibold shadow-xs disabled:opacity-50 transition-all cursor-pointer active:scale-95"
+                    className="shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600/90 hover:bg-emerald-500 text-foreground text-[11px] font-semibold shadow-xs disabled:opacity-50 transition-all cursor-pointer active:scale-95"
                   >
                     <Zap className={`size-3 ${optimizingRam ? "animate-spin" : ""}`} />
                     <span>{optimizingRam ? "Restarting..." : "Free RAM"}</span>
@@ -1275,14 +1288,14 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
 
           {activeTab === "test" && (
             <div className="flex-1 overflow-y-auto px-2 py-2 space-y-2">
-              <span className="text-[10px] font-semibold tracking-wider text-zinc-400 uppercase px-1">
+              <span className="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase px-1">
                 Direct Message Tester
               </span>
 
-              <div className="rounded-xl border border-white/[0.08] bg-zinc-900/60 p-2.5 space-y-2">
+              <div className="rounded-xl border border-white/[0.08] bg-muted/60 p-2.5 space-y-2">
                 {/* Active Session Indicator */}
-                <div className="flex items-center justify-between rounded-lg bg-black/40 border border-white/[0.06] p-2 text-xs">
-                  <span className="text-zinc-400">Via Session:</span>
+                <div className="flex items-center justify-between rounded-lg bg-muted/50 border border-white/[0.06] p-2 text-xs">
+                  <span className="text-muted-foreground">Via Session:</span>
                   <span className="font-semibold text-emerald-400 truncate ml-2">
                     {settings.activeSessionId || "None (Select in Sessions tab)"}
                   </span>
@@ -1290,20 +1303,24 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
 
                 {/* Recipient Phone */}
                 <div>
-                  <label className="text-[10.5px] font-medium text-zinc-400">Recipient Phone</label>
+                  <label className="text-[10.5px] font-medium text-muted-foreground">
+                    Recipient Phone
+                  </label>
                   <input
                     type="text"
                     placeholder="03001234567 or +92300..."
                     value={testRecipient}
                     onChange={(e) => setTestRecipient(e.target.value)}
-                    className="mt-0.5 w-full rounded-lg border border-white/10 bg-black/40 px-2.5 py-1 text-xs text-white placeholder:text-zinc-600 focus:outline-hidden focus:border-emerald-500"
+                    className="mt-0.5 w-full rounded-lg border border-white/10 bg-muted/50 px-2.5 py-1 text-xs text-foreground placeholder:text-muted-foreground/80 focus:outline-hidden focus:border-emerald-500"
                   />
                 </div>
 
                 {/* Message Type Selector */}
                 <div>
-                  <label className="text-[10.5px] font-medium text-zinc-400">Message Type</label>
-                  <div className="mt-0.5 flex rounded-lg bg-black/40 p-0.5 border border-white/[0.06] text-xs">
+                  <label className="text-[10.5px] font-medium text-muted-foreground">
+                    Message Type
+                  </label>
+                  <div className="mt-0.5 flex rounded-lg bg-muted/50 p-0.5 border border-white/[0.06] text-xs">
                     {(["text", "image", "voice"] as const).map((t) => (
                       <button
                         key={t}
@@ -1311,8 +1328,8 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
                         onClick={() => setTestMediaType(t)}
                         className={`flex-1 py-0.5 rounded-md capitalize transition-all cursor-pointer text-[11px] ${
                           testMediaType === t
-                            ? "bg-zinc-800 text-white font-semibold"
-                            : "text-zinc-400 hover:text-zinc-200"
+                            ? "bg-muted text-foreground font-semibold"
+                            : "text-muted-foreground hover:text-foreground/90"
                         }`}
                       >
                         {t}
@@ -1324,27 +1341,29 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
                 {/* Media URL input if not text */}
                 {testMediaType !== "text" && (
                   <div>
-                    <label className="text-[10.5px] font-medium text-zinc-400">Media URL</label>
+                    <label className="text-[10.5px] font-medium text-muted-foreground">
+                      Media URL
+                    </label>
                     <input
                       type="text"
                       placeholder="https://example.com/photo.jpg"
                       value={testMediaUrl}
                       onChange={(e) => setTestMediaUrl(e.target.value)}
-                      className="mt-0.5 w-full rounded-lg border border-white/10 bg-black/40 px-2.5 py-1 text-xs text-white placeholder:text-zinc-600 focus:outline-hidden focus:border-emerald-500"
+                      className="mt-0.5 w-full rounded-lg border border-white/10 bg-muted/50 px-2.5 py-1 text-xs text-foreground placeholder:text-muted-foreground/80 focus:outline-hidden focus:border-emerald-500"
                     />
                   </div>
                 )}
 
                 {/* Message text */}
                 <div>
-                  <label className="text-[10.5px] font-medium text-zinc-400">
+                  <label className="text-[10.5px] font-medium text-muted-foreground">
                     {testMediaType === "text" ? "Message Text" : "Caption (Optional)"}
                   </label>
                   <textarea
                     rows={2}
                     value={testMessage}
                     onChange={(e) => setTestMessage(e.target.value)}
-                    className="mt-0.5 w-full rounded-lg border border-white/10 bg-black/40 p-2 text-xs text-white placeholder:text-zinc-600 focus:outline-hidden focus:border-emerald-500 resize-none"
+                    className="mt-0.5 w-full rounded-lg border border-white/10 bg-muted/50 p-2 text-xs text-foreground placeholder:text-muted-foreground/80 focus:outline-hidden focus:border-emerald-500 resize-none"
                   />
                 </div>
 
@@ -1353,7 +1372,7 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
                   type="button"
                   onClick={handleSendTest}
                   disabled={testSending || !settings.activeSessionId}
-                  className="w-full bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold py-1.5 h-8 cursor-pointer"
+                  className="w-full bg-emerald-600 hover:bg-emerald-500 text-foreground rounded-lg text-xs font-semibold py-1.5 h-8 cursor-pointer"
                 >
                   {testSending ? (
                     <RefreshCw className="size-3 animate-spin mr-1.5" />
@@ -1374,7 +1393,7 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
                   >
                     <p className="font-semibold">{testResult.ok ? "Delivered!" : "Failed"}</p>
                     {testResult.messageId && (
-                      <p className="text-[9.5px] text-zinc-400 mt-0.5 truncate">
+                      <p className="text-[9.5px] text-muted-foreground mt-0.5 truncate">
                         ID: {testResult.messageId}
                       </p>
                     )}
@@ -1391,13 +1410,13 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
         {/* Create Session Modal */}
         {showNewModal && (
           <div className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md">
-            <div className="w-full max-w-sm rounded-2xl border border-white/15 bg-zinc-900 p-4 shadow-2xl space-y-3.5">
+            <div className="w-full max-w-sm rounded-2xl border border-white/15 bg-muted p-4 shadow-2xl space-y-3.5">
               <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
-                <h3 className="text-sm font-semibold text-white">Create New Session</h3>
+                <h3 className="text-sm font-semibold text-foreground">Create New Session</h3>
                 <button
                   type="button"
                   onClick={() => setShowNewModal(false)}
-                  className="text-zinc-400 hover:text-white cursor-pointer"
+                  className="text-muted-foreground hover:text-foreground cursor-pointer"
                 >
                   <X className="size-4" />
                 </button>
@@ -1405,7 +1424,7 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
 
               <div className="space-y-2.5">
                 <div>
-                  <label className="text-[11px] font-medium text-zinc-400">
+                  <label className="text-[11px] font-medium text-muted-foreground">
                     Session Identifier (e.g. hasan, friend, sales)
                   </label>
                   <input
@@ -1413,36 +1432,42 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
                     placeholder="e.g. hasan"
                     value={newSessionName}
                     onChange={(e) => setNewSessionName(e.target.value)}
-                    className="mt-1 w-full rounded-xl border border-white/10 bg-black/50 px-3 py-1.5 text-xs text-white placeholder:text-zinc-600 focus:outline-hidden focus:border-emerald-500"
+                    className="mt-1 w-full rounded-xl border border-white/10 bg-muted/60 px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/80 focus:outline-hidden focus:border-emerald-500"
                   />
                 </div>
 
                 <div>
-                  <label className="text-[11px] font-medium text-zinc-400">WhatsApp Engine</label>
+                  <label className="text-[11px] font-medium text-muted-foreground">
+                    WhatsApp Engine
+                  </label>
                   <div className="mt-1 grid grid-cols-2 gap-2 text-xs">
                     <button
                       type="button"
                       onClick={() => setNewEngine("whatsapp-web.js")}
                       className={`rounded-xl border p-2.5 text-left cursor-pointer transition-all ${
                         newEngine === "whatsapp-web.js"
-                          ? "border-emerald-500/50 bg-emerald-950/30 text-white font-semibold"
-                          : "border-white/10 bg-black/30 text-zinc-400"
+                          ? "border-emerald-500/50 bg-emerald-950/30 text-foreground font-semibold"
+                          : "border-white/10 bg-muted/40 text-muted-foreground"
                       }`}
                     >
                       <p className="font-semibold text-emerald-400">Web.js (Chrome)</p>
-                      <p className="text-[10px] text-zinc-500 mt-0.5">Safest (Simulates Web)</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        Safest (Simulates Web)
+                      </p>
                     </button>
                     <button
                       type="button"
                       onClick={() => setNewEngine("baileys")}
                       className={`rounded-xl border p-2.5 text-left cursor-pointer transition-all ${
                         newEngine === "baileys"
-                          ? "border-emerald-500/50 bg-emerald-950/30 text-white font-semibold"
-                          : "border-white/10 bg-black/30 text-zinc-400"
+                          ? "border-emerald-500/50 bg-emerald-950/30 text-foreground font-semibold"
+                          : "border-white/10 bg-muted/40 text-muted-foreground"
                       }`}
                     >
                       <p className="font-semibold text-emerald-400">Baileys</p>
-                      <p className="text-[10px] text-zinc-500 mt-0.5">Ultra Light (Low RAM)</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        Ultra Light (Low RAM)
+                      </p>
                     </button>
                   </div>
                 </div>
@@ -1463,7 +1488,7 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
                   size="sm"
                   disabled={loading || !newSessionName.trim()}
                   onClick={handleCreateSession}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold"
+                  className="bg-emerald-600 hover:bg-emerald-500 text-foreground rounded-xl text-xs font-semibold"
                 >
                   {loading ? "Creating..." : "Create & Scan QR"}
                 </Button>
@@ -1475,28 +1500,28 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
         {/* QR Code Scan Modal */}
         {activeQrSession && (
           <div className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-            <div className="w-full max-w-sm rounded-2xl border border-white/15 bg-zinc-900 p-5 shadow-2xl text-center space-y-3">
+            <div className="w-full max-w-sm rounded-2xl border border-white/15 bg-muted p-5 shadow-2xl text-center space-y-3">
               <div className="flex items-center justify-between border-b border-white/10 pb-2">
-                <span className="text-xs font-semibold text-white">
+                <span className="text-xs font-semibold text-foreground">
                   Link Device: {activeQrSession}
                 </span>
                 <button
                   type="button"
                   onClick={() => setActiveQrSession(null)}
-                  className="text-zinc-400 hover:text-white cursor-pointer"
+                  className="text-muted-foreground hover:text-foreground cursor-pointer"
                 >
                   <X className="size-4" />
                 </button>
               </div>
 
-              <p className="text-[11px] text-zinc-400">
+              <p className="text-[11px] text-muted-foreground">
                 Open WhatsApp on your phone ➡️ Settings ➡️ Linked Devices ➡️ Link a Device, then
                 scan this QR code:
               </p>
 
               <div className="mx-auto flex size-56 items-center justify-center rounded-2xl bg-white p-3 shadow-inner">
                 {qrLoading ? (
-                  <RefreshCw className="size-8 animate-spin text-zinc-700" />
+                  <RefreshCw className="size-8 animate-spin text-muted-foreground/60" />
                 ) : qrCodeData ? (
                   <img
                     src={
@@ -1509,9 +1534,11 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
                   />
                 ) : (
                   <div className="space-y-1">
-                    <QrCode className="mx-auto size-10 text-zinc-400" />
-                    <p className="text-[11px] text-zinc-600">Generating QR Code...</p>
-                    <p className="text-[10px] text-zinc-500">Wait a few seconds and refresh</p>
+                    <QrCode className="mx-auto size-10 text-muted-foreground" />
+                    <p className="text-[11px] text-muted-foreground/80">Generating QR Code...</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      Wait a few seconds and refresh
+                    </p>
                   </div>
                 )}
               </div>
@@ -1520,7 +1547,7 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
                 <button
                   type="button"
                   onClick={() => handleShowQr(activeQrSession)}
-                  className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-zinc-800 px-3 py-1.5 text-xs font-semibold text-zinc-200 hover:bg-zinc-700 cursor-pointer"
+                  className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-muted px-3 py-1.5 text-xs font-semibold text-foreground/90 hover:bg-muted cursor-pointer"
                 >
                   <RefreshCw className="size-3.5" />
                   <span>Refresh QR</span>
@@ -1532,7 +1559,7 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
                     setActiveQrSession(null);
                     fetchData();
                   }}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold"
+                  className="bg-emerald-600 hover:bg-emerald-500 text-foreground rounded-xl text-xs font-semibold"
                 >
                   Done
                 </Button>
@@ -1546,11 +1573,11 @@ export function WhatsAppSheet({ isOpen, onClose }: WhatsAppSheetProps) {
           <button
             type="button"
             onClick={onClose}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-zinc-900/95 hover:bg-zinc-800 text-zinc-100 border border-white/20 shadow-2xl backdrop-blur-xl active:scale-95 transition-all text-xs font-semibold cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-muted/95 hover:bg-muted text-foreground border border-white/20 shadow-2xl backdrop-blur-xl active:scale-95 transition-all text-xs font-semibold cursor-pointer"
             title="Close Sheet"
             aria-label="Close WhatsApp Sheet"
           >
-            <X className="size-4 text-zinc-300" />
+            <X className="size-4 text-foreground/80" />
             <span className="text-[11px]">Close</span>
           </button>
         </div>

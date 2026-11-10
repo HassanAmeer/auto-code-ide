@@ -33,6 +33,7 @@ import { resolvePrimaryEnvironmentHttpUrl } from "../../../environments/primary"
 import { useTerminalStore, terminalStore } from "./terminalStore";
 import { useProjects } from "../../../state/entities";
 import { toastManager } from "../../ui/toast";
+import { useDialogA11y } from "../../ui/useDialogA11y";
 import { cn } from "../../../lib/utils";
 import { setBotAttachment } from "../../../lib/botAttachmentStore";
 
@@ -115,7 +116,7 @@ function getFileIcon(name: string) {
   if (["txt", "md", "log", "env", "conf", "yaml", "yml"].includes(ext || "")) {
     return <FileText className="size-3.5 text-emerald-400 shrink-0" />;
   }
-  return <File className="size-3.5 text-zinc-400 shrink-0" />;
+  return <File className="size-3.5 text-muted-foreground shrink-0" />;
 }
 
 function formatBytes(bytes: number): string {
@@ -983,7 +984,7 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
     if (!node) {
       if (depth === 0) {
         return (
-          <div className="py-8 flex flex-col items-center justify-center gap-2 text-zinc-500 text-xs">
+          <div className="py-8 flex flex-col items-center justify-center gap-2 text-muted-foreground text-xs">
             <RotateCw className="size-4 animate-spin text-sky-400" />
             <span>Loading directory...</span>
           </div>
@@ -994,7 +995,7 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
 
     if (depth === 0 && node.isLoading && node.directories.length === 0 && node.files.length === 0) {
       return (
-        <div className="py-8 flex flex-col items-center justify-center gap-2 text-zinc-500 text-xs">
+        <div className="py-8 flex flex-col items-center justify-center gap-2 text-muted-foreground text-xs">
           <RotateCw className="size-4 animate-spin text-sky-400" />
           <span>Loading directory...</span>
         </div>
@@ -1008,7 +1009,9 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
       node.files.length === 0
     ) {
       return (
-        <div className="py-8 text-center text-zinc-500 text-xs font-sans">Folder is empty</div>
+        <div className="py-8 text-center text-muted-foreground text-xs font-sans">
+          Folder is empty
+        </div>
       );
     }
 
@@ -1033,7 +1036,7 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
               <div
                 style={{ paddingLeft: `${depth * 12 + 6}px` }}
                 className={cn(
-                  "flex items-center justify-between py-1 px-1.5 rounded-[5px] hover:bg-zinc-800/60 text-zinc-300 transition-colors group cursor-pointer text-xs select-none",
+                  "flex items-center justify-between py-1 px-1.5 rounded-[5px] hover:bg-muted/60 text-foreground/80 transition-colors group cursor-pointer text-xs select-none",
                 )}
                 onClick={() => toggleFolder(subPath)}
                 onDoubleClick={(e) => {
@@ -1043,9 +1046,9 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
               >
                 <div className="flex items-center gap-1.5 min-w-0 flex-1">
                   {isExpanded ? (
-                    <ChevronDown className="size-3 text-zinc-400 shrink-0" />
+                    <ChevronDown className="size-3 text-muted-foreground shrink-0" />
                   ) : (
-                    <ChevronRight className="size-3 text-zinc-400 shrink-0" />
+                    <ChevronRight className="size-3 text-muted-foreground shrink-0" />
                   )}
                   {isExpanded ? (
                     <FolderOpen className="size-3.5 text-amber-400 shrink-0" />
@@ -1078,7 +1081,7 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                       handleNavigatePath(subPath);
                     }}
                     title="Open this folder as root"
-                    className="p-1 rounded-[3px] text-zinc-400 hover:text-sky-300 hover:bg-zinc-700/60 transition-colors"
+                    className="p-1 rounded-[3px] text-muted-foreground hover:text-sky-300 hover:bg-muted/60 transition-colors"
                   >
                     <FolderOpen className="size-3" />
                   </button>
@@ -1091,7 +1094,7 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                       handleDownloadFolderZip(subPath, dirName);
                     }}
                     title={`Download "${dirName}" as ZIP`}
-                    className="p-1 rounded-[3px] text-zinc-400 hover:text-amber-300 hover:bg-zinc-700/60 transition-colors"
+                    className="p-1 rounded-[3px] text-muted-foreground hover:text-amber-300 hover:bg-muted/60 transition-colors"
                   >
                     {downloadingZipPath === subPath ? (
                       <RotateCw className="size-3 animate-spin text-amber-400" />
@@ -1108,7 +1111,7 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                       setCreateModal({ parentPath: subPath, type: "file" });
                     }}
                     title="Add file inside this folder"
-                    className="p-1 rounded-[3px] text-zinc-400 hover:text-emerald-400 hover:bg-zinc-700/60 transition-colors"
+                    className="p-1 rounded-[3px] text-muted-foreground hover:text-emerald-400 hover:bg-muted/60 transition-colors"
                   >
                     <Plus className="size-3" />
                   </button>
@@ -1154,13 +1157,13 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                 "flex items-center justify-between py-1 px-1.5 rounded-[5px] transition-colors group cursor-pointer text-xs select-none",
                 isSelected
                   ? "bg-sky-500/20 text-sky-200 font-semibold border border-sky-500/30"
-                  : "text-zinc-300 hover:bg-zinc-800/60 hover:text-zinc-100 border border-transparent",
+                  : "text-foreground/80 hover:bg-muted/60 hover:text-foreground border border-transparent",
               )}
             >
               <div className="flex items-center gap-1.5 min-w-0 flex-1">
                 {getFileIcon(file.name)}
                 <span className="truncate">{file.name}</span>
-                <span className="text-4xs text-zinc-500 font-mono hidden group-hover:inline">
+                <span className="text-4xs text-muted-foreground font-mono hidden group-hover:inline">
                   {formatBytes(file.size)}
                 </span>
               </div>
@@ -1186,7 +1189,7 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                       void handleExtractExistingZip(filePath, file.name);
                     }}
                     title={`Unzip into ${file.name.replace(/\.zip$/i, "")}/ folder`}
-                    className="p-1 rounded-[3px] text-amber-400 hover:text-amber-300 hover:bg-zinc-700/60 transition-colors"
+                    className="p-1 rounded-[3px] text-amber-400 hover:text-amber-300 hover:bg-muted/60 transition-colors"
                   >
                     <FileArchive className="size-3" />
                   </button>
@@ -1198,7 +1201,7 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                     handleDownload(filePath, file.name);
                   }}
                   title="Download file"
-                  className="p-1 rounded-[3px] text-zinc-400 hover:text-sky-300 hover:bg-zinc-700/60 transition-colors"
+                  className="p-1 rounded-[3px] text-muted-foreground hover:text-sky-300 hover:bg-muted/60 transition-colors"
                 >
                   <Download className="size-3" />
                 </button>
@@ -1222,6 +1225,10 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
     );
   };
 
+  const dialogRef = useDialogA11y<HTMLDivElement>(isOpen, () =>
+    terminalStore.setFileExplorerOpen(false),
+  );
+
   if (!isOpen || typeof document === "undefined") return null;
 
   const isDirty = selectedFile && selectedFile.content !== selectedFile.originalContent;
@@ -1237,12 +1244,15 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
 
       {/* Sheet Container: Right-side 90% sheet on mobile, centered modal on desktop */}
       <div
+        ref={dialogRef}
         role="dialog"
+        aria-modal="true"
         aria-label="File Manager"
-        className="relative z-[151] h-[100dvh] max-h-[100dvh] w-[90vw] max-w-[90vw] sm:w-full sm:max-w-6xl sm:h-[88vh] flex flex-col bg-[#0c1017] border-l sm:border border-zinc-800 shadow-2xl text-zinc-100 overflow-hidden font-sans rounded-none sm:rounded-[8px]"
+        tabIndex={-1}
+        className="relative z-[151] h-[100dvh] max-h-[100dvh] w-[90vw] max-w-[90vw] sm:w-full sm:max-w-6xl sm:h-[88vh] flex flex-col bg-background border-l sm:border border-border shadow-2xl text-foreground overflow-hidden font-sans rounded-none sm:rounded-[8px] focus:outline-none"
       >
         {/* Top Header & Windows-style Address/Path Bar (Safe area top padding on mobile) */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between border-b border-zinc-800/80 bg-[#161b22] px-3 pt-7 pb-2 sm:py-2 select-none gap-2 shrink-0">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between border-b border-border/80 bg-muted px-3 pt-7 pb-2 sm:py-2 select-none gap-2 shrink-0">
           {/* Left section: Mac dots, Title & Navigation Controls */}
           <div className="flex items-center justify-between sm:justify-start gap-2 shrink-0">
             <div className="flex items-center gap-2">
@@ -1252,7 +1262,7 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                 <span className="size-3 rounded-full bg-[#27c93f]" />
               </div>
 
-              <div className="flex items-center gap-1.5 text-zinc-200">
+              <div className="flex items-center gap-1.5 text-foreground/90">
                 <Layers className="size-4 text-emerald-400" />
                 <span className="font-semibold text-xs">File Manager</span>
               </div>
@@ -1266,8 +1276,8 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                 className={cn(
                   "p-1.5 rounded-[5px] border transition-colors cursor-pointer",
                   !rootPath || rootPath === "/" || rootPath.trim() === ""
-                    ? "border-zinc-800 text-zinc-600 cursor-not-allowed opacity-40"
-                    : "border-zinc-700/80 text-zinc-300 hover:text-white hover:bg-zinc-800 bg-zinc-900",
+                    ? "border-border text-muted-foreground/80 cursor-not-allowed opacity-40"
+                    : "border-border/80 text-foreground/80 hover:text-foreground hover:bg-muted bg-muted",
                 )}
               >
                 <ArrowUp className="size-3.5" />
@@ -1278,7 +1288,7 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                 type="button"
                 onClick={() => void loadDirectory(rootPath)}
                 title="Refresh Tree"
-                className="p-1.5 rounded-[5px] border border-zinc-700/80 text-zinc-300 hover:text-white hover:bg-zinc-800 bg-zinc-900 transition-colors cursor-pointer"
+                className="p-1.5 rounded-[5px] border border-border/80 text-foreground/80 hover:text-foreground hover:bg-muted bg-muted transition-colors cursor-pointer"
               >
                 <RotateCw className="size-3.5" />
               </button>
@@ -1289,7 +1299,7 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                 onClick={() => handleDownloadFolderZip(rootPath)}
                 disabled={downloadingZipPath === rootPath}
                 title="Download current directory as ZIP archive"
-                className="p-1.5 rounded-[5px] border border-zinc-700/80 text-amber-400 hover:text-amber-300 hover:bg-zinc-800 bg-zinc-900 transition-colors cursor-pointer disabled:opacity-50"
+                className="p-1.5 rounded-[5px] border border-border/80 text-amber-400 hover:text-amber-300 hover:bg-muted bg-muted transition-colors cursor-pointer disabled:opacity-50"
               >
                 {downloadingZipPath === rootPath ? (
                   <RotateCw className="size-3.5 animate-spin text-amber-400" />
@@ -1303,7 +1313,7 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
             <button
               type="button"
               onClick={() => terminalStore.setFileExplorerOpen(false)}
-              className="sm:hidden p-1.5 rounded-[5px] text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
+              className="sm:hidden p-1.5 rounded-[5px] text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
               title="Close File Manager"
             >
               <X className="size-4" />
@@ -1318,19 +1328,19 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
             }}
             className="flex-1 flex items-center gap-1 min-w-0"
           >
-            <div className="flex-1 relative flex items-center bg-zinc-900 border border-zinc-700/80 rounded-[5px] focus-within:border-sky-500 focus-within:ring-1 focus-within:ring-sky-500/20 px-2 py-1 transition-all">
+            <div className="flex-1 relative flex items-center bg-muted border border-border/80 rounded-[5px] focus-within:border-sky-500 focus-within:ring-1 focus-within:ring-sky-500/20 px-2 py-1 transition-all">
               <Folder className="size-3.5 text-amber-400 mr-1.5 shrink-0" />
               <input
                 type="text"
                 value={inputPath}
                 onChange={(e) => setInputPath(e.target.value)}
                 placeholder="/path/to/folder (e.g. /, /root, /tmp)..."
-                className="w-full bg-transparent text-xs text-zinc-100 placeholder:text-zinc-500 font-mono focus:outline-none"
+                className="w-full bg-transparent text-xs text-foreground placeholder:text-muted-foreground font-mono focus:outline-none"
               />
               <button
                 type="submit"
                 title="Go to path (Enter)"
-                className="px-2 py-0.5 rounded-[4px] bg-sky-600 hover:bg-sky-500 text-white font-medium text-3xs shrink-0 cursor-pointer ml-1 transition-all"
+                className="px-2 py-0.5 rounded-[4px] bg-sky-600 hover:bg-sky-500 text-foreground font-medium text-3xs shrink-0 cursor-pointer ml-1 transition-all"
               >
                 Go
               </button>
@@ -1341,19 +1351,19 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
           <div className="flex items-center gap-1.5 shrink-0">
             {/* Search field */}
             <div className="relative flex items-center w-full sm:w-44">
-              <Search className="size-3 text-zinc-500 absolute left-2 pointer-events-none" />
+              <Search className="size-3 text-muted-foreground absolute left-2 pointer-events-none" />
               <input
                 type="text"
                 placeholder="Search files..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-6 pr-6 py-1 text-xs rounded-[5px] bg-zinc-900 border border-zinc-700/80 text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-sky-500/80 transition-colors"
+                className="w-full pl-6 pr-6 py-1 text-xs rounded-[5px] bg-muted border border-border/80 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-sky-500/80 transition-colors"
               />
               {searchQuery && (
                 <button
                   type="button"
                   onClick={() => setSearchQuery("")}
-                  className="absolute right-1.5 text-zinc-500 hover:text-zinc-300 cursor-pointer p-0.5"
+                  className="absolute right-1.5 text-muted-foreground hover:text-foreground/80 cursor-pointer p-0.5"
                 >
                   <X className="size-3" />
                 </button>
@@ -1364,7 +1374,7 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
             <button
               type="button"
               onClick={() => terminalStore.setFileExplorerOpen(false)}
-              className="hidden sm:inline-flex p-1.5 rounded-[5px] text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
+              className="hidden sm:inline-flex p-1.5 rounded-[5px] text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
               title="Close File Manager"
             >
               <X className="size-4" />
@@ -1373,16 +1383,16 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
         </div>
 
         {/* Mobile Tabs: Files Tree vs Editor/Preview */}
-        <div className="flex sm:hidden items-center justify-between px-3 py-1.5 bg-[#12161f] border-b border-zinc-800 shrink-0">
-          <div className="flex w-full rounded-[6px] bg-zinc-900/90 p-0.5 border border-zinc-800">
+        <div className="flex sm:hidden items-center justify-between px-3 py-1.5 bg-[#12161f] border-b border-border shrink-0">
+          <div className="flex w-full rounded-[6px] bg-muted/90 p-0.5 border border-border">
             <button
               type="button"
               onClick={() => setMobileTab("files")}
               className={cn(
                 "flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-[5px] text-xs font-medium transition-all cursor-pointer",
                 mobileTab === "files"
-                  ? "bg-zinc-800 text-white shadow-xs font-semibold"
-                  : "text-zinc-400 hover:text-zinc-200",
+                  ? "bg-muted text-foreground shadow-xs font-semibold"
+                  : "text-muted-foreground hover:text-foreground/90",
               )}
             >
               <Folder className="size-3.5 text-amber-400" />
@@ -1394,8 +1404,8 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
               className={cn(
                 "flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-[5px] text-xs font-medium transition-all cursor-pointer",
                 mobileTab === "editor"
-                  ? "bg-zinc-800 text-white shadow-xs font-semibold"
-                  : "text-zinc-400 hover:text-zinc-200",
+                  ? "bg-muted text-foreground shadow-xs font-semibold"
+                  : "text-muted-foreground hover:text-foreground/90",
               )}
             >
               <FileCode className="size-3.5 text-sky-400" />
@@ -1412,26 +1422,26 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
           {/* Left Sidebar: Collapsible File Tree */}
           <div
             className={cn(
-              "w-full sm:w-80 border-r border-zinc-800 bg-[#0e141e] flex flex-col shrink-0 overflow-hidden",
+              "w-full sm:w-80 border-r border-border bg-[#0e141e] flex flex-col shrink-0 overflow-hidden",
               mobileTab === "files" ? "flex" : "hidden sm:flex",
             )}
           >
             {/* Search & Actions Bar */}
-            <div className="p-2 border-b border-zinc-800/80 space-y-2 shrink-0">
+            <div className="p-2 border-b border-border/80 space-y-2 shrink-0">
               <div className="relative flex items-center">
-                <Search className="size-3.5 text-zinc-500 absolute left-2.5" />
+                <Search className="size-3.5 text-muted-foreground absolute left-2.5" />
                 <input
                   type="text"
                   placeholder="Filter files & folders..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-8 pr-2.5 py-1 rounded-[5px] bg-zinc-900 border border-zinc-700/60 text-zinc-200 text-xs placeholder:text-zinc-500 focus:outline-none focus:border-sky-500/60"
+                  className="w-full pl-8 pr-2.5 py-1 rounded-[5px] bg-muted border border-border/60 text-foreground/90 text-xs placeholder:text-muted-foreground focus:outline-none focus:border-sky-500/60"
                 />
                 {searchQuery && (
                   <button
                     type="button"
                     onClick={() => setSearchQuery("")}
-                    className="absolute right-2 text-zinc-500 hover:text-zinc-300"
+                    className="absolute right-2 text-muted-foreground hover:text-foreground/80"
                   >
                     <X className="size-3" />
                   </button>
@@ -1439,9 +1449,9 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
               </div>
 
               {/* Action buttons on root */}
-              <div className="flex items-center justify-between text-3xs text-zinc-400 px-1">
+              <div className="flex items-center justify-between text-3xs text-muted-foreground px-1">
                 <div className="flex items-center gap-1.5 min-w-0">
-                  <span className="font-semibold tracking-wider text-zinc-400">
+                  <span className="font-semibold tracking-wider text-muted-foreground">
                     FILES & FOLDERS
                   </span>
                   <button
@@ -1510,7 +1520,7 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                     type="button"
                     onClick={() => setCreateModal({ parentPath: rootPath, type: "file" })}
                     title="Add file in project root"
-                    className="flex items-center gap-1 px-1.5 py-1 rounded-[4px] bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition-colors cursor-pointer shrink-0"
+                    className="flex items-center gap-1 px-1.5 py-1 rounded-[4px] bg-muted hover:bg-muted text-foreground/90 transition-colors cursor-pointer shrink-0"
                   >
                     <Plus className="size-2.5" />
                     <span>File</span>
@@ -1519,7 +1529,7 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                     type="button"
                     onClick={() => setCreateModal({ parentPath: rootPath, type: "directory" })}
                     title="Add folder in project root"
-                    className="flex items-center gap-1 px-1.5 py-1 rounded-[4px] bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition-colors cursor-pointer shrink-0"
+                    className="flex items-center gap-1 px-1.5 py-1 rounded-[4px] bg-muted hover:bg-muted text-foreground/90 transition-colors cursor-pointer shrink-0"
                   >
                     <Plus className="size-2.5" />
                     <span>Folder</span>
@@ -1565,24 +1575,24 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
             {selectedFile ? (
               <>
                 {/* Editor Top Bar */}
-                <div className="flex items-center justify-between px-3 sm:px-4 py-2 border-b border-zinc-800 bg-[#121824] shrink-0 gap-2">
+                <div className="flex items-center justify-between px-3 sm:px-4 py-2 border-b border-border bg-[#121824] shrink-0 gap-2">
                   <div className="flex items-center gap-1.5 min-w-0">
                     {/* Mobile Back to Files button */}
                     <button
                       type="button"
                       onClick={() => setMobileTab("files")}
                       title="Back to files list"
-                      className="sm:hidden flex items-center gap-1 px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 hover:text-white text-3xs font-medium cursor-pointer shrink-0"
+                      className="sm:hidden flex items-center gap-1 px-2 py-0.5 rounded bg-muted text-foreground/80 hover:text-foreground text-3xs font-medium cursor-pointer shrink-0"
                     >
                       <ArrowLeft className="size-3" />
                       <span>Files</span>
                     </button>
 
                     {getFileIcon(selectedFile.name)}
-                    <span className="font-semibold text-xs text-zinc-200 truncate font-mono">
+                    <span className="font-semibold text-xs text-foreground/90 truncate font-mono">
                       {selectedFile.name}
                     </span>
-                    <span className="text-3xs text-zinc-500 font-mono hidden sm:inline">
+                    <span className="text-3xs text-muted-foreground font-mono hidden sm:inline">
                       ({formatBytes(selectedFile.size)})
                     </span>
 
@@ -1619,7 +1629,7 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                         type="button"
                         onClick={handleCopyCode}
                         title="Copy code"
-                        className="p-1.5 rounded-[5px] text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+                        className="p-1.5 rounded-[5px] text-muted-foreground hover:text-foreground/90 hover:bg-muted transition-colors"
                       >
                         {copied ? (
                           <Check className="size-3.5 text-emerald-400" />
@@ -1632,7 +1642,7 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                       type="button"
                       onClick={() => handleDownload(selectedFile.path, selectedFile.name)}
                       title="Download file"
-                      className="p-1.5 rounded-[5px] text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+                      className="p-1.5 rounded-[5px] text-muted-foreground hover:text-foreground/90 hover:bg-muted transition-colors"
                     >
                       <Download className="size-3.5" />
                     </button>
@@ -1654,8 +1664,8 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                         className={cn(
                           "flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-[5px] font-medium text-xs transition-all shadow-xs cursor-pointer",
                           isDirty && !selectedFile.isTruncated
-                            ? "bg-emerald-600 hover:bg-emerald-500 text-white"
-                            : "bg-zinc-800 text-zinc-400 opacity-60 cursor-not-allowed",
+                            ? "bg-emerald-600 hover:bg-emerald-500 text-foreground"
+                            : "bg-muted text-muted-foreground opacity-60 cursor-not-allowed",
                         )}
                       >
                         <Save className="size-3.5" />
@@ -1672,7 +1682,7 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                       type="button"
                       onClick={() => setSelectedFile(null)}
                       title="Close file"
-                      className="p-1.5 rounded-[5px] text-zinc-400 hover:text-white hover:bg-zinc-800"
+                      className="p-1.5 rounded-[5px] text-muted-foreground hover:text-foreground hover:bg-muted"
                     >
                       <X className="size-3.5" />
                     </button>
@@ -1682,8 +1692,8 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                 {/* Editor / Viewer Body */}
                 {selectedFile.isImage ? (
                   // Image Previewer
-                  <div className="flex-1 flex flex-col items-center justify-center p-6 overflow-auto bg-black/40">
-                    <div className="relative max-w-full max-h-[60vh] flex items-center justify-center p-2 rounded-lg bg-zinc-900/60 border border-zinc-800">
+                  <div className="flex-1 flex flex-col items-center justify-center p-6 overflow-auto bg-muted/50">
+                    <div className="relative max-w-full max-h-[60vh] flex items-center justify-center p-2 rounded-lg bg-muted/60 border border-border">
                       <img
                         src={resolvePrimaryEnvironmentHttpUrl(
                           `/api/fs/download?path=${encodeURIComponent(selectedFile.path)}`,
@@ -1693,11 +1703,13 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                       />
                     </div>
                     <div className="mt-3 flex items-center gap-2">
-                      <span className="text-3xs text-zinc-400 font-mono">{selectedFile.name}</span>
+                      <span className="text-3xs text-muted-foreground font-mono">
+                        {selectedFile.name}
+                      </span>
                       <button
                         type="button"
                         onClick={() => handleDownload(selectedFile.path, selectedFile.name)}
-                        className="flex items-center gap-1 px-2.5 py-1 rounded bg-sky-600 hover:bg-sky-500 text-white text-xs font-medium cursor-pointer"
+                        className="flex items-center gap-1 px-2.5 py-1 rounded bg-sky-600 hover:bg-sky-500 text-foreground text-xs font-medium cursor-pointer"
                       >
                         <Download className="size-3" />
                         <span>Download Image</span>
@@ -1706,14 +1718,16 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                   </div>
                 ) : selectedFile.isBinary ? (
                   // Binary File Info Card
-                  <div className="flex-1 flex flex-col items-center justify-center p-6 text-center bg-black/30">
-                    <div className="p-6 rounded-2xl bg-zinc-900 border border-zinc-800 flex flex-col items-center max-w-sm shadow-xl">
+                  <div className="flex-1 flex flex-col items-center justify-center p-6 text-center bg-muted/40">
+                    <div className="p-6 rounded-2xl bg-muted border border-border flex flex-col items-center max-w-sm shadow-xl">
                       <FileArchive className="size-12 text-amber-400 mb-2" />
-                      <h4 className="font-semibold text-sm text-zinc-200">{selectedFile.name}</h4>
-                      <span className="text-3xs text-zinc-500 font-mono mt-0.5">
+                      <h4 className="font-semibold text-sm text-foreground/90">
+                        {selectedFile.name}
+                      </h4>
+                      <span className="text-3xs text-muted-foreground font-mono mt-0.5">
                         Binary File ({formatBytes(selectedFile.size)})
                       </span>
-                      <p className="text-xs text-zinc-400 mt-2 leading-relaxed">
+                      <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
                         Binary files cannot be opened in the web text editor to prevent data
                         corruption.
                       </p>
@@ -1725,7 +1739,7 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                               void handleExtractExistingZip(selectedFile.path, selectedFile.name)
                             }
                             disabled={isExtracting}
-                            className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2 rounded-[5px] bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold cursor-pointer shadow-md transition-all"
+                            className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2 rounded-[5px] bg-amber-600 hover:bg-amber-500 text-foreground text-xs font-semibold cursor-pointer shadow-md transition-all"
                           >
                             <FileArchive className="size-3.5" />
                             <span>
@@ -1737,7 +1751,7 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                           <button
                             type="button"
                             onClick={() => handleDownload(selectedFile.path, selectedFile.name)}
-                            className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-[5px] bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium cursor-pointer"
+                            className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-[5px] bg-muted hover:bg-muted text-foreground/90 text-xs font-medium cursor-pointer"
                           >
                             <Download className="size-3.5" />
                             <span>Download .zip</span>
@@ -1747,7 +1761,7 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                         <button
                           type="button"
                           onClick={() => handleDownload(selectedFile.path, selectedFile.name)}
-                          className="mt-4 flex items-center gap-1.5 px-3.5 py-1.5 rounded-[5px] bg-sky-600 hover:bg-sky-500 text-white text-xs font-medium cursor-pointer shadow-xs"
+                          className="mt-4 flex items-center gap-1.5 px-3.5 py-1.5 rounded-[5px] bg-sky-600 hover:bg-sky-500 text-foreground text-xs font-medium cursor-pointer shadow-xs"
                         >
                           <Download className="size-3.5" />
                           <span>Download File</span>
@@ -1762,7 +1776,7 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                       {/* Synchronized Line Numbers Gutter */}
                       <div
                         ref={lineNumbersRef}
-                        className="w-12 sm:w-14 shrink-0 bg-[#0c1017] border-r border-zinc-800/80 py-3 px-2 text-right font-mono text-xs leading-relaxed text-zinc-600 select-none overflow-hidden"
+                        className="w-12 sm:w-14 shrink-0 bg-background border-r border-border/80 py-3 px-2 text-right font-mono text-xs leading-relaxed text-muted-foreground/80 select-none overflow-hidden"
                         aria-hidden="true"
                       >
                         {editorLines.map((_, idx) => (
@@ -1785,23 +1799,23 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                         placeholder="Empty file..."
                         spellCheck={false}
                         className={cn(
-                          "flex-1 h-full py-3 px-4 bg-transparent text-zinc-100 font-mono text-xs leading-relaxed focus:outline-none resize-none selection:bg-sky-500/30 overflow-auto whitespace-pre",
+                          "flex-1 h-full py-3 px-4 bg-transparent text-foreground font-mono text-xs leading-relaxed focus:outline-none resize-none selection:bg-sky-500/30 overflow-auto whitespace-pre",
                           selectedFile.isTruncated && "opacity-90 cursor-default select-text",
                         )}
                       />
                     </div>
 
                     {/* Editor Footer Status Bar */}
-                    <div className="flex items-center justify-between px-3 py-1 bg-[#0c1017] border-t border-zinc-800 text-3xs font-mono text-zinc-500 select-none shrink-0">
+                    <div className="flex items-center justify-between px-3 py-1 bg-background border-t border-border text-3xs font-mono text-muted-foreground select-none shrink-0">
                       <div className="flex items-center gap-2">
-                        <span className="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 font-semibold">
+                        <span className="px-1.5 py-0.5 rounded bg-muted text-foreground/80 font-semibold">
                           {selectedFile.name.split(".").pop()?.toUpperCase() || "TXT"}
                         </span>
                         <span>{editorLines.length} lines</span>
                         <span>•</span>
                         <span>{selectedFile.content.length} chars</span>
                       </div>
-                      <div className="flex items-center gap-2 text-zinc-400">
+                      <div className="flex items-center gap-2 text-muted-foreground">
                         <span className="hidden sm:inline">UTF-8</span>
                         <span>•</span>
                         <span className="hidden sm:inline">Tab: 2 spaces</span>
@@ -1814,19 +1828,19 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
               </>
             ) : (
               /* Empty State */
-              <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-zinc-500">
-                <FolderOpen className="size-12 text-zinc-700 mb-3" />
-                <h3 className="font-semibold text-sm text-zinc-300">
+              <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-muted-foreground">
+                <FolderOpen className="size-12 text-muted-foreground/60 mb-3" />
+                <h3 className="font-semibold text-sm text-foreground/80">
                   Select a file to view or edit
                 </h3>
-                <p className="text-xs text-zinc-500 max-w-sm mt-1">
+                <p className="text-xs text-muted-foreground max-w-sm mt-1">
                   Browse the project files from the tree on the left. Click on any file to inspect
                   code or make direct text modifications.
                 </p>
                 <button
                   type="button"
                   onClick={() => setMobileTab("files")}
-                  className="sm:hidden mt-3.5 flex items-center gap-1.5 px-3.5 py-1.5 rounded-[5px] bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium border border-zinc-700 cursor-pointer transition-all shadow-xs"
+                  className="sm:hidden mt-3.5 flex items-center gap-1.5 px-3.5 py-1.5 rounded-[5px] bg-muted hover:bg-muted text-foreground/90 text-xs font-medium border border-border cursor-pointer transition-all shadow-xs"
                 >
                   <Folder className="size-3.5 text-amber-400" />
                   <span>Go to Files Tree</span>
@@ -1841,20 +1855,20 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
           <div className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
             <form
               onSubmit={handleCreateSubmit}
-              className="w-full max-w-sm p-4 rounded-[8px] bg-zinc-900 border border-zinc-700 shadow-2xl space-y-3"
+              className="w-full max-w-sm p-4 rounded-[8px] bg-muted border border-border shadow-2xl space-y-3"
             >
-              <div className="flex items-center justify-between font-semibold text-sm text-zinc-200">
+              <div className="flex items-center justify-between font-semibold text-sm text-foreground/90">
                 <span>Create New {createModal.type === "directory" ? "Folder" : "File"}</span>
                 <button
                   type="button"
                   onClick={() => setCreateModal(null)}
-                  className="text-zinc-500 hover:text-zinc-300"
+                  className="text-muted-foreground hover:text-foreground/80"
                 >
                   <X className="size-4" />
                 </button>
               </div>
 
-              <div className="text-2xs text-zinc-400 font-mono truncate">
+              <div className="text-2xs text-muted-foreground font-mono truncate">
                 In: {createModal.parentPath}
               </div>
 
@@ -1863,7 +1877,7 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                 value={createName}
                 onChange={(e) => setCreateName(e.target.value)}
                 placeholder={createModal.type === "directory" ? "folder-name" : "filename.ts"}
-                className="w-full px-3 py-1.5 rounded-[5px] bg-zinc-800 border border-zinc-600 text-zinc-100 text-xs font-mono focus:outline-none focus:border-sky-500"
+                className="w-full px-3 py-1.5 rounded-[5px] bg-muted border border-border text-foreground text-xs font-mono focus:outline-none focus:border-sky-500"
                 autoFocus
               />
 
@@ -1871,14 +1885,14 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
                 <button
                   type="button"
                   onClick={() => setCreateModal(null)}
-                  className="px-3 py-1 rounded-[5px] text-zinc-400 hover:text-zinc-200 text-xs"
+                  className="px-3 py-1 rounded-[5px] text-muted-foreground hover:text-foreground/90 text-xs"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={!createName.trim()}
-                  className="px-3.5 py-1 rounded-[5px] bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs disabled:opacity-40"
+                  className="px-3.5 py-1 rounded-[5px] bg-emerald-600 hover:bg-emerald-500 text-foreground font-medium text-xs disabled:opacity-40"
                 >
                   Create
                 </button>
@@ -1890,27 +1904,27 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
         {/* Modal: Delete Confirmation */}
         {deleteTarget && (
           <div className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-            <div className="w-full max-w-sm p-4 rounded-[8px] bg-zinc-900 border border-rose-500/50 shadow-2xl space-y-3">
+            <div className="w-full max-w-sm p-4 rounded-[8px] bg-muted border border-rose-500/50 shadow-2xl space-y-3">
               <div className="font-semibold text-sm text-rose-300">
                 Delete {deleteTarget.isDir ? "Folder" : "File"}?
               </div>
-              <p className="text-xs text-zinc-300">
+              <p className="text-xs text-foreground/80">
                 Are you sure you want to delete{" "}
-                <span className="font-mono font-bold text-white">{deleteTarget.name}</span>? This
-                action cannot be undone.
+                <span className="font-mono font-bold text-foreground">{deleteTarget.name}</span>?
+                This action cannot be undone.
               </p>
               <div className="flex items-center justify-end gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setDeleteTarget(null)}
-                  className="px-3 py-1 rounded-[5px] text-zinc-400 hover:text-zinc-200 text-xs"
+                  className="px-3 py-1 rounded-[5px] text-muted-foreground hover:text-foreground/90 text-xs"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
                   onClick={handleDeleteConfirm}
-                  className="px-3.5 py-1 rounded-[5px] bg-rose-600 hover:bg-rose-500 text-white font-medium text-xs"
+                  className="px-3.5 py-1 rounded-[5px] bg-rose-600 hover:bg-rose-500 text-foreground font-medium text-xs"
                 >
                   Delete
                 </button>
@@ -1924,7 +1938,7 @@ export const ProjectFileExplorer = memo(function ProjectFileExplorer() {
           <button
             type="button"
             onClick={() => terminalStore.setFileExplorerOpen(false)}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-[6px] bg-zinc-800 hover:bg-zinc-700 text-zinc-100 font-medium text-xs shadow-2xl border border-zinc-700 transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-[6px] bg-muted hover:bg-muted text-foreground font-medium text-xs shadow-2xl border border-border transition-all cursor-pointer"
             title="Close File Manager"
           >
             <X className="size-3.5" />

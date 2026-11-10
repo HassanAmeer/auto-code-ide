@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
-import { cn } from "~/lib/utils";
+import { cn, randomUUID } from "~/lib/utils";
 
 export type DrawToolType = "pencil" | "rect" | "circle" | "arrow" | "text";
 
@@ -265,7 +265,7 @@ export function PreviewDrawOverlay({
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
 
     const newStroke: DrawItem = {
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       type: currentTool,
       color: currentColor,
       width: currentWidth,
@@ -332,7 +332,7 @@ export function PreviewDrawOverlay({
     }
     const fontSize = Math.max(14, currentWidth * 2.8);
     const item: DrawItem = {
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       type: "text",
       color: currentColor,
       width: currentWidth,

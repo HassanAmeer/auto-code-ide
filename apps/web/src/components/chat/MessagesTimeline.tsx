@@ -291,7 +291,7 @@ import {
   formatDayAwareTimestamp,
   formatUpcomingTimestamp,
 } from "../../timestampFormat";
-import { FetchedToolOutput, V2ItemInspector } from "./V2ItemInspector";
+import { FetchedToolOutput, ItemInspector } from "./ItemInspector";
 import { useV2ItemSupport } from "../../state/v2ItemSupport";
 import { Collapsible, CollapsibleTrigger, CollapsiblePanel } from "../ui/collapsible";
 import {
@@ -3731,7 +3731,7 @@ function CupertinoErrorRow({
       onContinue={handleResume}
       onRetryTurn={ctx.onRetryTurn ? () => ctx.onRetryTurn?.(item.runId ?? undefined) : undefined}
       inspectorContent={
-        <V2ItemInspector
+        <ItemInspector
           projectedItem={row.projectedItem}
           environmentId={ctx.activeThreadEnvironmentId}
           cwd={ctx.markdownCwd}
@@ -3849,7 +3849,7 @@ function V2EventTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "event"
             </p>
           ) : null}
           <div className="mt-2">
-            <V2ItemInspector
+            <ItemInspector
               projectedItem={row.projectedItem}
               environmentId={ctx.activeThreadEnvironmentId}
               cwd={ctx.markdownCwd}
@@ -6355,7 +6355,7 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
         (workEntry.projectedItem && plainOutput === undefined)) ? (
         <WorkLogDetails kind="panel">
           {workEntry.projectedItem && plainOutput === undefined ? (
-            <V2ItemInspector
+            <ItemInspector
               projectedItem={workEntry.projectedItem}
               environmentId={ctx.activeThreadEnvironmentId}
               cwd={ctx.markdownCwd}

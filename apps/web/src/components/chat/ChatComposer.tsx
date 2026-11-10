@@ -1453,7 +1453,7 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
         compactBeforeSendTokens={props.compactBeforeSendTokens}
         keepFullHistory={props.keepFullHistory}
         onToggleKeepFullHistory={props.onToggleKeepFullHistory}
-        restingSend={props.restingSend}
+        restingSend={props.restingSend ?? false}
       />
     </>
   );

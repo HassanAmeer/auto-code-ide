@@ -23,6 +23,7 @@ import { useChatMemories, useMemorySheetState, type MemoryRecord } from "../../l
 import { useNotes, type NoteItem } from "../../lib/notesStore";
 import { useCallSessions } from "../../lib/callAssistantStore";
 import { Button } from "../ui/button";
+import { useDialogA11y } from "../ui/useDialogA11y";
 
 export function ChatMemorySection() {
   const { activeSession } = useCallSessions();
@@ -154,7 +155,7 @@ export function ChatMemorySection() {
                 {memories.length}
               </span>
             </h3>
-            <p className="text-[10px] text-zinc-400 truncate">
+            <p className="text-[10px] text-muted-foreground truncate">
               Isolated per chat ({activeSession?.title || "Current Chat"})
             </p>
           </div>
@@ -174,7 +175,7 @@ export function ChatMemorySection() {
 
       {/* Search Bar */}
       <div className="relative">
-        <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3 text-zinc-500" />
+        <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3 text-muted-foreground" />
         <input
           type="text"
           placeholder="Search memories by title or text..."
@@ -329,7 +330,7 @@ export function ChatMemorySection() {
                         type="button"
                         size="xs"
                         onClick={handleImportSelectedAsRecords}
-                        className="h-6 text-[10px] gap-1 bg-amber-500 hover:bg-amber-600 text-zinc-950 font-semibold cursor-pointer"
+                        className="h-6 text-[10px] gap-1 bg-amber-500 hover:bg-amber-600 text-black font-semibold cursor-pointer"
                       >
                         <Download className="size-3" />
                         <span>Import Selected</span>
@@ -452,7 +453,7 @@ export function ChatMemorySection() {
 
                 {/* Description / Content */}
                 {record.description && (
-                  <div className="mt-2 text-[11px] text-foreground/90 leading-relaxed whitespace-pre-wrap font-mono bg-zinc-950/60 p-2 rounded-lg border border-border/50 select-all">
+                  <div className="mt-2 text-[11px] text-foreground/90 leading-relaxed whitespace-pre-wrap font-mono bg-background/60 p-2 rounded-lg border border-border/50 select-all">
                     {record.description}
                   </div>
                 )}
@@ -494,6 +495,7 @@ export function ChatMemorySection() {
 
 export function MemorySheet() {
   const [isOpen, setIsOpen] = useMemorySheetState();
+  const dialogRef = useDialogA11y<HTMLDivElement>(isOpen, () => setIsOpen(false));
 
   if (!isOpen) return null;
 
@@ -503,20 +505,28 @@ export function MemorySheet() {
       <div
         className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity"
         onClick={() => setIsOpen(false)}
+        aria-hidden="true"
       />
 
       {/* Slide-over Drawer */}
-      <div className="relative z-[126] flex h-full w-[90vw] max-w-[90vw] sm:w-full sm:max-w-xl md:max-w-2xl flex-col bg-zinc-950 text-zinc-100 border-l border-purple-500/25 shadow-2xl animate-in slide-in-from-right duration-200 overflow-hidden">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Chat Memory Vault"
+        tabIndex={-1}
+        className="relative z-[126] flex h-full w-[90vw] max-w-[90vw] sm:w-full sm:max-w-xl md:max-w-2xl flex-col bg-background text-foreground border-l border-purple-500/25 shadow-2xl animate-in slide-in-from-right duration-200 overflow-hidden focus:outline-none"
+      >
         {/* Top Header */}
-        <div className="flex items-center justify-between border-b border-zinc-800/90 px-3.5 py-2.5 bg-zinc-900/90 backdrop-blur-md shrink-0">
+        <div className="flex items-center justify-between border-b border-border/90 px-3.5 py-2.5 bg-muted/90 backdrop-blur-md shrink-0">
           <div className="flex items-center gap-2">
             <Brain className="size-4 text-purple-400" />
-            <h2 className="text-sm font-semibold text-zinc-100">Chat Memory Vault</h2>
+            <h2 className="text-sm font-semibold text-foreground">Chat Memory Vault</h2>
           </div>
           <button
             type="button"
             onClick={() => setIsOpen(false)}
-            className="rounded-full p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 transition-colors cursor-pointer"
+            className="rounded-full p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
           >
             <XIcon className="size-4" />
           </button>

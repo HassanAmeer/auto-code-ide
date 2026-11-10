@@ -996,7 +996,7 @@ export const AiTerminalCommandBar = memo(function AiTerminalCommandBar({
       <div
         ref={terminalScreenRef}
         style={{ fontSize: `${terminalFontSize}px` }}
-        className="flex-1 p-2.5 overflow-y-auto leading-relaxed space-y-1.5 bg-[#050508] text-zinc-200 select-text [scrollbar-width:thin] scroll-smooth font-mono cursor-text"
+        className="flex-1 p-2.5 overflow-y-auto leading-relaxed space-y-1.5 bg-background text-zinc-200 select-text [scrollbar-width:thin] scroll-smooth font-mono cursor-text"
         onClick={() => promptInputRef.current?.focus()}
       >
         {/* Terminal Header Banner */}

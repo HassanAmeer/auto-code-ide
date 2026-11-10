@@ -19,9 +19,7 @@ import { Route as BotRouteImport } from './routes/bot'
 import { Route as AiTerminalRouteImport } from './routes/ai-terminal'
 import { Route as ChatRouteImport } from './routes/_chat'
 import { Route as ChatIndexRouteImport } from './routes/_chat.index'
-import { Route as SettingsTtsRouteImport } from './routes/settings.tts'
 import { Route as SettingsSttTtsRouteImport } from './routes/settings.stt-tts'
-import { Route as SettingsSttRouteImport } from './routes/settings.stt'
 import { Route as SettingsStorageRouteImport } from './routes/settings.storage'
 import { Route as SettingsSourceControlRouteImport } from './routes/settings.source-control'
 import { Route as SettingsSoundRouteImport } from './routes/settings.sound'
@@ -96,19 +94,9 @@ const ChatIndexRoute = ChatIndexRouteImport.update({
   path: '/',
   getParentRoute: () => ChatRoute,
 } as any)
-const SettingsTtsRoute = SettingsTtsRouteImport.update({
-  id: '/tts',
-  path: '/tts',
-  getParentRoute: () => SettingsRoute,
-} as any)
 const SettingsSttTtsRoute = SettingsSttTtsRouteImport.update({
   id: '/stt-tts',
   path: '/stt-tts',
-  getParentRoute: () => SettingsRoute,
-} as any)
-const SettingsSttRoute = SettingsSttRouteImport.update({
-  id: '/stt',
-  path: '/stt',
   getParentRoute: () => SettingsRoute,
 } as any)
 const SettingsStorageRoute = SettingsStorageRouteImport.update({
@@ -266,9 +254,7 @@ export interface FileRoutesByFullPath {
   '/settings/sound': typeof SettingsSoundRoute
   '/settings/source-control': typeof SettingsSourceControlRoute
   '/settings/storage': typeof SettingsStorageRoute
-  '/settings/stt': typeof SettingsSttRoute
   '/settings/stt-tts': typeof SettingsSttTtsRoute
-  '/settings/tts': typeof SettingsTtsRoute
   '/$environmentId/$threadId': typeof ChatEnvironmentIdThreadIdRoute
   '/draft/$draftId': typeof ChatDraftDraftIdRoute
 }
@@ -303,9 +289,7 @@ export interface FileRoutesByTo {
   '/settings/sound': typeof SettingsSoundRoute
   '/settings/source-control': typeof SettingsSourceControlRoute
   '/settings/storage': typeof SettingsStorageRoute
-  '/settings/stt': typeof SettingsSttRoute
   '/settings/stt-tts': typeof SettingsSttTtsRoute
-  '/settings/tts': typeof SettingsTtsRoute
   '/': typeof ChatIndexRoute
   '/$environmentId/$threadId': typeof ChatEnvironmentIdThreadIdRoute
   '/draft/$draftId': typeof ChatDraftDraftIdRoute
@@ -343,9 +327,7 @@ export interface FileRoutesById {
   '/settings/sound': typeof SettingsSoundRoute
   '/settings/source-control': typeof SettingsSourceControlRoute
   '/settings/storage': typeof SettingsStorageRoute
-  '/settings/stt': typeof SettingsSttRoute
   '/settings/stt-tts': typeof SettingsSttTtsRoute
-  '/settings/tts': typeof SettingsTtsRoute
   '/_chat/': typeof ChatIndexRoute
   '/_chat/$environmentId/$threadId': typeof ChatEnvironmentIdThreadIdRoute
   '/_chat/draft/$draftId': typeof ChatDraftDraftIdRoute
@@ -384,9 +366,7 @@ export interface FileRouteTypes {
     | '/settings/sound'
     | '/settings/source-control'
     | '/settings/storage'
-    | '/settings/stt'
     | '/settings/stt-tts'
-    | '/settings/tts'
     | '/$environmentId/$threadId'
     | '/draft/$draftId'
   fileRoutesByTo: FileRoutesByTo
@@ -421,9 +401,7 @@ export interface FileRouteTypes {
     | '/settings/sound'
     | '/settings/source-control'
     | '/settings/storage'
-    | '/settings/stt'
     | '/settings/stt-tts'
-    | '/settings/tts'
     | '/'
     | '/$environmentId/$threadId'
     | '/draft/$draftId'
@@ -460,9 +438,7 @@ export interface FileRouteTypes {
     | '/settings/sound'
     | '/settings/source-control'
     | '/settings/storage'
-    | '/settings/stt'
     | '/settings/stt-tts'
-    | '/settings/tts'
     | '/_chat/'
     | '/_chat/$environmentId/$threadId'
     | '/_chat/draft/$draftId'
@@ -553,25 +529,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChatIndexRouteImport
       parentRoute: typeof ChatRoute
     }
-    '/settings/tts': {
-      id: '/settings/tts'
-      path: '/tts'
-      fullPath: '/settings/tts'
-      preLoaderRoute: typeof SettingsTtsRouteImport
-      parentRoute: typeof SettingsRoute
-    }
     '/settings/stt-tts': {
       id: '/settings/stt-tts'
       path: '/stt-tts'
       fullPath: '/settings/stt-tts'
       preLoaderRoute: typeof SettingsSttTtsRouteImport
-      parentRoute: typeof SettingsRoute
-    }
-    '/settings/stt': {
-      id: '/settings/stt'
-      path: '/stt'
-      fullPath: '/settings/stt'
-      preLoaderRoute: typeof SettingsSttRouteImport
       parentRoute: typeof SettingsRoute
     }
     '/settings/storage': {
@@ -782,9 +744,7 @@ interface SettingsRouteChildren {
   SettingsSoundRoute: typeof SettingsSoundRoute
   SettingsSourceControlRoute: typeof SettingsSourceControlRoute
   SettingsStorageRoute: typeof SettingsStorageRoute
-  SettingsSttRoute: typeof SettingsSttRoute
   SettingsSttTtsRoute: typeof SettingsSttTtsRoute
-  SettingsTtsRoute: typeof SettingsTtsRoute
 }
 
 const SettingsRouteChildren: SettingsRouteChildren = {
@@ -808,9 +768,7 @@ const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsSoundRoute: SettingsSoundRoute,
   SettingsSourceControlRoute: SettingsSourceControlRoute,
   SettingsStorageRoute: SettingsStorageRoute,
-  SettingsSttRoute: SettingsSttRoute,
   SettingsSttTtsRoute: SettingsSttTtsRoute,
-  SettingsTtsRoute: SettingsTtsRoute,
 }
 
 const SettingsRouteWithChildren = SettingsRoute._addFileChildren(

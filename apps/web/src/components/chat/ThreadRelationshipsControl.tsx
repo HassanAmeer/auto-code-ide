@@ -40,7 +40,7 @@ import {
   SquareIcon,
   UnplugIcon,
 } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { useArchivedThreadSnapshots } from "../../lib/archivedThreadsState";
 import { buildThreadRouteParams } from "../../threadRoutes";
@@ -121,6 +121,11 @@ function ThreadLineageGroup(props: {
   readonly children: (rows: ReadonlyArray<ThreadRelationshipWalkRow>) => ReactNode;
 }) {
   const [expanded, setExpanded] = useState(props.expanded);
+  // Keep the collapse state in sync when the caller changes the default
+  // (e.g. switching related-agents tabs) instead of showing a stale toggle.
+  useEffect(() => {
+    setExpanded(props.expanded);
+  }, [props.expanded]);
   const [visibleCount, setVisibleCount] = useState(THREAD_LINEAGE_INITIAL_COUNT);
   const { visibleRows, hiddenCount } = resolveThreadLineageWindow(props.rows, visibleCount);
   const failedCount = props.rows.filter(

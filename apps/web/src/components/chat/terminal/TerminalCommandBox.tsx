@@ -124,9 +124,9 @@ export function TerminalCommandBox({
   return (
     <div className="w-full my-2.5 flex flex-col gap-2 font-sans select-text">
       {/* 1. Terminal Window Frame */}
-      <div className="overflow-hidden rounded-xl border border-zinc-800 bg-[#0c1017] shadow-xl text-zinc-100 transition-all">
+      <div className="overflow-hidden rounded-xl border border-border bg-background shadow-xl text-foreground transition-all">
         {/* Terminal Header Bar */}
-        <div className="flex items-center justify-between border-b border-zinc-800/80 bg-[#161b22] px-3.5 py-2 text-xs select-none">
+        <div className="flex items-center justify-between border-b border-border/80 bg-muted px-3.5 py-2 text-xs select-none">
           {/* macOS traffic light dots & window title */}
           <div className="flex items-center gap-2.5">
             <div className="flex items-center gap-1.5">

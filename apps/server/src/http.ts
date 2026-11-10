@@ -123,6 +123,7 @@ import {
   registerGoalTelemetry,
   updateGoalTelemetryStatus,
   stopAllRunningTelemetry,
+  stopWorkerTelemetry,
   pruneStaleTelemetry,
 } from "./dsh/index.ts";
 import { isComplexTask } from "./dsh/taskDecomposer.ts";
@@ -3539,6 +3540,31 @@ export const layerSuperAgentWorkersStopAllRoute = HttpRouter.add(
   Effect.gen(function* () {
     const result = stopAllRunningTelemetry();
     return HttpServerResponse.jsonUnsafe({ ok: true, ...result });
+  }),
+);
+
+export const layerSuperAgentWorkerStopRoute = HttpRouter.add(
+  "POST",
+  "/api/super-agent/workers/stop",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      workerId?: string;
+    };
+    const workerId = bodyJson?.workerId?.trim();
+    if (!workerId) {
+      return HttpServerResponse.jsonUnsafe(
+        { ok: false, error: "workerId is required" },
+        { status: 400 },
+      );
+    }
+    const stopped = stopWorkerTelemetry(workerId);
+    return HttpServerResponse.jsonUnsafe(
+      stopped
+        ? { ok: true, stoppedWorker: workerId }
+        : { ok: false, error: "Worker not found or already finished" },
+      stopped ? { status: 200 } : { status: 404 },
+    );
   }),
 );
 

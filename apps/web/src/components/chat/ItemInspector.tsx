@@ -28,7 +28,7 @@ import { resolveExternalWebLinkHref } from "./externalLinkContextMenu";
 import type { ExpandedImagePreview } from "./ExpandedImagePreview";
 import { ShellCommandBlock } from "./ShellCommandBlock";
 
-interface V2ItemInspectorProps {
+interface ItemInspectorProps {
   readonly projectedItem: OrchestrationV2ProjectedTurnItem;
   readonly environmentId: EnvironmentId;
   readonly cwd?: string | undefined;
@@ -219,7 +219,7 @@ function ToolCallBody(
   );
 }
 
-export const V2ItemInspector = memo(function V2ItemInspector(props: V2ItemInspectorProps) {
+export const ItemInspector = memo(function ItemInspector(props: ItemInspectorProps) {
   const fetched = useFetchedTurnItem(props.projectedItem, props.environmentId);
   const item = fetched.item;
   const outputState = fetched.output;
@@ -229,7 +229,7 @@ export const V2ItemInspector = memo(function V2ItemInspector(props: V2ItemInspec
     sourceItemId: props.projectedItem.sourceItemId,
   });
   return (
-    <div className="space-y-2 text-xs" data-v2-item-inspector={item.type}>
+    <div className="space-y-2 text-xs" data-item-inspector={item.type}>
       {item.type === "reasoning" && item.text ? (
         <div className="rounded-md border border-border/45 bg-muted/15 p-2 italic text-muted-foreground">
           <ChatMarkdown

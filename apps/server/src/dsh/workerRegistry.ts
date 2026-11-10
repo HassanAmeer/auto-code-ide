@@ -263,6 +263,22 @@ export function stopAllRunningTelemetry(): { stoppedWorkers: number; stoppedGoal
 }
 
 /**
+ * Mark a single running worker as failed. Returns true when a matching
+ * running worker was found and cancelled, false otherwise. Goals are
+ * intentionally not affected — the per-row Stop button is worker-scoped.
+ */
+export function stopWorkerTelemetry(id: string): boolean {
+  const existing = activeWorkers.get(id);
+  if (!existing || existing.status !== "running") return false;
+  activeWorkers.set(id, {
+    ...existing,
+    status: "failed",
+    completedAt: Date.now(),
+  });
+  return true;
+}
+
+/**
  * Clear all worker telemetry
  */
 export function clearWorkerTelemetry(): void {

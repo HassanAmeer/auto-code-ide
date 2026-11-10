@@ -81,7 +81,7 @@ import { Badge } from "~/components/ui/badge";
 import { BrowserSurfaceSlot } from "~/browser/BrowserSurfaceSlot";
 import { alternatePreviewRuntime, useRendersServerTabNatively } from "~/browser/previewRuntime";
 import { ServerBrowserSurface, type ServerBrowserHandle } from "~/browser/ServerBrowserSurface";
-import { cn } from "~/lib/utils";
+import { cn, randomUUID } from "~/lib/utils";
 import { useBrowserSurfaceStore } from "~/browser/browserSurfaceStore";
 import { usePreviewSession } from "./usePreviewSession";
 import { ZoomIndicator } from "./ZoomIndicator";
@@ -966,7 +966,7 @@ export function PreviewView({
         if (file.size > 0) {
           const image = {
             type: "image",
-            id: crypto.randomUUID() as any,
+            id: randomUUID() as any,
             name: file.name,
             mimeType: file.type,
             sizeBytes: file.size,

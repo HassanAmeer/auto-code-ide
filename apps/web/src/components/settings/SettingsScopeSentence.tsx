@@ -36,8 +36,6 @@ export const SETTINGS_DEVICE_ONLY_PATHS: ReadonlySet<string> = new Set([
   "/settings/sound",
   "/settings/notifications",
   "/settings/stt-tts",
-  "/settings/stt",
-  "/settings/tts",
   "/settings/custom-providers",
   "/settings/ip-rotation",
   "/settings/mcp",

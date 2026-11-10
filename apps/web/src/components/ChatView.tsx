@@ -9652,22 +9652,27 @@ export default function ChatView(props: ChatViewProps) {
       messageTextForSend.startsWith("/parallel-worker") ||
       messageTextForSend.startsWith("/parallel-subagents")
     ) {
+      // Explicit, user-triggered parallel worker dispatch. The sidebar card is the
+      // only place subagent status is shown; the message sent to the model is the
+      // user's actual task text, untouched.
       const cleanPrompt = messageTextForSend
         .replace(/^\/(?:teamwork-preview|teamwork|parallel-worker|parallel-subagents)\s*/i, "")
         .trim();
       toastManager.add({
         type: "neutral",
-        title: "DeepSeek Parallel Autonomous Workers dispatched",
+        title: "Parallel worker dispatched",
       });
       const targetProjName = activeProject?.title || projectForSend?.title || "Workspace";
+      const dispatchPrompt =
+        cleanPrompt || "Implement the requested features across parallel isolated worktrees";
       void fetch(resolvePrimaryEnvironmentHttpUrl("/api/super-agent/dispatch-worker"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           projectIdOrName: targetProjName,
           taskTitle: cleanPrompt.slice(0, 60) || "Autonomous Parallel Worker Task",
-          prompt: cleanPrompt || "Implement requested features across parallel isolated worktrees",
-          model: ctxSelectedModel || "deepseek-v4.1-flash-free",
+          prompt: dispatchPrompt,
+          ...(ctxSelectedModel ? { model: ctxSelectedModel } : {}),
           stream: true,
         }),
       })
@@ -9675,9 +9680,14 @@ export default function ChatView(props: ChatViewProps) {
           window.dispatchEvent(new CustomEvent("super-agent-state-updated"));
           window.dispatchEvent(new CustomEvent("t3-subagents-changed"));
         })
-        .catch(() => {});
+        .catch(() => {
+          toastManager.add({
+            type: "error",
+            title: "Parallel worker dispatch failed",
+          });
+        });
 
-      messageTextForSend = `[Supervisor Teamwork Dispatch: ${cleanPrompt.slice(0, 50) || "Parallel Subagents"}]\n\n🚀 DeepSeek Supervisor has decomposed this task into parallel domain-isolated milestones. Active workers are running in isolated Git worktrees. Monitor live output in the timeline subagents accordion and background services widget below.\n\n${cleanPrompt}`;
+      messageTextForSend = cleanPrompt || dispatchPrompt;
     }
 
     // Per protocol, parallel workers are triggered EXCLUSIVELY by the explicit
@@ -12885,7 +12895,7 @@ export default function ChatView(props: ChatViewProps) {
               {/* Mobile Fullscreen Terminal View (Concept 2 Full Frame) */}
               <div
                 className={cn(
-                  "md:hidden flex flex-1 flex-col h-full w-full bg-[#050508] z-20 overflow-hidden",
+                  "md:hidden flex flex-1 flex-col h-full w-full bg-background z-20 overflow-hidden",
                   terminalStoreState.mobileActiveTab !== "terminal" && "hidden",
                 )}
               >

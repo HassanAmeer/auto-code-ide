@@ -18,15 +18,16 @@ import {
 } from "lucide-react";
 import { useNotes, useNotesSheetState, type NoteItem } from "../../lib/notesStore";
 import { Button } from "../ui/button";
+import { useDialogA11y } from "../ui/useDialogA11y";
 
 const COLOR_CLASSES: Record<
   NonNullable<NoteItem["color"]>,
   { border: string; bg: string; dot: string; label: string }
 > = {
   default: {
-    border: "border-zinc-800",
-    bg: "bg-zinc-900/40",
-    dot: "bg-zinc-500",
+    border: "border-border",
+    bg: "bg-muted/40",
+    dot: "bg-muted-foreground",
     label: "Default",
   },
   amber: {
@@ -63,6 +64,7 @@ const COLOR_CLASSES: Record<
 
 export function NotesSheet() {
   const [isOpen, setIsOpen] = useNotesSheetState();
+  const dialogRef = useDialogA11y<HTMLDivElement>(isOpen, () => setIsOpen(false));
   const {
     notes,
     activeCount,
@@ -160,15 +162,23 @@ export function NotesSheet() {
       <div
         className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity"
         onClick={() => setIsOpen(false)}
+        aria-hidden="true"
       />
 
       {/* Slide-over Drawer (Cupertino iOS Style, 90% Width on Mobile) */}
-      <div className="relative z-[121] flex h-full w-[90vw] max-w-[90vw] sm:w-full sm:max-w-xl md:max-w-2xl flex-col bg-zinc-950 text-zinc-100 border-l border-zinc-800/80 shadow-2xl animate-in slide-in-from-right duration-200 overflow-hidden">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Notes and Reminders"
+        tabIndex={-1}
+        className="relative z-[121] flex h-full w-[90vw] max-w-[90vw] sm:w-full sm:max-w-xl md:max-w-2xl flex-col bg-background text-foreground border-l border-border/80 shadow-2xl animate-in slide-in-from-right duration-200 overflow-hidden focus:outline-none"
+      >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-zinc-800/90 px-3.5 py-2.5 sm:px-4 sm:py-3 bg-zinc-900/90 backdrop-blur-md shrink-0">
+        <div className="flex items-center justify-between border-b border-border/90 px-3.5 py-2.5 sm:px-4 sm:py-3 bg-muted/90 backdrop-blur-md shrink-0">
           <div className="flex items-center gap-2.5 min-w-0">
             <FileCheckIcon className="size-4 text-amber-400 shrink-0" />
-            <h2 className="text-sm font-semibold tracking-wide text-zinc-100 flex items-center gap-2 truncate">
+            <h2 className="text-sm font-semibold tracking-wide text-foreground flex items-center gap-2 truncate">
               <span>Notes & Reminders</span>
               <span className="rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.2 text-xs font-mono font-medium shrink-0">
                 {activeCount} active
@@ -193,7 +203,7 @@ export function NotesSheet() {
             <button
               type="button"
               onClick={() => setIsOpen(false)}
-              className="rounded-full p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 border border-transparent hover:border-zinc-700 transition-all cursor-pointer active:scale-95"
+              className="rounded-full p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground border border-transparent hover:border-border transition-all cursor-pointer active:scale-95"
               title="Close Notes"
             >
               <XIcon className="size-4" />
@@ -202,21 +212,21 @@ export function NotesSheet() {
         </div>
 
         {/* Search & Filter Toolbar */}
-        <div className="flex flex-col gap-2.5 border-b border-zinc-800/80 bg-zinc-900/40 p-3 shrink-0">
+        <div className="flex flex-col gap-2.5 border-b border-border/80 bg-muted/40 p-3 shrink-0">
           <div className="relative">
-            <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-zinc-500" />
+            <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
             <input
               type="text"
               placeholder="Search notes by title or content..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-full border border-zinc-800 bg-zinc-900/80 pl-8 pr-8 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 focus:border-amber-500/80 focus:outline-none transition-all"
+              className="w-full rounded-full border border-border bg-muted/80 pl-8 pr-8 py-1.5 text-xs text-foreground/90 placeholder-muted-foreground focus:border-amber-500/80 focus:outline-none transition-all"
             />
             {searchQuery && (
               <button
                 type="button"
                 onClick={() => setSearchQuery("")}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 cursor-pointer"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground/80 cursor-pointer"
               >
                 <XIcon className="size-3" />
               </button>
@@ -225,7 +235,7 @@ export function NotesSheet() {
 
           <div className="flex items-center justify-between text-xs gap-2">
             {/* Cupertino Segmented Pill Switcher */}
-            <div className="inline-flex items-center bg-zinc-950/90 p-0.5 sm:p-1 rounded-full border border-zinc-800/80">
+            <div className="inline-flex items-center bg-popover/90 p-0.5 sm:p-1 rounded-full border border-border/80">
               {(
                 [
                   { id: "all", label: `All (${notes.length})` },
@@ -240,7 +250,7 @@ export function NotesSheet() {
                   className={`rounded-full px-2.5 sm:px-3 py-1 text-2xs sm:text-xs font-semibold transition-all cursor-pointer ${
                     filter === tab.id
                       ? "bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-xs"
-                      : "text-zinc-400 hover:text-zinc-200"
+                      : "text-muted-foreground hover:text-foreground/90"
                   }`}
                 >
                   {tab.label}
@@ -252,7 +262,7 @@ export function NotesSheet() {
               <button
                 type="button"
                 onClick={() => clearCompletedNotes()}
-                className="text-[11px] text-zinc-500 hover:text-rose-400 transition-colors cursor-pointer px-2 py-1 rounded-full hover:bg-zinc-900 shrink-0"
+                className="text-[11px] text-muted-foreground hover:text-rose-400 transition-colors cursor-pointer px-2 py-1 rounded-full hover:bg-muted shrink-0"
                 title="Clear all completed notes"
               >
                 Clear completed
@@ -267,7 +277,7 @@ export function NotesSheet() {
           {isCreating && (
             <form
               onSubmit={handleSaveNew}
-              className="rounded-lg border border-amber-500/40 bg-zinc-900/90 p-3.5 space-y-3 shadow-lg animate-in fade-in duration-150"
+              className="rounded-lg border border-amber-500/40 bg-muted/90 p-3.5 space-y-3 shadow-lg animate-in fade-in duration-150"
             >
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-amber-300 flex items-center gap-1.5">
@@ -277,7 +287,7 @@ export function NotesSheet() {
                 <button
                   type="button"
                   onClick={() => setIsCreating(false)}
-                  className="text-zinc-400 hover:text-zinc-200 cursor-pointer"
+                  className="text-muted-foreground hover:text-foreground/90 cursor-pointer"
                 >
                   <XIcon className="size-3.5" />
                 </button>
@@ -290,7 +300,7 @@ export function NotesSheet() {
                   placeholder="Note title (required)..."
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
-                  className="w-full rounded border border-zinc-700 bg-zinc-950 px-2.5 py-1.5 text-xs text-zinc-100 placeholder-zinc-500 focus:border-amber-500 focus:outline-none"
+                  className="w-full rounded border border-border bg-background px-2.5 py-1.5 text-xs text-foreground placeholder-muted-foreground focus:border-amber-500 focus:outline-none"
                 />
               </div>
 
@@ -300,14 +310,14 @@ export function NotesSheet() {
                   placeholder="Note content, code snippets, reminders (optional)..."
                   value={newContent}
                   onChange={(e) => setNewContent(e.target.value)}
-                  className="w-full rounded border border-zinc-700 bg-zinc-950 p-2.5 text-xs text-zinc-200 placeholder-zinc-500 focus:border-amber-500 focus:outline-none resize-y"
+                  className="w-full rounded border border-border bg-background p-2.5 text-xs text-foreground/90 placeholder-muted-foreground focus:border-amber-500 focus:outline-none resize-y"
                 />
               </div>
 
               {/* Color Tag Selection */}
               <div className="flex items-center justify-between pt-1">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] text-zinc-400">Color:</span>
+                  <span className="text-[11px] text-muted-foreground">Color:</span>
                   {(["default", "amber", "emerald", "blue", "purple", "rose"] as const).map((c) => (
                     <button
                       key={c}
@@ -329,7 +339,7 @@ export function NotesSheet() {
                     size="xs"
                     variant="ghost"
                     onClick={() => setIsCreating(false)}
-                    className="h-7 text-xs text-zinc-400 hover:text-zinc-200 cursor-pointer"
+                    className="h-7 text-xs text-muted-foreground hover:text-foreground/90 cursor-pointer"
                   >
                     Cancel
                   </Button>
@@ -337,7 +347,7 @@ export function NotesSheet() {
                     type="submit"
                     size="xs"
                     disabled={!newTitle.trim()}
-                    className="h-7 text-xs bg-amber-500 hover:bg-amber-600 text-zinc-950 font-semibold cursor-pointer"
+                    className="h-7 text-xs bg-amber-500 hover:bg-amber-600 text-black font-semibold cursor-pointer"
                   >
                     Save Note
                   </Button>
@@ -348,10 +358,10 @@ export function NotesSheet() {
 
           {/* Notes List */}
           {filteredNotes.length === 0 ? (
-            <div className="flex flex-col items-center justify-center p-12 text-center text-zinc-500">
-              <StickyNoteIcon className="size-10 stroke-1 text-zinc-600 mb-2" />
-              <p className="text-xs font-semibold text-zinc-400">No notes found</p>
-              <p className="text-[11px] text-zinc-600 mt-1 max-w-xs">
+            <div className="flex flex-col items-center justify-center p-12 text-center text-muted-foreground">
+              <StickyNoteIcon className="size-10 stroke-1 text-muted-foreground/80 mb-2" />
+              <p className="text-xs font-semibold text-muted-foreground">No notes found</p>
+              <p className="text-[11px] text-muted-foreground/80 mt-1 max-w-xs">
                 {searchQuery
                   ? "No notes matched your search query."
                   : filter === "completed"
@@ -381,20 +391,20 @@ export function NotesSheet() {
                     <form
                       key={note.id}
                       onSubmit={handleSaveEdit}
-                      className="rounded-lg border border-amber-500/50 bg-zinc-900/90 p-3 space-y-2.5 shadow-md"
+                      className="rounded-lg border border-amber-500/50 bg-muted/90 p-3 space-y-2.5 shadow-md"
                     >
                       <input
                         type="text"
                         autoFocus
                         value={editTitle}
                         onChange={(e) => setEditTitle(e.target.value)}
-                        className="w-full rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-100 focus:border-amber-500 focus:outline-none"
+                        className="w-full rounded border border-border bg-background px-2 py-1 text-xs text-foreground focus:border-amber-500 focus:outline-none"
                       />
                       <textarea
                         rows={3}
                         value={editContent}
                         onChange={(e) => setEditContent(e.target.value)}
-                        className="w-full rounded border border-zinc-700 bg-zinc-950 p-2 text-xs text-zinc-200 focus:border-amber-500 focus:outline-none resize-y"
+                        className="w-full rounded border border-border bg-background p-2 text-xs text-foreground/90 focus:border-amber-500 focus:outline-none resize-y"
                       />
                       <div className="flex items-center justify-between pt-1">
                         <div className="flex items-center gap-1.5">
@@ -418,7 +428,7 @@ export function NotesSheet() {
                             size="xs"
                             variant="ghost"
                             onClick={() => setEditingId(null)}
-                            className="h-6 text-[11px] text-zinc-400"
+                            className="h-6 text-[11px] text-muted-foreground"
                           >
                             Cancel
                           </Button>
@@ -426,7 +436,7 @@ export function NotesSheet() {
                             type="submit"
                             size="xs"
                             disabled={!editTitle.trim()}
-                            className="h-6 text-[11px] bg-amber-500 hover:bg-amber-600 text-zinc-950 font-semibold cursor-pointer"
+                            className="h-6 text-[11px] bg-amber-500 hover:bg-amber-600 text-black font-semibold cursor-pointer"
                           >
                             Save Note
                           </Button>
@@ -443,8 +453,8 @@ export function NotesSheet() {
                       colorConfig.border
                     } ${colorConfig.bg} ${
                       note.completed
-                        ? "opacity-60 bg-zinc-950/40 border-zinc-800/40"
-                        : "hover:border-zinc-700/80 hover:shadow-sm"
+                        ? "opacity-60 bg-background/40 border-border/40"
+                        : "hover:border-border/80 hover:shadow-sm"
                     }`}
                   >
                     {/* Top Row: Checkmark + Title + Action Buttons */}
@@ -454,7 +464,7 @@ export function NotesSheet() {
                         <button
                           type="button"
                           onClick={() => toggleNoteCompleted(note.id)}
-                          className="mt-0.5 shrink-0 text-zinc-400 hover:text-emerald-400 transition-colors cursor-pointer"
+                          className="mt-0.5 shrink-0 text-muted-foreground hover:text-emerald-400 transition-colors cursor-pointer"
                           title={
                             note.completed ? "Mark as active" : "Mark as completed (check mark)"
                           }
@@ -462,7 +472,7 @@ export function NotesSheet() {
                           {note.completed ? (
                             <CheckCircle2Icon className="size-4 text-emerald-400 fill-emerald-400/20" />
                           ) : (
-                            <CircleIcon className="size-4 text-zinc-500 hover:text-emerald-400 transition-colors" />
+                            <CircleIcon className="size-4 text-muted-foreground hover:text-emerald-400 transition-colors" />
                           )}
                         </button>
 
@@ -471,8 +481,8 @@ export function NotesSheet() {
                             onClick={() => toggleNoteCompleted(note.id)}
                             className={`text-xs font-semibold cursor-pointer select-none leading-snug break-words ${
                               note.completed
-                                ? "line-through text-zinc-500"
-                                : "text-zinc-100 hover:text-amber-200"
+                                ? "line-through text-muted-foreground"
+                                : "text-foreground hover:text-amber-200"
                             }`}
                           >
                             {note.title}
@@ -487,7 +497,7 @@ export function NotesSheet() {
                           onClick={() =>
                             copyToClipboard(`${note.title}\n\n${note.content}`.trim(), note.id)
                           }
-                          className="p-1 rounded text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/60 transition-colors"
+                          className="p-1 rounded text-muted-foreground hover:text-foreground/90 hover:bg-muted/60 transition-colors"
                           title="Copy note content"
                         >
                           {copiedId === note.id ? (
@@ -500,7 +510,7 @@ export function NotesSheet() {
                         <button
                           type="button"
                           onClick={() => handleStartEdit(note)}
-                          className="p-1 rounded text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/60 transition-colors"
+                          className="p-1 rounded text-muted-foreground hover:text-foreground/90 hover:bg-muted/60 transition-colors"
                           title="Edit note"
                         >
                           <Edit3Icon className="size-3.5" />
@@ -509,7 +519,7 @@ export function NotesSheet() {
                         <button
                           type="button"
                           onClick={() => deleteNote(note.id)}
-                          className="p-1 rounded text-zinc-500 hover:text-rose-400 hover:bg-zinc-800/60 transition-colors"
+                          className="p-1 rounded text-muted-foreground hover:text-rose-400 hover:bg-muted/60 transition-colors"
                           title="Delete note"
                         >
                           <Trash2Icon className="size-3.5" />
@@ -521,7 +531,9 @@ export function NotesSheet() {
                     {note.content && (
                       <div
                         className={`mt-2 text-[11px] leading-relaxed whitespace-pre-wrap pl-6.5 break-words font-sans ${
-                          note.completed ? "text-zinc-500 line-through" : "text-zinc-300"
+                          note.completed
+                            ? "text-muted-foreground line-through"
+                            : "text-foreground/80"
                         }`}
                       >
                         {note.content}
@@ -529,9 +541,9 @@ export function NotesSheet() {
                     )}
 
                     {/* Bottom Metadata */}
-                    <div className="mt-2.5 pt-2 border-t border-zinc-800/40 flex items-center justify-between text-[10px] text-zinc-500 pl-6.5">
+                    <div className="mt-2.5 pt-2 border-t border-border/40 flex items-center justify-between text-[10px] text-muted-foreground pl-6.5">
                       <span className="flex items-center gap-1 font-mono">
-                        <CalendarIcon className="size-2.5 text-zinc-600" />
+                        <CalendarIcon className="size-2.5 text-muted-foreground/80" />
                         {formatDate(note.updatedAt)}
                       </span>
 
@@ -549,23 +561,25 @@ export function NotesSheet() {
         </div>
 
         {/* Footer with Cupertino iOS Styling & Bottom-Right Close Button */}
-        <div className="border-t border-zinc-800/90 px-3.5 py-2.5 bg-zinc-900/90 backdrop-blur-md flex items-center justify-between text-[11px] text-zinc-400 gap-2 shrink-0">
+        <div className="border-t border-border/90 px-3.5 py-2.5 bg-muted/90 backdrop-blur-md flex items-center justify-between text-[11px] text-muted-foreground gap-2 shrink-0">
           <div className="flex items-center gap-1.5 min-w-0">
             <span className="truncate">
               {notes.length} note{notes.length === 1 ? "" : "s"} ({completedCount} done)
             </span>
-            <span className="hidden sm:inline text-zinc-600">•</span>
-            <span className="hidden sm:inline text-zinc-500 text-[10px]">Saved in browser</span>
+            <span className="hidden sm:inline text-muted-foreground/80">•</span>
+            <span className="hidden sm:inline text-muted-foreground text-[10px]">
+              Saved in browser
+            </span>
           </div>
 
           {/* Bottom-Right Cross Icon Button (Cupertino iOS Style) */}
           <button
             type="button"
             onClick={() => setIsOpen(false)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-800/90 hover:bg-zinc-700 active:scale-95 text-zinc-200 text-xs font-semibold border border-zinc-700/80 shadow-xs transition-all cursor-pointer shrink-0"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-muted/90 hover:bg-muted active:scale-95 text-foreground/90 text-xs font-semibold border border-border/80 shadow-xs transition-all cursor-pointer shrink-0"
             title="Close Notes"
           >
-            <XIcon className="size-3.5 text-zinc-400" />
+            <XIcon className="size-3.5 text-muted-foreground" />
             <span>Close</span>
           </button>
         </div>

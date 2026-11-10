@@ -276,17 +276,17 @@ describe("Digi-Labs Voice Delivery Styles & Co-Tuning", () => {
     expect(VOCAL_STYLES.explainer).toBeDefined();
     expect(VOCAL_STYLES.calm).toBeDefined();
 
-    expect(VOCAL_STYLES.business.edgePreset.rate).toBe("+4%");
-    expect(VOCAL_STYLES.business.edgePreset.pitch).toBe("+5Hz");
-    expect(VOCAL_STYLES.business.edgePreset.volume).toBe("+6%");
+    expect(VOCAL_STYLES.business!.edgePreset.rate).toBe("+4%");
+    expect(VOCAL_STYLES.business!.edgePreset.pitch).toBe("+5Hz");
+    expect(VOCAL_STYLES.business!.edgePreset.volume).toBe("+6%");
 
     expect(getGeminiActingPrefix("explainer")).toContain("friendly expert");
     expect(getGeminiActingPrefix("business")).toContain("confident");
     expect(getGeminiActingPrefix("promo")).toContain("excited product promo");
     expect(getGeminiActingPrefix("calm")).toContain("narrator");
 
-    expect(VOICE_DELIVERY_STYLES.promo.rate).toBe("+18%");
-    expect(VOICE_DELIVERY_STYLES.calm.rate).toBe("-14%");
+    expect(VOICE_DELIVERY_STYLES.promo!.rate).toBe("+18%");
+    expect(VOICE_DELIVERY_STYLES.calm!.rate).toBe("-14%");
   });
 
   it("calculates accurate multipliers from delivery style presets", () => {
@@ -567,17 +567,17 @@ describe("Zero-Freeze TTS Lifecycle & Cancel Deadlock Elimination", () => {
     player.enqueue("Pehla jumla yahan hai.");
 
     expect(startedChunks.length).toBe(1);
-    expect(startedChunks[0].text).toContain("Pehla jumla yahan hai.");
-    expect(startedChunks[0].id).toMatch(/^chunk_\d+_\d+$/);
-    expect(startedChunks[0].index).toBe(0);
-    expect(typeof startedChunks[0].timestamp).toBe("number");
+    expect(startedChunks[0]!.text).toContain("Pehla jumla yahan hai.");
+    expect(startedChunks[0]!.id).toMatch(/^chunk_\d+_\d+$/);
+    expect(startedChunks[0]!.index).toBe(0);
+    expect(typeof startedChunks[0]!.timestamp).toBe("number");
 
     // Wait for mock speech completion
     await new Promise((resolve) => setTimeout(resolve, 60));
 
     expect(endedChunks.length).toBe(1);
-    expect(endedChunks[0].id).toBe(startedChunks[0].id);
-    expect(endedChunks[0].text).toBe(startedChunks[0].text);
+    expect(endedChunks[0]!.id).toBe(startedChunks[0]!.id);
+    expect(endedChunks[0]!.text).toBe(startedChunks[0]!.text);
 
     player.stop();
   });
@@ -611,6 +611,6 @@ describe("Zero-Freeze TTS Lifecycle & Cancel Deadlock Elimination", () => {
     expect(player.getCurrentChunk()).toBeNull();
     expect(target.speechSynthesis.cancel).toHaveBeenCalled();
     expect(endedChunks.length).toBe(1);
-    expect(endedChunks[0].id).toBe(activeChunk.id);
+    expect(endedChunks[0]!.id).toBe(activeChunk.id);
   });
 });

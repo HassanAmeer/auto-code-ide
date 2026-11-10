@@ -213,8 +213,8 @@ function readStoredWorkers(): SubagentItem[] {
         completedAt: typeof item.completedAt === "number" ? item.completedAt : undefined,
       }));
     }
-  } catch {
-    // Ignore parse error
+  } catch (error) {
+    console.warn("Failed to read stored telemetry, ignoring:", error);
   }
   return [];
 }
@@ -235,8 +235,8 @@ function readStoredGoals(): GoalItem[] {
         status: item.status || "active",
       }));
     }
-  } catch {
-    // Ignore parse error
+  } catch (error) {
+    console.warn("Failed to read stored telemetry, ignoring:", error);
   }
   return [];
 }
@@ -268,6 +268,7 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
   const [storedWorkers, setStoredWorkers] = useState<SubagentItem[]>(() => readStoredWorkers());
   const [storedGoals, setStoredGoals] = useState<GoalItem[]>(() => readStoredGoals());
   const [apiWorkers, setApiWorkers] = useState<SubagentItem[]>([]);
+  const [workersError, setWorkersError] = useState<string | null>(null);
 
   // Listen for storage or custom events
   useEffect(() => {
@@ -307,6 +308,7 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
               : Array.isArray(data.workers)
                 ? data.workers
                 : [];
+            setWorkersError(null);
             setApiWorkers(
               workersList.map((w: any, idx: number) => ({
                 id: w.id || `api-worker-${idx}`,
@@ -319,14 +321,18 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
           }
         }
       } catch {
-        // Endpoint may not be registered yet, swallow safely
+        // Surface the failure instead of looking empty — the sidebar stays usable
+        // but the user can tell the workers API is down.
+        if (!cancelled) setWorkersError("Workers API unreachable");
       }
     }
 
     void fetchWorkers();
+    const intervalId = window.setInterval(fetchWorkers, 15_000);
     return () => {
       cancelled = true;
       controller.abort();
+      window.clearInterval(intervalId);
     };
   }, [environmentId, threadId]);
 
@@ -564,10 +570,9 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
         kind: isFailed ? "cancelled" : isTimer ? "timer" : "scheduled",
         status: isRunning ? "running" : isFailed ? "failed" : "pending",
         rawTask: task,
-        detail:
-          typeof task.prompt === "string"
-            ? task.prompt.replace(/\s+/g, " ").trim().slice(0, 240)
-            : undefined,
+        ...(typeof task.prompt === "string"
+          ? { detail: task.prompt.replace(/\s+/g, " ").trim().slice(0, 240) }
+          : {}),
       });
     }
 
@@ -666,6 +671,14 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
 
         {subagentsExpanded && (
           <div className="flex flex-col gap-0.5 pt-0.5 pl-1">
+            {workersError ? (
+              <div
+                role="status"
+                className="py-0.5 px-2 text-[10px] text-amber-500/90 flex items-center gap-1"
+              >
+                <AlertCircle className="size-3 shrink-0" /> {workersError}
+              </div>
+            ) : null}
             {combinedSubagents.length === 0 ? (
               <div className="py-1 px-2 text-[11px] text-muted-foreground font-mono">
                 No active subagents
@@ -701,14 +714,33 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
                         type="button"
                         onClick={async (e) => {
                           e.stopPropagation();
+                          if (busyTaskId === agent.id) return;
+                          setBusyTaskId(agent.id);
                           try {
-                            await fetch("/api/super-agent/workers/stop-all", { method: "POST" });
+                            const res = await fetch("/api/super-agent/workers/stop", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ workerId: agent.id }),
+                            });
+                            if (!res.ok) {
+                              toastManager.add({
+                                type: "error",
+                                title: "Could not stop this subagent",
+                              });
+                              return;
+                            }
                             window.dispatchEvent(new CustomEvent("super-agent-state-updated"));
                           } catch {
-                            // Refresh will resync on the next poll
+                            toastManager.add({
+                              type: "error",
+                              title: "Could not stop this subagent",
+                            });
+                          } finally {
+                            setBusyTaskId(null);
                           }
                         }}
-                        className="p-1 rounded text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                        disabled={busyTaskId === agent.id}
+                        className="p-1 rounded text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-default"
                         title="Stop Subagent"
                         aria-label={`Stop ${agent.title}`}
                       >

@@ -37,6 +37,8 @@ import {
   type AiModelLogEntry,
 } from "../../lib/networkLogger";
 import { useNetworkLogs, useAiModelLogs } from "./useNetworkLogs";
+import { useDialogA11y } from "../ui/useDialogA11y";
+import { toastManager } from "../ui/toast";
 import {
   useVoiceCallLogs,
   clearVoiceCallLogs,
@@ -67,7 +69,10 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
         setScheduledTasks(data.tasks || []);
       }
     } catch {
-      // ignore
+      toastManager.add({
+        type: "error",
+        title: "Request failed — check the server connection",
+      });
     }
   }, []);
 
@@ -86,7 +91,10 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
       });
       await fetchScheduledTasks();
     } catch {
-      // ignore
+      toastManager.add({
+        type: "error",
+        title: "Request failed — check the server connection",
+      });
     }
   };
 
@@ -99,7 +107,10 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
       });
       await fetchScheduledTasks();
     } catch {
-      // ignore
+      toastManager.add({
+        type: "error",
+        title: "Request failed — check the server connection",
+      });
     }
   };
 
@@ -147,7 +158,10 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
         setWaLogs(data.logs || []);
       }
     } catch {
-      // ignore
+      toastManager.add({
+        type: "error",
+        title: "Request failed — check the server connection",
+      });
     }
   }, []);
 
@@ -156,7 +170,10 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
       await fetch("/api/whatsapp/logs/clear", { method: "POST" });
       setWaLogs([]);
     } catch {
-      // ignore
+      toastManager.add({
+        type: "error",
+        title: "Request failed — check the server connection",
+      });
     }
   };
 
@@ -375,6 +392,8 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
     return null;
   }, [selectedLog]);
 
+  const dialogRef = useDialogA11y<HTMLDivElement>(isOpen, onClose);
+
   if (!isOpen) return null;
 
   const getMethodBadgeClass = (method: string) => {
@@ -392,20 +411,20 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
     )
       return "bg-rose-500/20 text-rose-300 border-rose-500/40";
     if (method.includes("WS ↘")) return "bg-cyan-500/15 text-cyan-400 border-cyan-500/30";
-    return "bg-zinc-700/30 text-zinc-300 border-zinc-600/30";
+    return "bg-muted/30 text-foreground/80 border-border/40";
   };
 
   const getStatusBadgeClass = (status?: number, state?: string) => {
     if (state === "pending")
       return "bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse";
     if (!status && state === "error") return "bg-rose-500/20 text-rose-300 border-rose-500/40";
-    if (!status) return "bg-zinc-800 text-zinc-400 border-zinc-700";
+    if (!status) return "bg-muted text-muted-foreground border-border";
     if (status >= 200 && status < 300)
       return "bg-emerald-500/15 text-emerald-300 border-emerald-500/30";
     if (status === 101) return "bg-indigo-500/15 text-indigo-300 border-indigo-500/30";
     if (status >= 400 && status < 500) return "bg-amber-500/20 text-amber-300 border-amber-500/40";
     if (status >= 500) return "bg-rose-500/20 text-rose-300 border-rose-500/40";
-    return "bg-zinc-800 text-zinc-300 border-zinc-700";
+    return "bg-muted text-foreground/80 border-border";
   };
 
   const getAiStatusBadge = (log: AiModelLogEntry) => {
@@ -446,22 +465,30 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
       <div
         className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity"
         onClick={onClose}
+        aria-hidden="true"
       />
 
       {/* Slide-over panel */}
-      <div className="relative z-[121] flex h-full w-[90vw] max-w-[90vw] sm:w-full sm:max-w-2xl md:max-w-4xl flex-col bg-zinc-950 text-zinc-100 border-l border-zinc-800/80 shadow-2xl animate-in slide-in-from-right duration-200 overflow-hidden">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Request Logs"
+        tabIndex={-1}
+        className="relative z-[121] flex h-full w-[90vw] max-w-[90vw] sm:w-full sm:max-w-2xl md:max-w-4xl flex-col bg-background text-foreground border-l border-border/80 shadow-2xl animate-in slide-in-from-right duration-200 overflow-hidden focus:outline-none"
+      >
         {/* Top App Header with Cupertino iOS Segmented Tabs */}
-        <div className="flex items-center justify-between border-b border-zinc-800/80 px-2.5 py-2 sm:px-4 sm:py-2.5 bg-zinc-900/90 backdrop-blur-md shrink-0 gap-2 min-w-0">
+        <div className="flex items-center justify-between border-b border-border/80 px-2.5 py-2 sm:px-4 sm:py-2.5 bg-muted/90 backdrop-blur-md shrink-0 gap-2 min-w-0">
           <div className="flex items-center gap-2 min-w-0 flex-1">
             {/* Cupertino Segmented Tab Switcher */}
-            <div className="inline-flex items-center bg-zinc-950/90 p-0.5 sm:p-1 rounded-full border border-zinc-800/80 shrink-0">
+            <div className="inline-flex items-center bg-popover/90 p-0.5 sm:p-1 rounded-full border border-border/80 shrink-0">
               <button
                 type="button"
                 onClick={() => setMainTab("ai")}
                 className={`flex items-center gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full text-2xs sm:text-xs font-semibold transition-all cursor-pointer ${
                   mainTab === "ai"
                     ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-xs"
-                    : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60"
+                    : "text-muted-foreground hover:text-foreground/90 hover:bg-muted/60"
                 }`}
               >
                 <BotIcon className="size-3.5 text-emerald-400 shrink-0" />
@@ -471,7 +498,7 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                   className={`rounded-full px-1.5 py-0.2 text-[10px] font-mono ${
                     mainTab === "ai"
                       ? "bg-emerald-500/30 text-emerald-200 font-bold"
-                      : "bg-zinc-800 text-zinc-400"
+                      : "bg-muted text-muted-foreground"
                   }`}
                 >
                   {aiLogs.length}
@@ -483,14 +510,14 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                 onClick={() => setMainTab("network")}
                 className={`flex items-center gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full text-2xs sm:text-xs font-semibold transition-all cursor-pointer ${
                   mainTab === "network"
-                    ? "bg-zinc-800 text-zinc-100 border border-zinc-700 shadow-xs"
-                    : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60"
+                    ? "bg-muted text-foreground border border-border shadow-xs"
+                    : "text-muted-foreground hover:text-foreground/90 hover:bg-muted/60"
                 }`}
               >
                 <GlobeIcon className="size-3.5 text-cyan-400 shrink-0" />
                 <span className="hidden sm:inline">Network Traffic</span>
                 <span className="inline sm:hidden">Network</span>
-                <span className="rounded-full bg-zinc-800 px-1.5 py-0.2 text-[10px] font-mono text-zinc-400">
+                <span className="rounded-full bg-muted px-1.5 py-0.2 text-[10px] font-mono text-muted-foreground">
                   {logs.length}
                 </span>
               </button>
@@ -501,7 +528,7 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                 className={`flex items-center gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full text-2xs sm:text-xs font-semibold transition-all cursor-pointer ${
                   mainTab === "bot"
                     ? "bg-purple-500/20 text-purple-300 border border-purple-500/40 shadow-xs"
-                    : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60"
+                    : "text-muted-foreground hover:text-foreground/90 hover:bg-muted/60"
                 }`}
               >
                 <RadioIcon className="size-3.5 text-purple-400 shrink-0" />
@@ -511,7 +538,7 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                   className={`rounded-full px-1.5 py-0.2 text-[10px] font-mono ${
                     mainTab === "bot"
                       ? "bg-purple-500/30 text-purple-200 font-bold"
-                      : "bg-zinc-800 text-zinc-400"
+                      : "bg-muted text-muted-foreground"
                   }`}
                 >
                   {botLogs.length}
@@ -524,7 +551,7 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                 className={`flex items-center gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full text-2xs sm:text-xs font-semibold transition-all cursor-pointer ${
                   mainTab === "wa"
                     ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-xs"
-                    : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60"
+                    : "text-muted-foreground hover:text-foreground/90 hover:bg-muted/60"
                 }`}
               >
                 <MessageCircle className="size-3.5 text-emerald-400 shrink-0" />
@@ -534,7 +561,7 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                   className={`rounded-full px-1.5 py-0.2 text-[10px] font-mono ${
                     mainTab === "wa"
                       ? "bg-emerald-500/30 text-emerald-200 font-bold"
-                      : "bg-zinc-800 text-zinc-400"
+                      : "bg-muted text-muted-foreground"
                   }`}
                 >
                   {waLogs.length}
@@ -547,7 +574,7 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                 className={`flex items-center gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full text-2xs sm:text-xs font-semibold transition-all cursor-pointer ${
                   mainTab === "tasks"
                     ? "bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-xs"
-                    : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60"
+                    : "text-muted-foreground hover:text-foreground/90 hover:bg-muted/60"
                 }`}
               >
                 <CalendarIcon className="size-3.5 text-amber-400 shrink-0" />
@@ -557,7 +584,7 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                   className={`rounded-full px-1.5 py-0.2 text-[10px] font-mono ${
                     mainTab === "tasks"
                       ? "bg-amber-500/30 text-amber-200 font-bold"
-                      : "bg-zinc-800 text-zinc-400"
+                      : "bg-muted text-muted-foreground"
                   }`}
                 >
                   {scheduledTasks.length}
@@ -573,7 +600,7 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                 variant="outline"
                 onClick={handleRefreshTasks}
                 disabled={isRefreshingTasks}
-                className="rounded-full bg-zinc-900/80 border-zinc-700/80 hover:bg-zinc-800 text-zinc-300 hover:text-white text-xs h-7 px-2.5 cursor-pointer"
+                className="rounded-full bg-muted/80 border-border/80 hover:bg-muted text-foreground/80 hover:text-foreground text-xs h-7 px-2.5 cursor-pointer"
               >
                 <RefreshCwIcon
                   className={`size-3 mr-1 ${isRefreshingTasks ? "animate-spin text-amber-400" : ""}`}
@@ -587,7 +614,7 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                   variant="outline"
                   onClick={handleRefreshWa}
                   disabled={isRefreshingWa}
-                  className="rounded-full bg-zinc-900/80 border-zinc-700/80 hover:bg-zinc-800 text-zinc-300 hover:text-white text-xs h-7 px-2.5 cursor-pointer"
+                  className="rounded-full bg-muted/80 border-border/80 hover:bg-muted text-foreground/80 hover:text-foreground text-xs h-7 px-2.5 cursor-pointer"
                 >
                   <RefreshCwIcon
                     className={`size-3 mr-1 ${isRefreshingWa ? "animate-spin text-emerald-400" : ""}`}
@@ -599,7 +626,7 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                   variant="outline"
                   onClick={handleClearWaLogs}
                   disabled={waLogs.length === 0}
-                  className="rounded-full bg-zinc-900/80 border-zinc-700/80 hover:bg-zinc-800 text-zinc-400 hover:text-rose-400 text-xs h-7 px-2.5 cursor-pointer"
+                  className="rounded-full bg-muted/80 border-border/80 hover:bg-muted text-muted-foreground hover:text-rose-400 text-xs h-7 px-2.5 cursor-pointer"
                   title="Clear WhatsApp Logs"
                 >
                   <Trash2Icon className="size-3 mr-1" />
@@ -615,7 +642,7 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                     copyToClipboard(JSON.stringify(filteredBotLogs, null, 2), "copyAllBotLogs")
                   }
                   title="Copy all currently filtered Bot & Call logs as JSON"
-                  className="h-7 text-xs gap-1 border-zinc-800/80 hover:bg-zinc-900 hover:text-cyan-400 text-zinc-400 px-2 sm:px-2.5"
+                  className="h-7 text-xs gap-1 border-border/80 hover:bg-muted hover:text-cyan-400 text-muted-foreground px-2 sm:px-2.5"
                   style={{ borderRadius: "12px" }}
                 >
                   {copiedKey === "copyAllBotLogs" ? (
@@ -630,7 +657,7 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                   variant="outline"
                   onClick={() => clearVoiceCallLogs()}
                   title="Clear all recorded Bot & Call logs"
-                  className="h-7 text-xs gap-1 border-zinc-800/80 hover:bg-zinc-900 hover:text-rose-400 text-zinc-400 px-2 sm:px-2.5"
+                  className="h-7 text-xs gap-1 border-border/80 hover:bg-muted hover:text-rose-400 text-muted-foreground px-2 sm:px-2.5"
                   style={{ borderRadius: "12px" }}
                 >
                   <Trash2Icon className="size-3.5" />
@@ -646,7 +673,7 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                     copyToClipboard(JSON.stringify(filteredAiLogs, null, 2), "copyAllAiLogs")
                   }
                   title="Copy all currently filtered AI logs as JSON"
-                  className="h-7 text-xs gap-1 border-zinc-800/80 hover:bg-zinc-900 hover:text-cyan-400 text-zinc-400 px-2 sm:px-2.5"
+                  className="h-7 text-xs gap-1 border-border/80 hover:bg-muted hover:text-cyan-400 text-muted-foreground px-2 sm:px-2.5"
                   style={{ borderRadius: "12px" }}
                 >
                   {copiedKey === "copyAllAiLogs" ? (
@@ -661,7 +688,7 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                   variant="outline"
                   onClick={handleRefreshAi}
                   title="Refresh AI logs from server"
-                  className="h-7 text-xs gap-1 border-zinc-800/80 hover:bg-zinc-900 hover:text-emerald-400 text-zinc-400 px-2 sm:px-2.5"
+                  className="h-7 text-xs gap-1 border-border/80 hover:bg-muted hover:text-emerald-400 text-muted-foreground px-2 sm:px-2.5"
                   style={{ borderRadius: "12px" }}
                 >
                   <RefreshCwIcon
@@ -674,7 +701,7 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                   variant="outline"
                   onClick={() => networkLogger.clearAiModelLogs()}
                   title="Clear all recorded AI logs"
-                  className="h-7 text-xs gap-1 border-zinc-800/80 hover:bg-zinc-900 hover:text-rose-400 text-zinc-400 px-2 sm:px-2.5"
+                  className="h-7 text-xs gap-1 border-border/80 hover:bg-muted hover:text-rose-400 text-muted-foreground px-2 sm:px-2.5"
                   style={{ borderRadius: "12px" }}
                 >
                   <Trash2Icon className="size-3.5" />
@@ -687,7 +714,7 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                 variant="outline"
                 onClick={() => networkLogger.clear()}
                 title="Clear all network logs"
-                className="h-7 text-xs gap-1 border-zinc-800/80 hover:bg-zinc-900 hover:text-rose-400 text-zinc-400 px-2 sm:px-2.5"
+                className="h-7 text-xs gap-1 border-border/80 hover:bg-muted hover:text-rose-400 text-muted-foreground px-2 sm:px-2.5"
                 style={{ borderRadius: "12px" }}
               >
                 <Trash2Icon className="size-3.5" />
@@ -700,7 +727,7 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
               type="button"
               onClick={onClose}
               title="Close Logs Sheet"
-              className="flex items-center justify-center size-7 sm:size-8 rounded-full bg-zinc-800/90 hover:bg-zinc-700 text-zinc-300 hover:text-white border border-zinc-700/60 transition-all cursor-pointer shrink-0 shadow-xs active:scale-95 ml-1"
+              className="flex items-center justify-center size-7 sm:size-8 rounded-full bg-muted/90 hover:bg-muted text-foreground/80 hover:text-foreground border border-border/60 transition-all cursor-pointer shrink-0 shadow-xs active:scale-95 ml-1"
             >
               <XIcon className="size-4" />
             </button>
@@ -713,22 +740,22 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
         {mainTab === "ai" && (
           <div className="flex flex-col flex-1 min-h-0">
             {/* Filter & Search Toolbar */}
-            <div className="flex flex-col gap-2 border-b border-zinc-800/80 bg-zinc-900/30 p-3">
+            <div className="flex flex-col gap-2 border-b border-border/80 bg-muted/30 p-3">
               <div className="flex items-center gap-2">
                 <div className="relative flex-1">
-                  <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-zinc-500" />
+                  <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
                   <input
                     type="text"
                     placeholder="Search AI Model, Provider, Error, User Prompt, Endpoint..."
                     value={aiSearchQuery}
                     onChange={(e) => setAiSearchQuery(e.target.value)}
-                    className="w-full rounded-md border border-zinc-800 bg-zinc-900/80 pl-8 pr-8 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 focus:border-emerald-500 focus:outline-none"
+                    className="w-full rounded-md border border-border bg-muted/80 pl-8 pr-8 py-1.5 text-xs text-foreground/90 placeholder-muted-foreground focus:border-emerald-500 focus:outline-none"
                   />
                   {aiSearchQuery && (
                     <button
                       type="button"
                       onClick={() => setAiSearchQuery("")}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground/80"
                     >
                       <XIcon className="size-3" />
                     </button>
@@ -753,7 +780,7 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                       className={`px-3 py-1 font-medium transition-colors cursor-pointer capitalize text-xs ${
                         aiFilter === tab.id
                           ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-semibold shadow-xs"
-                          : "bg-zinc-800/80 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 border border-transparent"
+                          : "bg-muted/80 text-muted-foreground hover:bg-muted hover:text-foreground/90 border border-transparent"
                       }`}
                       style={{ borderRadius: "12px" }}
                     >
@@ -762,7 +789,7 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                   ))}
                 </div>
 
-                <div className="text-[11px] font-mono text-zinc-500">
+                <div className="text-[11px] font-mono text-muted-foreground">
                   Showing {filteredAiLogs.length} of {aiLogs.length} AI runs
                 </div>
               </div>
@@ -777,12 +804,12 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                 }`}
               >
                 {filteredAiLogs.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center p-12 text-center text-zinc-500">
-                    <BotIcon className="size-10 stroke-1 text-zinc-600 mb-2" />
-                    <p className="text-xs font-semibold text-zinc-400">
+                  <div className="flex flex-col items-center justify-center p-12 text-center text-muted-foreground">
+                    <BotIcon className="size-10 stroke-1 text-muted-foreground/80 mb-2" />
+                    <p className="text-xs font-semibold text-muted-foreground">
                       No AI model activity recorded yet
                     </p>
-                    <p className="text-[11px] text-zinc-600 mt-1 max-w-xs">
+                    <p className="text-[11px] text-muted-foreground/80 mt-1 max-w-xs">
                       Send a prompt or direct an agent. The outgoing request, headers, model info,
                       and incoming response will appear here in real-time.
                     </p>
@@ -795,9 +822,9 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                         <div
                           key={log.id}
                           onClick={() => setSelectedAiLogId(log.id)}
-                          className={`flex flex-col gap-1.5 p-3 transition-colors cursor-pointer hover:bg-zinc-900/60 ${
+                          className={`flex flex-col gap-1.5 p-3 transition-colors cursor-pointer hover:bg-muted/60 ${
                             isSelected
-                              ? "bg-zinc-900 border-l-2 border-emerald-500"
+                              ? "bg-muted border-l-2 border-emerald-500"
                               : log.state === "error"
                                 ? "bg-rose-950/10 hover:bg-rose-950/20"
                                 : ""
@@ -816,7 +843,7 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                             </div>
 
                             <div className="flex items-center gap-1.5 shrink-0">
-                              <span className="text-[11px] font-mono text-zinc-400">
+                              <span className="text-[11px] font-mono text-muted-foreground">
                                 {log.durationMs !== undefined && log.durationMs > 0
                                   ? `${log.durationMs}ms`
                                   : ""}
@@ -830,7 +857,7 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                                     (log.error ? `Error: ${log.error}` : log.userPrompt);
                                   copyToClipboard(textToCopy, `listCopy_${log.id}`);
                                 }}
-                                className="p-1 rounded hover:bg-zinc-800 text-zinc-500 hover:text-zinc-200 transition-colors cursor-pointer"
+                                className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground/90 transition-colors cursor-pointer"
                                 title={
                                   log.responseBody ? "Copy output / stream" : "Copy prompt/log"
                                 }
@@ -845,20 +872,22 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                           </div>
 
                           <div className="flex items-center justify-between gap-2 text-[11px]">
-                            <span className="text-zinc-400 font-sans truncate">
-                              <span className="text-zinc-500">Payload:</span>{" "}
+                            <span className="text-muted-foreground font-sans truncate">
+                              <span className="text-muted-foreground">Payload:</span>{" "}
                               <code className="text-emerald-400 font-mono text-[10px]">
                                 "model": "{log.model}"
                               </code>
                             </span>
-                            <span className="font-mono text-zinc-500 shrink-0">
+                            <span className="font-mono text-muted-foreground shrink-0">
                               {log.timeFormatted.split(".")[0]}
                             </span>
                           </div>
 
                           {/* User Prompt Snippet */}
-                          <div className="text-[11px] text-zinc-400 line-clamp-2 bg-zinc-950/50 p-1.5 rounded border border-zinc-900 font-sans">
-                            <span className="text-zinc-500 font-mono text-[10px]">User: </span>
+                          <div className="text-[11px] text-muted-foreground line-clamp-2 bg-background/50 p-1.5 rounded border border-border font-sans">
+                            <span className="text-muted-foreground font-mono text-[10px]">
+                              User:{" "}
+                            </span>
                             {log.userPrompt}
                           </div>
 
@@ -877,14 +906,14 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
 
               {/* Right Panel: Selected AI Log Deep Details */}
               {selectedAiLog ? (
-                <div className="flex flex-1 flex-col overflow-hidden bg-zinc-950">
+                <div className="flex flex-1 flex-col overflow-hidden bg-background">
                   {/* Inspector Header */}
-                  <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-2.5 bg-zinc-900/50">
+                  <div className="flex items-center justify-between border-b border-border px-4 py-2.5 bg-muted/50">
                     <div className="flex items-center gap-2 min-w-0">
                       <button
                         type="button"
                         onClick={() => setSelectedAiLogId(null)}
-                        className="md:hidden flex items-center gap-1 px-2.5 py-1 rounded-full bg-zinc-800/90 text-zinc-300 hover:text-white border border-zinc-700/60 text-xs font-semibold mr-1 cursor-pointer shrink-0 active:scale-95"
+                        className="md:hidden flex items-center gap-1 px-2.5 py-1 rounded-full bg-muted/90 text-foreground/80 hover:text-foreground border border-border/60 text-xs font-semibold mr-1 cursor-pointer shrink-0 active:scale-95"
                       >
                         ← Back
                       </button>
@@ -897,7 +926,7 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                           <button
                             type="button"
                             onClick={() => copyToClipboard(selectedAiLog.model, "topModelId")}
-                            className="text-zinc-500 hover:text-zinc-200 text-[10px] flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 shrink-0 cursor-pointer"
+                            className="text-muted-foreground hover:text-foreground/90 text-[10px] flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-muted border border-border shrink-0 cursor-pointer"
                             title="Copy Model ID"
                           >
                             {copiedKey === "topModelId" ? (
@@ -908,7 +937,7 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                             Copy ID
                           </button>
                         </div>
-                        <span className="text-[10px] text-zinc-400 truncate">
+                        <span className="text-[10px] text-muted-foreground truncate">
                           Wire JSON:{" "}
                           <code className="text-emerald-400 font-mono">
                             "model": "{selectedAiLog.model}"
@@ -954,7 +983,7 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                         onClick={() =>
                           copyToClipboard(JSON.stringify(selectedAiLog, null, 2), "aiFullLogTop")
                         }
-                        className="h-6 text-[11px] gap-1 text-zinc-400 hover:text-zinc-200 border border-zinc-800"
+                        className="h-6 text-[11px] gap-1 text-muted-foreground hover:text-foreground/90 border border-border"
                         style={{ borderRadius: "10px" }}
                         title="Copy complete log record as JSON"
                       >
@@ -972,7 +1001,7 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                         onClick={() =>
                           copyToClipboard(formatAiCurlCommand(selectedAiLog), "aiCurlTop")
                         }
-                        className="h-6 text-[11px] gap-1 text-zinc-400 hover:text-emerald-300 border border-zinc-800"
+                        className="h-6 text-[11px] gap-1 text-muted-foreground hover:text-emerald-300 border border-border"
                         style={{ borderRadius: "10px" }}
                         title="Copy curl command to test this model in terminal"
                       >
@@ -987,7 +1016,7 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                   </div>
 
                   {/* Inspector Sub-Tabs */}
-                  <div className="flex items-center border-b border-zinc-800 bg-zinc-900/20 px-3 text-xs overflow-x-auto">
+                  <div className="flex items-center border-b border-border bg-muted/20 px-3 text-xs overflow-x-auto">
                     {(
                       [
                         { id: "overview", label: "Model & Request" },
@@ -1007,8 +1036,8 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                         onClick={() => setAiActiveTab(tab.id)}
                         className={`border-b-2 px-3 py-2 font-medium transition-colors cursor-pointer shrink-0 ${
                           aiActiveTab === tab.id
-                            ? "border-emerald-500 text-zinc-100 font-semibold"
-                            : "border-transparent text-zinc-400 hover:text-zinc-200"
+                            ? "border-emerald-500 text-foreground font-semibold"
+                            : "border-transparent text-muted-foreground hover:text-foreground/90"
                         } ${tab.id === "error" && selectedAiLog.error ? "text-rose-400 font-bold" : ""}`}
                       >
                         {tab.label}
@@ -1022,7 +1051,7 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                     {aiActiveTab === "overview" && (
                       <div className="space-y-4 font-sans">
                         {/* Model ID Wire Payload Summary Card */}
-                        <div className="rounded-lg border border-emerald-500/30 bg-gradient-to-r from-emerald-950/30 via-zinc-900/60 to-zinc-900/40 p-3.5 space-y-2.5">
+                        <div className="rounded-lg border border-emerald-500/30 bg-gradient-to-r from-emerald-950/30 via-zinc-900/60 to-muted/40 p-3.5 space-y-2.5">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                               <CpuIcon className="size-4 text-emerald-400" />
@@ -1036,7 +1065,7 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                               onClick={() =>
                                 copyToClipboard(selectedAiLog.model, "overviewModelId")
                               }
-                              className="h-6 text-[11px] gap-1 border-zinc-700/80 rounded-full hover:bg-zinc-800 text-zinc-300"
+                              className="h-6 text-[11px] gap-1 border-border/80 rounded-full hover:bg-muted text-foreground/80"
                             >
                               {copiedKey === "overviewModelId" ? (
                                 <CheckIcon className="size-3 text-emerald-400" />
@@ -1048,8 +1077,8 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                           </div>
 
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
-                            <div className="bg-zinc-950/80 p-2 rounded border border-zinc-800">
-                              <span className="text-zinc-500 text-[10px] block uppercase font-sans">
+                            <div className="bg-muted/80 p-2 rounded border border-border">
+                              <span className="text-muted-foreground text-[10px] block uppercase font-sans">
                                 Active Model ID
                               </span>
                               <span className="text-emerald-300 font-mono font-bold text-xs select-all">
@@ -1057,31 +1086,31 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                               </span>
                             </div>
 
-                            <div className="bg-zinc-950/80 p-2 rounded border border-zinc-800">
-                              <span className="text-zinc-500 text-[10px] block uppercase font-sans">
+                            <div className="bg-muted/80 p-2 rounded border border-border">
+                              <span className="text-muted-foreground text-[10px] block uppercase font-sans">
                                 JSON Key-Value
                               </span>
-                              <span className="text-zinc-200 font-mono text-xs select-all">
+                              <span className="text-foreground/90 font-mono text-xs select-all">
                                 <span className="text-cyan-400">"model"</span>:{" "}
                                 <span className="text-emerald-300">"{selectedAiLog.model}"</span>
                               </span>
                             </div>
 
-                            <div className="bg-zinc-950/80 p-2 rounded border border-zinc-800">
-                              <span className="text-zinc-500 text-[10px] block uppercase font-sans">
+                            <div className="bg-muted/80 p-2 rounded border border-border">
+                              <span className="text-muted-foreground text-[10px] block uppercase font-sans">
                                 Transmission Format
                               </span>
-                              <span className="text-zinc-300 font-mono text-[11px]">
+                              <span className="text-foreground/80 font-mono text-[11px]">
                                 HTTP POST Body (
                                 <span className="text-amber-300">application/json</span>)
                               </span>
                             </div>
 
-                            <div className="bg-zinc-950/80 p-2 rounded border border-zinc-800">
-                              <span className="text-zinc-500 text-[10px] block uppercase font-sans">
+                            <div className="bg-muted/80 p-2 rounded border border-border">
+                              <span className="text-muted-foreground text-[10px] block uppercase font-sans">
                                 Provider Target
                               </span>
-                              <span className="text-zinc-300 font-mono text-[11px]">
+                              <span className="text-foreground/80 font-mono text-[11px]">
                                 {selectedAiLog.provider} • ID: {selectedAiLog.providerInstanceId}
                               </span>
                             </div>
@@ -1099,7 +1128,7 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                         </div>
 
                         {/* Main Info Card */}
-                        <div className="rounded-lg border border-zinc-800/80 bg-zinc-900/40 p-3.5 space-y-3">
+                        <div className="rounded-lg border border-border/80 bg-muted/40 p-3.5 space-y-3">
                           <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
                             <BotIcon className="size-4" />
                             AI Model & Provider Execution
@@ -1107,23 +1136,31 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
 
                           <div className="grid grid-cols-2 gap-3 text-[11px] font-mono">
                             <div>
-                              <span className="text-zinc-500 block font-sans">Selected Model</span>
-                              <span className="text-zinc-100 font-bold">{selectedAiLog.model}</span>
+                              <span className="text-muted-foreground block font-sans">
+                                Selected Model
+                              </span>
+                              <span className="text-foreground font-bold">
+                                {selectedAiLog.model}
+                              </span>
                             </div>
                             <div>
-                              <span className="text-zinc-500 block font-sans">Provider Name</span>
-                              <span className="text-zinc-100 font-bold">
+                              <span className="text-muted-foreground block font-sans">
+                                Provider Name
+                              </span>
+                              <span className="text-foreground font-bold">
                                 {selectedAiLog.provider}
                               </span>
                             </div>
                             <div>
-                              <span className="text-zinc-500 block font-sans">Provider ID</span>
-                              <span className="text-zinc-300">
+                              <span className="text-muted-foreground block font-sans">
+                                Provider ID
+                              </span>
+                              <span className="text-foreground/80">
                                 {selectedAiLog.providerInstanceId}
                               </span>
                             </div>
                             <div>
-                              <span className="text-zinc-500 block font-sans">
+                              <span className="text-muted-foreground block font-sans">
                                 Response Latency
                               </span>
                               <span className="text-emerald-300 font-bold">
@@ -1133,12 +1170,18 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                               </span>
                             </div>
                             <div>
-                              <span className="text-zinc-500 block font-sans">Timestamp</span>
-                              <span className="text-zinc-300">{selectedAiLog.timeFormatted}</span>
+                              <span className="text-muted-foreground block font-sans">
+                                Timestamp
+                              </span>
+                              <span className="text-foreground/80">
+                                {selectedAiLog.timeFormatted}
+                              </span>
                             </div>
                             <div>
-                              <span className="text-zinc-500 block font-sans">Status Code</span>
-                              <span className="text-zinc-100">
+                              <span className="text-muted-foreground block font-sans">
+                                Status Code
+                              </span>
+                              <span className="text-foreground">
                                 {selectedAiLog.status
                                   ? `${selectedAiLog.status} ${selectedAiLog.statusText || ""}`
                                   : selectedAiLog.state}
@@ -1148,16 +1191,16 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                         </div>
 
                         {/* Endpoint & URL Card */}
-                        <div className="rounded-lg border border-zinc-800/80 bg-zinc-900/40 p-3.5 space-y-2">
-                          <span className="text-[11px] uppercase tracking-wider text-zinc-500 font-semibold block">
+                        <div className="rounded-lg border border-border/80 bg-muted/40 p-3.5 space-y-2">
+                          <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold block">
                             Target Endpoint & Base URL
                           </span>
-                          <div className="flex items-center justify-between gap-2 break-all text-zinc-200 bg-zinc-950 p-2 rounded border border-zinc-800/60 font-mono text-[11px]">
+                          <div className="flex items-center justify-between gap-2 break-all text-foreground/90 bg-background p-2 rounded border border-border/60 font-mono text-[11px]">
                             <span>{selectedAiLog.endpoint}</span>
                             <button
                               type="button"
                               onClick={() => copyToClipboard(selectedAiLog.endpoint, "endpoint")}
-                              className="shrink-0 text-zinc-400 hover:text-zinc-200 p-1"
+                              className="shrink-0 text-muted-foreground hover:text-foreground/90 p-1"
                             >
                               {copiedKey === "endpoint" ? (
                                 <CheckIcon className="size-3.5 text-emerald-400" />
@@ -1167,23 +1210,25 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                             </button>
                           </div>
 
-                          <div className="pt-1 flex items-center justify-between text-[11px] text-zinc-400">
+                          <div className="pt-1 flex items-center justify-between text-[11px] text-muted-foreground">
                             <span>Base URL:</span>
-                            <span className="font-mono text-zinc-300">{selectedAiLog.baseUrl}</span>
+                            <span className="font-mono text-foreground/80">
+                              {selectedAiLog.baseUrl}
+                            </span>
                           </div>
 
-                          <div className="flex items-center justify-between text-[11px] text-zinc-400">
+                          <div className="flex items-center justify-between text-[11px] text-muted-foreground">
                             <span>API Key (Active):</span>
-                            <span className="font-mono text-zinc-300 bg-zinc-950 px-2 py-0.5 rounded border border-zinc-800">
+                            <span className="font-mono text-foreground/80 bg-background px-2 py-0.5 rounded border border-border">
                               {selectedAiLog.apiKeyMasked}
                             </span>
                           </div>
                         </div>
 
                         {/* Request Headers Table */}
-                        <div className="rounded-lg border border-zinc-800/80 bg-zinc-900/40 p-3.5 space-y-2">
+                        <div className="rounded-lg border border-border/80 bg-muted/40 p-3.5 space-y-2">
                           <div className="flex items-center justify-between">
-                            <span className="text-[11px] uppercase tracking-wider text-zinc-500 font-semibold">
+                            <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
                               Outgoing Request Headers
                             </span>
                             <button
@@ -1194,7 +1239,7 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                                   "headers",
                                 )
                               }
-                              className="text-zinc-400 hover:text-zinc-200 flex items-center gap-1 text-[11px]"
+                              className="text-muted-foreground hover:text-foreground/90 flex items-center gap-1 text-[11px]"
                             >
                               {copiedKey === "headers" ? (
                                 <CheckIcon className="size-3 text-emerald-400" />
@@ -1205,13 +1250,13 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                             </button>
                           </div>
 
-                          <div className="rounded-md border border-zinc-800 bg-zinc-950 divide-y divide-zinc-900 overflow-hidden font-mono text-[11px]">
+                          <div className="rounded-md border border-border bg-background divide-y divide-zinc-900 overflow-hidden font-mono text-[11px]">
                             {Object.entries(selectedAiLog.requestHeaders).map(([key, val]) => (
                               <div key={key} className="flex p-2 items-center">
-                                <span className="w-1/3 text-zinc-400 font-semibold break-all">
+                                <span className="w-1/3 text-muted-foreground font-semibold break-all">
                                   {key}
                                 </span>
-                                <span className="w-2/3 text-zinc-200 break-all">{val}</span>
+                                <span className="w-2/3 text-foreground/90 break-all">{val}</span>
                               </div>
                             ))}
                           </div>
@@ -1223,14 +1268,14 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                     {aiActiveTab === "payload" && (
                       <div className="space-y-4 font-sans">
                         {/* Model ID Highlight Header */}
-                        <div className="rounded-lg border border-emerald-500/40 bg-zinc-900/60 p-3.5 space-y-3">
+                        <div className="rounded-lg border border-emerald-500/40 bg-muted/60 p-3.5 space-y-3">
                           <div className="flex items-center justify-between flex-wrap gap-2">
                             <div className="space-y-0.5">
                               <span className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
                                 <CpuIcon className="size-4 text-emerald-400" />
                                 Model ID in Wire Payload
                               </span>
-                              <p className="text-[11px] text-zinc-400">
+                              <p className="text-[11px] text-muted-foreground">
                                 This model identifier is transmitted in the outgoing HTTP POST
                                 request payload.
                               </p>
@@ -1242,7 +1287,7 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                                 onClick={() =>
                                   copyToClipboard(selectedAiLog.model, "payloadModelId")
                                 }
-                                className="h-6 text-[11px] gap-1 border-zinc-700/80 rounded-full hover:bg-zinc-800 text-zinc-300"
+                                className="h-6 text-[11px] gap-1 border-border/80 rounded-full hover:bg-muted text-foreground/80"
                               >
                                 {copiedKey === "payloadModelId" ? (
                                   <CheckIcon className="size-3 text-emerald-400" />
@@ -1260,7 +1305,7 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                                     "payloadModelJson",
                                   )
                                 }
-                                className="h-6 text-[11px] gap-1 border-zinc-700/80 rounded-full hover:bg-zinc-800 text-zinc-300"
+                                className="h-6 text-[11px] gap-1 border-border/80 rounded-full hover:bg-muted text-foreground/80"
                               >
                                 {copiedKey === "payloadModelJson" ? (
                                   <CheckIcon className="size-3 text-emerald-400" />
@@ -1272,28 +1317,28 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                             </div>
                           </div>
 
-                          <div className="rounded-md border border-zinc-800 bg-zinc-950 p-2.5 font-mono text-xs flex items-center justify-between gap-2 overflow-x-auto">
+                          <div className="rounded-md border border-border bg-background p-2.5 font-mono text-xs flex items-center justify-between gap-2 overflow-x-auto">
                             <div className="flex items-center gap-2">
-                              <span className="text-zinc-500 select-none">JSON Field:</span>
+                              <span className="text-muted-foreground select-none">JSON Field:</span>
                               <span className="text-cyan-400">"model"</span>:{" "}
                               <span className="text-emerald-300 font-bold">
                                 "{selectedAiLog.model}"
                               </span>
                             </div>
-                            <span className="text-[10px] text-zinc-500 font-sans px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 shrink-0">
+                            <span className="text-[10px] text-muted-foreground font-sans px-2 py-0.5 rounded bg-muted border border-border shrink-0">
                               string
                             </span>
                           </div>
                         </div>
 
                         {/* Full Outgoing Request Body (Payload JSON) */}
-                        <div className="rounded-lg border border-zinc-800/80 bg-zinc-900/40 p-3.5 space-y-2">
+                        <div className="rounded-lg border border-border/80 bg-muted/40 p-3.5 space-y-2">
                           <div className="flex items-center justify-between">
                             <div className="space-y-0.5">
-                              <span className="text-xs font-bold uppercase tracking-wider text-zinc-200">
+                              <span className="text-xs font-bold uppercase tracking-wider text-foreground/90">
                                 Full Outgoing Request Payload (JSON Body)
                               </span>
-                              <div className="text-[11px] text-zinc-500">
+                              <div className="text-[11px] text-muted-foreground">
                                 Content-Type: application/json • Method: POST
                               </div>
                             </div>
@@ -1302,7 +1347,7 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                               onClick={() =>
                                 copyToClipboard(outgoingPayloadJson, "fullPayloadJson")
                               }
-                              className="text-zinc-400 hover:text-zinc-200 flex items-center gap-1 text-[11px] px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/60 cursor-pointer"
+                              className="text-muted-foreground hover:text-foreground/90 flex items-center gap-1 text-[11px] px-2 py-1 rounded bg-muted/60 border border-border/60 cursor-pointer"
                             >
                               {copiedKey === "fullPayloadJson" ? (
                                 <CheckIcon className="size-3 text-emerald-400" />
@@ -1313,27 +1358,29 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                             </button>
                           </div>
 
-                          <pre className="rounded-md border border-zinc-800 bg-zinc-950 p-3 font-mono text-[11px] text-zinc-300 whitespace-pre-wrap max-h-96 overflow-y-auto leading-relaxed">
+                          <pre className="rounded-md border border-border bg-background p-3 font-mono text-[11px] text-foreground/80 whitespace-pre-wrap max-h-96 overflow-y-auto leading-relaxed">
                             {outgoingPayloadJson}
                           </pre>
                         </div>
 
                         {/* Provider Transmission Formats (How different types send Model ID) */}
-                        <div className="rounded-lg border border-zinc-800/80 bg-zinc-900/40 p-3.5 space-y-3">
-                          <span className="text-xs font-bold uppercase tracking-wider text-zinc-400 block">
+                        <div className="rounded-lg border border-border/80 bg-muted/40 p-3.5 space-y-3">
+                          <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">
                             How Model ID is Sent in Different API Types & Formats
                           </span>
 
                           <div className="space-y-2.5 text-[11px]">
                             {/* OpenAI / OpenRouter / DeepSeek Standard */}
-                            <div className="p-2.5 rounded-md bg-zinc-950 border border-zinc-800/80 space-y-1.5">
-                              <div className="flex items-center justify-between text-zinc-300 font-semibold font-mono text-xs">
+                            <div className="p-2.5 rounded-md bg-background border border-border/80 space-y-1.5">
+                              <div className="flex items-center justify-between text-foreground/80 font-semibold font-mono text-xs">
                                 <span className="text-emerald-400">
                                   1. Standard OpenAI / OpenRouter / DeepSeek
                                 </span>
-                                <span className="text-zinc-500 text-[10px]">JSON POST Body</span>
+                                <span className="text-muted-foreground text-[10px]">
+                                  JSON POST Body
+                                </span>
                               </div>
-                              <pre className="text-zinc-400 font-mono text-[10.5px] overflow-x-auto bg-zinc-900/50 p-2 rounded border border-zinc-900">
+                              <pre className="text-muted-foreground font-mono text-[10.5px] overflow-x-auto bg-muted/50 p-2 rounded border border-border">
                                 {`{
   "model": "${selectedAiLog.model}",
   "messages": [{"role": "user", "content": "..."}],
@@ -1343,14 +1390,16 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                             </div>
 
                             {/* Anthropic Messages */}
-                            <div className="p-2.5 rounded-md bg-zinc-950 border border-zinc-800/80 space-y-1.5">
-                              <div className="flex items-center justify-between text-zinc-300 font-semibold font-mono text-xs">
+                            <div className="p-2.5 rounded-md bg-background border border-border/80 space-y-1.5">
+                              <div className="flex items-center justify-between text-foreground/80 font-semibold font-mono text-xs">
                                 <span className="text-violet-400">
                                   2. Anthropic Claude Messages API
                                 </span>
-                                <span className="text-zinc-500 text-[10px]">JSON POST Body</span>
+                                <span className="text-muted-foreground text-[10px]">
+                                  JSON POST Body
+                                </span>
                               </div>
-                              <pre className="text-zinc-400 font-mono text-[10.5px] overflow-x-auto bg-zinc-900/50 p-2 rounded border border-zinc-900">
+                              <pre className="text-muted-foreground font-mono text-[10.5px] overflow-x-auto bg-muted/50 p-2 rounded border border-border">
                                 {`{
   "model": "${selectedAiLog.model}",
   "max_tokens": 4096,
@@ -1360,30 +1409,32 @@ export function RequestLogsSheet({ isOpen, onClose }: RequestLogsSheetProps) {
                             </div>
 
                             {/* Google Gemini REST API */}
-                            <div className="p-2.5 rounded-md bg-zinc-950 border border-zinc-800/80 space-y-1.5">
-                              <div className="flex items-center justify-between text-zinc-300 font-semibold font-mono text-xs">
+                            <div className="p-2.5 rounded-md bg-background border border-border/80 space-y-1.5">
+                              <div className="flex items-center justify-between text-foreground/80 font-semibold font-mono text-xs">
                                 <span className="text-blue-400">
                                   3. Google Gemini REST (URL Path / Endpoint)
                                 </span>
-                                <span className="text-zinc-500 text-[10px]">
+                                <span className="text-muted-foreground text-[10px]">
                                   Endpoint Parameter
                                 </span>
                               </div>
-                              <pre className="text-zinc-400 font-mono text-[10.5px] overflow-x-auto bg-zinc-900/50 p-2 rounded border border-zinc-900">
+                              <pre className="text-muted-foreground font-mono text-[10.5px] overflow-x-auto bg-muted/50 p-2 rounded border border-border">
                                 {`POST /v1beta/models/${selectedAiLog.model}:streamGenerateContent?key=API_KEY
 Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                               </pre>
                             </div>
 
                             {/* cURL flag */}
-                            <div className="p-2.5 rounded-md bg-zinc-950 border border-zinc-800/80 space-y-1.5">
-                              <div className="flex items-center justify-between text-zinc-300 font-semibold font-mono text-xs">
+                            <div className="p-2.5 rounded-md bg-background border border-border/80 space-y-1.5">
+                              <div className="flex items-center justify-between text-foreground/80 font-semibold font-mono text-xs">
                                 <span className="text-amber-400">
                                   4. Terminal cURL Payload Flag
                                 </span>
-                                <span className="text-zinc-500 text-[10px]">--data flag</span>
+                                <span className="text-muted-foreground text-[10px]">
+                                  --data flag
+                                </span>
                               </div>
-                              <pre className="text-zinc-400 font-mono text-[10.5px] overflow-x-auto bg-zinc-900/50 p-2 rounded border border-zinc-900">
+                              <pre className="text-muted-foreground font-mono text-[10.5px] overflow-x-auto bg-muted/50 p-2 rounded border border-border">
                                 {`curl -X POST "${selectedAiLog.endpoint}" \\
   -H "Content-Type: application/json" \\
   --data '{"model":"${selectedAiLog.model}","stream":true,...}'`}
@@ -1398,9 +1449,9 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                     {aiActiveTab === "prompt" && (
                       <div className="space-y-4 font-sans">
                         {/* Direct User Prompt */}
-                        <div className="rounded-lg border border-zinc-800/80 bg-zinc-900/40 p-3.5 space-y-2">
+                        <div className="rounded-lg border border-border/80 bg-muted/40 p-3.5 space-y-2">
                           <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold uppercase tracking-wider text-zinc-300">
+                            <span className="text-xs font-bold uppercase tracking-wider text-foreground/80">
                               User Prompt
                             </span>
                             <button
@@ -1408,7 +1459,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                               onClick={() =>
                                 copyToClipboard(selectedAiLog.userPrompt, "userPrompt")
                               }
-                              className="text-zinc-400 hover:text-zinc-200 flex items-center gap-1 text-[11px]"
+                              className="text-muted-foreground hover:text-foreground/90 flex items-center gap-1 text-[11px]"
                             >
                               {copiedKey === "userPrompt" ? (
                                 <CheckIcon className="size-3 text-emerald-400" />
@@ -1418,15 +1469,15 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                               Copy Prompt
                             </button>
                           </div>
-                          <div className="rounded-md border border-zinc-800 bg-zinc-950 p-3 text-zinc-100 whitespace-pre-wrap leading-relaxed">
+                          <div className="rounded-md border border-border bg-background p-3 text-foreground whitespace-pre-wrap leading-relaxed">
                             {selectedAiLog.userPrompt}
                           </div>
                         </div>
 
                         {/* Full Conversation Payload */}
-                        <div className="rounded-lg border border-zinc-800/80 bg-zinc-900/40 p-3.5 space-y-2">
+                        <div className="rounded-lg border border-border/80 bg-muted/40 p-3.5 space-y-2">
                           <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold uppercase tracking-wider text-zinc-300">
+                            <span className="text-xs font-bold uppercase tracking-wider text-foreground/80">
                               Full Messages Payload ({selectedAiLog.messages.length} messages)
                             </span>
                             <button
@@ -1437,7 +1488,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                                   "messagesPayload",
                                 )
                               }
-                              className="text-zinc-400 hover:text-zinc-200 flex items-center gap-1 text-[11px]"
+                              className="text-muted-foreground hover:text-foreground/90 flex items-center gap-1 text-[11px]"
                             >
                               {copiedKey === "messagesPayload" ? (
                                 <CheckIcon className="size-3 text-emerald-400" />
@@ -1447,7 +1498,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                               Copy JSON
                             </button>
                           </div>
-                          <pre className="rounded-md border border-zinc-800 bg-zinc-950 p-3 font-mono text-[11px] text-zinc-300 whitespace-pre-wrap max-h-96 overflow-y-auto">
+                          <pre className="rounded-md border border-border bg-background p-3 font-mono text-[11px] text-foreground/80 whitespace-pre-wrap max-h-96 overflow-y-auto">
                             {JSON.stringify(selectedAiLog.messages, null, 2)}
                           </pre>
                         </div>
@@ -1459,7 +1510,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                       <div className="space-y-3 font-sans">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold uppercase tracking-wider text-zinc-300">
+                            <span className="text-xs font-bold uppercase tracking-wider text-foreground/80">
                               Model Output & Streamed Response
                             </span>
                             {selectedAiLog.state === "streaming" && (
@@ -1502,7 +1553,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                                 onClick={() =>
                                   copyToClipboard(selectedAiLog.responseBody || "", "floatCopy")
                                 }
-                                className="h-6 px-2 text-[11px] gap-1 bg-zinc-900/90 border border-zinc-700/80 hover:bg-zinc-800 text-zinc-300 hover:text-white shadow-sm cursor-pointer"
+                                className="h-6 px-2 text-[11px] gap-1 bg-muted/90 border border-border/80 hover:bg-muted text-foreground/80 hover:text-foreground shadow-sm cursor-pointer"
                                 style={{ borderRadius: "8px" }}
                                 title="Copy stream content"
                               >
@@ -1514,12 +1565,12 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                                 Copy
                               </Button>
                             </div>
-                            <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-4 font-mono text-[11px] text-zinc-200 whitespace-pre-wrap leading-relaxed max-h-[500px] overflow-y-auto pr-20">
+                            <div className="rounded-lg border border-border bg-background p-4 font-mono text-[11px] text-foreground/90 whitespace-pre-wrap leading-relaxed max-h-[500px] overflow-y-auto pr-20">
                               {selectedAiLog.responseBody}
                             </div>
                           </div>
                         ) : (
-                          <div className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-8 text-center text-zinc-500 text-xs">
+                          <div className="rounded-lg border border-border bg-muted/30 p-8 text-center text-muted-foreground text-xs">
                             {selectedAiLog.state === "streaming"
                               ? "Stream connection established. Waiting for incoming chunks..."
                               : "No response body returned yet."}
@@ -1551,7 +1602,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                               <span className="text-[11px] uppercase tracking-wider text-rose-400/80 font-semibold">
                                 Provider Error Message:
                               </span>
-                              <div className="font-mono text-xs text-rose-100 bg-zinc-950 p-3 rounded border border-rose-900/60 whitespace-pre-wrap">
+                              <div className="font-mono text-xs text-rose-100 bg-background p-3 rounded border border-rose-900/60 whitespace-pre-wrap">
                                 {selectedAiLog.error}
                               </div>
                             </div>
@@ -1568,7 +1619,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                                     href="https://openrouter.ai/settings/keys"
                                     target="_blank"
                                     rel="noreferrer"
-                                    className="underline text-rose-300 hover:text-white"
+                                    className="underline text-rose-300 hover:text-foreground"
                                   >
                                     openrouter.ai/settings/keys
                                   </a>
@@ -1606,7 +1657,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                     {aiActiveTab === "curl" && (
                       <div className="space-y-3 font-sans">
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold uppercase tracking-wider text-zinc-300">
+                          <span className="text-xs font-bold uppercase tracking-wider text-foreground/80">
                             Direct cURL Command (Reproduce in Terminal)
                           </span>
                           <button
@@ -1614,7 +1665,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                             onClick={() =>
                               copyToClipboard(formatAiCurlCommand(selectedAiLog), "aiCurlFull")
                             }
-                            className="text-zinc-400 hover:text-zinc-200 flex items-center gap-1 text-[11px]"
+                            className="text-muted-foreground hover:text-foreground/90 flex items-center gap-1 text-[11px]"
                           >
                             {copiedKey === "aiCurlFull" ? (
                               <CheckIcon className="size-3 text-emerald-400" />
@@ -1624,7 +1675,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                             Copy Command
                           </button>
                         </div>
-                        <pre className="rounded-lg border border-zinc-800 bg-zinc-950 p-3.5 font-mono text-[11px] text-zinc-200 whitespace-pre-wrap leading-relaxed overflow-x-auto">
+                        <pre className="rounded-lg border border-border bg-background p-3.5 font-mono text-[11px] text-foreground/90 whitespace-pre-wrap leading-relaxed overflow-x-auto">
                           {formatAiCurlCommand(selectedAiLog)}
                         </pre>
                       </div>
@@ -1632,7 +1683,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                   </div>
                 </div>
               ) : (
-                <div className="hidden md:flex flex-1 items-center justify-center p-8 text-center text-zinc-600 text-xs">
+                <div className="hidden md:flex flex-1 items-center justify-center p-8 text-center text-muted-foreground/80 text-xs">
                   Select any AI model run from the left list to inspect outgoing headers, prompt,
                   latency, streaming output, and exact error diagnosis.
                 </div>
@@ -1647,22 +1698,22 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
         {mainTab === "network" && (
           <div className="flex flex-col flex-1 min-h-0">
             {/* Filter Toolbar */}
-            <div className="flex flex-col gap-2 border-b border-zinc-800/80 bg-zinc-900/30 p-3">
+            <div className="flex flex-col gap-2 border-b border-border/80 bg-muted/30 p-3">
               <div className="flex items-center gap-2">
                 <div className="relative flex-1">
-                  <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-zinc-500" />
+                  <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
                   <input
                     type="text"
                     placeholder="Filter by URL, method, status, payload..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full rounded-md border border-zinc-800 bg-zinc-900/80 pl-8 pr-3 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 focus:border-zinc-600 focus:outline-none"
+                    className="w-full rounded-md border border-border bg-muted/80 pl-8 pr-3 py-1.5 text-xs text-foreground/90 placeholder-muted-foreground focus:border-border focus:outline-none"
                   />
                   {searchQuery && (
                     <button
                       type="button"
                       onClick={() => setSearchQuery("")}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground/80"
                     >
                       <XIcon className="size-3" />
                     </button>
@@ -1678,8 +1729,8 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                     onClick={() => setFilterType(type)}
                     className={`px-3 py-1 font-medium transition-colors cursor-pointer capitalize text-xs ${
                       filterType === type
-                        ? "bg-zinc-100 text-zinc-950 font-semibold"
-                        : "bg-zinc-800/80 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+                        ? "bg-foreground/10 text-foreground font-semibold"
+                        : "bg-muted/80 text-muted-foreground hover:bg-muted hover:text-foreground/90"
                     }`}
                     style={{ borderRadius: "12px" }}
                   >
@@ -1704,10 +1755,10 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                 }`}
               >
                 {filteredNetworkLogs.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center p-12 text-center text-zinc-500">
-                    <GlobeIcon className="size-8 stroke-1 text-zinc-600 mb-2" />
+                  <div className="flex flex-col items-center justify-center p-12 text-center text-muted-foreground">
+                    <GlobeIcon className="size-8 stroke-1 text-muted-foreground/80 mb-2" />
                     <p className="text-xs font-medium">No requests recorded</p>
-                    <p className="text-[11px] text-zinc-600 mt-1">
+                    <p className="text-[11px] text-muted-foreground/80 mt-1">
                       Actions and network activity will appear here in real-time.
                     </p>
                   </div>
@@ -1719,8 +1770,8 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                         <div
                           key={log.id}
                           onClick={() => setSelectedLogId(log.id)}
-                          className={`flex flex-col gap-1 p-2.5 transition-colors cursor-pointer hover:bg-zinc-900/60 ${
-                            isSelected ? "bg-zinc-900 border-l-2 border-emerald-500" : ""
+                          className={`flex flex-col gap-1 p-2.5 transition-colors cursor-pointer hover:bg-muted/60 ${
+                            isSelected ? "bg-muted border-l-2 border-emerald-500" : ""
                           }`}
                         >
                           <div className="flex items-center justify-between gap-2">
@@ -1749,7 +1800,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                               </span>
                             </div>
 
-                            <span className="text-[10px] font-mono text-zinc-500 shrink-0">
+                            <span className="text-[10px] font-mono text-muted-foreground shrink-0">
                               {log.durationMs !== undefined && log.durationMs > 0
                                 ? `${log.durationMs}ms`
                                 : ""}
@@ -1758,12 +1809,12 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
 
                           <div className="flex items-center justify-between gap-2 mt-0.5">
                             <span
-                              className="text-xs font-mono text-zinc-300 truncate"
+                              className="text-xs font-mono text-foreground/80 truncate"
                               title={log.url}
                             >
                               {log.url}
                             </span>
-                            <span className="text-[10px] font-mono text-zinc-500 shrink-0">
+                            <span className="text-[10px] font-mono text-muted-foreground shrink-0">
                               {log.timeFormatted.split(".")[0]}
                             </span>
                           </div>
@@ -1776,13 +1827,13 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
 
               {/* Details panel */}
               {selectedLog ? (
-                <div className="flex flex-1 flex-col overflow-hidden bg-zinc-950">
-                  <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-2 bg-zinc-900/50">
+                <div className="flex flex-1 flex-col overflow-hidden bg-background">
+                  <div className="flex items-center justify-between border-b border-border px-4 py-2 bg-muted/50">
                     <div className="flex items-center gap-2 min-w-0">
                       <button
                         type="button"
                         onClick={() => setSelectedLogId(null)}
-                        className="md:hidden flex items-center gap-1 px-2.5 py-1 rounded-full bg-zinc-800/90 text-zinc-300 hover:text-white border border-zinc-700/60 text-xs font-semibold mr-1 cursor-pointer shrink-0 active:scale-95"
+                        className="md:hidden flex items-center gap-1 px-2.5 py-1 rounded-full bg-muted/90 text-foreground/80 hover:text-foreground border border-border/60 text-xs font-semibold mr-1 cursor-pointer shrink-0 active:scale-95"
                       >
                         ← Back
                       </button>
@@ -1808,7 +1859,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                         size="xs"
                         variant="ghost"
                         onClick={() => copyToClipboard(formatCurlCommand(selectedLog), "curl")}
-                        className="h-6 text-[11px] gap-1 text-zinc-400 hover:text-zinc-200"
+                        className="h-6 text-[11px] gap-1 text-muted-foreground hover:text-foreground/90"
                         title="Copy as cURL command"
                       >
                         {copiedKey === "curl" ? (
@@ -1822,7 +1873,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                   </div>
 
                   {/* Tabs */}
-                  <div className="flex items-center border-b border-zinc-800 bg-zinc-900/20 px-3 text-xs">
+                  <div className="flex items-center border-b border-border bg-muted/20 px-3 text-xs">
                     {(
                       [
                         { id: "overview", label: "Overview" },
@@ -1838,8 +1889,8 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                         onClick={() => setActiveTab(tab.id)}
                         className={`border-b-2 px-3 py-2 font-medium transition-colors cursor-pointer ${
                           activeTab === tab.id
-                            ? "border-emerald-500 text-zinc-100"
-                            : "border-transparent text-zinc-400 hover:text-zinc-200"
+                            ? "border-emerald-500 text-foreground"
+                            : "border-transparent text-muted-foreground hover:text-foreground/90"
                         }`}
                       >
                         {tab.label}
@@ -1851,17 +1902,17 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                   <div className="flex-1 overflow-y-auto p-4 text-xs font-mono">
                     {activeTab === "overview" && (
                       <div className="space-y-3">
-                        <div className="rounded-lg border border-zinc-800/80 bg-zinc-900/40 p-3 space-y-2">
+                        <div className="rounded-lg border border-border/80 bg-muted/40 p-3 space-y-2">
                           <div className="flex flex-col gap-1">
-                            <span className="text-[11px] uppercase tracking-wider text-zinc-500 font-sans font-semibold">
+                            <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-sans font-semibold">
                               Request URL
                             </span>
-                            <div className="flex items-center justify-between gap-2 break-all text-zinc-200 bg-zinc-950 p-2 rounded border border-zinc-800/60">
+                            <div className="flex items-center justify-between gap-2 break-all text-foreground/90 bg-background p-2 rounded border border-border/60">
                               <span>{selectedLog.url}</span>
                               <button
                                 type="button"
                                 onClick={() => copyToClipboard(selectedLog.url, "url")}
-                                className="shrink-0 text-zinc-400 hover:text-zinc-200 p-1"
+                                className="shrink-0 text-muted-foreground hover:text-foreground/90 p-1"
                               >
                                 {copiedKey === "url" ? (
                                   <CheckIcon className="size-3 text-emerald-400" />
@@ -1877,13 +1928,13 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                               <div className="flex items-center gap-2">
                                 <CpuIcon className="size-4 shrink-0 text-emerald-400" />
                                 <div>
-                                  <span className="font-semibold text-zinc-300">
+                                  <span className="font-semibold text-foreground/80">
                                     Detected Model ID:
                                   </span>{" "}
-                                  <span className="font-mono font-bold text-emerald-300 bg-zinc-950 px-1.5 py-0.5 rounded border border-zinc-800">
+                                  <span className="font-mono font-bold text-emerald-300 bg-background px-1.5 py-0.5 rounded border border-border">
                                     {detectedModel.model}
                                   </span>
-                                  <span className="text-[10px] text-zinc-400 ml-1.5 font-sans">
+                                  <span className="text-[10px] text-muted-foreground ml-1.5 font-sans">
                                     ({detectedModel.source})
                                   </span>
                                 </div>
@@ -1893,7 +1944,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                                 onClick={() =>
                                   copyToClipboard(detectedModel.model ?? "", "detectedNetModel")
                                 }
-                                className="text-zinc-400 hover:text-zinc-200 text-[11px] flex items-center gap-1 px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 cursor-pointer"
+                                className="text-muted-foreground hover:text-foreground/90 text-[11px] flex items-center gap-1 px-2 py-0.5 rounded bg-muted border border-border cursor-pointer"
                               >
                                 {copiedKey === "detectedNetModel" ? (
                                   <CheckIcon className="size-3 text-emerald-400" />
@@ -1907,26 +1958,36 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
 
                           <div className="grid grid-cols-2 gap-2 pt-2 text-[11px]">
                             <div>
-                              <span className="text-zinc-500 block font-sans">Timestamp</span>
-                              <span className="text-zinc-300">{selectedLog.timeFormatted}</span>
+                              <span className="text-muted-foreground block font-sans">
+                                Timestamp
+                              </span>
+                              <span className="text-foreground/80">
+                                {selectedLog.timeFormatted}
+                              </span>
                             </div>
                             <div>
-                              <span className="text-zinc-500 block font-sans">Duration</span>
-                              <span className="text-zinc-300">
+                              <span className="text-muted-foreground block font-sans">
+                                Duration
+                              </span>
+                              <span className="text-foreground/80">
                                 {selectedLog.durationMs ?? 0} ms
                               </span>
                             </div>
                             <div>
-                              <span className="text-zinc-500 block font-sans">Status</span>
-                              <span className="text-zinc-300">
+                              <span className="text-muted-foreground block font-sans">Status</span>
+                              <span className="text-foreground/80">
                                 {selectedLog.status
                                   ? `${selectedLog.status} ${selectedLog.statusText || ""}`
                                   : selectedLog.state}
                               </span>
                             </div>
                             <div>
-                              <span className="text-zinc-500 block font-sans">Protocol / Type</span>
-                              <span className="text-zinc-300 uppercase">{selectedLog.type}</span>
+                              <span className="text-muted-foreground block font-sans">
+                                Protocol / Type
+                              </span>
+                              <span className="text-foreground/80 uppercase">
+                                {selectedLog.type}
+                              </span>
                             </div>
                           </div>
 
@@ -1943,44 +2004,46 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                     {activeTab === "headers" && (
                       <div className="space-y-4">
                         <div>
-                          <h4 className="text-[11px] font-sans font-semibold uppercase tracking-wider text-zinc-400 mb-2">
+                          <h4 className="text-[11px] font-sans font-semibold uppercase tracking-wider text-muted-foreground mb-2">
                             Request Headers
                           </h4>
                           {selectedLog.requestHeaders &&
                           Object.keys(selectedLog.requestHeaders).length > 0 ? (
-                            <div className="rounded-md border border-zinc-800 bg-zinc-900/40 divide-y divide-zinc-800/60">
+                            <div className="rounded-md border border-border bg-muted/40 divide-y divide-zinc-800/60">
                               {Object.entries(selectedLog.requestHeaders).map(([k, v]) => (
                                 <div key={k} className="flex p-2 text-[11px]">
-                                  <span className="w-1/3 text-zinc-400 font-semibold break-all">
+                                  <span className="w-1/3 text-muted-foreground font-semibold break-all">
                                     {k}
                                   </span>
-                                  <span className="w-2/3 text-zinc-200 break-all">{v}</span>
+                                  <span className="w-2/3 text-foreground/90 break-all">{v}</span>
                                 </div>
                               ))}
                             </div>
                           ) : (
-                            <p className="text-zinc-500 text-[11px]">No request headers captured</p>
+                            <p className="text-muted-foreground text-[11px]">
+                              No request headers captured
+                            </p>
                           )}
                         </div>
 
                         <div>
-                          <h4 className="text-[11px] font-sans font-semibold uppercase tracking-wider text-zinc-400 mb-2">
+                          <h4 className="text-[11px] font-sans font-semibold uppercase tracking-wider text-muted-foreground mb-2">
                             Response Headers
                           </h4>
                           {selectedLog.responseHeaders &&
                           Object.keys(selectedLog.responseHeaders).length > 0 ? (
-                            <div className="rounded-md border border-zinc-800 bg-zinc-900/40 divide-y divide-zinc-800/60">
+                            <div className="rounded-md border border-border bg-muted/40 divide-y divide-zinc-800/60">
                               {Object.entries(selectedLog.responseHeaders).map(([k, v]) => (
                                 <div key={k} className="flex p-2 text-[11px]">
-                                  <span className="w-1/3 text-zinc-400 font-semibold break-all">
+                                  <span className="w-1/3 text-muted-foreground font-semibold break-all">
                                     {k}
                                   </span>
-                                  <span className="w-2/3 text-zinc-200 break-all">{v}</span>
+                                  <span className="w-2/3 text-foreground/90 break-all">{v}</span>
                                 </div>
                               ))}
                             </div>
                           ) : (
-                            <p className="text-zinc-500 text-[11px]">
+                            <p className="text-muted-foreground text-[11px]">
                               No response headers captured
                             </p>
                           )}
@@ -1991,7 +2054,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                     {activeTab === "payload" && (
                       <div>
                         <div className="flex items-center justify-between mb-2">
-                          <h4 className="text-[11px] font-sans font-semibold uppercase tracking-wider text-zinc-400">
+                          <h4 className="text-[11px] font-sans font-semibold uppercase tracking-wider text-muted-foreground">
                             Request Payload
                           </h4>
                           {selectedLog.requestBody && (
@@ -2000,7 +2063,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                               onClick={() =>
                                 copyToClipboard(selectedLog.requestBody || "", "reqBody")
                               }
-                              className="text-zinc-400 hover:text-zinc-200 flex items-center gap-1 text-[11px]"
+                              className="text-muted-foreground hover:text-foreground/90 flex items-center gap-1 text-[11px]"
                             >
                               {copiedKey === "reqBody" ? (
                                 <CheckIcon className="size-3 text-emerald-400" />
@@ -2016,13 +2079,13 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                             <div className="flex items-center gap-2">
                               <CpuIcon className="size-4 shrink-0 text-emerald-400" />
                               <div>
-                                <span className="font-semibold text-zinc-300">
+                                <span className="font-semibold text-foreground/80">
                                   Payload Model ID:
                                 </span>{" "}
-                                <span className="font-mono font-bold text-emerald-300 bg-zinc-950 px-1.5 py-0.5 rounded border border-zinc-800">
+                                <span className="font-mono font-bold text-emerald-300 bg-background px-1.5 py-0.5 rounded border border-border">
                                   {detectedModel.model}
                                 </span>
-                                <span className="text-[10px] text-zinc-400 ml-1.5">
+                                <span className="text-[10px] text-muted-foreground ml-1.5">
                                   ({detectedModel.source})
                                 </span>
                               </div>
@@ -2032,7 +2095,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                               onClick={() =>
                                 copyToClipboard(detectedModel.model ?? "", "detectedNetModel2")
                               }
-                              className="text-zinc-400 hover:text-zinc-200 text-[11px] flex items-center gap-1 px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 cursor-pointer"
+                              className="text-muted-foreground hover:text-foreground/90 text-[11px] flex items-center gap-1 px-2 py-0.5 rounded bg-muted border border-border cursor-pointer"
                             >
                               {copiedKey === "detectedNetModel2" ? (
                                 <CheckIcon className="size-3 text-emerald-400" />
@@ -2044,11 +2107,13 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                           </div>
                         )}
                         {selectedLog.requestBody ? (
-                          <pre className="rounded-md border border-zinc-800 bg-zinc-900/70 p-3 text-[11px] text-zinc-200 whitespace-pre-wrap overflow-x-auto">
+                          <pre className="rounded-md border border-border bg-muted/70 p-3 text-[11px] text-foreground/90 whitespace-pre-wrap overflow-x-auto">
                             {selectedLog.requestBody}
                           </pre>
                         ) : (
-                          <p className="text-zinc-500 text-[11px]">No request body payload</p>
+                          <p className="text-muted-foreground text-[11px]">
+                            No request body payload
+                          </p>
                         )}
                       </div>
                     )}
@@ -2056,7 +2121,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                     {activeTab === "response" && (
                       <div>
                         <div className="flex items-center justify-between mb-2">
-                          <h4 className="text-[11px] font-sans font-semibold uppercase tracking-wider text-zinc-400">
+                          <h4 className="text-[11px] font-sans font-semibold uppercase tracking-wider text-muted-foreground">
                             Response Payload
                           </h4>
                           {selectedLog.responseBody && (
@@ -2065,7 +2130,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                               onClick={() =>
                                 copyToClipboard(selectedLog.responseBody || "", "resBody")
                               }
-                              className="text-zinc-400 hover:text-zinc-200 flex items-center gap-1 text-[11px]"
+                              className="text-muted-foreground hover:text-foreground/90 flex items-center gap-1 text-[11px]"
                             >
                               {copiedKey === "resBody" ? (
                                 <CheckIcon className="size-3 text-emerald-400" />
@@ -2077,11 +2142,13 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                           )}
                         </div>
                         {selectedLog.responseBody ? (
-                          <pre className="rounded-md border border-zinc-800 bg-zinc-900/70 p-3 text-[11px] text-zinc-200 whitespace-pre-wrap overflow-x-auto">
+                          <pre className="rounded-md border border-border bg-muted/70 p-3 text-[11px] text-foreground/90 whitespace-pre-wrap overflow-x-auto">
                             {selectedLog.responseBody}
                           </pre>
                         ) : (
-                          <p className="text-zinc-500 text-[11px]">No response body available</p>
+                          <p className="text-muted-foreground text-[11px]">
+                            No response body available
+                          </p>
                         )}
                       </div>
                     )}
@@ -2089,7 +2156,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                     {activeTab === "curl" && (
                       <div>
                         <div className="flex items-center justify-between mb-2">
-                          <h4 className="text-[11px] font-sans font-semibold uppercase tracking-wider text-zinc-400">
+                          <h4 className="text-[11px] font-sans font-semibold uppercase tracking-wider text-muted-foreground">
                             cURL Equivalent
                           </h4>
                           <button
@@ -2097,7 +2164,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                             onClick={() =>
                               copyToClipboard(formatCurlCommand(selectedLog), "curlText")
                             }
-                            className="text-zinc-400 hover:text-zinc-200 flex items-center gap-1 text-[11px]"
+                            className="text-muted-foreground hover:text-foreground/90 flex items-center gap-1 text-[11px]"
                           >
                             {copiedKey === "curlText" ? (
                               <CheckIcon className="size-3 text-emerald-400" />
@@ -2107,7 +2174,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                             Copy cURL
                           </button>
                         </div>
-                        <pre className="rounded-md border border-zinc-800 bg-zinc-900/70 p-3 text-[11px] text-zinc-200 whitespace-pre-wrap overflow-x-auto">
+                        <pre className="rounded-md border border-border bg-muted/70 p-3 text-[11px] text-foreground/90 whitespace-pre-wrap overflow-x-auto">
                           {formatCurlCommand(selectedLog)}
                         </pre>
                       </div>
@@ -2115,7 +2182,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                   </div>
                 </div>
               ) : (
-                <div className="hidden md:flex flex-1 items-center justify-center p-8 text-center text-zinc-600 text-xs">
+                <div className="hidden md:flex flex-1 items-center justify-center p-8 text-center text-muted-foreground/80 text-xs">
                   Select any request from the list to view headers, payload, response, and cURL
                   details.
                 </div>
@@ -2130,22 +2197,22 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
         {mainTab === "bot" && (
           <div className="flex flex-col flex-1 min-h-0">
             {/* Filter & Search Toolbar */}
-            <div className="flex flex-col gap-2 border-b border-zinc-800/80 bg-zinc-900/30 p-3">
+            <div className="flex flex-col gap-2 border-b border-border/80 bg-muted/30 p-3">
               <div className="flex items-center gap-2">
                 <div className="relative flex-1">
-                  <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-zinc-500" />
+                  <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
                   <input
                     type="text"
                     placeholder="Search Bot Runs, User Speech, LiveKit, Models, Prompts, Errors..."
                     value={botSearchQuery}
                     onChange={(e) => setBotSearchQuery(e.target.value)}
-                    className="w-full rounded-md border border-zinc-800 bg-zinc-900/80 pl-8 pr-8 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 focus:border-purple-500 focus:outline-none"
+                    className="w-full rounded-md border border-border bg-muted/80 pl-8 pr-8 py-1.5 text-xs text-foreground/90 placeholder-muted-foreground focus:border-purple-500 focus:outline-none"
                   />
                   {botSearchQuery && (
                     <button
                       type="button"
                       onClick={() => setBotSearchQuery("")}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground/80"
                     >
                       <XIcon className="size-3" />
                     </button>
@@ -2199,7 +2266,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                       className={`px-2.5 py-1 font-medium transition-colors cursor-pointer text-xs shrink-0 whitespace-nowrap ${
                         botFilter === tab.id
                           ? "bg-purple-500/20 text-purple-300 border border-purple-500/40 font-semibold shadow-xs"
-                          : "bg-zinc-800/80 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 border border-transparent"
+                          : "bg-muted/80 text-muted-foreground hover:bg-muted hover:text-foreground/90 border border-transparent"
                       }`}
                       style={{ borderRadius: "12px" }}
                     >
@@ -2208,7 +2275,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                   ))}
                 </div>
 
-                <div className="text-[11px] font-mono text-zinc-500 shrink-0 hidden sm:block">
+                <div className="text-[11px] font-mono text-muted-foreground shrink-0 hidden sm:block">
                   Showing {filteredBotLogs.length} of {botLogs.length} events
                 </div>
               </div>
@@ -2223,12 +2290,12 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                 }`}
               >
                 {filteredBotLogs.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center p-12 text-center text-zinc-500">
-                    <RadioIcon className="size-10 stroke-1 text-zinc-600 mb-2 animate-pulse" />
-                    <p className="text-xs font-semibold text-zinc-400">
+                  <div className="flex flex-col items-center justify-center p-12 text-center text-muted-foreground">
+                    <RadioIcon className="size-10 stroke-1 text-muted-foreground/80 mb-2 animate-pulse" />
+                    <p className="text-xs font-semibold text-muted-foreground">
                       No Bot or Voice Call activity recorded yet
                     </p>
-                    <p className="text-[11px] text-zinc-600 mt-1 max-w-xs">
+                    <p className="text-[11px] text-muted-foreground/80 mt-1 max-w-xs">
                       Start a voice call, speak into the mic, or trigger an agent task. STT
                       transcripts, LiveKit WebRTC messages, AI model dispatches, noise gating, and
                       status codes will stream here live.
@@ -2256,7 +2323,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                           case "TTS":
                             return "bg-teal-500/15 text-teal-300 border-teal-500/30";
                           default:
-                            return "bg-zinc-700/30 text-zinc-300 border-zinc-600/30";
+                            return "bg-muted/30 text-foreground/80 border-border/40";
                         }
                       };
 
@@ -2271,9 +2338,9 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                         <div
                           key={log.id}
                           onClick={() => setSelectedBotLogId(log.id)}
-                          className={`flex flex-col gap-1.5 p-3 transition-colors cursor-pointer hover:bg-zinc-900/60 ${
+                          className={`flex flex-col gap-1.5 p-3 transition-colors cursor-pointer hover:bg-muted/60 ${
                             isSelected
-                              ? "bg-zinc-900 border-l-2 border-purple-500"
+                              ? "bg-muted border-l-2 border-purple-500"
                               : log.level === "error"
                                 ? "bg-rose-950/10 hover:bg-rose-950/20"
                                 : ""
@@ -2315,8 +2382,8 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
 
                               {/* Model Pill */}
                               {log.model && (
-                                <span className="rounded px-1.5 py-0.5 text-[10px] font-mono bg-zinc-800 text-zinc-300 border border-zinc-700/60 truncate max-w-[150px] flex items-center gap-1">
-                                  <CpuIcon className="size-2.5 text-zinc-400 shrink-0" />
+                                <span className="rounded px-1.5 py-0.5 text-[10px] font-mono bg-muted text-foreground/80 border border-border/60 truncate max-w-[150px] flex items-center gap-1">
+                                  <CpuIcon className="size-2.5 text-muted-foreground shrink-0" />
                                   {log.model}
                                 </span>
                               )}
@@ -2324,12 +2391,14 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
 
                             <div className="flex items-center gap-1.5 shrink-0">
                               {log.durationMs !== undefined && log.durationMs > 0 && (
-                                <span className="text-[10px] font-mono text-zinc-400 flex items-center gap-0.5">
-                                  <ClockIcon className="size-2.5 text-zinc-500" />
+                                <span className="text-[10px] font-mono text-muted-foreground flex items-center gap-0.5">
+                                  <ClockIcon className="size-2.5 text-muted-foreground" />
                                   {log.durationMs}ms
                                 </span>
                               )}
-                              <span className="text-[10px] font-mono text-zinc-500">{timeStr}</span>
+                              <span className="text-[10px] font-mono text-muted-foreground">
+                                {timeStr}
+                              </span>
                               <button
                                 type="button"
                                 onClick={(e) => {
@@ -2339,7 +2408,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                                     JSON.stringify(log.response || log.payload || log, null, 2);
                                   copyToClipboard(textToCopy, `listCopy_${log.id}`);
                                 }}
-                                className="p-1 rounded hover:bg-zinc-800 text-zinc-500 hover:text-zinc-200 transition-colors cursor-pointer"
+                                className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground/90 transition-colors cursor-pointer"
                                 title="Copy event detail"
                               >
                                 {copiedKey === `listCopy_${log.id}` ? (
@@ -2351,12 +2420,12 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                             </div>
                           </div>
 
-                          <div className="text-xs font-semibold text-zinc-200 truncate flex items-center gap-1.5">
+                          <div className="text-xs font-semibold text-foreground/90 truncate flex items-center gap-1.5">
                             <span className="truncate">{log.title}</span>
                           </div>
 
                           {log.detail && (
-                            <p className="text-[11px] text-zinc-400 line-clamp-2 leading-relaxed font-mono">
+                            <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed font-mono">
                               {log.detail}
                             </p>
                           )}
@@ -2369,15 +2438,15 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
 
               {/* Right Panel: Selected Bot Log Inspector */}
               {selectedBotLog ? (
-                <div className="flex flex-1 flex-col overflow-y-auto bg-zinc-950">
+                <div className="flex flex-1 flex-col overflow-y-auto bg-background">
                   {/* Top Header of Inspector */}
-                  <div className="border-b border-zinc-800/80 bg-zinc-900/60 p-3.5 space-y-2.5">
+                  <div className="border-b border-border/80 bg-muted/60 p-3.5 space-y-2.5">
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 flex-wrap min-w-0">
                         <button
                           type="button"
                           onClick={() => setSelectedBotLogId(null)}
-                          className="md:hidden text-zinc-400 hover:text-zinc-100 p-1 -ml-1 text-xs"
+                          className="md:hidden text-muted-foreground hover:text-foreground p-1 -ml-1 text-xs"
                         >
                           &larr; Back
                         </button>
@@ -2397,7 +2466,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                           </span>
                         )}
                         {selectedBotLog.model && (
-                          <span className="rounded px-2 py-0.5 text-xs font-mono bg-zinc-800 text-zinc-300 border border-zinc-700/60 flex items-center gap-1">
+                          <span className="rounded px-2 py-0.5 text-xs font-mono bg-muted text-foreground/80 border border-border/60 flex items-center gap-1">
                             <CpuIcon className="size-3 text-purple-400" />
                             {selectedBotLog.model}
                           </span>
@@ -2414,7 +2483,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                               `copyFull_${selectedBotLog.id}`,
                             )
                           }
-                          className="h-7 text-xs gap-1 border-zinc-800 hover:bg-zinc-800 hover:text-zinc-100 text-zinc-400"
+                          className="h-7 text-xs gap-1 border-border hover:bg-muted hover:text-foreground text-muted-foreground"
                         >
                           {copiedKey === `copyFull_${selectedBotLog.id}` ? (
                             <CheckIcon className="size-3 text-emerald-400" />
@@ -2426,8 +2495,10 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                       </div>
                     </div>
 
-                    <h3 className="text-sm font-semibold text-zinc-100">{selectedBotLog.title}</h3>
-                    <div className="flex items-center gap-3 text-[11px] font-mono text-zinc-500">
+                    <h3 className="text-sm font-semibold text-foreground">
+                      {selectedBotLog.title}
+                    </h3>
+                    <div className="flex items-center gap-3 text-[11px] font-mono text-muted-foreground">
                       <span>{new Date(selectedBotLog.timestamp).toISOString()}</span>
                       {selectedBotLog.durationMs !== undefined && (
                         <span>Duration: {selectedBotLog.durationMs}ms</span>
@@ -2436,7 +2507,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                     </div>
 
                     {/* Inspector Sub-Tabs */}
-                    <div className="flex items-center gap-1 border-t border-zinc-800/80 pt-2 text-xs">
+                    <div className="flex items-center gap-1 border-t border-border/80 pt-2 text-xs">
                       {(
                         [
                           { id: "overview", label: "Overview" },
@@ -2451,8 +2522,8 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                           onClick={() => setBotActiveTab(tab.id)}
                           className={`px-3 py-1 font-medium transition-colors cursor-pointer text-xs rounded-md ${
                             botActiveTab === tab.id
-                              ? "bg-zinc-800 text-zinc-100 font-semibold"
-                              : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
+                              ? "bg-muted text-foreground font-semibold"
+                              : "text-muted-foreground hover:text-foreground/90 hover:bg-muted"
                           }`}
                         >
                           {tab.label}
@@ -2467,54 +2538,54 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                       <div className="space-y-4">
                         {/* Event Overview Grid */}
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                          <div className="rounded-lg border border-zinc-800/80 bg-zinc-900/40 p-2.5">
-                            <span className="text-[10px] text-zinc-500 uppercase font-mono">
+                          <div className="rounded-lg border border-border/80 bg-muted/40 p-2.5">
+                            <span className="text-[10px] text-muted-foreground uppercase font-mono">
                               Category
                             </span>
-                            <p className="text-xs font-semibold text-zinc-200 mt-0.5">
+                            <p className="text-xs font-semibold text-foreground/90 mt-0.5">
                               {selectedBotLog.category}
                             </p>
                           </div>
-                          <div className="rounded-lg border border-zinc-800/80 bg-zinc-900/40 p-2.5">
-                            <span className="text-[10px] text-zinc-500 uppercase font-mono">
+                          <div className="rounded-lg border border-border/80 bg-muted/40 p-2.5">
+                            <span className="text-[10px] text-muted-foreground uppercase font-mono">
                               Status Code
                             </span>
-                            <p className="text-xs font-semibold text-zinc-200 mt-0.5">
+                            <p className="text-xs font-semibold text-foreground/90 mt-0.5">
                               {selectedBotLog.statusCode ||
                                 (selectedBotLog.level === "error" ? "ERROR" : "OK")}
                             </p>
                           </div>
-                          <div className="rounded-lg border border-zinc-800/80 bg-zinc-900/40 p-2.5">
-                            <span className="text-[10px] text-zinc-500 uppercase font-mono">
+                          <div className="rounded-lg border border-border/80 bg-muted/40 p-2.5">
+                            <span className="text-[10px] text-muted-foreground uppercase font-mono">
                               Model
                             </span>
-                            <p className="text-xs font-semibold text-zinc-200 mt-0.5 truncate">
+                            <p className="text-xs font-semibold text-foreground/90 mt-0.5 truncate">
                               {selectedBotLog.model || "N/A"}
                             </p>
                           </div>
-                          <div className="rounded-lg border border-zinc-800/80 bg-zinc-900/40 p-2.5">
-                            <span className="text-[10px] text-zinc-500 uppercase font-mono">
+                          <div className="rounded-lg border border-border/80 bg-muted/40 p-2.5">
+                            <span className="text-[10px] text-muted-foreground uppercase font-mono">
                               Duration
                             </span>
-                            <p className="text-xs font-semibold text-zinc-200 mt-0.5">
+                            <p className="text-xs font-semibold text-foreground/90 mt-0.5">
                               {selectedBotLog.durationMs !== undefined
                                 ? `${selectedBotLog.durationMs}ms`
                                 : "N/A"}
                             </p>
                           </div>
-                          <div className="rounded-lg border border-zinc-800/80 bg-zinc-900/40 p-2.5">
-                            <span className="text-[10px] text-zinc-500 uppercase font-mono">
+                          <div className="rounded-lg border border-border/80 bg-muted/40 p-2.5">
+                            <span className="text-[10px] text-muted-foreground uppercase font-mono">
                               Level
                             </span>
-                            <p className="text-xs font-semibold text-zinc-200 mt-0.5 uppercase">
+                            <p className="text-xs font-semibold text-foreground/90 mt-0.5 uppercase">
                               {selectedBotLog.level || "info"}
                             </p>
                           </div>
-                          <div className="rounded-lg border border-zinc-800/80 bg-zinc-900/40 p-2.5">
-                            <span className="text-[10px] text-zinc-500 uppercase font-mono">
+                          <div className="rounded-lg border border-border/80 bg-muted/40 p-2.5">
+                            <span className="text-[10px] text-muted-foreground uppercase font-mono">
                               Event Time
                             </span>
-                            <p className="text-xs font-semibold text-zinc-200 mt-0.5 font-mono">
+                            <p className="text-xs font-semibold text-foreground/90 mt-0.5 font-mono">
                               {new Date(selectedBotLog.timestamp).toLocaleTimeString()}
                             </p>
                           </div>
@@ -2524,7 +2595,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                         {selectedBotLog.detail && (
                           <div className="space-y-1.5">
                             <div className="flex items-center justify-between">
-                              <h4 className="text-[11px] font-sans font-semibold uppercase tracking-wider text-zinc-400">
+                              <h4 className="text-[11px] font-sans font-semibold uppercase tracking-wider text-muted-foreground">
                                 Message & Description
                               </h4>
                               <button
@@ -2532,7 +2603,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                                 onClick={() =>
                                   copyToClipboard(selectedBotLog.detail || "", "descCopy")
                                 }
-                                className="text-zinc-400 hover:text-zinc-200 flex items-center gap-1 text-[11px]"
+                                className="text-muted-foreground hover:text-foreground/90 flex items-center gap-1 text-[11px]"
                               >
                                 {copiedKey === "descCopy" ? (
                                   <CheckIcon className="size-3 text-emerald-400" />
@@ -2542,7 +2613,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                                 Copy
                               </button>
                             </div>
-                            <pre className="rounded-md border border-zinc-800 bg-zinc-900/70 p-3 text-[11px] text-zinc-200 whitespace-pre-wrap overflow-x-auto leading-relaxed">
+                            <pre className="rounded-md border border-border bg-muted/70 p-3 text-[11px] text-foreground/90 whitespace-pre-wrap overflow-x-auto leading-relaxed">
                               {selectedBotLog.detail}
                             </pre>
                           </div>
@@ -2552,14 +2623,16 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                         {selectedBotLog.metadata &&
                           Object.keys(selectedBotLog.metadata).length > 0 && (
                             <div className="space-y-1.5">
-                              <h4 className="text-[11px] font-sans font-semibold uppercase tracking-wider text-zinc-400">
+                              <h4 className="text-[11px] font-sans font-semibold uppercase tracking-wider text-muted-foreground">
                                 Diagnostic Metadata
                               </h4>
-                              <div className="p-3 rounded-lg border border-zinc-800/80 bg-zinc-900/40 font-mono text-[11px] space-y-1">
+                              <div className="p-3 rounded-lg border border-border/80 bg-muted/40 font-mono text-[11px] space-y-1">
                                 {Object.entries(selectedBotLog.metadata).map(([k, v]) => (
                                   <div key={k} className="flex items-center justify-between gap-2">
-                                    <span className="text-zinc-500">{k}:</span>
-                                    <span className="text-zinc-300 font-semibold">{String(v)}</span>
+                                    <span className="text-muted-foreground">{k}:</span>
+                                    <span className="text-foreground/80 font-semibold">
+                                      {String(v)}
+                                    </span>
                                   </div>
                                 ))}
                               </div>
@@ -2571,7 +2644,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                     {botActiveTab === "payload" && (
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
-                          <h4 className="text-[11px] font-sans font-semibold uppercase tracking-wider text-zinc-400">
+                          <h4 className="text-[11px] font-sans font-semibold uppercase tracking-wider text-muted-foreground">
                             Payload & Incoming Input
                           </h4>
                           {selectedBotLog.payload && (
@@ -2585,7 +2658,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                                   "botPayloadCopy",
                                 )
                               }
-                              className="text-zinc-400 hover:text-zinc-200 flex items-center gap-1 text-[11px]"
+                              className="text-muted-foreground hover:text-foreground/90 flex items-center gap-1 text-[11px]"
                             >
                               {copiedKey === "botPayloadCopy" ? (
                                 <CheckIcon className="size-3 text-emerald-400" />
@@ -2597,13 +2670,13 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                           )}
                         </div>
                         {selectedBotLog.payload ? (
-                          <pre className="rounded-md border border-zinc-800 bg-zinc-900/70 p-3 text-[11px] text-zinc-200 whitespace-pre-wrap overflow-x-auto font-mono">
+                          <pre className="rounded-md border border-border bg-muted/70 p-3 text-[11px] text-foreground/90 whitespace-pre-wrap overflow-x-auto font-mono">
                             {typeof selectedBotLog.payload === "string"
                               ? selectedBotLog.payload
                               : JSON.stringify(selectedBotLog.payload, null, 2)}
                           </pre>
                         ) : (
-                          <p className="text-zinc-500 text-[11px]">
+                          <p className="text-muted-foreground text-[11px]">
                             No payload recorded for this event
                           </p>
                         )}
@@ -2613,7 +2686,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                     {botActiveTab === "response" && (
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
-                          <h4 className="text-[11px] font-sans font-semibold uppercase tracking-wider text-zinc-400">
+                          <h4 className="text-[11px] font-sans font-semibold uppercase tracking-wider text-muted-foreground">
                             Response & Output Data
                           </h4>
                           {(selectedBotLog.response || selectedBotLog.detail) && (
@@ -2629,7 +2702,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                                   "botResponseCopy",
                                 )
                               }
-                              className="text-zinc-400 hover:text-zinc-200 flex items-center gap-1 text-[11px]"
+                              className="text-muted-foreground hover:text-foreground/90 flex items-center gap-1 text-[11px]"
                             >
                               {copiedKey === "botResponseCopy" ? (
                                 <CheckIcon className="size-3 text-emerald-400" />
@@ -2641,17 +2714,19 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                           )}
                         </div>
                         {selectedBotLog.response ? (
-                          <pre className="rounded-md border border-zinc-800 bg-zinc-900/70 p-3 text-[11px] text-zinc-200 whitespace-pre-wrap overflow-x-auto font-mono">
+                          <pre className="rounded-md border border-border bg-muted/70 p-3 text-[11px] text-foreground/90 whitespace-pre-wrap overflow-x-auto font-mono">
                             {typeof selectedBotLog.response === "string"
                               ? selectedBotLog.response
                               : JSON.stringify(selectedBotLog.response, null, 2)}
                           </pre>
                         ) : selectedBotLog.detail ? (
-                          <pre className="rounded-md border border-zinc-800 bg-zinc-900/70 p-3 text-[11px] text-zinc-200 whitespace-pre-wrap overflow-x-auto font-mono">
+                          <pre className="rounded-md border border-border bg-muted/70 p-3 text-[11px] text-foreground/90 whitespace-pre-wrap overflow-x-auto font-mono">
                             {selectedBotLog.detail}
                           </pre>
                         ) : (
-                          <p className="text-zinc-500 text-[11px]">No response body recorded</p>
+                          <p className="text-muted-foreground text-[11px]">
+                            No response body recorded
+                          </p>
                         )}
                       </div>
                     )}
@@ -2659,7 +2734,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                     {botActiveTab === "metadata" && (
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
-                          <h4 className="text-[11px] font-sans font-semibold uppercase tracking-wider text-zinc-400">
+                          <h4 className="text-[11px] font-sans font-semibold uppercase tracking-wider text-muted-foreground">
                             Complete Event JSON
                           </h4>
                           <button
@@ -2670,7 +2745,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                                 "fullEventJson",
                               )
                             }
-                            className="text-zinc-400 hover:text-zinc-200 flex items-center gap-1 text-[11px]"
+                            className="text-muted-foreground hover:text-foreground/90 flex items-center gap-1 text-[11px]"
                           >
                             {copiedKey === "fullEventJson" ? (
                               <CheckIcon className="size-3 text-emerald-400" />
@@ -2680,7 +2755,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                             Copy Full JSON
                           </button>
                         </div>
-                        <pre className="rounded-md border border-zinc-800 bg-zinc-900/70 p-3 text-[11px] text-zinc-200 whitespace-pre-wrap overflow-x-auto font-mono">
+                        <pre className="rounded-md border border-border bg-muted/70 p-3 text-[11px] text-foreground/90 whitespace-pre-wrap overflow-x-auto font-mono">
                           {JSON.stringify(selectedBotLog, null, 2)}
                         </pre>
                       </div>
@@ -2688,7 +2763,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                   </div>
                 </div>
               ) : (
-                <div className="hidden md:flex flex-1 items-center justify-center p-8 text-center text-zinc-600 text-xs">
+                <div className="hidden md:flex flex-1 items-center justify-center p-8 text-center text-muted-foreground/80 text-xs">
                   Select any Bot or Call event from the left list to inspect status code, model,
                   LiveKit messages, and full payload details.
                 </div>
@@ -2699,25 +2774,25 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
 
         {/* ── WhatsApp Logs Tab Content ──────────────────────────────────────── */}
         {mainTab === "wa" && (
-          <div className="flex-1 flex flex-col md:flex-row min-h-0 min-w-0 bg-zinc-950/80">
+          <div className="flex-1 flex flex-col md:flex-row min-h-0 min-w-0 bg-muted/80">
             {/* Left Column: Filter Bar + Log Items List */}
-            <div className="w-full md:w-96 flex flex-col border-r border-zinc-800/80 shrink-0 min-h-0 bg-zinc-950/40">
+            <div className="w-full md:w-96 flex flex-col border-r border-border/80 shrink-0 min-h-0 bg-background/40">
               {/* Search & Filter Header */}
-              <div className="p-2 sm:p-2.5 border-b border-zinc-800/80 space-y-2">
+              <div className="p-2 sm:p-2.5 border-b border-border/80 space-y-2">
                 <div className="relative">
-                  <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-zinc-500" />
+                  <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
                   <input
                     type="text"
                     placeholder="Search by text, phone, or ID..."
                     value={waSearchQuery}
                     onChange={(e) => setWaSearchQuery(e.target.value)}
-                    className="w-full pl-8 pr-2.5 py-1.5 rounded-xl bg-zinc-900 border border-zinc-800 text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-hidden focus:border-emerald-500"
+                    className="w-full pl-8 pr-2.5 py-1.5 rounded-xl bg-muted border border-border text-xs text-foreground/90 placeholder:text-muted-foreground/80 focus:outline-hidden focus:border-emerald-500"
                   />
                   {waSearchQuery && (
                     <button
                       type="button"
                       onClick={() => setWaSearchQuery("")}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground/80"
                     >
                       <XIcon className="size-3" />
                     </button>
@@ -2737,7 +2812,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                         className={`px-2 py-0.5 rounded-full capitalize shrink-0 transition-all cursor-pointer ${
                           waFilter === f
                             ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-semibold"
-                            : "bg-zinc-900 text-zinc-400 border border-zinc-800 hover:text-zinc-200"
+                            : "bg-muted text-muted-foreground border border-border hover:text-foreground/90"
                         }`}
                       >
                         {f} ({count})
@@ -2767,10 +2842,12 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
 
                   if (list.length === 0) {
                     return (
-                      <div className="p-8 text-center text-zinc-600 text-xs space-y-1">
-                        <MessageCircle className="mx-auto size-7 text-zinc-700" />
-                        <p className="font-medium text-zinc-400">No WhatsApp logs captured</p>
-                        <p className="text-3xs text-zinc-600">
+                      <div className="p-8 text-center text-muted-foreground/80 text-xs space-y-1">
+                        <MessageCircle className="mx-auto size-7 text-muted-foreground/60" />
+                        <p className="font-medium text-muted-foreground">
+                          No WhatsApp logs captured
+                        </p>
+                        <p className="text-3xs text-muted-foreground/80">
                           Messages sent, received, edited or deleted will appear here live.
                         </p>
                       </div>
@@ -2792,7 +2869,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                         className={`p-2.5 transition-all cursor-pointer text-xs space-y-1 ${
                           isSelected
                             ? "bg-emerald-950/30 border-l-2 border-emerald-400"
-                            : "hover:bg-zinc-900/40"
+                            : "hover:bg-muted/40"
                         }`}
                       >
                         <div className="flex items-center justify-between text-3xs">
@@ -2812,25 +2889,29 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                             >
                               {log.type}
                             </span>
-                            <span className="text-zinc-500 font-mono">[{log.sessionId}]</span>
+                            <span className="text-muted-foreground font-mono">
+                              [{log.sessionId}]
+                            </span>
                           </div>
-                          <span className="text-zinc-500 font-mono text-3xs">
+                          <span className="text-muted-foreground font-mono text-3xs">
                             {new Date(log.timestamp).toLocaleTimeString()}
                           </span>
                         </div>
 
-                        <div className="flex items-center gap-1.5 text-zinc-300 font-medium truncate">
+                        <div className="flex items-center gap-1.5 text-foreground/80 font-medium truncate">
                           <span>
                             {isInbound
                               ? `From: ${log.from}`
                               : `To: ${log.to || log.from || "Client"}`}
                           </span>
                           {log.senderName && (
-                            <span className="text-zinc-500 font-normal">({log.senderName})</span>
+                            <span className="text-muted-foreground font-normal">
+                              ({log.senderName})
+                            </span>
                           )}
                         </div>
 
-                        <p className="text-zinc-400 text-2xs line-clamp-2 break-all">
+                        <p className="text-muted-foreground text-2xs line-clamp-2 break-all">
                           {log.body ||
                             (log.caption
                               ? `[Media: ${log.caption}]`
@@ -2844,12 +2925,12 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
             </div>
 
             {/* Right Column: Selected WhatsApp Event Details */}
-            <div className="flex-1 flex flex-col min-h-0 min-w-0 bg-zinc-950/60 overflow-y-auto">
+            <div className="flex-1 flex flex-col min-h-0 min-w-0 bg-background/60 overflow-y-auto">
               {(() => {
                 const selectedLog = waLogs.find((l) => l.id === selectedWaLogId) || waLogs[0];
                 if (!selectedLog) {
                   return (
-                    <div className="flex-1 flex items-center justify-center p-8 text-center text-zinc-600 text-xs">
+                    <div className="flex-1 flex items-center justify-center p-8 text-center text-muted-foreground/80 text-xs">
                       Select any WhatsApp message or event from the left list to inspect details.
                     </div>
                   );
@@ -2860,7 +2941,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                 return (
                   <div className="p-4 space-y-4">
                     {/* Header Card */}
-                    <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/60 p-3.5 space-y-2">
+                    <div className="rounded-2xl border border-border/80 bg-muted/60 p-3.5 space-y-2">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <span
@@ -2874,27 +2955,28 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                           >
                             {selectedLog.type}
                           </span>
-                          <span className="text-xs text-zinc-400 font-mono">
-                            Session: <strong className="text-white">{selectedLog.sessionId}</strong>
+                          <span className="text-xs text-muted-foreground font-mono">
+                            Session:{" "}
+                            <strong className="text-foreground">{selectedLog.sessionId}</strong>
                           </span>
                         </div>
-                        <span className="text-3xs text-zinc-500 font-mono">
+                        <span className="text-3xs text-muted-foreground font-mono">
                           {new Date(selectedLog.timestamp).toLocaleString()}
                         </span>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1 border-t border-zinc-800/60">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1 border-t border-border/60">
                         <div>
-                          <span className="text-zinc-500 text-3xs uppercase tracking-wider block">
+                          <span className="text-muted-foreground text-3xs uppercase tracking-wider block">
                             Sender / From
                           </span>
-                          <div className="flex items-center gap-1 font-mono text-zinc-200">
+                          <div className="flex items-center gap-1 font-mono text-foreground/90">
                             <span>{selectedLog.from || "N/A"}</span>
                             {selectedLog.from && (
                               <button
                                 type="button"
                                 onClick={() => copyToClipboard(selectedLog.from!, "copyFrom")}
-                                className="text-zinc-500 hover:text-zinc-300"
+                                className="text-muted-foreground hover:text-foreground/80"
                               >
                                 {copiedKey === "copyFrom" ? (
                                   <CheckIcon className="size-3 text-emerald-400" />
@@ -2907,32 +2989,33 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                         </div>
 
                         <div>
-                          <span className="text-zinc-500 text-3xs uppercase tracking-wider block">
+                          <span className="text-muted-foreground text-3xs uppercase tracking-wider block">
                             Recipient / To
                           </span>
-                          <div className="flex items-center gap-1 font-mono text-zinc-200">
+                          <div className="flex items-center gap-1 font-mono text-foreground/90">
                             <span>{selectedLog.to || "N/A"}</span>
                           </div>
                         </div>
                       </div>
 
                       {selectedLog.messageId && (
-                        <div className="text-3xs text-zinc-500 font-mono pt-1">
-                          Message ID: <span className="text-zinc-400">{selectedLog.messageId}</span>
+                        <div className="text-3xs text-muted-foreground font-mono pt-1">
+                          Message ID:{" "}
+                          <span className="text-muted-foreground">{selectedLog.messageId}</span>
                         </div>
                       )}
                     </div>
 
                     {/* Message Bubble View */}
                     <div className="space-y-1.5">
-                      <span className="text-3xs font-semibold uppercase tracking-wider text-zinc-500 px-1">
+                      <span className="text-3xs font-semibold uppercase tracking-wider text-muted-foreground px-1">
                         Message Content
                       </span>
                       <div
                         className={`rounded-2xl border p-3.5 space-y-2 ${
                           isInbound
-                            ? "border-emerald-500/30 bg-emerald-950/20 text-zinc-100"
-                            : "border-zinc-800 bg-zinc-900/80 text-zinc-200"
+                            ? "border-emerald-500/30 bg-emerald-950/20 text-foreground"
+                            : "border-border bg-muted/80 text-foreground/90"
                         }`}
                       >
                         <p className="text-xs whitespace-pre-wrap leading-relaxed select-text font-sans">
@@ -2941,7 +3024,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
 
                         {selectedLog.mediaUrl && (
                           <div className="pt-2 border-t border-white/10 flex items-center gap-2 text-xs">
-                            <span className="text-zinc-400">Media:</span>
+                            <span className="text-muted-foreground">Media:</span>
                             <a
                               href={selectedLog.mediaUrl}
                               target="_blank"
@@ -2960,7 +3043,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                     {selectedLog.rawPayload && (
                       <div className="space-y-1.5">
                         <div className="flex items-center justify-between px-1">
-                          <span className="text-3xs font-semibold uppercase tracking-wider text-zinc-500">
+                          <span className="text-3xs font-semibold uppercase tracking-wider text-muted-foreground">
                             Raw Webhook Event Payload
                           </span>
                           <button
@@ -2971,7 +3054,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                                 "copyWaRaw",
                               )
                             }
-                            className="text-zinc-400 hover:text-zinc-200 flex items-center gap-1 text-2xs"
+                            className="text-muted-foreground hover:text-foreground/90 flex items-center gap-1 text-2xs"
                           >
                             {copiedKey === "copyWaRaw" ? (
                               <CheckIcon className="size-3 text-emerald-400" />
@@ -2981,7 +3064,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                             <span>Copy JSON</span>
                           </button>
                         </div>
-                        <pre className="rounded-xl border border-zinc-800 bg-black/50 p-3 text-3xs text-zinc-300 font-mono overflow-x-auto whitespace-pre-wrap">
+                        <pre className="rounded-xl border border-border bg-muted/60 p-3 text-3xs text-foreground/80 font-mono overflow-x-auto whitespace-pre-wrap">
                           {JSON.stringify(selectedLog.rawPayload, null, 2)}
                         </pre>
                       </div>
@@ -2997,24 +3080,24 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
         {/* TAB 5: SCHEDULED WHATSAPP TASKS                           */}
         {/* ========================================================= */}
         {mainTab === "tasks" && (
-          <div className="flex-1 flex flex-col min-h-0 bg-black/40">
+          <div className="flex-1 flex flex-col min-h-0 bg-muted/50">
             {/* Search and Filter Bar */}
-            <div className="shrink-0 p-3 sm:p-3.5 border-b border-zinc-800/80 bg-zinc-900/60 backdrop-blur-xs flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center justify-between">
+            <div className="shrink-0 p-3 sm:p-3.5 border-b border-border/80 bg-muted/60 backdrop-blur-xs flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center justify-between">
               {/* Search Bar */}
               <div className="relative flex-1">
-                <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-zinc-500" />
+                <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
                 <input
                   type="text"
                   value={taskSearchQuery}
                   onChange={(e) => setTaskSearchQuery(e.target.value)}
                   placeholder="Search by contact name, phone, message text..."
-                  className="w-full bg-zinc-950/70 border border-zinc-800 rounded-full pl-8 pr-3 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-hidden focus:border-amber-500/50 transition-colors"
+                  className="w-full bg-background/70 border border-border rounded-full pl-8 pr-3 py-1.5 text-xs text-foreground/90 placeholder-muted-foreground focus:outline-hidden focus:border-amber-500/50 transition-colors"
                 />
                 {taskSearchQuery && (
                   <button
                     type="button"
                     onClick={() => setTaskSearchQuery("")}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 text-xs"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground/80 text-xs"
                   >
                     &times;
                   </button>
@@ -3042,8 +3125,8 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                               ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
                               : tab === "failed"
                                 ? "bg-rose-500/20 text-rose-300 border border-rose-500/40"
-                                : "bg-zinc-800 text-white border border-zinc-700"
-                          : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 border border-transparent"
+                                : "bg-muted text-foreground border border-border"
+                          : "text-muted-foreground hover:text-foreground/90 hover:bg-muted border border-transparent"
                       }`}
                     >
                       <span>{tab}</span>
@@ -3062,12 +3145,12 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                     <CalendarIcon className="size-6" />
                   </div>
                   <div className="space-y-1 max-w-sm">
-                    <p className="text-xs font-semibold text-zinc-300">
+                    <p className="text-xs font-semibold text-foreground/80">
                       {taskSearchQuery
                         ? "No matching scheduled tasks found"
                         : "No Scheduled WhatsApp Tasks"}
                     </p>
-                    <p className="text-2xs text-zinc-500 leading-relaxed">
+                    <p className="text-2xs text-muted-foreground leading-relaxed">
                       AI Super Bot ko chat mein batayein WhatsApp message schedule karne ke liye
                       (maslan: &ldquo;kal subah 10 baje is number ko message bhejna&rdquo;). Wo
                       yahan register ho kar apne time par deliver hoga.
@@ -3084,7 +3167,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                   return (
                     <div
                       key={task.id}
-                      className="group rounded-2xl border border-zinc-800/90 bg-zinc-900/70 hover:bg-zinc-900 hover:border-zinc-700/80 p-3 sm:p-3.5 transition-all shadow-xs space-y-2.5"
+                      className="group rounded-2xl border border-border/90 bg-muted/70 hover:bg-muted hover:border-border/80 p-3 sm:p-3.5 transition-all shadow-xs space-y-2.5"
                     >
                       {/* Top Header Row: Recipient & Status Badge */}
                       <div className="flex items-start justify-between gap-2">
@@ -3104,7 +3187,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                           </div>
                           <div className="min-w-0">
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="text-xs font-bold text-zinc-100 truncate">
+                              <span className="text-xs font-bold text-foreground truncate">
                                 {task.recipientName ||
                                   (task.isGroup ? "WhatsApp Group" : "Recipient")}
                               </span>
@@ -3113,12 +3196,14 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                                   Group
                                 </span>
                               )}
-                              <span className="text-[10px] font-semibold uppercase bg-zinc-800/80 text-zinc-400 px-1.5 py-0.2 rounded-full border border-zinc-700/60 flex items-center gap-1">
+                              <span className="text-[10px] font-semibold uppercase bg-muted/80 text-muted-foreground px-1.5 py-0.2 rounded-full border border-border/60 flex items-center gap-1">
                                 <MessageSquare className="size-2.5" />
                                 {task.type || "text"}
                               </span>
                             </div>
-                            <p className="text-2xs font-mono text-zinc-400 truncate">{task.to}</p>
+                            <p className="text-2xs font-mono text-muted-foreground truncate">
+                              {task.to}
+                            </p>
                           </div>
                         </div>
 
@@ -3146,7 +3231,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                             </span>
                           )}
                           {isCancelled && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-semibold bg-zinc-800/80 border border-zinc-700 text-zinc-400">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-semibold bg-muted/80 border border-border text-muted-foreground">
                               Cancelled
                             </span>
                           )}
@@ -3157,14 +3242,14 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                       <div className="flex items-center gap-1.5 text-2xs text-amber-300/90 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1.5 rounded-xl">
                         <ClockIcon className="size-3 text-amber-400 shrink-0" />
                         <span className="font-medium">Scheduled for:</span>
-                        <span className="font-semibold text-zinc-200">
+                        <span className="font-semibold text-foreground/90">
                           {task.scheduledTime ||
                             (task.scheduledTimestamp
                               ? new Date(task.scheduledTimestamp).toLocaleString()
                               : "Pending")}
                         </span>
                         {task.scheduledTimestamp && (
-                          <span className="font-mono text-[10px] text-zinc-400 ml-auto hidden sm:inline">
+                          <span className="font-mono text-[10px] text-muted-foreground ml-auto hidden sm:inline">
                             (
                             {new Date(task.scheduledTimestamp).toLocaleTimeString([], {
                               hour: "2-digit",
@@ -3176,10 +3261,10 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                       </div>
 
                       {/* Message Body Content Preview */}
-                      <div className="rounded-xl bg-zinc-950/60 border border-zinc-800/80 p-2.5 text-xs text-zinc-200 whitespace-pre-wrap select-text leading-relaxed font-sans">
+                      <div className="rounded-xl bg-background/60 border border-border/80 p-2.5 text-xs text-foreground/90 whitespace-pre-wrap select-text leading-relaxed font-sans">
                         {task.message || task.caption || "[No text message]"}
                         {task.mediaUrl && (
-                          <div className="mt-2 pt-2 border-t border-zinc-800 flex items-center gap-2 text-2xs text-zinc-400">
+                          <div className="mt-2 pt-2 border-t border-border flex items-center gap-2 text-2xs text-muted-foreground">
                             <span>Media:</span>
                             <span className="font-mono text-cyan-400 truncate">
                               {task.mediaUrl}
@@ -3196,7 +3281,7 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
                       )}
 
                       {/* Actions Footer */}
-                      <div className="flex items-center justify-between pt-1 border-t border-zinc-800/50 text-2xs text-zinc-500">
+                      <div className="flex items-center justify-between pt-1 border-t border-border/50 text-2xs text-muted-foreground">
                         <span className="font-mono text-[10px]">
                           Created:{" "}
                           {new Date(task.createdAt).toLocaleTimeString([], {
@@ -3241,19 +3326,19 @@ Body: { "contents": [{"parts": [{"text": "..."}]}] }`}
         )}
 
         {/* Bottom Cupertino iOS Toolbar with Bottom-Left Close Button */}
-        <div className="shrink-0 flex items-center justify-between px-3 py-2 sm:px-4 sm:py-2.5 bg-zinc-900/95 border-t border-zinc-800/80 backdrop-blur-md text-xs select-none">
+        <div className="shrink-0 flex items-center justify-between px-3 py-2 sm:px-4 sm:py-2.5 bg-muted/95 border-t border-border/80 backdrop-blur-md text-xs select-none">
           {/* Bottom-Left Close Button */}
           <button
             type="button"
             onClick={onClose}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-zinc-800/90 hover:bg-zinc-700 text-zinc-200 hover:text-white border border-zinc-700/70 font-medium text-xs transition-all cursor-pointer shadow-xs active:scale-95"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-muted/90 hover:bg-muted text-foreground/90 hover:text-foreground border border-border/70 font-medium text-xs transition-all cursor-pointer shadow-xs active:scale-95"
             title="Close Sheet"
           >
-            <XIcon className="size-3.5 text-zinc-300" />
+            <XIcon className="size-3.5 text-foreground/80" />
             <span>Close</span>
           </button>
 
-          <div className="flex items-center gap-2 text-3xs font-mono text-zinc-400">
+          <div className="flex items-center gap-2 text-3xs font-mono text-muted-foreground">
             <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
             <span className="hidden sm:inline">Live Inspector &bull;</span>
             <span>{aiLogs.length + logs.length + botLogs.length} Records</span>
