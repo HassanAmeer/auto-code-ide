@@ -374,6 +374,8 @@ interface TimelineRowSharedState {
   onOpenWorktreeSetupTerminal: ((terminalId: string) => void) | null;
   onRetryTurn?: ((runId?: RunId) => void) | null | undefined;
   latestErrorRowId?: string | null | undefined;
+  /** Row ids of 408/timeout error cards that are followed by a successful assistant response. */
+  staleErrorRowIds?: ReadonlySet<string>;
   workGroupViewState: WorkGroupViewState;
   interruptedRunIds?: ReadonlySet<RunId>;
   hasInterruptedRun?: boolean;
@@ -941,6 +943,40 @@ const ConversationTimeline = memo(function ConversationTimeline({
     worktreeSetup,
   ]);
   const rows = useStableRows(rawRows, listIdentityKey);
+  const staleErrorRowIds = useMemo(() => {
+    const result = new Set<string>();
+    let seenAssistant = false;
+    for (let i = rows.length - 1; i >= 0; i--) {
+      const r = rows[i] as any;
+      if (!r) continue;
+      if (r.kind === "message" && r.message?.role === "assistant") {
+        seenAssistant = true;
+        continue;
+      }
+      const isErrorRow =
+        (r.kind === "event" && r.projectedItem?.item?.type === "error") ||
+        (r.kind === "work" &&
+          Array.isArray(r.groupedEntries) &&
+          r.groupedEntries.some(
+            (e: any) =>
+              e?.structuredPayload?.type === "error" || e?.projectedItem?.item?.type === "error",
+          )) ||
+        (r.kind === "work-live" &&
+          (r.entry?.structuredPayload?.type === "error" ||
+            r.entry?.projectedItem?.item?.type === "error"));
+      if (isErrorRow && seenAssistant) {
+        result.add(r.id);
+        if (r.kind === "work" && Array.isArray(r.groupedEntries)) {
+          for (const e of r.groupedEntries) {
+            if (e?.structuredPayload?.type === "error" || e?.projectedItem?.item?.type === "error")
+              result.add(e?.id ?? r.id);
+          }
+        }
+        if (r.kind === "work-live") result.add(r.entry?.id ?? r.id);
+      }
+    }
+    return result;
+  }, [rows]);
   const latestErrorRowId = useMemo(() => {
     for (let i = rows.length - 1; i >= 0; i--) {
       const r = rows[i];
@@ -1415,6 +1451,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
       onOpenWorktreeSetupTerminal: onOpenWorktreeSetupTerminal ?? null,
       onRetryTurn: onRetryTurn ?? null,
       latestErrorRowId,
+      staleErrorRowIds,
       workGroupViewState,
       interruptedRunIds,
       hasInterruptedRun,
@@ -1457,6 +1494,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
       onOpenWorktreeSetupTerminal,
       onRetryTurn,
       latestErrorRowId,
+      staleErrorRowIds,
       workGroupViewState,
       interruptedRunIds,
       hasInterruptedRun,
@@ -3778,6 +3816,9 @@ function V2EventTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "event"
   const presentation = v2EventPresentation(item);
   const Icon = presentation.icon;
   if (item.type === "error") {
+    if (ctx.staleErrorRowIds?.has(row.id)) {
+      return null;
+    }
     return (
       <CupertinoErrorRow
         item={item}
@@ -6038,6 +6079,9 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
     const isLatestError = ctx.latestErrorRowId ? workEntry.id === ctx.latestErrorRowId : true;
     if (!isLatestError) {
       // Collapse repeated failures: only the newest "Provider Error / Retry" box stays visible.
+      return null;
+    }
+    if (ctx.staleErrorRowIds?.has(workEntry.id)) {
       return null;
     }
     const effectiveThreadId =
