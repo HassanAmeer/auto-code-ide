@@ -123,6 +123,7 @@ const RPC_AGGREGATES = {
   [WS_METHODS.pullRequestsLabelCandidates]: "pull-requests",
   [WS_METHODS.pullRequestsSetLabels]: "pull-requests",
   [WS_METHODS.sourceControlLookupRepository]: "source-control",
+  [WS_METHODS.sourceControlListRepositories]: "source-control",
   [WS_METHODS.sourceControlCloneRepository]: "source-control",
   [WS_METHODS.sourceControlPublishRepository]: "source-control",
   [WS_METHODS.projectCloneStart]: "source-control",

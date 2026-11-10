@@ -18,6 +18,8 @@ import {
   type SourceControlRepositoryCloneUrls,
   type SourceControlRepositoryInfo,
   type SourceControlRepositoryLookupInput,
+  type SourceControlListRepositoriesInput,
+  type SourceControlRepositoryListItem,
 } from "@t3tools/contracts";
 
 import * as ServerConfig from "../config.ts";
@@ -39,6 +41,13 @@ export class SourceControlRepositoryService extends Context.Service<
     readonly lookupRepository: (
       input: SourceControlRepositoryLookupInput,
     ) => Effect.Effect<SourceControlRepositoryInfo, SourceControlRepositoryError>;
+    /** Authenticated account's repositories, most recently pushed first. */
+    readonly listRepositories: (
+      input: SourceControlListRepositoriesInput,
+    ) => Effect.Effect<
+      ReadonlyArray<SourceControlRepositoryListItem>,
+      SourceControlRepositoryError
+    >;
     /**
      * Everything `cloneRepository` checks before running git: the resolved
      * remote, the normalized destination, and that the destination is empty.
@@ -200,6 +209,28 @@ export const make = Effect.gen(function* () {
       repository: input.repository.trim(),
     });
     return toRepositoryInfo(providerKind, urls);
+  });
+
+  const listRepositories = Effect.fn("SourceControlRepositoryService.listRepositories")(function* (
+    input: SourceControlListRepositoriesInput,
+  ) {
+    const providerKind = yield* ensureConcreteProvider({
+      operation: "listRepositories",
+      provider: input.provider,
+    });
+    const provider = yield* providers.get(providerKind);
+    if (typeof provider.listRepositories !== "function") {
+      return yield* new SourceControlRepositoryError({
+        operation: "listRepositories",
+        provider: providerKind,
+        detail: "Listing repositories is only supported for GitHub right now.",
+      });
+    }
+    return yield* provider.listRepositories({
+      cwd: input.cwd ?? config.cwd,
+      ...(input.host === undefined ? {} : { host: input.host }),
+      ...(input.limit === undefined ? {} : { limit: input.limit }),
+    });
   });
 
   const normalizeDestinationPath = Effect.fn("SourceControlRepositoryService.normalizeDestination")(
@@ -460,6 +491,8 @@ export const make = Effect.gen(function* () {
   return SourceControlRepositoryService.of({
     lookupRepository: (input) =>
       lookupRepository(input).pipe(mapRepositoryError("lookupRepository", input.provider)),
+    listRepositories: (input) =>
+      listRepositories(input).pipe(mapRepositoryError("listRepositories", input.provider)),
     prepareClone: (input) =>
       prepareClone(input).pipe(mapRepositoryError("cloneRepository", input.provider ?? "unknown")),
     cloneRepository: (input, options) =>

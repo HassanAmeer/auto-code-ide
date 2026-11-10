@@ -16,6 +16,7 @@ import {
   type GitHubSettings,
   type SourceControlProviderDiscoveryItem,
   type SourceControlRepositoryCloneUrls,
+  type SourceControlRepositoryListItem,
 } from "@t3tools/contracts";
 import { normalizeGitRemoteUrl } from "@t3tools/shared/git";
 import { HostProcessEnvironment } from "@t3tools/shared/hostProcess";
@@ -342,6 +343,18 @@ const RawRepositorySchema = Schema.Struct({
   default_branch: Schema.optional(Schema.NullOr(Schema.String)),
 });
 const decodeRawRepository = decodeJsonResult(RawRepositorySchema);
+const RawRepositoryListSchema = Schema.Array(
+  Schema.Struct({
+    full_name: TrimmedNonEmptyString,
+    html_url: TrimmedNonEmptyString,
+    ssh_url: TrimmedNonEmptyString,
+    private: Schema.optional(Schema.Boolean),
+    description: Schema.optional(Schema.NullOr(Schema.String)),
+    pushed_at: Schema.optional(Schema.NullOr(Schema.String)),
+    default_branch: Schema.optional(Schema.NullOr(Schema.String)),
+  }),
+);
+const decodeRawRepositoryList = decodeJsonResult(RawRepositoryListSchema);
 
 function repositoryCloneUrls(
   raw: Schema.Schema.Type<typeof RawRepositorySchema>,
@@ -713,6 +726,45 @@ export const make = Effect.gen(function* () {
     return decoded.success;
   });
 
+  /** The repositories the authenticated account can see, most recently pushed first. */
+  const listRepositories = Effect.fn("GitHubSourceControlProvider.listRepositories")(
+    function* (input: {
+      readonly cwd: string;
+      readonly host?: string | undefined;
+      readonly limit?: number | undefined;
+    }) {
+      const host = (
+        input.host?.trim().toLowerCase() ||
+        environment.GH_HOST?.trim().toLowerCase() ||
+        "github.com"
+      ).toLowerCase();
+      const limit = Math.min(Math.max(Math.trunc(input.limit ?? 100) || 100, 1), 100);
+      const response = yield* rest(
+        {
+          host,
+          operation: "listRepositories",
+          path: `user/repos?per_page=${limit}&sort=pushed&affiliation=owner,collaborator,organization_member`,
+          allowReserve: true,
+        },
+        "The repository list could not be read.",
+      );
+      const decoded = decodeRawRepositoryList(response.body);
+      if (Result.isFailure(decoded)) {
+        return yield* failure("GitHub returned an invalid repository list.", decoded.failure);
+      }
+      return decoded.success.map((raw): SourceControlRepositoryListItem => ({
+        provider: "github",
+        nameWithOwner: raw.full_name,
+        url: raw.html_url,
+        sshUrl: raw.ssh_url,
+        description: raw.description ?? null,
+        isPrivate: raw.private ?? false,
+        pushedAt: raw.pushed_at ?? null,
+        defaultBranch: raw.default_branch ?? null,
+      }));
+    },
+  );
+
   const readViewerLogin = Effect.fn("GitHubSourceControlProvider.readViewerLogin")(function* (
     host: string,
   ) {
@@ -1005,6 +1057,16 @@ export const make = Effect.gen(function* () {
       }).pipe(
         Effect.mapError(
           providerError("createChangeRequest", input.cwd, { reference: input.headSelector }),
+        ),
+      ),
+    listRepositories: (input) =>
+      listRepositories({
+        cwd: input.cwd,
+        ...(input.host === undefined ? {} : { host: input.host }),
+        ...(input.limit === undefined ? {} : { limit: input.limit }),
+      }).pipe(
+        Effect.mapError(
+          providerError("listRepositories", input.cwd, { host: input.host ?? "github.com" }),
         ),
       ),
     getRepositoryCloneUrls: (input) =>

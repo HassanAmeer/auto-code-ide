@@ -64,6 +64,30 @@ export const SourceControlRepositoryInfo = Schema.Struct({
 });
 export type SourceControlRepositoryInfo = typeof SourceControlRepositoryInfo.Type;
 
+/** One entry in the authenticated account's repository list, sorted by last push. */
+export const SourceControlRepositoryListItem = Schema.Struct({
+  provider: SourceControlProviderKind,
+  nameWithOwner: TrimmedNonEmptyString,
+  url: TrimmedNonEmptyString,
+  sshUrl: TrimmedNonEmptyString,
+  description: Schema.NullOr(Schema.String),
+  isPrivate: Schema.Boolean,
+  pushedAt: Schema.NullOr(Schema.String),
+  defaultBranch: Schema.NullOr(Schema.String),
+});
+export type SourceControlRepositoryListItem = typeof SourceControlRepositoryListItem.Type;
+
+export const SourceControlListRepositoriesInput = Schema.Struct({
+  provider: SourceControlProviderKind,
+  cwd: Schema.optional(TrimmedNonEmptyString),
+  host: Schema.optional(TrimmedNonEmptyString),
+  limit: Schema.optional(Schema.Number),
+});
+export type SourceControlListRepositoriesInput = typeof SourceControlListRepositoriesInput.Type;
+
+export const SourceControlListRepositoriesResult = Schema.Array(SourceControlRepositoryListItem);
+export type SourceControlListRepositoriesResult = typeof SourceControlListRepositoriesResult.Type;
+
 export const SourceControlRepositoryLookupInput = Schema.Struct({
   provider: SourceControlProviderKind,
   repository: TrimmedNonEmptyString,

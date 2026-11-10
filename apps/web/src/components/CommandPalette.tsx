@@ -170,6 +170,7 @@ import {
   enumerateCommandPaletteItems,
   findHighlightedCommandPaletteItem,
   type CommandPaletteActionItem,
+  type CommandPaletteGroup,
   type CommandPaletteOpenIntent,
   type CommandPaletteProject,
   type CommandPaletteSubmenuItem,
@@ -329,6 +330,19 @@ function remoteProjectSourceProvider(
   return source === "url" ? null : source;
 }
 
+/** "3d ago" / "2mo ago" — compact relative date for the repository list rows. */
+function formatRepoPushed(pushedAt: string | null): string {
+  if (!pushedAt) return "never";
+  const then = new Date(pushedAt).getTime();
+  if (!Number.isFinite(then)) return "unknown";
+  const seconds = Math.max(0, Math.floor((Date.now() - then) / 1000));
+  if (seconds < 3600) return `${Math.max(1, Math.floor(seconds / 60))}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  if (seconds < 86400 * 30) return `${Math.floor(seconds / 86400)}d ago`;
+  if (seconds < 86400 * 365) return `${Math.floor(seconds / (86400 * 30))}mo ago`;
+  return `${Math.floor(seconds / (86400 * 365))}y ago`;
+}
+
 function remoteProjectSourceIcon(source: AddProjectRemoteSource, className: string): ReactNode {
   switch (source) {
     case "github":
@@ -356,7 +370,11 @@ function remoteProjectInputPlaceholder(flow: AddProjectCloneFlow | null): string
   if (flow.source === "url") {
     return "Enter Git clone URL";
   }
-  return `Enter ${remoteProjectSourceLabel(flow.source)} repository (${remoteProjectSourcePathHint(flow.source)})`;
+  const sourceLabel = remoteProjectSourceLabel(flow.source);
+  if (flow.source === "github") {
+    return "Search your repositories or type owner/repo…";
+  }
+  return `Enter ${sourceLabel} repository (${remoteProjectSourcePathHint(flow.source)})`;
 }
 
 function sourceProviderKind(source: AddProjectRemoteSource): AddProjectRemoteProviderKind | null {
@@ -1121,6 +1139,111 @@ function OpenCommandPaletteDialog(props: {
           input: {},
         }),
   );
+  // GitHub clone step: the account's repositories, most recently pushed first,
+  // filtered live by what the user types. Empty until a GitHub flow opens.
+  const githubRepoList = useEnvironmentQuery(
+    addProjectCloneFlow?.step === "repository" && addProjectCloneFlow.source === "github"
+      ? sourceControlEnvironment.listRepositories({
+          environmentId: addProjectCloneFlow.environmentId,
+          input: { provider: "github", limit: 100 },
+        })
+      : null,
+  );
+  const githubRepoGroups = useMemo<ReadonlyArray<CommandPaletteGroup> | null>(() => {
+    if (addProjectCloneFlow?.step !== "repository" || addProjectCloneFlow.source !== "github") {
+      return null;
+    }
+    const flow = addProjectCloneFlow;
+    const loadingRow = (title: string, description: string): CommandPaletteActionItem => ({
+      kind: "action",
+      value: `github-repos:${title}`,
+      searchTerms: [],
+      title,
+      description,
+      icon: <GitHubIcon className={ITEM_ICON_CLASS} />,
+      disabled: true,
+      keepOpen: true,
+      run: async () => {},
+    });
+    const repos = githubRepoList.data ?? [];
+    if (githubRepoList.isPending && repos.length === 0) {
+      return [
+        {
+          value: "github-repos",
+          label: "Your GitHub repositories",
+          items: [
+            loadingRow("Loading your repositories…", "Reading from GitHub (signed-in account)"),
+          ],
+        },
+      ];
+    }
+    if (githubRepoList.error && repos.length === 0) {
+      return [
+        {
+          value: "github-repos",
+          label: "Your GitHub repositories",
+          items: [loadingRow("Could not list repositories", githubRepoList.error)],
+        },
+      ];
+    }
+    if (repos.length === 0) {
+      return [
+        {
+          value: "github-repos",
+          label: "Your GitHub repositories",
+          items: [
+            loadingRow(
+              "No repositories found",
+              "GitHub returned no repositories visible to this account",
+            ),
+          ],
+        },
+      ];
+    }
+    const items: CommandPaletteActionItem[] = repos.map((repo) => ({
+      kind: "action",
+      value: `github-repo:${repo.nameWithOwner}`,
+      searchTerms: [repo.nameWithOwner, repo.description ?? "", "github", "repository", "clone"],
+      title: repo.nameWithOwner,
+      description: `${repo.isPrivate ? "Private" : "Public"}${
+        repo.defaultBranch ? ` · ${repo.defaultBranch}` : ""
+      }${repo.description ? ` · ${repo.description}` : ""}`,
+      icon: <GitHubIcon className={ITEM_ICON_CLASS} />,
+      titleTrailingContent: (
+        <span className="ms-auto text-xs tabular-nums text-muted-foreground/70">
+          {formatRepoPushed(repo.pushedAt ?? null)}
+        </span>
+      ),
+      keepOpen: false,
+      run: async () => {
+        const destinationPath = getCloneDestinationPath(
+          getDefaultCloneParentPath(flow.environmentId),
+          getCloneDirectoryName(repo.nameWithOwner),
+        );
+        setAddProjectCloneFlow({
+          step: "confirm",
+          environmentId: flow.environmentId,
+          source: "github",
+          repositoryInput: repo.nameWithOwner,
+          repository: {
+            provider: "github",
+            nameWithOwner: repo.nameWithOwner,
+            url: repo.url,
+            sshUrl: repo.sshUrl,
+          },
+          remoteUrl: getDefaultCloneUrl({
+            provider: "github",
+            url: repo.url,
+            sshUrl: repo.sshUrl,
+          }),
+        });
+        setHighlightedItemValue(null);
+        setQuery(destinationPath);
+        setBrowseGeneration((generation) => generation + 1);
+      },
+    }));
+    return [{ value: "github-repos", label: "Your GitHub repositories", items }];
+  }, [addProjectCloneFlow, githubRepoList.data, githubRepoList.error, githubRepoList.isPending]);
   const browseEnvironmentPlatform = getEnvironmentBrowsePlatform(
     browseEnvironment?.serverConfig?.environment.platform.os,
   );
@@ -2403,18 +2526,20 @@ function OpenCommandPaletteDialog(props: {
   const sourceSelectionViewValue =
     addProjectEnvironmentId === null ? null : `sources:${addProjectEnvironmentId}`;
   const activeGroups =
-    addProjectEnvironmentId !== null &&
-    currentView !== null &&
-    currentView.groups[0]?.value === sourceSelectionViewValue
-      ? buildAddProjectSourceGroups(
-          addProjectEnvironmentId,
-          buildAddProjectRemoteSourceReadiness(sourceControlDiscovery.data),
-        )
-      : currentView?.groups[0]?.value === "themes"
-        ? changeThemeItem.groups
-        : currentView?.groups[0]?.value === "appearance"
-          ? changeAppearanceItem.groups
-          : (currentView?.groups ?? rootGroups);
+    githubRepoGroups !== null
+      ? githubRepoGroups
+      : addProjectEnvironmentId !== null &&
+          currentView !== null &&
+          currentView.groups[0]?.value === sourceSelectionViewValue
+        ? buildAddProjectSourceGroups(
+            addProjectEnvironmentId,
+            buildAddProjectRemoteSourceReadiness(sourceControlDiscovery.data),
+          )
+        : currentView?.groups[0]?.value === "themes"
+          ? changeThemeItem.groups
+          : currentView?.groups[0]?.value === "appearance"
+            ? changeAppearanceItem.groups
+            : (currentView?.groups ?? rootGroups);
 
   const filteredGroups = filterCommandPaletteGroups({
     activeGroups,

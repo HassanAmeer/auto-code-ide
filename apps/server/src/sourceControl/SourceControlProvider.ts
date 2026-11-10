@@ -8,6 +8,7 @@ import type {
   SourceControlProviderKind,
   SourceControlRepositoryCloneUrls,
   SourceControlRepositoryVisibility,
+  SourceControlRepositoryListItem,
 } from "@t3tools/contracts";
 
 export interface SourceControlLinkSubject {
@@ -126,6 +127,16 @@ export class SourceControlProvider extends Context.Service<
       readonly context?: SourceControlProviderContext;
       readonly repository: string;
     }) => Effect.Effect<SourceControlRepositoryCloneUrls, SourceControlProviderError>;
+    /**
+     * Authenticated account's repositories, most recently pushed first.
+     * Optional capability: providers that cannot list them (or have no
+     * credential) simply omit it, and the caller answers with a clear error.
+     */
+    readonly listRepositories?: (input: {
+      readonly cwd: string;
+      readonly host?: string;
+      readonly limit?: number;
+    }) => Effect.Effect<ReadonlyArray<SourceControlRepositoryListItem>, SourceControlProviderError>;
     readonly createRepository: (input: {
       readonly cwd: string;
       readonly repository: string;
