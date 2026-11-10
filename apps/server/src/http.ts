@@ -3398,7 +3398,9 @@ export const layerSuperAgentDispatchWorkerRoute = HttpRouter.add(
         projectRoot: targetRoot,
         projectIdOrName: targetName,
         taskTitle,
-        prompt: formattedEnvelopePrompt,
+        // Raw user task — the harness decomposes THIS, not the formatted
+        // envelope (whose bullet/numbered rule lines would be misparsed as milestones).
+        prompt: bodyJson?.prompt?.trim() || formattedEnvelopePrompt,
         envelope,
         model: bodyJson?.model || "default",
         stream: isStream,

@@ -194,7 +194,7 @@ export async function executeAutonomousReviewLoop(opts: {
         round: currentRound,
         phase: `Supervisor Final Verification Pass`,
         syntaxClean: true,
-        previewHttpStatus: 200,
+        previewHttpStatus: previewHealthy ? 200 : 404,
         errorsFound: [],
         autoHealedPatches: roundPatches,
         status: "verified_clean",

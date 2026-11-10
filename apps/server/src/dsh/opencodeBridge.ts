@@ -94,6 +94,7 @@ export async function executeOpenCodeTask(opts: {
     );
 
     let filesWrittenCount = 0;
+    let llmErrorMessage: string | null = null;
     try {
       const bypassMod = await import(
         "../../../../opencode-bypass-api/src/server/bypass/client.ts" as string
@@ -179,42 +180,23 @@ export async function executeOpenCodeTask(opts: {
         }
       }
     } catch (llmErr: any) {
-      onLog?.(`ℹ️ DeepSeek synthesis note: ${llmErr?.message || "fallback to starter template"}.`);
+      llmErrorMessage = llmErr?.message || String(llmErr);
+      onLog?.(`⚠️ Model execution failed: ${llmErrorMessage || "unknown error"}.`);
     }
 
     const indexPath = NodePath.join(worktreePath, "index.html");
     if (opts.abortCheck?.()) {
-      onLog?.("⛔ Aborted by user — skipping starter template.");
+      onLog?.("⛔ Aborted by user — execution stopped.");
       return abortedResult();
     }
-    if (!NodeFS.existsSync(indexPath) && filesWrittenCount === 0) {
-      onLog?.(`📝 Creating initial index.html via executeWriteTool...`);
-      const starterContent = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${projectName} - Live Preview</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-slate-900 text-white min-h-screen flex items-center justify-center p-4">
-  <div class="max-w-md w-full bg-slate-800/80 border border-slate-700 rounded-2xl p-6 shadow-2xl backdrop-blur">
-    <div class="flex items-center gap-2 mb-3 text-emerald-400">
-      <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
-      <span class="text-xs font-semibold tracking-wider uppercase font-mono">Live Preview Verified</span>
-    </div>
-    <h1 class="text-xl font-bold tracking-tight mb-2">${projectName}</h1>
-    <p class="text-xs text-slate-300 leading-relaxed mb-4">
-      Feature: "${taskTitle}"
-    </p>
-    <div class="rounded-lg bg-slate-900/60 p-3 border border-slate-700/60 text-xs font-mono text-slate-400">
-      <div>Status: <span class="text-emerald-400">Active</span></div>
-      <div>Engine: OpenCode Full Engine (Standalone)</div>
-    </div>
-  </div>
-</body>
-</html>`;
-      executeWriteTool({ path: "index.html", content: starterContent }, worktreePath);
+    if (filesWrittenCount === 0 && llmErrorMessage) {
+      // The model failed and produced nothing — never fabricate a starter file.
+      return {
+        ok: false,
+        filesModified: [],
+        outputSummary: `Model execution failed: ${llmErrorMessage}`,
+        error: llmErrorMessage,
+      };
     }
 
     const finalFiles = executeGlobTool({ pattern: "**/*" }, worktreePath);
@@ -342,22 +324,11 @@ export async function executeOpenCodeTask(opts: {
     }
   }
 
-  // Fallback if daemon is not reachable
-  const indexPath = NodePath.join(worktreePath, "index.html");
-  if (!NodeFS.existsSync(indexPath)) {
-    executeWriteTool(
-      {
-        path: "index.html",
-        content: `<!DOCTYPE html>\n<html><head><title>${projectName}</title></head><body><h1>${projectName}</h1><p>${taskTitle}</p></body></html>`,
-      },
-      worktreePath,
-    );
-  }
-
-  const files = NodeFS.existsSync(worktreePath) ? NodeFS.readdirSync(worktreePath) : [];
+  // Daemon was not reachable — report an honest error, never fabricate files.
   return {
-    ok: true,
-    filesModified: files,
-    outputSummary: `Autonomous Worker Harness verified and populated files in ${worktreePath}.`,
+    ok: false,
+    filesModified: [],
+    outputSummary: "OpenCode daemon unreachable — task not executed.",
+    error: "OpenCode external CLI adapter: no reachable daemon (ports 4099/45991).",
   };
 }

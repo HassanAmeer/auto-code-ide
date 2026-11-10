@@ -300,7 +300,18 @@ export async function runAutonomousHarnessWorkflow(
     (result): result is NonNullable<(typeof parallelResults)[number]> => result !== null,
   );
   for (const result of runnableResults) {
-    const { st, allocation } = result;
+    const { st, allocation, subtaskRes } = result;
+    // Nothing to merge when the model produced zero files (failed/empty branch).
+    if (!subtaskRes.ok || subtaskRes.filesModified.length === 0) {
+      if (allocation.isIsolated) {
+        logStep(
+          "merge",
+          `⏭️ [Worker #${st.order}] No file changes produced (${subtaskRes.error ? "error: " + subtaskRes.error : "empty output"}) — skipping merge and cleaning up worktree.`,
+        );
+        cleanupWorkerWorktree(projectRoot, allocation.worktreePath, allocation.branchName);
+      }
+      continue;
+    }
     if (allocation.isIsolated) {
       logStep("merge", `🔀 Merging [Worker #${st.order}] branch (${allocation.branchName})...`);
       const mergeRes = mergeWorkerWorktree(
