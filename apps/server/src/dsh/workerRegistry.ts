@@ -15,6 +15,7 @@ export interface ActiveWorkerTelemetry {
   projectId?: string | undefined;
   filesModified?: string[] | undefined;
   logs?: string[] | undefined;
+  error?: string | undefined;
 }
 
 export interface ActiveGoalTelemetry {

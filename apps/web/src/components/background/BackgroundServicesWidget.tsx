@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
   ChevronDownIcon,
+  InfoIcon,
   Loader2Icon,
   PlayIcon,
   SquareIcon,
@@ -162,6 +163,12 @@ export interface SubagentItem {
   readonly status?: string;
   /** Epoch ms when the worker finished, if known — used for freshness pruning. */
   readonly completedAt?: number | undefined;
+  /** Failure reason reported by the worker (rate-limit, model error, empty output). */
+  readonly error?: string | undefined;
+  /** Milestone/goal the worker was executing (dsh telemetry rows). */
+  readonly goal?: string | undefined;
+  /** Model the worker invoked (dsh telemetry rows). */
+  readonly model?: string | undefined;
   /** Projection subagents run in a child thread — stop goes through interruptTurn for these. */
   readonly childThreadId?: ThreadId | undefined;
 }
@@ -262,9 +269,10 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
   const environmentId = propEnvironmentId ?? activeEnvId ?? primaryEnvId;
 
   // Subagents and Goals are expanded by default as in the screenshot
-  const [subagentsExpanded, setSubagentsExpanded] = useState(true);
+  // Collapsed by default — the sidebar stays quiet until something is running.
+  const [subagentsExpanded, setSubagentsExpanded] = useState(false);
   const [tasksExpanded, setTasksExpanded] = useState(initialExpanded);
-  const [goalsExpanded, setGoalsExpanded] = useState(true);
+  const [goalsExpanded, setGoalsExpanded] = useState(false);
 
   const [busyTaskId, setBusyTaskId] = useState<string | null>(null);
   const [stoppingTerminalId, setStoppingTerminalId] = useState<string | null>(null);
@@ -335,6 +343,9 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
               role: w.role || w.agentRole,
               status: w.status || "running",
               completedAt: typeof w.completedAt === "number" ? w.completedAt : undefined,
+              error: typeof w.error === "string" ? w.error : undefined,
+              goal: typeof w.goal === "string" ? w.goal : undefined,
+              model: typeof w.model === "string" ? w.model : undefined,
             })),
           );
         }
@@ -822,8 +833,45 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
                         <SquareIcon className="size-3 fill-current" />
                       </button>
                     ) : isFailed ? (
-                      <span className="rounded-full bg-rose-500/10 px-1.5 py-0.5 text-[10px] font-mono text-rose-400 uppercase shrink-0 leading-none">
-                        failed
+                      <span className="flex items-center gap-1 shrink-0">
+                        <Tooltip>
+                          <TooltipTrigger
+                            render={
+                              <button
+                                type="button"
+                                className="rounded p-0.5 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                                aria-label={`Why ${agent.title} failed`}
+                              >
+                                <InfoIcon className="size-3.5" />
+                              </button>
+                            }
+                          />
+                          <TooltipPopup side="left" className="max-w-80 text-left">
+                            <span className="flex flex-col gap-1 text-[11px] leading-snug">
+                              <span className="font-semibold text-rose-300">
+                                Why this subagent failed
+                              </span>
+                              {agent.goal ? (
+                                <span className="text-muted-foreground">Goal: {agent.goal}</span>
+                              ) : null}
+                              {agent.role ? (
+                                <span className="text-muted-foreground/70">Role: {agent.role}</span>
+                              ) : null}
+                              {agent.model ? (
+                                <span className="font-mono text-muted-foreground/70">
+                                  Model: {agent.model}
+                                </span>
+                              ) : null}
+                              <span className="text-foreground/85">
+                                {agent.error ??
+                                  "No failure reason was recorded by the worker. Most often: the model hit a rate-limit (HTTP 429) or produced zero usable files."}
+                              </span>
+                            </span>
+                          </TooltipPopup>
+                        </Tooltip>
+                        <span className="rounded-full bg-rose-500/10 px-1.5 py-0.5 text-[10px] font-mono text-rose-400 uppercase leading-none">
+                          failed
+                        </span>
                       </span>
                     ) : null}
                   </div>

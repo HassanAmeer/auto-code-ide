@@ -278,6 +278,11 @@ export async function runAutonomousHarnessWorkflow(
         st.status = "failed";
         updateWorkerTelemetryStatus(workerId, "failed", {
           completedAt: Date.now(),
+          error:
+            subtaskRes.error ||
+            (subtaskRes.filesModified.length === 0
+              ? "Worker produced 0 files (model error, rate-limit, or no actionable steps)"
+              : "Worker reported failure"),
         });
         updateGoalTelemetryStatus(`goal-${taskId}-${st.order}`, "failed", {
           completedAt: Date.now(),
