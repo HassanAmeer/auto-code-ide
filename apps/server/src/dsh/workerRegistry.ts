@@ -1,9 +1,10 @@
 // @effect-diagnostics globalDateInEffect:off globalRandomInEffect:off nodeBuiltinImport:off globalTimers:off globalTimersInEffect:off preferSchemaOverJson:off globalDate:off globalFetchInEffect:off globalFetch:off globalConsoleInEffect:off
+import { markWorkerAborted } from "./abortRegistry.ts";
 
 export interface ActiveWorkerTelemetry {
   id: string;
   role: string;
-  status: "running" | "completed" | "failed";
+  status: "running" | "completed" | "failed" | "cancelled";
   model: string;
   cwd: string;
   goal: string;
@@ -19,7 +20,7 @@ export interface ActiveWorkerTelemetry {
 export interface ActiveGoalTelemetry {
   id: string;
   title: string;
-  status: "running" | "completed" | "failed";
+  status: "running" | "completed" | "failed" | "cancelled";
   workerId?: string | undefined;
   order?: number | undefined;
   projectName?: string | undefined;
@@ -37,6 +38,7 @@ export interface TelemetrySnapshot {
     activeWorkers: number;
     completedWorkers: number;
     failedWorkers: number;
+    cancelledWorkers: number;
     totalGoals: number;
     activeGoals: number;
     completedGoals: number;
@@ -165,7 +167,7 @@ export function registerWorkerTelemetry(worker: ActiveWorkerTelemetry): void {
  */
 export function updateWorkerTelemetryStatus(
   id: string,
-  status: "running" | "completed" | "failed",
+  status: "running" | "completed" | "failed" | "cancelled",
   updates?: Partial<ActiveWorkerTelemetry>,
 ): void {
   const existing = activeWorkers.get(id);
@@ -208,7 +210,7 @@ export function registerGoalTelemetry(goal: ActiveGoalTelemetry): void {
  */
 export function updateGoalTelemetryStatus(
   id: string,
-  status: "running" | "completed" | "failed",
+  status: "running" | "completed" | "failed" | "cancelled",
   updates?: Partial<ActiveGoalTelemetry>,
 ): void {
   const existing = activeGoals.get(id);
@@ -243,9 +245,10 @@ export function stopAllRunningTelemetry(): { stoppedWorkers: number; stoppedGoal
   const now = Date.now();
   for (const [id, worker] of activeWorkers) {
     if (worker.status !== "running") continue;
+    markWorkerAborted(id);
     activeWorkers.set(id, {
       ...worker,
-      status: "failed",
+      status: "cancelled",
       completedAt: now,
     });
     stoppedWorkers += 1;
@@ -254,7 +257,7 @@ export function stopAllRunningTelemetry(): { stoppedWorkers: number; stoppedGoal
     if (goal.status !== "running") continue;
     activeGoals.set(id, {
       ...goal,
-      status: "failed",
+      status: "cancelled",
       completedAt: now,
     } as ActiveGoalTelemetry);
     stoppedGoals += 1;
@@ -263,16 +266,22 @@ export function stopAllRunningTelemetry(): { stoppedWorkers: number; stoppedGoal
 }
 
 /**
- * Mark a single running worker as failed. Returns true when a matching
- * running worker was found and cancelled, false otherwise. Goals are
- * intentionally not affected — the per-row Stop button is worker-scoped.
+ * Mark a single running worker as cancelled and request a cooperative abort of
+ * its execution loop. Returns true when a matching running worker was found,
+ * false otherwise. Goals are intentionally not affected — the per-row Stop
+ * button is worker-scoped.
+ *
+ * Abort is cooperative: in-flight model calls run to their own timeout, but
+ * the worker stops at the next checkpoint (before/after dispatch, before
+ * merge, before review) and its results are discarded.
  */
 export function stopWorkerTelemetry(id: string): boolean {
   const existing = activeWorkers.get(id);
   if (!existing || existing.status !== "running") return false;
+  markWorkerAborted(id);
   activeWorkers.set(id, {
     ...existing,
-    status: "failed",
+    status: "cancelled",
     completedAt: Date.now(),
   });
   return true;
@@ -298,19 +307,16 @@ export function getTelemetrySnapshot(filter?: {
 
   if (filter?.projectName && filter.projectName !== "all" && filter.projectName !== "Workspace") {
     const nameMatch = filter.projectName.toLowerCase();
-    const filteredWorkers = workers.filter(
+    // Strict scoping: rows without matching project metadata are excluded —
+    // the sidebar must never leak another project's agents/goals.
+    workers = workers.filter(
       (w) => w.projectName && w.projectName.toLowerCase().includes(nameMatch),
     );
-    if (filteredWorkers.length > 0) {
-      workers = filteredWorkers;
-    }
-
-    const filteredGoals = goals.filter(
-      (g) => g.projectName && g.projectName.toLowerCase().includes(nameMatch),
-    );
-    if (filteredGoals.length > 0) {
-      goals = filteredGoals;
-    }
+    goals = goals.filter((g) => g.projectName && g.projectName.toLowerCase().includes(nameMatch));
+  }
+  if (filter?.projectId) {
+    workers = workers.filter((w) => w.projectId === filter.projectId);
+    goals = goals.filter((g) => g.projectId === filter.projectId);
   }
 
   // Sort: running workers first, then by startedAt descending
@@ -329,7 +335,10 @@ export function getTelemetrySnapshot(filter?: {
 
   const activeWorkersCount = workers.filter((w) => w.status === "running").length;
   const completedWorkersCount = workers.filter((w) => w.status === "completed").length;
-  const failedWorkersCount = workers.filter((w) => w.status === "failed").length;
+  const failedWorkersCount = workers.filter(
+    (w) => w.status === "failed" || w.status === "cancelled",
+  ).length;
+  const cancelledWorkersCount = workers.filter((w) => w.status === "cancelled").length;
 
   const activeGoalsCount = goals.filter((g) => g.status === "running").length;
   const completedGoalsCount = goals.filter((g) => g.status === "completed").length;
@@ -343,6 +352,7 @@ export function getTelemetrySnapshot(filter?: {
       activeWorkers: activeWorkersCount,
       completedWorkers: completedWorkersCount,
       failedWorkers: failedWorkersCount,
+      cancelledWorkers: cancelledWorkersCount,
       totalGoals: goals.length,
       activeGoals: activeGoalsCount,
       completedGoals: completedGoalsCount,

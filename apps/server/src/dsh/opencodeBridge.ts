@@ -70,7 +70,13 @@ export async function executeOpenCodeTask(opts: {
     const existingFiles = executeGlobTool({ pattern: "**/*" }, worktreePath);
     onLog?.(`📂 Scanned ${existingFiles.length} files in worktree.`);
 
-    const modelToUse = model && model.includes("deepseek") ? model : "deepseek-v4.1-flash-free";
+    // Honor the caller's explicit model; the DeepSeek gateway model is only a
+    // fallback when nothing is configured (or a custom SUPER_AGENT_WORKER_MODEL
+    // is set). Never silently swap a configured model.
+    const modelToUse =
+      model && model !== "default"
+        ? model
+        : process.env.SUPER_AGENT_WORKER_MODEL || "deepseek-v4.1-flash-free";
     onLog?.(
       `⚡ Standalone Engine: Invoking DeepSeek Harness model (${modelToUse}) for real code synthesis...`,
     );

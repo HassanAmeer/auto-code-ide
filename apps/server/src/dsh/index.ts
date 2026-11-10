@@ -12,6 +12,7 @@ import {
   updateGoalTelemetryStatus,
   deriveSpecialistRole,
 } from "./workerRegistry.ts";
+import { isWorkerAborted, clearWorkerAbort } from "./abortRegistry.ts";
 import { executeOpenCodeTask } from "./opencodeBridge.ts";
 import { executeAutonomousReviewLoop } from "./selfReviewLoop.ts";
 import { decomposeTask } from "./taskDecomposer.ts";
@@ -168,6 +169,21 @@ export async function runAutonomousHarnessWorkflow(
 
   const parallelResults = await Promise.all(
     workerAllocations.map(async ({ st, allocation, workerId }) => {
+      if (isWorkerAborted(workerId)) {
+        st.status = "failed";
+        updateWorkerTelemetryStatus(workerId, "cancelled", { completedAt: Date.now() });
+        if (subtasks.length > 1) {
+          updateGoalTelemetryStatus(`goal-${taskId}-${st.order}`, "cancelled", {
+            completedAt: Date.now(),
+          });
+        }
+        clearWorkerAbort(workerId);
+        logStep(
+          `worker-${st.order}`,
+          `⛔ [Worker #${st.order}] Aborted by user before execution — output skipped.`,
+        );
+        return null;
+      }
       st.status = "in_progress";
       const specialistRole = deriveSpecialistRole(st.title, st.category, st.order);
       logStep(
@@ -208,7 +224,6 @@ export async function runAutonomousHarnessWorkflow(
         projectName,
         projectId,
         startedAt: Date.now(),
-        progress: 30,
       });
 
       logStep(
@@ -225,6 +240,22 @@ export async function runAutonomousHarnessWorkflow(
         onLog: (m) => logStep(`worker-${st.order}`, m),
       });
 
+      if (isWorkerAborted(workerId)) {
+        st.status = "failed";
+        updateWorkerTelemetryStatus(workerId, "cancelled", { completedAt: Date.now() });
+        if (subtasks.length > 1) {
+          updateGoalTelemetryStatus(`goal-${taskId}-${st.order}`, "cancelled", {
+            completedAt: Date.now(),
+          });
+        }
+        clearWorkerAbort(workerId);
+        logStep(
+          `worker-${st.order}`,
+          `⛔ [Worker #${st.order}] Aborted by user — model output discarded.`,
+        );
+        return null;
+      }
+
       if (subtaskRes.ok) {
         st.status = "completed";
         subtaskRes.filesModified.forEach((f) => filesModifiedSet.add(f));
@@ -236,6 +267,7 @@ export async function runAutonomousHarnessWorkflow(
         updateGoalTelemetryStatus(`goal-${taskId}-${st.order}`, "completed", {
           completedAt: Date.now(),
         });
+        clearWorkerAbort(workerId);
         logStep(
           `worker-${st.order}`,
           `✓ [Parallel Worker #${st.order}] "${st.title}" completed (${subtaskRes.filesModified.length} files).`,
@@ -248,6 +280,7 @@ export async function runAutonomousHarnessWorkflow(
         updateGoalTelemetryStatus(`goal-${taskId}-${st.order}`, "failed", {
           completedAt: Date.now(),
         });
+        clearWorkerAbort(workerId);
         logStep(
           `worker-${st.order}`,
           `⚠️ [Parallel Worker #${st.order}] Notice: finished with status failed, proceeding to merge.`,
@@ -260,7 +293,12 @@ export async function runAutonomousHarnessWorkflow(
 
   // 4. Sequential Merge of Parallel Worktree Branches into Main Workspace with Conflict Auto-Resolution
   logStep("merge", `🔀 Merging parallel worker branches back into main workspace...`);
-  for (const { st, allocation } of parallelResults) {
+  // Aborted workers produced nothing to merge — they are excluded from the merge phase.
+  const runnableResults = parallelResults.filter(
+    (result): result is NonNullable<(typeof parallelResults)[number]> => result !== null,
+  );
+  for (const result of runnableResults) {
+    const { st, allocation } = result;
     if (allocation.isIsolated) {
       logStep("merge", `🔀 Merging [Worker #${st.order}] branch (${allocation.branchName})...`);
       const mergeRes = mergeWorkerWorktree(
@@ -286,75 +324,101 @@ export async function runAutonomousHarnessWorkflow(
     }
   }
 
-  // 5. Autonomous 3-Level Review & Auto-Heal Loop on Merged Workspace
-  logStep("review", `🔍 Beginning 3-Level Autonomous Review Loop across merged workspace...`);
-  const reviewResult = await executeAutonomousReviewLoop({
-    worktreePath: projectRoot,
-    projectName,
-    taskTitle,
-    prompt,
-    selectedModel: model,
-    onLog: (m) => logStep("review", m),
-  });
+  // 5. Autonomous 3-Level Review & Auto-Heal Loop on Merged Workspace.
+  // Skipped entirely when no worker produced a milestone — claiming a clean
+  // review on top of zero merged changes would be fabrication.
+  const anyCompleted = runnableResults.some(({ subtaskRes }) => subtaskRes.ok);
+  const doneCount = runnableResults.filter(({ subtaskRes }) => subtaskRes.ok).length;
+  let reviewResult: Awaited<ReturnType<typeof executeAutonomousReviewLoop>> | null = null;
+  if (anyCompleted) {
+    logStep("review", `🔍 Beginning 3-Level Autonomous Review Loop across merged workspace...`);
+    reviewResult = await executeAutonomousReviewLoop({
+      worktreePath: projectRoot,
+      projectName,
+      taskTitle,
+      prompt,
+      selectedModel: model,
+      onLog: (m) => logStep("review", m),
+    });
+  } else {
+    logStep(
+      "review",
+      "ℹ️ Skipping review — no milestone completed (aborted or failed). Nothing to verify.",
+    );
+  }
 
-  // 6. Optional Auto WhatsApp Notification to Priority Client (e.g. 0349)
+  // 6. Optional Auto WhatsApp Notification to the configured priority client.
+  // Only when a client target is configured or auto-notify is enabled — never a hardcoded number.
   let clientNotified = false;
-  const targetRecipient = clientNotificationTarget || "0349";
   try {
     const settings = (await fetchWhatsAppSettings().catch(() => null)) as any;
-    const priorityTargets = settings?.priorityTargets || [];
+    const priorityTargets: Array<{ jid?: string; phoneNumber?: string }> =
+      settings?.priorityTargets || [];
     const activePriorityJid = settings?.activePriorityJid;
 
-    let resolvedJid = targetRecipient;
-    const foundTarget = priorityTargets.find(
-      (pt: any) =>
-        (pt.jid && pt.jid.includes("0349")) ||
-        (pt.phoneNumber && pt.phoneNumber.includes("0349")) ||
-        pt.jid === activePriorityJid,
-    );
-    if (foundTarget) {
-      resolvedJid = foundTarget.jid;
-    }
+    const targetRecipient = clientNotificationTarget || activePriorityJid || null;
 
-    if (resolvedJid && (clientNotificationTarget || settings?.autoNotifyOnCompletion)) {
-      logStep("whatsapp", `📱 Notifying priority client (${resolvedJid}) via WhatsApp...`);
+    if (targetRecipient && reviewResult) {
+      logStep("whatsapp", `📱 Notifying priority client (${targetRecipient}) via WhatsApp...`);
       const waRes = await sendWhatsAppMessage({
-        to: resolvedJid,
-        text: `Assalam-o-Alaikum! Project update: "${taskTitle}" mukammal ho chuka hai aur 100% test pass hai.\n\nLive Preview: ${reviewResult.previewUrl}`,
+        to: targetRecipient,
+        text: `Assalam-o-Alaikum! Project update: "${taskTitle}" — ${doneCount}/${subtasks.length} milestones complete.\n\nLive Preview: ${reviewResult.previewUrl}`,
       });
       if (waRes?.ok) {
         clientNotified = true;
-        logStep("whatsapp", `✓ WhatsApp preview delivery sent to ${resolvedJid}.`);
+        logStep("whatsapp", `✓ WhatsApp preview delivery sent to ${targetRecipient}.`);
+      }
+    } else if (settings?.autoNotifyOnCompletion && priorityTargets.length > 0 && reviewResult) {
+      const fallbackTarget = priorityTargets[0]?.jid;
+      if (fallbackTarget) {
+        logStep("whatsapp", `📱 Notifying priority client (${fallbackTarget}) via WhatsApp...`);
+        const waRes = await sendWhatsAppMessage({
+          to: fallbackTarget,
+          text: `Assalam-o-Alaikum! Project update: "${taskTitle}" — ${doneCount}/${subtasks.length} milestones complete.\n\nLive Preview: ${reviewResult.previewUrl}`,
+        });
+        if (waRes?.ok) {
+          clientNotified = true;
+          logStep("whatsapp", `✓ WhatsApp preview delivery sent to ${fallbackTarget}.`);
+        }
       }
     }
-  } catch {}
+  } catch (err) {
+    logStep(
+      "whatsapp",
+      `⚠️ WhatsApp notification skipped: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
 
   logStep(
     "complete",
-    `🎉 Task 100% complete & verified clean. Live preview: ${reviewResult.previewUrl}`,
+    anyCompleted
+      ? `🎉 Task done: ${doneCount}/${subtasks.length} milestones completed${reviewResult ? `. Live preview: ${reviewResult.previewUrl}` : "."}`
+      : `🛑 Task ended without producing changes (${subtasks.length - doneCount}/${subtasks.length} milestones aborted or failed).`,
   );
 
   // Mark main goal completed in telemetry
-  updateGoalTelemetryStatus(mainGoalId, "completed", {
+  updateGoalTelemetryStatus(mainGoalId, anyCompleted ? "completed" : "failed", {
     completedAt: Date.now(),
   });
 
   return {
-    ok: true,
+    ok: anyCompleted,
     workerId: `worker-${taskId}`,
     projectId,
     projectName,
     taskTitle,
-    status: "completed",
-    progress: 100,
-    previewUrl: reviewResult.previewUrl,
-    checklist: reviewResult.checklist,
+    status: anyCompleted ? "completed" : "error",
+    progress: anyCompleted ? 100 : 0,
+    previewUrl: reviewResult?.previewUrl ?? "",
+    checklist: reviewResult?.checklist ?? [],
     subtasks,
-    reviewLoop: reviewResult.rounds,
-    errorsFixed: reviewResult.allFixedIssues,
+    reviewLoop: reviewResult?.rounds ?? [],
+    errorsFixed: reviewResult?.allFixedIssues ?? [],
     streamingLogs: logs,
     clientNotificationSent: clientNotified,
-    summary: `Autonomous Harness Worker completed "${taskTitle}". 3-Level Review passed (${reviewResult.rounds.length} rounds). Auto-healed ${reviewResult.allFixedIssues.length} issues. Live preview verified healthy.`,
+    summary: anyCompleted
+      ? `Autonomous Harness Worker completed "${taskTitle}" (${doneCount}/${subtasks.length} milestones).${reviewResult ? ` 3-Level Review passed (${reviewResult.rounds.length} rounds). Auto-healed ${reviewResult.allFixedIssues.length} issues.` : ""}`
+      : `Task "${taskTitle}" ended without producing changes — milestones aborted or failed; no files were merged.`,
   };
 }
 

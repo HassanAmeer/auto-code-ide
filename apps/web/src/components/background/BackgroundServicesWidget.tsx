@@ -184,6 +184,8 @@ export interface BackgroundServicesWidgetProps {
   readonly scope?: "all" | "project";
   /** Project root the "project" scope filters by (falls back to thread scoping). */
   readonly projectRoot?: string | null;
+  /** Project name/title used to scope the telemetry fetch; without it no API workers are fetched (project scope stays empty rather than leaking other projects). */
+  readonly projectName?: string | undefined;
   /** Explicit subagents override or initial list */
   readonly subagents?: ReadonlyArray<SubagentItem>;
   /** Explicit goals override or initial list */
@@ -250,6 +252,7 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
   goals: propGoals,
   scope = "all",
   projectRoot = null,
+  projectName,
 }: BackgroundServicesWidgetProps) {
   const activeEnvId = useActiveEnvironmentId();
   const primaryEnvId = usePrimaryEnvironmentId();
@@ -290,35 +293,47 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
     };
   }, []);
 
-  // Gracefully fetch workers from `/api/super-agent/workers`
+  // Gracefully fetch workers from `/api/super-agent/workers`.
+  // Project scope passes the project name so the server strict-filters;
+  // without a project we render nothing instead of leaking other projects.
   useEffect(() => {
+    if (scope === "project" && !projectName) {
+      setApiWorkers([]);
+      setWorkersError(null);
+      return;
+    }
     let cancelled = false;
     const controller = new AbortController();
+    const params = new URLSearchParams();
+    if (projectName) params.set("projectName", projectName);
+    const url =
+      params.size > 0
+        ? `/api/super-agent/workers?${params.toString()}`
+        : "/api/super-agent/workers";
 
     async function fetchWorkers() {
       try {
-        const res = await fetch("/api/super-agent/workers", {
+        const res = await fetch(url, {
           signal: controller.signal,
         });
-        if (res.ok) {
-          const data = await res.json();
-          if (!cancelled && data) {
-            const workersList = Array.isArray(data)
-              ? data
-              : Array.isArray(data.workers)
-                ? data.workers
-                : [];
-            setWorkersError(null);
-            setApiWorkers(
-              workersList.map((w: any, idx: number) => ({
-                id: w.id || `api-worker-${idx}`,
-                title: w.title || w.name || w.agentRole || w.role || "Specialist Worker",
-                role: w.role || w.agentRole,
-                status: w.status || "running",
-                completedAt: typeof w.completedAt === "number" ? w.completedAt : undefined,
-              })),
-            );
-          }
+        if (!res.ok) throw new Error(`Workers API returned ${res.status}`);
+        const data = await res.json();
+        if (!cancelled && data) {
+          const workersList = Array.isArray(data)
+            ? data
+            : Array.isArray(data.workers)
+              ? data.workers
+              : [];
+          setWorkersError(null);
+          setApiWorkers(
+            workersList.map((w: any, idx: number) => ({
+              id: w.id || `api-worker-${idx}`,
+              title: w.title || w.name || w.agentRole || w.role || "Specialist Worker",
+              role: w.role || w.agentRole,
+              status: w.status || "running",
+              completedAt: typeof w.completedAt === "number" ? w.completedAt : undefined,
+            })),
+          );
         }
       } catch {
         // Surface the failure instead of looking empty — the sidebar stays usable
@@ -329,12 +344,19 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
 
     void fetchWorkers();
     const intervalId = window.setInterval(fetchWorkers, 15_000);
+    const onUpdate = () => {
+      void fetchWorkers();
+    };
+    window.addEventListener("super-agent-state-updated", onUpdate);
+    window.addEventListener("t3-subagents-changed", onUpdate);
     return () => {
       cancelled = true;
       controller.abort();
       window.clearInterval(intervalId);
+      window.removeEventListener("super-agent-state-updated", onUpdate);
+      window.removeEventListener("t3-subagents-changed", onUpdate);
     };
-  }, [environmentId, threadId]);
+  }, [scope, projectName, threadId]);
 
   const canOperate = useEnvironmentScope(environmentId, AuthOrchestrationOperateScope);
   const canOperateTerminal = useEnvironmentScope(environmentId, AuthTerminalOperateScope);
@@ -723,13 +745,24 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
                               body: JSON.stringify({ workerId: agent.id }),
                             });
                             if (!res.ok) {
+                              const body = (await res.json().catch(() => null)) as {
+                                error?: string;
+                              } | null;
                               toastManager.add({
                                 type: "error",
-                                title: "Could not stop this subagent",
+                                title: body?.error ?? "Could not stop this subagent",
                               });
                               return;
                             }
+                            setApiWorkers((prev) =>
+                              prev.map((worker) =>
+                                worker.id === agent.id
+                                  ? { ...worker, status: "cancelled", completedAt: Date.now() }
+                                  : worker,
+                              ),
+                            );
                             window.dispatchEvent(new CustomEvent("super-agent-state-updated"));
+                            window.dispatchEvent(new CustomEvent("t3-subagents-changed"));
                           } catch {
                             toastManager.add({
                               type: "error",

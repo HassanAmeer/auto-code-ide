@@ -187,6 +187,7 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
                 showOpenSheetButton={true}
                 scope="project"
                 projectRoot={props.gitCwd}
+                projectName={props.activeProjectName}
               />
             </ThreadDetailsSection>
           ) : null}

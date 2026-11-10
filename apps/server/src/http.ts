@@ -3430,19 +3430,22 @@ export const layerSuperAgentDispatchWorkerRoute = HttpRouter.add(
         status: "completed",
       },
       {
-        step: "DeepSeek Supervisor Review Loop & Self-Healing",
-        desc:
-          harnessResult.errorsFixed.length > 0
-            ? `Review loop passed (${harnessResult.reviewLoop.length} rounds). Auto-healed ${harnessResult.errorsFixed.length} issues. Zero errors remaining.`
-            : "Review loop passed: 0 syntax issues detected, 100% clean.",
-        status: "completed",
+        step: "Supervisor Review Loop & Self-Healing",
+        desc: !harnessResult.reviewLoop.length
+          ? "Review loop did not run — no milestone completed successfully."
+          : harnessResult.errorsFixed.length > 0
+            ? `Review loop passed (${harnessResult.reviewLoop.length} rounds). Auto-healed ${harnessResult.errorsFixed.length} issues.`
+            : `Review loop passed (${harnessResult.reviewLoop.length} rounds). No issues detected.`,
+        status: harnessResult.reviewLoop.length > 0 ? "completed" : "skipped",
       },
       {
         step: "Preview & Client Delivery",
         desc: harnessResult.clientNotificationSent
-          ? `Verified preview (HTTP 200 OK) & sent WhatsApp notification to priority client.`
-          : `Verified preview entry (HTTP 200 OK) at ${harnessResult.previewUrl}.`,
-        status: "completed",
+          ? `Preview published and notification sent to the configured priority client.`
+          : harnessResult.previewUrl
+            ? `Preview entry available at ${harnessResult.previewUrl}. Client was not notified.`
+            : "No changes were produced; nothing was published or sent.",
+        status: harnessResult.previewUrl ? "completed" : "skipped",
       },
     ];
 
@@ -3453,8 +3456,8 @@ export const layerSuperAgentDispatchWorkerRoute = HttpRouter.add(
       projectName: project.projectName,
       workspaceRoot: project.workspaceRoot,
       taskTitle,
-      status: "completed",
-      progress: 100,
+      status: harnessResult.status,
+      progress: harnessResult.status === "completed" ? 100 : 0,
       framework,
       verificationSteps,
       subtasks: harnessResult.subtasks,
