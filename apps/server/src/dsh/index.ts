@@ -41,6 +41,7 @@ export interface HarnessExecutionResult {
   previewUrl: string;
   checklist: any[];
   subtasks: SubtaskPlanItem[];
+  filesModified?: string[] | undefined;
   reviewLoop: any[];
   errorsFixed: string[];
   streamingLogs: string[];
@@ -418,6 +419,7 @@ export async function runAutonomousHarnessWorkflow(
     errorsFixed: reviewResult?.allFixedIssues ?? [],
     streamingLogs: logs,
     clientNotificationSent: clientNotified,
+    filesModified: Array.from(filesModifiedSet),
     summary: anyCompleted
       ? `Autonomous Harness Worker completed "${taskTitle}" (${doneCount}/${subtasks.length} milestones).${reviewResult ? ` 3-Level Review passed (${reviewResult.rounds.length} rounds). Auto-healed ${reviewResult.allFixedIssues.length} issues.` : ""}`
       : `Task "${taskTitle}" ended without producing changes — milestones aborted or failed; no files were merged.`,

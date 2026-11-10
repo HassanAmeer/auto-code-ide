@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import { useRef } from "react";
 import { cn } from "~/lib/utils";
+import { resolvePrimaryEnvironmentHttpUrl } from "~/environments/primary";
+import { toastManager } from "~/components/ui/toast";
 
 export interface BoardTask {
   id: string;
@@ -118,54 +120,152 @@ export function AutonomousTaskBoard({
     setTasks((prev) => prev.filter((t) => t.id !== taskId));
   }, []);
 
-  // Goal Decomposer (Simulated DeepSeek supervisor task breakdown)
-  const handleDecomposeGoal = useCallback(() => {
+  // Decompose & dispatch for real: sends the goal to the dsh parallel-worker
+  // harness over SSE, streams live harness lines into the card's progress,
+  // and writes real milestone/files/preview results when the run completes.
+  // No simulated timeout, no templated placeholder tasks.
+  const handleDecomposeGoal = useCallback(async () => {
     const goal = newGoalInput.trim();
-    if (!goal) return;
+    if (!goal || isDecomposing) return;
 
     setIsDecomposing(true);
+    const cardId = `dispatch-${Date.now()}`;
+    const setCard = (patch: Partial<BoardTask>) =>
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === cardId ? { ...t, ...patch, updatedAt: new Date().toISOString() } : t,
+        ),
+      );
+    const bumpProgress = (delta: number) =>
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === cardId
+            ? {
+                ...t,
+                progress: Math.min(80, Math.max(t.progress, 20) + delta),
+                updatedAt: new Date().toISOString(),
+              }
+            : t,
+        ),
+      );
 
-    setTimeout(() => {
-      const cleanSlug = goal
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .slice(0, 20);
-      const timestamp = Date.now().toString(36).slice(-4);
-
-      const subtaskA: BoardTask = {
-        id: `task-${Date.now()}-1`,
-        title: `1. Setup: ${goal.slice(0, 40)}`,
-        description: `Initialize architecture, data structures, and configuration files for ${goal}.`,
+    setTasks((prev) => [
+      {
+        id: cardId,
+        title: goal.slice(0, 60),
+        description: goal,
         status: "in_progress",
-        branch: `task/${cleanSlug}-core-${timestamp}`,
-        worktreePath: `worktrees/${cleanSlug}-core`,
+        branch: "",
+        worktreePath: "",
         workerModel: activeModel,
-        progress: 30,
-        filesModified: [`src/${cleanSlug}.ts`],
+        progress: 5,
+        filesModified: [],
         autoHealedErrors: 0,
         updatedAt: new Date().toISOString(),
         projectName,
-      };
+      },
+      ...prev,
+    ]);
+    setNewGoalInput("");
 
-      const subtaskB: BoardTask = {
-        id: `task-${Date.now()}-2`,
-        title: `2. Implementation: ${goal.slice(0, 40)}`,
-        description: `Implement primary business logic, client views, and integration handling.`,
+    try {
+      const res = await fetch(
+        resolvePrimaryEnvironmentHttpUrl("/api/super-agent/dispatch-worker"),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            projectIdOrName: projectName,
+            taskTitle: goal.slice(0, 60),
+            prompt: goal,
+            model: "default",
+            stream: true,
+          }),
+        },
+      );
+      if (!res.ok || !res.body) {
+        const txt = await res.text().catch(() => "");
+        throw new Error(txt.slice(0, 160) || `Dispatch failed (${res.status})`);
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let finalData: any = null;
+      let streamTicks = 0;
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const chunks = buffer.split("\n\n");
+        buffer = chunks.pop() || "";
+        for (const chunk of chunks) {
+          const line = chunk.trim();
+          if (!line.startsWith("data:")) continue;
+          try {
+            const evt = JSON.parse(line.slice(5).trim());
+            if (evt.type === "stream") {
+              streamTicks += 1;
+              if (streamTicks % 2 === 0) bumpProgress(3);
+            } else if (evt.type === "complete" || evt.status === "completed") {
+              finalData = evt;
+            }
+          } catch {
+            // Partial/non-JSON SSE data line — ignore.
+          }
+        }
+      }
+
+      if (finalData) {
+        const ok = finalData.status === "completed";
+        const subLines = Array.isArray(finalData.subtasks)
+          ? finalData.subtasks
+              .map(
+                (st: any) =>
+                  `${st?.status === "completed" ? "✓" : "✗"} [${st?.order ?? "?"}] ${st?.title ?? "milestone"}`,
+              )
+              .join("\n")
+          : "";
+        const errorsFixed: string[] = Array.isArray(finalData.errorsFixed)
+          ? finalData.errorsFixed
+          : [];
+        setCard({
+          status: ok ? "done" : "backlog",
+          progress: 100,
+          description: `${goal}\n\n${finalData.summary ?? ""}${
+            subLines ? `\n\nMilestones understood & executed:\n${subLines}` : ""
+          }${errorsFixed.length > 0 ? `\n\nAuto-healed: ${errorsFixed.length} issue(s)` : ""}`,
+          filesModified: Array.isArray(finalData.filesModified) ? finalData.filesModified : [],
+          previewUrl: finalData.previewUrl || undefined,
+          autoHealedErrors: errorsFixed.length,
+          workerModel: activeModel,
+        });
+        toastManager.add({
+          type: ok ? "success" : "error",
+          title: ok
+            ? "Parallel workers completed — milestones merged"
+            : "Worker harness finished without producing changes",
+        });
+        window.dispatchEvent(new CustomEvent("super-agent-state-updated"));
+        window.dispatchEvent(new CustomEvent("t3-subagents-changed"));
+        window.dispatchEvent(new CustomEvent("t3-goals-changed"));
+      } else {
+        throw new Error(
+          "Harness ended without a completion event — task may still be running; check the Subagents sidebar.",
+        );
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setCard({
         status: "backlog",
-        branch: `task/${cleanSlug}-ui-${timestamp}`,
-        worktreePath: `worktrees/${cleanSlug}-ui`,
-        workerModel: activeModel,
         progress: 0,
-        autoHealedErrors: 0,
-        updatedAt: new Date().toISOString(),
-        projectName,
-      };
-
-      setTasks((prev) => [subtaskA, subtaskB, ...prev]);
-      setNewGoalInput("");
+        description: `⚠ ${goal}\n\nDispatch failed: ${message}`,
+      });
+      toastManager.add({ type: "error", title: "Dispatch failed", description: message });
+    } finally {
       setIsDecomposing(false);
-    }, 800);
-  }, [newGoalInput, activeModel, projectName]);
+    }
+  }, [newGoalInput, isDecomposing, activeModel, projectName]);
 
   // Real best-effort health check of each task's preview URL (same-origin HEAD).
   useEffect(() => {
@@ -304,12 +404,12 @@ export function AutonomousTaskBoard({
             {isDecomposing ? (
               <>
                 <RefreshCw className="size-3 animate-spin" />
-                <span>Decomposing...</span>
+                <span>Workers running…</span>
               </>
             ) : (
               <>
                 <Sparkles className="size-3" />
-                <span>Decompose & Plan</span>
+                <span>Dispatch to Parallel Workers</span>
               </>
             )}
           </button>

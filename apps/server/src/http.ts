@@ -3467,6 +3467,7 @@ export const layerSuperAgentDispatchWorkerRoute = HttpRouter.add(
       streamingLogs: streamLogs,
       previewUrl: harnessResult.previewUrl,
       clientNotificationSent: harnessResult.clientNotificationSent,
+      filesModified: harnessResult.filesModified ?? [],
       summary: harnessResult.summary,
     };
 
