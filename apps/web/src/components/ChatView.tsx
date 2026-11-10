@@ -2354,19 +2354,30 @@ export default function ChatView(props: ChatViewProps) {
   // anchored end-space filler for the geometry at anchor time and never
   // recomputes it, so a lingering anchor leaves stale filler height behind
   // the composer — phantom scroll range on threads whose content fits.
+  const ACTIVE_ANCHOR_RUN_STATUSES = [
+    "preparing",
+    "queued",
+    "starting",
+    "running",
+    "waiting",
+  ] as const;
   const anchorRunSettled = useMemo(() => {
     if (timelineAnchorMessageId === null) return false;
-    const anchorRun = serverProjection?.runs.find(
+    if (serverProjection === null || serverProjection === undefined) return false;
+    const anchorRun = serverProjection.runs.find(
       (run) => run.userMessageId === timelineAnchorMessageId,
     );
-    if (anchorRun === undefined) return false;
-    return (
-      anchorRun.status !== "preparing" &&
-      anchorRun.status !== "queued" &&
-      anchorRun.status !== "starting" &&
-      anchorRun.status !== "running" &&
-      anchorRun.status !== "waiting"
-    );
+    if (anchorRun === undefined) {
+      // Super-agent / subagent turns can run in a sibling thread, so this
+      // thread's projection never contains the anchored run. Un-pin only once
+      // the thread itself is fully idle — otherwise the phantom end-space
+      // lingers forever and grows with every turn.
+      const anyRunActive = serverProjection.runs.some((run) =>
+        (ACTIVE_ANCHOR_RUN_STATUSES as readonly string[]).includes(run.status),
+      );
+      return !anyRunActive;
+    }
+    return !(ACTIVE_ANCHOR_RUN_STATUSES as readonly string[]).includes(anchorRun.status);
   }, [serverProjection, timelineAnchorMessageId]);
   useEffect(() => {
     if (!anchorRunSettled) return;
