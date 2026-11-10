@@ -12,6 +12,13 @@ export type ComposerInlineToken =
       readonly source: string;
       readonly start: number;
       readonly end: number;
+    }
+  | {
+      readonly type: "slash-command";
+      readonly value: string;
+      readonly source: string;
+      readonly start: number;
+      readonly end: number;
     };
 
 export interface CollectComposerInlineTokensOptions {
@@ -31,6 +38,23 @@ const SKILL_MENTION_SOURCE =
 // While typing, a token only becomes a chip once a delimiter follows it, so a
 // half-typed name at the end of the text stays plain.
 const SKILL_TOKEN_REGEX = new RegExp(`${SKILL_MENTION_SOURCE}(?=\\s)`, "gu");
+/**
+ * The one slash command the composer chips inline. Deliberately exact: other
+ * commands stay plain text until they grow their own atom node. Group 1 is the
+ * leading delimiter and group 2 the command name. The pattern is global, so
+ * use it with `matchAll` or `replace`, not `test` or `exec`.
+ */
+const SLASH_COMMAND_MENTION_SOURCE = /(^|\s)\/(parallel-subagents)/.source;
+// While typing, a token only becomes a chip once a delimiter follows it, so a
+// half-typed command at the end of the text stays plain.
+const SLASH_COMMAND_TOKEN_REGEX = new RegExp(`${SLASH_COMMAND_MENTION_SOURCE}(?=\\s)`, "gu");
+/**
+ * Slash commands in a sent prompt, which may also end at the end of the text.
+ */
+export const SLASH_COMMAND_MENTION_PATTERN = new RegExp(
+  `${SLASH_COMMAND_MENTION_SOURCE}(?=\\s|$)`,
+  "gu",
+);
 /**
  * Skill mentions in a sent prompt, which may also end at the end of the text.
  * Group 1 is the leading delimiter and group 2 the skill name. The pattern is
@@ -129,6 +153,24 @@ export function collectComposerInlineTokens(
     const end = start + fullMatch.length - prefix.length;
     matches.push({
       type: "skill",
+      value,
+      source: text.slice(start, end),
+      start,
+      end,
+    });
+  }
+
+  for (const match of text.matchAll(SLASH_COMMAND_TOKEN_REGEX)) {
+    const fullMatch = match[0];
+    const prefix = match[1] ?? "";
+    const value = match[2] ?? "";
+    if (!value) {
+      continue;
+    }
+    const start = (match.index ?? 0) + prefix.length;
+    const end = start + fullMatch.length - prefix.length;
+    matches.push({
+      type: "slash-command",
       value,
       source: text.slice(start, end),
       start,

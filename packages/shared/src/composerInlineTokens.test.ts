@@ -67,6 +67,47 @@ describe("collectComposerInlineTokens", () => {
     expect(collectComposerInlineTokens("Inspect @AGENTS.md")).toEqual([]);
   });
 
+  it("collects /parallel-subagents followed by a delimiter as a slash-command token", () => {
+    const text = "/parallel-subagents ";
+
+    expect(collectComposerInlineTokens(text)).toEqual([
+      {
+        type: "slash-command",
+        value: "parallel-subagents",
+        source: "/parallel-subagents",
+        start: 0,
+        end: 19,
+      },
+    ]);
+    expect(text.slice(19)).toBe(" ");
+  });
+
+  it("collects a slash-command token mid-text", () => {
+    expect(collectComposerInlineTokens("run /parallel-subagents please")).toEqual([
+      {
+        type: "slash-command",
+        value: "parallel-subagents",
+        source: "/parallel-subagents",
+        start: 4,
+        end: 23,
+      },
+    ]);
+  });
+
+  it("does not convert a slash-command at the end of the text", () => {
+    // Matches skill semantics: no trailing delimiter, no chip.
+    expect(collectComposerInlineTokens("/parallel-subagents")).toEqual([]);
+  });
+
+  it("does not convert a truncated slash-command", () => {
+    expect(collectComposerInlineTokens("/parallel-subagent ")).toEqual([]);
+  });
+
+  it("does not convert a different slash command", () => {
+    expect(collectComposerInlineTokens("/parallel-worker ")).toEqual([]);
+    expect(collectComposerInlineTokens("/parallel-subagentsx ")).toEqual([]);
+  });
+
   it("keeps the delimiter after a token outside its source range", () => {
     const text = "Inspect [package.json](package.json) next";
 

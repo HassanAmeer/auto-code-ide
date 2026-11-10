@@ -459,6 +459,12 @@ function atomJsonForSegment(
       },
     };
   }
+  if (segment.type === "slash-command") {
+    return {
+      type: "composer-slash-command",
+      attrs: { command: segment.command, source: segment.source },
+    };
+  }
   if (segment.type === "citation") {
     return {
       type: "composer-citation",
@@ -811,6 +817,8 @@ function readAtomSource(node: ProseMirrorNode): string {
       const name = typeof attrs.skillName === "string" ? attrs.skillName : "";
       return name ? `$${name}` : "";
     }
+    case "composer-slash-command":
+      return typeof attrs.command === "string" && attrs.command ? `/${attrs.command}` : "";
     default:
       return "";
   }

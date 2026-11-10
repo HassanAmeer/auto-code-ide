@@ -38,6 +38,7 @@ import {
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
+import { ZapIcon } from "lucide-react";
 import { EditorContent, useEditor } from "@tiptap/react";
 
 import {
@@ -96,7 +97,7 @@ import { AssistantCitationChip } from "./chat/AssistantCitationChip";
 import { getTimelinePageScrollKey } from "./chat/pageScrollController";
 import { ContextChipPopover } from "./contextChipParts";
 import { Button } from "./ui/button";
-import { ContextChip } from "./ContextChip";
+import { ContextChip, ContextChipLabel } from "./ContextChip";
 import {
   ComposerContextActionsContext,
   ComposerContextReferenceChip,
@@ -338,6 +339,47 @@ function ComposerSkillNodeView({ node }: NodeViewProps) {
           ) : null}
         </div>
       </ContextChipPopover>
+    </NodeViewWrapper>
+  );
+}
+
+const ComposerSlashCommandExtension = Node.create({
+  name: "composer-slash-command",
+  group: "inline",
+  inline: true,
+  atom: true,
+  selectable: true,
+  addAttributes() {
+    return {
+      command: { default: "" },
+      source: { default: "/parallel-subagents" },
+    };
+  },
+  parseHTML() {
+    return [{ tag: "span[data-composer-slash-command]" }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ["span", { "data-composer-slash-command": "", ...HTMLAttributes }];
+  },
+  addNodeView() {
+    return ReactNodeViewRenderer(ComposerSlashCommandNodeView);
+  },
+});
+
+function ComposerSlashCommandNodeView({ node }: NodeViewProps) {
+  const command = (node.attrs.command as string) ?? "";
+  return (
+    <NodeViewWrapper as="span" className={CHIP_NODE_SELECTION_CLASS_NAME}>
+      <ContextChip
+        kind="subagent"
+        contentEditable={false}
+        spellCheck={false}
+        data-composer-slash-command-chip="true"
+        aria-label={`Slash command ${command ? `/${command}` : "/parallel-subagents"}`}
+      >
+        <ZapIcon aria-hidden />
+        <ContextChipLabel>Parallel Subagents</ContextChipLabel>
+      </ContextChip>
     </NodeViewWrapper>
   );
 }
@@ -1048,6 +1090,7 @@ function ComposerPromptEditorTiptapInner(props: ComposerPromptEditorProps) {
         ComposerUndoGroupingExtension,
         ComposerMentionExtension,
         ComposerSkillExtension,
+        ComposerSlashCommandExtension,
         ComposerCitationExtension,
         ComposerContextReferenceExtension,
         ComposerMarkersExtension,

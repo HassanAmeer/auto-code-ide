@@ -2780,28 +2780,12 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           description: "Extract web page content via Fetch MCP (/fetch <url>)",
         },
         {
-          id: "slash:teamwork-preview",
-          type: "slash-command",
-          command: "teamwork-preview",
-          label: "/teamwork-preview",
-          description:
-            "Dispatch autonomous parallel workers (frontend, backend, QA) via DeepSeek supervisor",
-        },
-        {
-          id: "slash:parallel-worker",
-          type: "slash-command",
-          command: "parallel-worker",
-          label: "/parallel-worker",
-          description:
-            "Trigger the Parallel Subagents Protocol — decompose into 2-4 domain-isolated workers in isolated Git worktrees",
-        },
-        {
           id: "slash:parallel-subagents",
           type: "slash-command",
           command: "parallel-subagents",
           label: "/parallel-subagents",
           description:
-            "Alias of /parallel-worker — trigger Parallel Subagents Protocol in isolated Git worktrees",
+            "Dispatch autonomous parallel workers — coordinates multiple workers in isolated Git worktrees",
         },
         ...(planModeUiEnabled
           ? [
@@ -4276,8 +4260,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           item.command === "export" ||
           item.command === "coder" ||
           item.command === "review" ||
-          item.command === "teamwork-preview" ||
-          item.command === "parallel-worker" ||
           item.command === "parallel-subagents"
         ) {
           const replacement = `/${item.command} `;

@@ -59,6 +59,10 @@ const schema = getSchemaByResolvedExtensions(
       skillLabel: { default: "" },
       skillDescription: { default: null },
     }),
+    stubAtom("composer-slash-command", {
+      command: { default: "" },
+      source: { default: "/parallel-subagents" },
+    }),
     stubAtom("composer-citation", {
       citation: { default: null },
       source: { default: "" },
@@ -111,6 +115,10 @@ const plainSchema = getSchemaByResolvedExtensions(
       skillName: { default: "" },
       skillLabel: { default: "" },
       skillDescription: { default: null },
+    }),
+    stubAtom("composer-slash-command", {
+      command: { default: "" },
+      source: { default: "/parallel-subagents" },
     }),
     stubAtom("composer-citation", {
       citation: { default: null },
@@ -750,6 +758,17 @@ describe("composer rich text document model", () => {
     };
     expect(after.content.map((n) => n.type)).toEqual(["composer-skill", "text"]);
     expect(after.content[0]?.attrs?.skillName).toBe("my-skill");
+  });
+
+  it("builds a composer-slash-command atom from /parallel-subagents and round-trips it", () => {
+    const value = "/parallel-subagents ";
+    const json = buildDocJson(value, (name) => ({ label: name, description: null }));
+    const paragraph = json.content[0] as {
+      content: { type: string; attrs?: { command?: string } }[];
+    };
+    expect(paragraph.content.map((n) => n.type)).toEqual(["composer-slash-command", "text"]);
+    expect(paragraph.content[0]?.attrs?.command).toBe("parallel-subagents");
+    expect(roundTrip(value).value).toBe(value);
   });
 
   it("keeps chips in a fence's info string and body each in their own place", () => {

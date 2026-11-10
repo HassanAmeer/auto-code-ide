@@ -9657,21 +9657,14 @@ export default function ChatView(props: ChatViewProps) {
       } else {
         messageTextForSend = `[Fetch MCP Notice: ${url}]\n⚠️ Could not fetch page content: ${fetchRes.error || "Unknown error"}`;
       }
-    } else if (
-      messageTextForSend.startsWith("/teamwork-preview") ||
-      messageTextForSend.startsWith("/teamwork") ||
-      messageTextForSend.startsWith("/parallel-worker") ||
-      messageTextForSend.startsWith("/parallel-subagents")
-    ) {
+    } else if (messageTextForSend.startsWith("/parallel-subagents")) {
       // Explicit, user-triggered parallel worker dispatch. The sidebar card is the
       // only place subagent status is shown; the message sent to the model is the
       // user's actual task text, untouched.
-      const cleanPrompt = messageTextForSend
-        .replace(/^\/(?:teamwork-preview|teamwork|parallel-worker|parallel-subagents)\s*/i, "")
-        .trim();
+      const cleanPrompt = messageTextForSend.replace(/^\/parallel-subagents\s*/i, "").trim();
       toastManager.add({
         type: "neutral",
-        title: "Parallel worker dispatched",
+        title: "Parallel workers dispatched",
       });
       const targetProjName = activeProject?.title || projectForSend?.title || "Workspace";
       const dispatchPrompt =
@@ -9702,7 +9695,7 @@ export default function ChatView(props: ChatViewProps) {
     }
 
     // Per protocol, parallel workers are triggered EXCLUSIVELY by the explicit
-    // /parallel-worker or /parallel-subagents slash commands — never implicitly.
+    // /parallel-subagents slash command — never implicitly.
 
     if (isComposerWebSearchEnabled() && messageTextForSend && !messageTextForSend.startsWith("/")) {
       try {

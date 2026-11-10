@@ -22,6 +22,11 @@ export type ComposerPromptSegment =
       source: string;
     }
   | {
+      type: "slash-command";
+      command: string;
+      source: string;
+    }
+  | {
       type: "citation";
       citation: AssistantCitation;
       source: string;
@@ -127,6 +132,8 @@ function splitPromptTextIntoComposerSegments(text: string): ComposerPromptSegmen
         path: match.value,
         source: match.source,
       });
+    } else if (match.type === "slash-command") {
+      segments.push({ type: "slash-command", command: match.value, source: match.source });
     } else {
       segments.push({ type: "skill", name: match.value, source: match.source });
     }
