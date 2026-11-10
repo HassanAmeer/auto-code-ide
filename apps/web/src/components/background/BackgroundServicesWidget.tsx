@@ -1,5 +1,12 @@
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronDownIcon, Loader2Icon, PlayIcon, SquareIcon } from "lucide-react";
+import {
+  ChevronDownIcon,
+  Loader2Icon,
+  PlayIcon,
+  SquareIcon,
+  CheckCircle2,
+  AlertCircle,
+} from "lucide-react";
 import {
   AuthOrchestrationOperateScope,
   AuthTerminalOperateScope,
@@ -152,6 +159,8 @@ export interface SubagentItem {
   readonly title: string;
   readonly role?: string;
   readonly status?: string;
+  /** Epoch ms when the worker finished, if known — used for freshness pruning. */
+  readonly completedAt?: number | undefined;
 }
 
 export interface GoalItem {
@@ -201,6 +210,7 @@ function readStoredWorkers(): SubagentItem[] {
         title: item.title || item.name || item.agentRole || item.role || "Specialist Worker",
         role: item.role || item.agentRole,
         status: item.status || "running",
+        completedAt: typeof item.completedAt === "number" ? item.completedAt : undefined,
       }));
     }
   } catch {
@@ -303,6 +313,7 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
                 title: w.title || w.name || w.agentRole || w.role || "Specialist Worker",
                 role: w.role || w.agentRole,
                 status: w.status || "running",
+                completedAt: typeof w.completedAt === "number" ? w.completedAt : undefined,
               })),
             );
           }
@@ -345,7 +356,9 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
     }));
   }, [rawSubagents]);
 
-  // Aggregate subagents from all sources
+  // Aggregate subagents from all sources (deduped by id, then by normalized
+  // title/role — the same worker reappears across projection/API/storage), and
+  // pruned by a 3-minute freshness gate so old completed agents clear out.
   const combinedSubagents = useMemo<SubagentItem[]>(() => {
     if (propSubagents && propSubagents.length > 0) return [...propSubagents];
 
@@ -354,7 +367,40 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
     for (const item of apiWorkers) if (!map.has(item.id)) map.set(item.id, item);
     for (const item of storedWorkers) if (!map.has(item.id)) map.set(item.id, item);
 
-    return Array.from(map.values());
+    // Dedupe by normalized title + role: the same specialist reported by
+    // multiple sources must collapse into a single row.
+    const statusRank = (status?: string) =>
+      status === "running" ? 2 : status === "failed" || status === "error" ? 1 : 0;
+    const byTitle = new Map<string, SubagentItem>();
+    for (const item of map.values()) {
+      const key = `${String(item.title ?? "")
+        .toLowerCase()
+        .trim()}|${String(item.role ?? "")
+        .toLowerCase()
+        .trim()}`;
+      const prev = byTitle.get(key);
+      if (!prev) {
+        byTitle.set(key, item);
+        continue;
+      }
+      if (statusRank(item.status) > statusRank(prev.status)) {
+        byTitle.set(key, item);
+      } else if (
+        statusRank(item.status) === statusRank(prev.status) &&
+        (item.completedAt ?? 0) > (prev.completedAt ?? 0)
+      ) {
+        byTitle.set(key, item);
+      }
+    }
+
+    // Freshness gate: drop completed/failed entries older than 3 minutes (or
+    // without a known finish timestamp) — the sidebar must read "No active
+    // subagents" once the run is truly done, not pile up ghost rows.
+    const FRESH_CUTOFF = Date.now() - 3 * 60 * 1000;
+    return [...byTitle.values()].filter((item) => {
+      if (item.status === "running") return true;
+      return typeof item.completedAt === "number" && item.completedAt > FRESH_CUTOFF;
+    });
   }, [propSubagents, projectionSubagents, apiWorkers, storedWorkers]);
 
   // Map thread projection provider goals
@@ -625,24 +671,57 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
                 No active subagents
               </div>
             ) : (
-              combinedSubagents.map((agent) => (
-                <div
-                  key={agent.id}
-                  className="flex h-7 items-center justify-between gap-2 px-2 rounded-md hover:bg-black/[0.035] dark:hover:bg-white/[0.08] transition-colors group cursor-default"
-                >
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <SleekSpinnerRing className="size-3.5 text-muted-foreground shrink-0" />
-                    <span className="text-xs text-foreground/85 group-hover:text-foreground font-normal truncate">
-                      {agent.title}
-                    </span>
+              combinedSubagents.map((agent) => {
+                const status = agent.status ?? "running";
+                const isRunning = status === "running";
+                const isCompleted = status === "completed";
+                const isFailed = status === "failed" || status === "error";
+                const isCancelled = status === "cancelled";
+                return (
+                  <div
+                    key={agent.id}
+                    className="flex h-7 items-center justify-between gap-2 px-2 rounded-md hover:bg-black/[0.035] dark:hover:bg-white/[0.08] transition-colors group cursor-default"
+                  >
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      {isCompleted ? (
+                        <CheckCircle2 className="size-3.5 text-emerald-400 shrink-0" />
+                      ) : isFailed ? (
+                        <AlertCircle className="size-3.5 text-rose-400 shrink-0" />
+                      ) : isCancelled ? (
+                        <CancelledCircleIcon className="size-3.5 text-muted-foreground shrink-0" />
+                      ) : (
+                        <SleekSpinnerRing className="size-3.5 text-cyan-400 shrink-0 animate-spin" />
+                      )}
+                      <span className="text-xs text-foreground/85 group-hover:text-foreground font-normal truncate">
+                        {agent.title}
+                      </span>
+                    </div>
+                    {isRunning ? (
+                      <button
+                        type="button"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          try {
+                            await fetch("/api/super-agent/workers/stop-all", { method: "POST" });
+                            window.dispatchEvent(new CustomEvent("super-agent-state-updated"));
+                          } catch {
+                            // Refresh will resync on the next poll
+                          }
+                        }}
+                        className="p-1 rounded text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                        title="Stop Subagent"
+                        aria-label={`Stop ${agent.title}`}
+                      >
+                        <SquareIcon className="size-3 fill-current" />
+                      </button>
+                    ) : isFailed ? (
+                      <span className="rounded-full bg-rose-500/10 px-1.5 py-0.5 text-[10px] font-mono text-rose-400 uppercase shrink-0 leading-none">
+                        failed
+                      </span>
+                    ) : null}
                   </div>
-                  {agent.status && agent.status !== "running" && (
-                    <span className="text-2xs font-mono text-muted-foreground uppercase shrink-0">
-                      {agent.status}
-                    </span>
-                  )}
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         )}
