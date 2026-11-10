@@ -1433,13 +1433,14 @@ export function deriveRevertTurnCountByUserMessageId(input: {
     }
     if (entry.message.runId === null) continue;
     const ownCheckpoint = readyCheckpointByRunId.get(entry.message.runId);
-    // A failed response never produces a ready checkpoint — still offer the
-    // revert arrow by rewinding to the last known-good turn (or the start).
-    const turnCount =
-      ownCheckpoint !== undefined
-        ? ownCheckpoint.checkpointTurnCount
-        : (lastReadyCheckpointTurnCount ?? 1);
-    byUserMessageId.set(entry.message.id, Math.max(0, turnCount - 1));
+    // A failed response never produces a ready checkpoint — revert to the
+    // last known-good checkpoint *before* this turn instead of subtracting
+    // one from it (which rolled back one turn too early).
+    if (ownCheckpoint !== undefined) {
+      byUserMessageId.set(entry.message.id, Math.max(0, ownCheckpoint.checkpointTurnCount - 1));
+    } else {
+      byUserMessageId.set(entry.message.id, Math.max(0, lastReadyCheckpointTurnCount ?? 0));
+    }
   }
   return byUserMessageId;
 }

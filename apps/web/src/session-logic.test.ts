@@ -301,6 +301,104 @@ describe("V2 session presentation", () => {
     expect(targets.has(steerMessageId)).toBe(false);
   });
 
+  it("rewinds interrupted turns to the last known-good checkpoint, not one turn early", () => {
+    const run1 = RunId.make("run-complete");
+    const run2 = RunId.make("run-interrupted");
+    const run3 = RunId.make("run-interrupted-later");
+    const user1 = MessageId.make("user-1");
+    const assistant1 = MessageId.make("assistant-1");
+    const user2 = MessageId.make("user-2");
+    const user3 = MessageId.make("user-3");
+    const messages: ChatMessage[] = [
+      {
+        id: user1,
+        role: "user",
+        text: "Complete",
+        runId: run1,
+        inputIntent: "turn_start",
+        streaming: false,
+        createdAt: "2026-06-20T00:00:00.000Z",
+        updatedAt: "2026-06-20T00:00:00.000Z",
+      },
+      {
+        id: assistant1,
+        role: "assistant",
+        text: "Done",
+        runId: run1,
+        streaming: false,
+        createdAt: "2026-06-20T00:00:01.000Z",
+        updatedAt: "2026-06-20T00:00:01.000Z",
+      },
+      {
+        id: user2,
+        role: "user",
+        text: "Stopped",
+        runId: run2,
+        inputIntent: "turn_start",
+        streaming: false,
+        createdAt: "2026-06-20T00:00:02.000Z",
+        updatedAt: "2026-06-20T00:00:02.000Z",
+      },
+      {
+        id: user3,
+        role: "user",
+        text: "Stopped again",
+        runId: run3,
+        inputIntent: "turn_start",
+        streaming: false,
+        createdAt: "2026-06-20T00:00:03.000Z",
+        updatedAt: "2026-06-20T00:00:03.000Z",
+      },
+    ];
+    const timelineEntries: TimelineEntry[] = messages.map((message): TimelineEntry => ({
+      id: message.id,
+      kind: "message",
+      createdAt: message.createdAt,
+      message,
+    }));
+    const targets = deriveRevertTurnCountByUserMessageId({
+      timelineEntries,
+      checkpoints: [
+        {
+          runId: run1,
+          checkpointTurnCount: 1,
+          checkpointRef: "checkpoint-run-1" as never,
+          status: "ready",
+          files: [],
+          assistantMessageId: assistant1,
+          completedAt: "2026-06-20T00:00:01.500Z",
+        },
+      ],
+    });
+    expect(targets.get(user2)).toBe(1);
+    expect(targets.get(user3)).toBe(1);
+  });
+
+  it("rewinds a first-turn interruption to the start of the thread", () => {
+    const run1 = RunId.make("run-interrupted");
+    const user1 = MessageId.make("user-1");
+    const messages: ChatMessage[] = [
+      {
+        id: user1,
+        role: "user",
+        text: "Stopped",
+        runId: run1,
+        inputIntent: "turn_start",
+        streaming: false,
+        createdAt: "2026-06-20T00:00:00.000Z",
+        updatedAt: "2026-06-20T00:00:00.000Z",
+      },
+    ];
+    const timelineEntries: TimelineEntry[] = messages.map((message): TimelineEntry => ({
+      id: message.id,
+      kind: "message",
+      createdAt: message.createdAt,
+      message,
+    }));
+    const targets = deriveRevertTurnCountByUserMessageId({ timelineEntries, checkpoints: [] });
+    expect(targets.get(user1)).toBe(0);
+  });
+
   it("uses visible turn item order and keeps provider errors in the work log", () => {
     const now = DateTime.makeUnsafe("2026-06-20T00:00:00.000Z");
     const threadId = ThreadId.make("thread-visible");
