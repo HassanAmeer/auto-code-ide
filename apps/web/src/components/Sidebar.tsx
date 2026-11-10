@@ -344,6 +344,15 @@ function threadTimeLabel(thread: SidebarThreadSummary): string {
   return compactSidebarTimeLabel(formatRelativeTimeLabel(timestamp));
 }
 
+function threadOriginLabel(thread: SidebarThreadSummary): string | null {
+  if (thread.lineage?.relationshipToParent === "subagent") return "Subagent";
+  const createdBy = (thread as any).source?.createdBy ?? (thread as any).createdBy;
+  const creationSource = (thread as any).source?.creationSource ?? (thread as any).creationSource;
+  if (createdBy === "agent" || createdBy === "system") return "Bot";
+  if (creationSource === "mcp" || creationSource === "provider") return "Bot";
+  return null;
+}
+
 // Settled rows read "how long ago did this wrap up", matching their sort
 // key: both go through resolveSettledThreadTimestamp so label and order can't
 // disagree.
@@ -2339,6 +2348,7 @@ const SidebarSearchResultRow = memo(function SidebarSearchResultRow(props: {
             <span className="flex min-w-0 items-center gap-2.5">
               <span className="min-w-0 flex-1 truncate">{thread.title}</span>
               <span className="shrink-0 text-xs text-muted-foreground/55 tabular-nums">
+                {threadOriginLabel(thread) ? `${threadOriginLabel(thread)}, ` : ""}
                 {threadTimeLabel(thread)}
               </span>
             </span>
