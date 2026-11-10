@@ -1017,25 +1017,39 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
                 No active goals
               </div>
             ) : (
-              combinedGoals.map((goal) => (
-                <div
-                  key={goal.id}
-                  className="flex h-7 items-center justify-between gap-2 px-2 rounded-md hover:bg-black/[0.035] dark:hover:bg-white/[0.08] transition-colors group cursor-default"
-                  title={goal.text}
-                >
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <SleekSpinnerRing className="size-3.5 text-muted-foreground shrink-0" />
-                    <span className="text-xs text-foreground/85 group-hover:text-foreground font-normal truncate">
-                      {goal.text}
-                    </span>
+              combinedGoals.map((goal) => {
+                const goalStatus = goal.status ?? "running";
+                const isGoalCompleted = goalStatus === "completed" || goalStatus === "done";
+                const isGoalFailed = goalStatus === "failed" || goalStatus === "error";
+                const isGoalCancelled = goalStatus === "cancelled";
+                return (
+                  <div
+                    key={goal.id}
+                    className="flex h-7 items-center justify-between gap-2 px-2 rounded-md hover:bg-black/[0.035] dark:hover:bg-white/[0.08] transition-colors group cursor-default"
+                    title={goal.text}
+                  >
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      {isGoalCompleted ? (
+                        <CheckCircle2 className="size-3.5 text-emerald-400 shrink-0" />
+                      ) : isGoalFailed ? (
+                        <AlertCircle className="size-3.5 text-rose-400 shrink-0" />
+                      ) : isGoalCancelled ? (
+                        <CancelledCircleIcon className="size-3.5 text-muted-foreground shrink-0" />
+                      ) : (
+                        <SleekSpinnerRing className="size-3.5 text-cyan-400 shrink-0 animate-spin" />
+                      )}
+                      <span className="text-xs text-foreground/85 group-hover:text-foreground font-normal truncate">
+                        {goal.text}
+                      </span>
+                    </div>
+                    {isGoalFailed ? (
+                      <span className="rounded-full bg-rose-500/10 px-1.5 py-0.5 text-[10px] font-mono text-rose-400 uppercase shrink-0 leading-none">
+                        failed
+                      </span>
+                    ) : null}
                   </div>
-                  {goal.status && goal.status !== "active" && (
-                    <span className="text-2xs font-mono text-muted-foreground uppercase shrink-0">
-                      {goal.status}
-                    </span>
-                  )}
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         )}

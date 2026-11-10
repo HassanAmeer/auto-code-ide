@@ -478,7 +478,6 @@ import { ExpandedImageDialog } from "./chat/ExpandedImageDialog";
 import { PullRequestThreadDialog } from "./PullRequestThreadDialog";
 import type { AssistantCitationRequest } from "./chat/AssistantCitationSource";
 import { MessagesTimeline, type MessagesTimelineHistoryControls } from "./chat/MessagesTimeline";
-import { ParallelSubagentsAccordion } from "./chat/ParallelSubagentsAccordion";
 import { isVoiceCallActive } from "./chat/voiceCall";
 import {
   playResponseDoneSound,
@@ -12318,17 +12317,7 @@ export default function ChatView(props: ChatViewProps) {
                   {...(draftId ? { onWorktreeSetupWorkLocally } : {})}
                   {...(onOpenWorktreeSetupTerminal ? { onOpenWorktreeSetupTerminal } : {})}
                   isPreparingWorktree={!paintOnlyDisplayedTimeline && isPreparingWorktree}
-                  footer={
-                    paintOnlyDisplayedTimeline ? null : (
-                      <>
-                        <ParallelSubagentsAccordion
-                          activeProjectName={activeProject?.title}
-                          activeProjectId={activeProject?.id ? String(activeProject.id) : undefined}
-                        />
-                        {threadStatusLine}
-                      </>
-                    )
-                  }
+                  footer={paintOnlyDisplayedTimeline ? null : <>{threadStatusLine}</>}
                   listRef={legendListRef}
                   timelineEntries={displayedTimeline.entries}
                   providerStatuses={
