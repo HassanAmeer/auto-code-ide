@@ -42,6 +42,7 @@ import {
   registerWorkerTelemetry,
   updateWorkerTelemetryStatus,
 } from "./workerRegistry.ts";
+import { isWorkerAborted, clearWorkerAbort } from "./abortRegistry.ts";
 
 export type WatchdogStatus =
   | "watching"
@@ -55,7 +56,7 @@ export interface WatchdogWorkerRow {
   id: string;
   role: string;
   goal: string;
-  status: "running" | "completed" | "failed";
+  status: "running" | "completed" | "failed" | "cancelled";
   filesChanged: number;
   reviewNotes: string[];
   buildRan: boolean;
@@ -666,6 +667,25 @@ export async function startWatchdogSupervision(
           }
         };
 
+        // A stop request from the card marks the worker aborted — do not even
+        // start it, and never merge its output.
+        const abortedResult = {
+          ok: false,
+          filesModified: [] as string[],
+          outputSummary: "Stopped by user",
+          error: "Stopped by user",
+        };
+        if (isWorkerAborted(workerId)) {
+          clearWorkerAbort(workerId);
+          const abortedRow = state.workers.find((w) => w.id === workerId);
+          if (abortedRow) {
+            abortedRow.status = "cancelled";
+            abortedRow.reviewNotes.push("stopped by user before dispatch");
+          }
+          updateWorkerTelemetryStatus(workerId, "cancelled", { completedAt: now() });
+          return { st, allocation, workerId, res: abortedResult };
+        }
+
         let res = await executeOpenCodeTask({
           worktreePath: allocation.worktreePath,
           projectName,
@@ -697,6 +717,18 @@ export async function startWatchdogSupervision(
           }
         }
 
+        // Stopped while the model was working — discard the output.
+        if (isWorkerAborted(workerId)) {
+          clearWorkerAbort(workerId);
+          const abortedRow = state.workers.find((w) => w.id === workerId);
+          if (abortedRow) {
+            abortedRow.status = "cancelled";
+            abortedRow.reviewNotes.push("stopped by user — output discarded");
+          }
+          updateWorkerTelemetryStatus(workerId, "cancelled", { completedAt: now() });
+          return { st, allocation, workerId, res: abortedResult };
+        }
+
         return { st, allocation, workerId, res };
       }),
     );
@@ -715,10 +747,13 @@ export async function startWatchdogSupervision(
         if (!row) return { crashed: true as const, reason: "row missing" };
 
         if (!res.ok) {
-          row.status = "failed";
+          const cancelled = res.error === "Stopped by user";
+          row.status = cancelled ? "cancelled" : "failed";
           row.reviewNotes.push(res.error ?? "worker failed");
-          state.issues.push(`${row.role}: ${res.error ?? "worker failed"}`);
-          updateWorkerTelemetryStatus(workerId, "failed", {
+          if (!cancelled) {
+            state.issues.push(`${row.role}: ${res.error ?? "worker failed"}`);
+          }
+          updateWorkerTelemetryStatus(workerId, cancelled ? "cancelled" : "failed", {
             completedAt: now(),
             error: res.error ?? "worker failed",
           });

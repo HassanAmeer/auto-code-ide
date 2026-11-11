@@ -736,7 +736,21 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
   return (
     <div className={cn("flex flex-col gap-1 py-0.5 px-0.5 select-none", className)}>
       {/* 0. Watchdog Section — watches every sub-agent and reports the verdict */}
-      <WatchdogCard projectName={projectName} />
+      <WatchdogCard
+        projectName={projectName}
+        backgroundTasks={visibleBackgroundTasks.map((task) => ({
+          id: task.id,
+          title: task.title,
+          status: task.status,
+          busy: task.terminalTarget ? stoppingTerminalId === task.terminalTarget.terminalId : false,
+          onStop:
+            task.terminalTarget && canOperateTerminal
+              ? () => {
+                  void handleStopTerminal(task.terminalTarget!, task.title);
+                }
+              : undefined,
+        }))}
+      />
 
       {/* 1. Subagents Section */}
       <div className="flex flex-col">

@@ -3,6 +3,7 @@ import { AlertCircle, CheckCircle2, ChevronDownIcon, InfoIcon, SquareIcon } from
 
 import { cn } from "../../lib/utils";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { toastManager } from "../ui/toast";
 import { SleekSpinnerRing } from "./sleekSpinner";
 
 export type WatchdogStatus =
@@ -17,7 +18,7 @@ export interface WatchdogWorkerRow {
   readonly id: string;
   readonly role: string;
   readonly goal: string;
-  readonly status: "running" | "completed" | "failed";
+  readonly status: "running" | "completed" | "failed" | "cancelled";
   readonly filesChanged: number;
   readonly reviewNotes: ReadonlyArray<string>;
   readonly buildRan: boolean;
@@ -52,10 +53,21 @@ export interface WatchdogItem {
     | undefined;
 }
 
+export interface WatchdogBackgroundTask {
+  readonly id: string;
+  readonly title: string;
+  readonly status: string;
+  /** Stop handler — when present the row shows a stop icon. */
+  readonly onStop?: (() => void) | undefined;
+  readonly busy?: boolean | undefined;
+}
+
 export interface WatchdogCardProps {
   readonly projectName?: string | undefined;
   readonly className?: string;
   readonly initiallyExpanded?: boolean;
+  /** App-level background tasks (terminals, scheduled runs) shown in the card. */
+  readonly backgroundTasks?: ReadonlyArray<WatchdogBackgroundTask> | undefined;
 }
 
 function statusIcon(status: WatchdogStatus) {
@@ -124,6 +136,7 @@ export const WatchdogCard = memo(function WatchdogCard({
   projectName,
   className,
   initiallyExpanded = true,
+  backgroundTasks,
 }: WatchdogCardProps) {
   const [items, setItems] = useState<WatchdogItem[]>([]);
   const [expanded, setExpanded] = useState(initiallyExpanded);
@@ -179,6 +192,41 @@ export const WatchdogCard = memo(function WatchdogCard({
       void load();
     }
   }, [flowMode, load]);
+
+  const [stoppingWorkerId, setStoppingWorkerId] = useState<string | null>(null);
+
+  const handleStopWorker = useCallback(
+    async (workerId: string, label: string) => {
+      setStoppingWorkerId(workerId);
+      try {
+        const res = await fetch("/api/super-agent/workers/stop", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ workerId }),
+        });
+        const data = await res.json().catch(() => null);
+        if (data?.ok) {
+          toastManager.add({
+            type: "info",
+            title: `Stopped ${label}`,
+            description: "Sub-agent output discarded, nothing merged.",
+          });
+        } else {
+          toastManager.add({
+            type: "error",
+            title: `Could not stop ${label}`,
+            description: data?.error ?? "Unknown error",
+          });
+        }
+      } catch {
+        toastManager.add({ type: "error", title: `Could not stop ${label}` });
+      } finally {
+        setStoppingWorkerId(null);
+        void load();
+      }
+    },
+    [load],
+  );
 
   const handleStop = useCallback(
     async (watchdogId: string) => {
@@ -263,126 +311,213 @@ export const WatchdogCard = memo(function WatchdogCard({
               <AlertCircle className="size-3 shrink-0" /> {error}
             </div>
           ) : null}
-          {items.length === 0 ? (
+          {backgroundTasks && backgroundTasks.length > 0 ? (
+            <div className="flex flex-col gap-0.5 pb-1">
+              <div className="px-2 pt-0.5 text-[9.5px] uppercase tracking-wider text-muted-foreground/70">
+                Background tasks
+              </div>
+              {backgroundTasks.map((task) => (
+                <div key={task.id} className="flex items-center gap-1.5 px-2">
+                  {task.status === "running" ? (
+                    <SleekSpinnerRing className="size-2.5 text-cyan-400 shrink-0 animate-spin" />
+                  ) : (
+                    <SquareIcon className="size-2.5 text-muted-foreground/60 shrink-0" />
+                  )}
+                  <span
+                    className="text-[10.5px] text-foreground/75 truncate flex-1"
+                    title={task.title}
+                  >
+                    {task.title}
+                  </span>
+                  {task.onStop ? (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        task.onStop?.();
+                      }}
+                      disabled={task.busy}
+                      className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer disabled:opacity-40"
+                      title="Stop this background task"
+                      aria-label={`Stop ${task.title}`}
+                    >
+                      <SquareIcon className="size-2.5 fill-current" />
+                    </button>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          ) : null}
+          {items.length === 0 && (!backgroundTasks || backgroundTasks.length === 0) ? (
             <div className="py-1 px-2 text-[11px] text-muted-foreground font-mono">
               No active watchdog
             </div>
-          ) : (
-            items.map((item) => {
-              const isActive = item.status !== "completed" && item.status !== "failed";
-              return (
-                <div
-                  key={item.id}
-                  className="flex flex-col gap-1 px-2 py-1 rounded-md hover:bg-black/[0.025] dark:hover:bg-white/[0.05] transition-colors"
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    {statusIcon(item.status)}
-                    <span className="text-xs text-foreground/85 truncate">{item.taskTitle}</span>
-                    {isActive ? (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          void handleStop(item.id);
-                        }}
-                        disabled={stoppingId === item.id}
-                        className="ml-auto p-1 rounded text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer disabled:opacity-40"
-                        title="Stop Watchdog"
-                        aria-label={`Stop watchdog for ${item.taskTitle}`}
-                      >
-                        <SquareIcon className="size-3 fill-current" />
-                      </button>
+          ) : null}
+          {items.length === 0
+            ? null
+            : items.map((item) => {
+                const isActive = item.status !== "completed" && item.status !== "failed";
+                return (
+                  <div
+                    key={item.id}
+                    className="flex flex-col gap-1 px-2 py-1 rounded-md hover:bg-black/[0.025] dark:hover:bg-white/[0.05] transition-colors"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      {statusIcon(item.status)}
+                      <span className="text-xs text-foreground/85 truncate">{item.taskTitle}</span>
+                      {isActive ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void handleStop(item.id);
+                          }}
+                          disabled={stoppingId === item.id}
+                          className="ml-auto p-1 rounded text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer disabled:opacity-40"
+                          title="Stop Watchdog"
+                          aria-label={`Stop watchdog for ${item.taskTitle}`}
+                        >
+                          <SquareIcon className="size-3 fill-current" />
+                        </button>
+                      ) : null}
+                    </div>
+
+                    <div className="text-[10px] text-muted-foreground/85 font-mono truncate pl-5.5">
+                      {item.lastAction}
+                    </div>
+
+                    {item.workers.map((worker) => (
+                      <div key={worker.id} className="flex flex-col gap-0.5 pl-5.5">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          {worker.status === "completed" ? (
+                            <CheckCircle2 className="size-3 text-emerald-400 shrink-0" />
+                          ) : worker.status === "failed" ? (
+                            <AlertCircle className="size-3 text-rose-400 shrink-0" />
+                          ) : worker.status === "cancelled" ? (
+                            <SquareIcon className="size-3 text-muted-foreground shrink-0" />
+                          ) : (
+                            <SleekSpinnerRing className="size-3 text-cyan-400 shrink-0 animate-spin" />
+                          )}
+                          <span className="text-[10px] text-foreground/75 truncate">
+                            {worker.role}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground/70 font-mono shrink-0">
+                            {worker.filesChanged} file{worker.filesChanged === 1 ? "" : "s"}
+                          </span>
+                          <span className="ml-auto flex items-center gap-1 shrink-0">
+                            {buildBadge(worker)}
+                            {testBadge(worker)}
+                            {worker.status === "running" ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void handleStopWorker(worker.id, worker.role);
+                                }}
+                                disabled={stoppingWorkerId === worker.id}
+                                className="rounded p-0.5 text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer disabled:opacity-40"
+                                title="Stop this sub-agent"
+                                aria-label={`Stop ${worker.role}`}
+                              >
+                                <SquareIcon className="size-2.5 fill-current" />
+                              </button>
+                            ) : null}
+                          </span>
+                        </div>
+                        {worker.logs && worker.logs.length > 0 ? (
+                          <div className="truncate pl-4.5 text-[9.5px] font-mono text-cyan-400/75">
+                            {worker.logs[worker.logs.length - 1]}
+                          </div>
+                        ) : null}
+                        {worker.reviewNotes.length > 0 ? (
+                          <div className="flex items-center gap-1 pl-4.5">
+                            <Tooltip>
+                              <TooltipTrigger
+                                render={
+                                  <button
+                                    type="button"
+                                    className="rounded p-0.5 text-amber-400/90 hover:text-amber-300 transition-colors cursor-pointer"
+                                    aria-label={`Review notes for ${worker.role}`}
+                                  >
+                                    <InfoIcon className="size-3" />
+                                  </button>
+                                }
+                              />
+                              <TooltipPopup side="left" className="max-w-80 text-left">
+                                {worker.reviewNotes.join("\n")}
+                              </TooltipPopup>
+                            </Tooltip>
+                            <span className="text-[10px] text-amber-400/90 truncate">
+                              {worker.reviewNotes[0]}
+                            </span>
+                          </div>
+                        ) : null}
+                      </div>
+                    ))}
+
+                    {item.verdict ? (
+                      <div className="text-[10px] text-muted-foreground/80 pl-5.5">
+                        {item.verdict}
+                      </div>
                     ) : null}
-                  </div>
-
-                  <div className="text-[10px] text-muted-foreground/85 font-mono truncate pl-5.5">
-                    {item.lastAction}
-                  </div>
-
-                  {item.workers.map((worker) => (
-                    <div key={worker.id} className="flex flex-col gap-0.5 pl-5.5">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        {worker.status === "completed" ? (
-                          <CheckCircle2 className="size-3 text-emerald-400 shrink-0" />
-                        ) : worker.status === "failed" ? (
-                          <AlertCircle className="size-3 text-rose-400 shrink-0" />
-                        ) : (
-                          <SleekSpinnerRing className="size-3 text-cyan-400 shrink-0 animate-spin" />
-                        )}
-                        <span className="text-[10px] text-foreground/75 truncate">
-                          {worker.role}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground/70 font-mono shrink-0">
-                          {worker.filesChanged} file{worker.filesChanged === 1 ? "" : "s"}
-                        </span>
-                        <span className="ml-auto flex items-center gap-1 shrink-0">
-                          {buildBadge(worker)}
-                          {testBadge(worker)}
+                    {/* Background tasks the watchdog is running — each one is
+                      stoppable on its own, without killing the whole run. */}
+                    {item.workers.filter((w) => w.status === "running").length > 0 ? (
+                      <div className="flex flex-col gap-0.5 pl-5.5">
+                        <div className="text-[9.5px] uppercase tracking-wider text-muted-foreground/70">
+                          Background tasks
+                        </div>
+                        {item.workers
+                          .filter((w) => w.status === "running")
+                          .map((w) => (
+                            <div key={`bg-${w.id}`} className="flex items-center gap-1.5">
+                              <SleekSpinnerRing className="size-2.5 text-cyan-400 shrink-0 animate-spin" />
+                              <span className="text-[10px] text-foreground/70 truncate flex-1">
+                                {w.goal}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void handleStopWorker(w.id, w.role);
+                                }}
+                                disabled={stoppingWorkerId === w.id}
+                                className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer disabled:opacity-40"
+                                title="Stop this background task"
+                                aria-label={`Stop ${w.goal}`}
+                              >
+                                <SquareIcon className="size-2.5 fill-current" />
+                              </button>
+                            </div>
+                          ))}
+                      </div>
+                    ) : null}
+                    {item.checklist && item.checklist.length > 0 ? (
+                      <div className="flex flex-col gap-0.5 pl-5.5">
+                        {item.checklist.map((c) => (
+                          <div key={c.id} className="flex items-start gap-1.5">
+                            {c.status === "passed" ? (
+                              <CheckCircle2 className="size-3 text-emerald-400 shrink-0 mt-px" />
+                            ) : (
+                              <AlertCircle className="size-3 text-amber-400 shrink-0 mt-px" />
+                            )}
+                            <span className="text-[10px] text-foreground/70 truncate">
+                              {c.requirement}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                    {item.recoveries && item.recoveries > 0 ? (
+                      <div className="pl-5.5">
+                        <span className="rounded bg-violet-500/15 px-1 py-0.5 text-[9px] font-mono text-violet-400">
+                          🛠 {item.recoveries} self-heal{item.recoveries === 1 ? "" : "s"}
                         </span>
                       </div>
-                      {worker.logs && worker.logs.length > 0 ? (
-                        <div className="truncate pl-4.5 text-[9.5px] font-mono text-cyan-400/75">
-                          {worker.logs[worker.logs.length - 1]}
-                        </div>
-                      ) : null}
-                      {worker.reviewNotes.length > 0 ? (
-                        <div className="flex items-center gap-1 pl-4.5">
-                          <Tooltip>
-                            <TooltipTrigger
-                              render={
-                                <button
-                                  type="button"
-                                  className="rounded p-0.5 text-amber-400/90 hover:text-amber-300 transition-colors cursor-pointer"
-                                  aria-label={`Review notes for ${worker.role}`}
-                                >
-                                  <InfoIcon className="size-3" />
-                                </button>
-                              }
-                            />
-                            <TooltipPopup side="left" className="max-w-80 text-left">
-                              {worker.reviewNotes.join("\n")}
-                            </TooltipPopup>
-                          </Tooltip>
-                          <span className="text-[10px] text-amber-400/90 truncate">
-                            {worker.reviewNotes[0]}
-                          </span>
-                        </div>
-                      ) : null}
-                    </div>
-                  ))}
-
-                  {item.verdict ? (
-                    <div className="text-[10px] text-muted-foreground/80 pl-5.5">
-                      {item.verdict}
-                    </div>
-                  ) : null}
-                  {item.checklist && item.checklist.length > 0 ? (
-                    <div className="flex flex-col gap-0.5 pl-5.5">
-                      {item.checklist.map((c) => (
-                        <div key={c.id} className="flex items-start gap-1.5">
-                          {c.status === "passed" ? (
-                            <CheckCircle2 className="size-3 text-emerald-400 shrink-0 mt-px" />
-                          ) : (
-                            <AlertCircle className="size-3 text-amber-400 shrink-0 mt-px" />
-                          )}
-                          <span className="text-[10px] text-foreground/70 truncate">
-                            {c.requirement}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-                  {item.recoveries && item.recoveries > 0 ? (
-                    <div className="pl-5.5">
-                      <span className="rounded bg-violet-500/15 px-1 py-0.5 text-[9px] font-mono text-violet-400">
-                        🛠 {item.recoveries} self-heal{item.recoveries === 1 ? "" : "s"}
-                      </span>
-                    </div>
-                  ) : null}
-                </div>
-              );
-            })
-          )}
+                    ) : null}
+                  </div>
+                );
+              })}
         </div>
       ) : null}
     </div>
