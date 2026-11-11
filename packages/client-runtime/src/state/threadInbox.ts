@@ -11,6 +11,7 @@ type WorkingThreadInput = Pick<
   | "hasPendingUserInput"
   | "interactionMode"
   | "latestRun"
+  | "pendingBackgroundTasks"
   | "runtime"
 >;
 
@@ -30,7 +31,16 @@ export function isThreadWorking(thread: WorkingThreadInput): boolean {
     run.status !== "running" &&
     run.status !== "waiting" &&
     thread.runtime?.activeRunId !== run.runId;
-  return !(thread.interactionMode === "plan" && thread.hasActionableProposedPlan && runSettled);
+  const planPending =
+    thread.interactionMode === "plan" && thread.hasActionableProposedPlan && runSettled;
+  if (!threadRuntimeIsActive(thread.runtime)) {
+    // No live run (e.g. the turn finished and the runtime went back to idle):
+    // only background work that will wake the thread still counts as working.
+    // A plain idle thread is done — the project spinner must stop spinning.
+    if (planPending) return false;
+    return (thread.pendingBackgroundTasks?.length ?? 0) > 0;
+  }
+  return !planPending;
 }
 
 type InboxThreadInput = Pick<

@@ -2146,6 +2146,7 @@ describe("Working shelf (beta)", () => {
     hasPendingUserInput: false,
     interactionMode: "default" as const,
     latestRun: makeLatestRun(),
+    pendingBackgroundTasks: [],
     runtime: null,
   };
   // Stopped with background tasks still open: V2's "waiting" sidebar status.
