@@ -53,5 +53,8 @@ node_modules/
 .claude/skills/
 .opencode/skills/
 
+# Local engine config with live provider/API keys — never commit (use .env placeholders instead)
+opencode.json
+
 # Runtime user data (WhatsApp sessions, logs, API keys, bot memory) - never commit
 userdata/
