@@ -1,5 +1,5 @@
 import { getWhatsAppSettings, updateWhatsAppSettings } from "./config.ts";
-import { logWhatsAppEvent } from "./logger.ts";
+import { getWhatsAppLogs, logWhatsAppEvent } from "./logger.ts";
 import type { WhatsAppSession, WhatsAppChat, WhatsAppPriorityTarget } from "./types.ts";
 
 /**
@@ -37,7 +37,7 @@ export interface LastSentState {
   to: string;
   chatId: string;
   text: string;
-  messageId?: string;
+  messageId?: string | undefined;
   timestamp: number;
 }
 
@@ -220,7 +220,7 @@ export async function startSession(
 
 export async function getSessionQr(
   sessionId: string,
-): Promise<{ qr?: string; status: string; error?: string }> {
+): Promise<{ qr?: string | undefined; status: string; error?: string | undefined }> {
   const settings = getWhatsAppSettings();
 
   const fetchQr = async () => {
@@ -326,9 +326,9 @@ export async function getSessionQr(
 export async function sendTextMessage(opts: {
   to: string;
   text: string;
-  sessionId?: string;
-  simulateDelay?: boolean;
-}): Promise<{ ok: boolean; messageId?: string; error?: string }> {
+  sessionId?: string | undefined;
+  simulateDelay?: boolean | undefined;
+}): Promise<{ ok: boolean; messageId?: string | undefined; error?: string | undefined }> {
   const settings = getWhatsAppSettings();
   const sessionId = opts.sessionId || settings.activeSessionId;
 
@@ -416,11 +416,11 @@ export async function sendTextMessage(opts: {
 export async function sendMediaMessage(opts: {
   to: string;
   mediaUrl: string;
-  caption?: string;
-  filename?: string;
-  mimetype?: string;
-  sessionId?: string;
-}): Promise<{ ok: boolean; messageId?: string; error?: string }> {
+  caption?: string | undefined;
+  filename?: string | undefined;
+  mimetype?: string | undefined;
+  sessionId?: string | undefined;
+}): Promise<{ ok: boolean; messageId?: string | undefined; error?: string | undefined }> {
   const settings = getWhatsAppSettings();
   const sessionId = opts.sessionId || settings.activeSessionId;
 
@@ -680,10 +680,10 @@ export interface WhatsAppMessageRecord {
  * Fetches recent messages from OpenWA (optionally filtered by chatId, limit, type).
  */
 export async function getChatMessages(opts?: {
-  chatId?: string;
-  limit?: number;
-  sessionId?: string;
-  type?: string;
+  chatId?: string | undefined;
+  limit?: number | undefined;
+  sessionId?: string | undefined;
+  type?: string | undefined;
 }): Promise<WhatsAppMessageRecord[]> {
   const settings = getWhatsAppSettings();
   const sid = opts?.sessionId || settings.activeSessionId;

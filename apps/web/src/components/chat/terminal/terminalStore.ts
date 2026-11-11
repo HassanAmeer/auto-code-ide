@@ -76,6 +76,16 @@ const STORAGE_KEY_ALWAYS_ALLOWED_COMMANDS = "adc_terminal_always_allowed_command
 const STORAGE_KEY_RUNS = "adc_terminal_latest_runs";
 const STORAGE_KEY_RUNS_BY_CHAT = "adc_terminal_runs_by_chat";
 
+/** Guarded localStorage write — quota/private-mode failures must never crash store updates. */
+function safeSetItem(key: string, value: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Ignore quota/storage errors (private browsing, full disk) — UI must keep working.
+  }
+}
+
 function saveRunsByChatToStorage(runsByChat: Record<string, TerminalCommandRun[]>) {
   if (typeof window !== "undefined") {
     try {
@@ -85,7 +95,7 @@ function saveRunsByChatToStorage(runsByChat: Record<string, TerminalCommandRun[]
           trimmed[k] = v.slice(0, 30);
         }
       }
-      window.localStorage.setItem(STORAGE_KEY_RUNS_BY_CHAT, JSON.stringify(trimmed));
+      safeSetItem(STORAGE_KEY_RUNS_BY_CHAT, JSON.stringify(trimmed));
     } catch {
       // ignore storage quota errors
     }
@@ -286,7 +296,7 @@ export const terminalStore = {
   setActiveCwd(cwd: string) {
     state = { ...state, activeCwd: cwd };
     if (typeof window !== "undefined") {
-      window.localStorage.setItem(STORAGE_KEY_CWD, cwd);
+      safeSetItem(STORAGE_KEY_CWD, cwd);
     }
     notify();
   },
@@ -299,7 +309,7 @@ export const terminalStore = {
       unreadAiToolsCount: isOpen ? 0 : state.unreadAiToolsCount,
     };
     if (typeof window !== "undefined") {
-      window.localStorage.setItem(STORAGE_KEY_OPEN, String(isOpen));
+      safeSetItem(STORAGE_KEY_OPEN, String(isOpen));
     }
     notify();
   },
@@ -370,7 +380,7 @@ export const terminalStore = {
     const updatedTabs = state.terminalTabs.map((t) => (t.id === tabId ? { ...t, cwd } : t));
     state = { ...state, terminalTabs: updatedTabs, activeCwd: cwd };
     if (typeof window !== "undefined") {
-      window.localStorage.setItem(STORAGE_KEY_CWD, cwd);
+      safeSetItem(STORAGE_KEY_CWD, cwd);
     }
     notify();
   },
@@ -383,7 +393,7 @@ export const terminalStore = {
   setPermissionMode(mode: "full-access" | "ask") {
     state = { ...state, permissionMode: mode };
     if (typeof window !== "undefined") {
-      window.localStorage.setItem(STORAGE_KEY_PERMISSION_MODE, mode);
+      safeSetItem(STORAGE_KEY_PERMISSION_MODE, mode);
     }
     notify();
   },
@@ -395,7 +405,7 @@ export const terminalStore = {
     const next = Array.from(new Set([...state.alwaysAllowedCommands, base, trimmed]));
     state = { ...state, alwaysAllowedCommands: next };
     if (typeof window !== "undefined") {
-      window.localStorage.setItem(STORAGE_KEY_ALWAYS_ALLOWED_COMMANDS, JSON.stringify(next));
+      safeSetItem(STORAGE_KEY_ALWAYS_ALLOWED_COMMANDS, JSON.stringify(next));
     }
     notify();
   },
@@ -418,7 +428,7 @@ export const terminalStore = {
     const updated = [...state.sshProfiles.filter((p) => p.id !== profile.id), profile];
     state = { ...state, sshProfiles: updated, activeTarget: profile.id };
     if (typeof window !== "undefined") {
-      window.localStorage.setItem(STORAGE_KEY_SSH, JSON.stringify(updated));
+      safeSetItem(STORAGE_KEY_SSH, JSON.stringify(updated));
       void saveServerSetting(STORAGE_KEY_SSH, updated);
     }
     notify();
@@ -432,7 +442,7 @@ export const terminalStore = {
       activeTarget: state.activeTarget === id ? "local" : state.activeTarget,
     };
     if (typeof window !== "undefined") {
-      window.localStorage.setItem(STORAGE_KEY_SSH, JSON.stringify(updated));
+      safeSetItem(STORAGE_KEY_SSH, JSON.stringify(updated));
       void saveServerSetting(STORAGE_KEY_SSH, updated);
     }
     notify();
@@ -448,7 +458,7 @@ export const terminalStore = {
       if (nextRuns.length === 0) {
         window.localStorage.removeItem(STORAGE_KEY_RUNS);
       } else {
-        window.localStorage.setItem(STORAGE_KEY_RUNS, JSON.stringify(nextRuns.slice(0, 20)));
+        safeSetItem(STORAGE_KEY_RUNS, JSON.stringify(nextRuns.slice(0, 20)));
       }
     }
     saveRunsByChatToStorage(nextRunsByChat);
@@ -519,7 +529,7 @@ export const terminalStore = {
       runsByChat: nextRunsByChat,
     };
     if (typeof window !== "undefined") {
-      window.localStorage.setItem(STORAGE_KEY_RUNS, JSON.stringify(nextRuns.slice(0, 20)));
+      safeSetItem(STORAGE_KEY_RUNS, JSON.stringify(nextRuns.slice(0, 20)));
     }
     saveRunsByChatToStorage(nextRunsByChat);
     notify();
@@ -533,7 +543,7 @@ export const terminalStore = {
     const updated = [...state.accessKeys, newKey];
     state = { ...state, accessKeys: updated };
     if (typeof window !== "undefined") {
-      window.localStorage.setItem(STORAGE_KEY_KEYS, JSON.stringify(updated));
+      safeSetItem(STORAGE_KEY_KEYS, JSON.stringify(updated));
       void saveServerSetting(STORAGE_KEY_KEYS, updated);
     }
     notify();
@@ -543,7 +553,7 @@ export const terminalStore = {
     const updated = state.accessKeys.map((k) => (k.id === id ? { ...k, ...updates } : k));
     state = { ...state, accessKeys: updated };
     if (typeof window !== "undefined") {
-      window.localStorage.setItem(STORAGE_KEY_KEYS, JSON.stringify(updated));
+      safeSetItem(STORAGE_KEY_KEYS, JSON.stringify(updated));
       void saveServerSetting(STORAGE_KEY_KEYS, updated);
     }
     notify();
@@ -553,7 +563,7 @@ export const terminalStore = {
     const updated = state.accessKeys.map((k) => (k.id === id ? { ...k, enabled: !k.enabled } : k));
     state = { ...state, accessKeys: updated };
     if (typeof window !== "undefined") {
-      window.localStorage.setItem(STORAGE_KEY_KEYS, JSON.stringify(updated));
+      safeSetItem(STORAGE_KEY_KEYS, JSON.stringify(updated));
       void saveServerSetting(STORAGE_KEY_KEYS, updated);
     }
     notify();
@@ -575,16 +585,16 @@ export const terminalStore = {
       activeCwd: nextCwd,
     };
     if (typeof window !== "undefined") {
-      if (projectId) window.localStorage.setItem(STORAGE_KEY_PROJECT_ID, projectId);
+      if (projectId) safeSetItem(STORAGE_KEY_PROJECT_ID, projectId);
       else window.localStorage.removeItem(STORAGE_KEY_PROJECT_ID);
 
-      if (title) window.localStorage.setItem(STORAGE_KEY_PROJECT_TITLE, title);
+      if (title) safeSetItem(STORAGE_KEY_PROJECT_TITLE, title);
       else window.localStorage.removeItem(STORAGE_KEY_PROJECT_TITLE);
 
-      if (workspaceRoot) window.localStorage.setItem(STORAGE_KEY_LAST_PROJECT_PATH, workspaceRoot);
+      if (workspaceRoot) safeSetItem(STORAGE_KEY_LAST_PROJECT_PATH, workspaceRoot);
 
-      window.localStorage.setItem(STORAGE_KEY_SCOPE_MODE, nextScope);
-      window.localStorage.setItem(STORAGE_KEY_CWD, nextCwd);
+      safeSetItem(STORAGE_KEY_SCOPE_MODE, nextScope);
+      safeSetItem(STORAGE_KEY_CWD, nextCwd);
     }
     notify();
   },
@@ -597,8 +607,8 @@ export const terminalStore = {
       activeCwd: nextCwd,
     };
     if (typeof window !== "undefined") {
-      window.localStorage.setItem(STORAGE_KEY_SCOPE_MODE, mode);
-      window.localStorage.setItem(STORAGE_KEY_CWD, nextCwd);
+      safeSetItem(STORAGE_KEY_SCOPE_MODE, mode);
+      safeSetItem(STORAGE_KEY_CWD, nextCwd);
     }
     notify();
   },
@@ -616,9 +626,9 @@ export const terminalStore = {
       activeTarget: nextKeyId ? `key_${nextKeyId}` : "local",
     };
     if (typeof window !== "undefined") {
-      if (nextKeyId) window.localStorage.setItem(STORAGE_KEY_SELECTED_KEY, nextKeyId);
+      if (nextKeyId) safeSetItem(STORAGE_KEY_SELECTED_KEY, nextKeyId);
       else window.localStorage.removeItem(STORAGE_KEY_SELECTED_KEY);
-      window.localStorage.setItem(STORAGE_KEY_KEYS, JSON.stringify(updated));
+      safeSetItem(STORAGE_KEY_KEYS, JSON.stringify(updated));
     }
     notify();
   },
@@ -635,7 +645,7 @@ export const terminalStore = {
       activeTarget: nextSelectedKey ? `key_${nextSelectedKey}` : "local",
     };
     if (typeof window !== "undefined") {
-      window.localStorage.setItem(STORAGE_KEY_KEYS, JSON.stringify(updated));
+      safeSetItem(STORAGE_KEY_KEYS, JSON.stringify(updated));
       void saveServerSetting(STORAGE_KEY_KEYS, updated);
       if (!nextSelectedKey) window.localStorage.removeItem(STORAGE_KEY_SELECTED_KEY);
     }
@@ -723,7 +733,7 @@ export const terminalStore = {
 
     if (typeof window !== "undefined") {
       try {
-        window.localStorage.setItem(STORAGE_KEY_RUNS, JSON.stringify(mappedRuns.slice(0, 30)));
+        safeSetItem(STORAGE_KEY_RUNS, JSON.stringify(mappedRuns.slice(0, 30)));
       } catch {}
     }
 
@@ -763,8 +773,8 @@ export const terminalStore = {
     };
 
     if (typeof window !== "undefined") {
-      window.localStorage.setItem(STORAGE_KEY_TERMINAL_CHATS, JSON.stringify(updated));
-      window.localStorage.setItem(STORAGE_KEY_RUNS, JSON.stringify([]));
+      safeSetItem(STORAGE_KEY_TERMINAL_CHATS, JSON.stringify(updated));
+      safeSetItem(STORAGE_KEY_RUNS, JSON.stringify([]));
     }
     saveRunsByChatToStorage(nextRunsByChat);
     notify();
@@ -778,7 +788,7 @@ export const terminalStore = {
       terminalChats: updated,
     };
     if (typeof window !== "undefined") {
-      window.localStorage.setItem(STORAGE_KEY_TERMINAL_CHATS, JSON.stringify(updated));
+      safeSetItem(STORAGE_KEY_TERMINAL_CHATS, JSON.stringify(updated));
     }
     notify();
   },
@@ -798,8 +808,8 @@ export const terminalStore = {
       runs: mappedRuns,
     };
     if (typeof window !== "undefined") {
-      window.localStorage.setItem(STORAGE_KEY_TERMINAL_CHATS, JSON.stringify(updated));
-      window.localStorage.setItem(STORAGE_KEY_RUNS, JSON.stringify(mappedRuns.slice(0, 30)));
+      safeSetItem(STORAGE_KEY_TERMINAL_CHATS, JSON.stringify(updated));
+      safeSetItem(STORAGE_KEY_RUNS, JSON.stringify(mappedRuns.slice(0, 30)));
     }
     saveRunsByChatToStorage(nextRunsByChat);
     notify();
@@ -843,8 +853,8 @@ export const terminalStore = {
         activeTarget: `key_${savedKey.id}`,
       };
       if (typeof window !== "undefined") {
-        window.localStorage.setItem(STORAGE_KEY_KEYS, JSON.stringify(updated));
-        window.localStorage.setItem(STORAGE_KEY_SELECTED_KEY, savedKey.id);
+        safeSetItem(STORAGE_KEY_KEYS, JSON.stringify(updated));
+        safeSetItem(STORAGE_KEY_SELECTED_KEY, savedKey.id);
       }
     } else {
       savedKey = {
@@ -866,8 +876,8 @@ export const terminalStore = {
         activeTarget: `key_${savedKey.id}`,
       };
       if (typeof window !== "undefined") {
-        window.localStorage.setItem(STORAGE_KEY_KEYS, JSON.stringify(updated));
-        window.localStorage.setItem(STORAGE_KEY_SELECTED_KEY, savedKey.id);
+        safeSetItem(STORAGE_KEY_KEYS, JSON.stringify(updated));
+        safeSetItem(STORAGE_KEY_SELECTED_KEY, savedKey.id);
       }
     }
 
@@ -879,7 +889,7 @@ export const terminalStore = {
     const updated = state.accessKeys.map((k) => ({ ...k, enabled }));
     state = { ...state, accessKeys: updated };
     if (typeof window !== "undefined") {
-      window.localStorage.setItem(STORAGE_KEY_KEYS, JSON.stringify(updated));
+      safeSetItem(STORAGE_KEY_KEYS, JSON.stringify(updated));
     }
     notify();
   },
@@ -1091,10 +1101,7 @@ export const terminalStore = {
           saveRunsByChatToStorage(blockedRunsByChat);
           if (typeof window !== "undefined") {
             try {
-              window.localStorage.setItem(
-                STORAGE_KEY_RUNS,
-                JSON.stringify(blockedRuns.slice(0, 20)),
-              );
+              safeSetItem(STORAGE_KEY_RUNS, JSON.stringify(blockedRuns.slice(0, 20)));
             } catch {
               // ignore storage quota errors
             }
@@ -1288,14 +1295,8 @@ export const terminalStore = {
       };
       if (typeof window !== "undefined") {
         try {
-          window.localStorage.setItem(
-            STORAGE_KEY_RUNS,
-            JSON.stringify(updatedCompletedRuns.slice(0, 20)),
-          );
-          window.localStorage.setItem(
-            STORAGE_KEY_TERMINAL_CHATS,
-            JSON.stringify(updatedTerminalChats),
-          );
+          safeSetItem(STORAGE_KEY_RUNS, JSON.stringify(updatedCompletedRuns.slice(0, 20)));
+          safeSetItem(STORAGE_KEY_TERMINAL_CHATS, JSON.stringify(updatedTerminalChats));
         } catch {
           // ignore storage quota errors
         }

@@ -364,6 +364,47 @@ export function isLoopbackHostname(hostname: string): boolean {
   return LOOPBACK_HOSTNAMES.has(normalizedHostname);
 }
 
+/**
+ * Literal-IP / well-known-name guard for outbound fetches. Blocks loopback,
+ * RFC1918, link-local (cloud metadata 169.254.169.254), CGN and unspecified
+ * addresses so /api/web/fetch can't be used to reach internal services.
+ * Note: hostnames resolving to private IPs are not caught without DNS lookup;
+ * deployments needing full SSRF protection should egress through a proxy.
+ */
+export function isPrivateOrReservedHost(hostname: string): boolean {
+  const normalizedHostname = hostname
+    .trim()
+    .toLowerCase()
+    .replace(/^\[(.*)\]$/, "$1");
+  if (!normalizedHostname) return true;
+  if (isLoopbackHostname(normalizedHostname)) return true;
+  if (normalizedHostname === "0.0.0.0" || normalizedHostname === "::") return true;
+  if (normalizedHostname.endsWith(".internal") || normalizedHostname.endsWith(".local")) {
+    return true;
+  }
+  const ipv4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(normalizedHostname);
+  if (ipv4) {
+    const a = Number(ipv4[1]);
+    const b = Number(ipv4[2]);
+    if ([a, b, Number(ipv4[3]), Number(ipv4[4])].some((n) => n > 255)) return true;
+    if (a === 10 || a === 127 || a === 0) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 169 && b === 254) return true;
+    if (a === 100 && b >= 64 && b <= 127) return true;
+    if (a >= 224) return true; // multicast/reserved
+    return false;
+  }
+  const ipv6 = normalizedHostname;
+  if (ipv6 === "::1" || ipv6 === "::ffff:0.0.0.0") return true;
+  if (ipv6.startsWith("::ffff:")) {
+    const mapped = ipv6.slice("::ffff:".length);
+    if (/^\d{1,3}(\.\d{1,3}){3}$/.test(mapped)) return isPrivateOrReservedHost(mapped);
+  }
+  if (ipv6.startsWith("fc") || ipv6.startsWith("fd") || ipv6.startsWith("fe80")) return true;
+  return false;
+}
+
 export function resolveDevRedirectUrl(devUrl: URL, requestUrl: URL): string {
   const redirectUrl = new URL(devUrl.toString());
   redirectUrl.pathname = requestUrl.pathname;
@@ -1271,17 +1312,31 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
     const lastUserMsg = [...messages].reverse().find((m) => m.role === "user")?.content || "";
     let botResult: any = null;
     try {
+      const botConfig = yield* ServerConfig.ServerConfig;
+      let projectRoot = process.cwd();
+      try {
+        const target = resolveProjectTarget(botConfig.dbPath, bodyJson?.instanceId || "Workspace");
+        if (target?.workspaceRoot) {
+          projectRoot = target.workspaceRoot;
+        }
+      } catch (resolveError) {
+        console.warn("[super-bot] project root resolution failed, using cwd:", resolveError);
+      }
+      const superBotLanguage = bodyJson?.language === "english" ? "english" : "urdu";
       botResult = yield* Effect.promise(() =>
         runSuperBotTurn({
           userText: lastUserMsg,
           projectName: bodyJson?.instanceId || "Workspace",
-          projectRoot: "/root/autojobs",
+          projectRoot,
           selectedModel: bodyJson?.model || "gemini-2.5-flash",
-          language: "urdu",
+          language: superBotLanguage,
           messages,
         }),
       );
-    } catch {}
+    } catch (superBotError) {
+      // Never swallow bot failures silently — log and fall through to the normal model path.
+      console.warn("[super-bot] bridge failed:", superBotError);
+    }
 
     // Only return directly if a physical tool executed (e.g. wishlist add/list, auto-heal trigger, watchdog, whatsapp executed actions)
     // NEVER short-circuit conversational turns, greetings, questions, or clarification with static strings!
@@ -1291,9 +1346,16 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
       [
         "wishlist_item_added",
         "wishlist_listed",
+        "auto_heal_executed",
         "auto_heal_triggered",
+        "watchdog_activated",
         "watchdog_started",
         "watchdog_status",
+        "whatsapp_clarification_needed",
+        "whatsapp_recipient_needed",
+        "whatsapp_delete_prompt",
+        "whatsapp_edit_prompt",
+        "whatsapp_send_failed",
         "whatsapp_message_sent",
         "whatsapp_message_scheduled",
         "whatsapp_message_edited",
@@ -3127,7 +3189,9 @@ export const layerProjectPreviewRoute = HttpRouter.add(
     }
 
     let filePath = NodePath.resolve(targetRoot, rawSubPath);
-    if (!filePath.startsWith(targetRoot)) {
+    const isInsideTargetRoot = (candidate: string) =>
+      candidate === targetRoot || candidate.startsWith(targetRoot + NodePath.sep);
+    if (!isInsideTargetRoot(filePath)) {
       return HttpServerResponse.text("Forbidden: Path Traversal", { status: 403 });
     }
 
@@ -3138,7 +3202,7 @@ export const layerProjectPreviewRoute = HttpRouter.add(
       for (const dir of subDirs) {
         const candidate = NodePath.resolve(targetRoot, dir, rawSubPath);
         if (
-          candidate.startsWith(targetRoot) &&
+          isInsideTargetRoot(candidate) &&
           NodeFS.existsSync(candidate) &&
           !NodeFS.statSync(candidate).isDirectory()
         ) {
@@ -3829,7 +3893,8 @@ export const layerCodexCliStatusRoute = HttpRouter.add(
             message: `Binary not found at specified path: ${requestedPath}`,
           });
         }
-        const out = NodeChildProcess.execSync(`${requestedPath} --version`, {
+        // execFileSync never spawns a shell, so metacharacters in the path are inert.
+        const out = NodeChildProcess.execFileSync(requestedPath, ["--version"], {
           encoding: "utf-8",
           timeout: 4000,
           env: {
@@ -3891,7 +3956,7 @@ export const layerCodexCliStatusRoute = HttpRouter.add(
         if (bin !== "codex" && !NodeFS.existsSync(bin)) {
           continue;
         }
-        const out = NodeChildProcess.execSync(`${bin} --version`, {
+        const out = NodeChildProcess.execFileSync(bin, ["--version"], {
           encoding: "utf-8",
           timeout: 4000,
           env: {
@@ -5883,24 +5948,14 @@ export const layerWebFetchRoute = HttpRouter.add(
 
     const targetUrl = parsedUrl.toString();
 
-    try {
-      try {
-        const jinaRes = yield* Effect.promise(() =>
-          fetch(`https://r.jina.ai/${targetUrl}`, {
-            headers: { Accept: "text/markdown, text/plain" },
-          }),
-        );
-        if (jinaRes.ok) {
-          const text = yield* Effect.promise(() => jinaRes.text());
-          return HttpServerResponse.jsonUnsafe({
-            ok: true,
-            source: "jina",
-            url: targetUrl,
-            text: text.slice(0, 20000),
-          });
-        }
-      } catch {}
+    if (isPrivateOrReservedHost(parsedUrl.hostname)) {
+      return HttpServerResponse.jsonUnsafe({
+        ok: false,
+        error: "Refusing to fetch a private or reserved host.",
+      });
+    }
 
+    try {
       let currentUrl = targetUrl;
       let res: Response | null = null;
       for (let redirectCount = 0; redirectCount < 5; redirectCount++) {
@@ -5925,6 +5980,12 @@ export const layerWebFetchRoute = HttpRouter.add(
               error: "Redirect to non-HTTP/HTTPS protocol prohibited.",
             });
           }
+          if (isPrivateOrReservedHost(nextUrl.hostname)) {
+            return HttpServerResponse.jsonUnsafe({
+              ok: false,
+              error: "Redirect to a private or reserved host prohibited.",
+            });
+          }
           currentUrl = nextUrl.toString();
           continue;
         }
@@ -5937,6 +5998,14 @@ export const layerWebFetchRoute = HttpRouter.add(
         return HttpServerResponse.jsonUnsafe({
           ok: false,
           error: res ? `HTTP ${res.status}: ${res.statusText}` : "Failed to fetch webpage.",
+        });
+      }
+
+      const contentLength = Number(res.headers.get("content-length") ?? 0);
+      if (Number.isFinite(contentLength) && contentLength > 10 * 1024 * 1024) {
+        return HttpServerResponse.jsonUnsafe({
+          ok: false,
+          error: "Response too large to process.",
         });
       }
 

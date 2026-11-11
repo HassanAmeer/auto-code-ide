@@ -107,13 +107,13 @@ export function cancelScheduledWhatsAppTask(taskId: string): boolean {
 
 export async function runScheduledWhatsAppTaskNow(
   taskId: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string | undefined }> {
   ensureLoaded();
   const task = memoryTasks.find((t) => t.id === taskId);
   if (!task) return { ok: false, error: "Task not found" };
 
   try {
-    let result: { ok: boolean; messageId?: string; error?: string };
+    let result: { ok: boolean; messageId?: string | undefined; error?: string | undefined };
 
     if (task.messageType === "image" && task.mediaUrl) {
       result = await sendMediaMessage({

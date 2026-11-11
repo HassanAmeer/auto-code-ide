@@ -151,23 +151,8 @@ export async function fetchTinyFishUrl(
   const endpoint = getTinyFishConfig().fetchEndpoint || "https://api.fetch.tinyfish.ai";
 
   if (!key) {
-    // Graceful fallback to Jina reader if no TinyFish key
-    try {
-      const jinaRes = await fetch(`https://r.jina.ai/${targetUrl}`, {
-        headers: { Accept: "text/markdown, text/plain" },
-      });
-      if (jinaRes.ok) {
-        const text = await jinaRes.text();
-        return {
-          success: true,
-          title: targetUrl,
-          text: text.slice(0, 10000),
-        };
-      }
-    } catch {
-      // Fall through
-    }
-
+    // Refuse to silently proxy arbitrary URLs (which can be internal or token-bearing)
+    // through a third-party reader service. Require an explicit TinyFish key.
     return {
       success: false,
       error: "TinyFish API key required for full stealth Chromium extraction.",

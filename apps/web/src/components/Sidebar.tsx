@@ -1898,7 +1898,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
                     <span className="text-xs">
                       {variantAction === "unsettle"
                         ? settledTimeLabel(thread)
-                        : threadTimeLabel(thread)}
+                        : `${threadOriginLabel(thread) ? `${threadOriginLabel(thread)}, ` : ""}${threadTimeLabel(thread)}`}
                     </span>
                   )}
                 </span>
@@ -2090,7 +2090,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
                         </span>
                       )
                     ) : (
-                      threadTimeLabel(thread)
+                      `${threadOriginLabel(thread) ? `${threadOriginLabel(thread)}, ` : ""}${threadTimeLabel(thread)}`
                     )}
                   </span>
                   {props.settlementSupported || showSnoozeButton || hasUnsentDraft ? (

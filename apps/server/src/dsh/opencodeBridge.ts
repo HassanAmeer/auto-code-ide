@@ -25,12 +25,17 @@ export interface OpenCodeExecutionResult {
  */
 export function getActiveCoreEngine(): string {
   try {
+    const autocodeHome = process.env.AUTOCODE_HOME?.trim();
+    const t3Home = process.env.T3CODE_BASE_DIR?.trim();
     const candidateDirs = [
+      ...(autocodeHome ? [NodePath.join(autocodeHome, "userdata"), autocodeHome] : []),
+      ...(t3Home ? [NodePath.join(t3Home, "userdata"), t3Home] : []),
       "/root/autojobs/data/userdata",
       "/root/autojobs/data",
+      NodePath.join(NodeOS.homedir(), ".autocode", "userdata"),
+      NodePath.join(NodeOS.homedir(), ".autocode"),
       NodePath.join(process.cwd(), "data/userdata"),
       NodePath.join(process.cwd(), "data"),
-      NodePath.join(NodeOS.homedir(), ".autocode/userdata"),
     ];
     for (const dir of candidateDirs) {
       const jsonPath = NodePath.join(dir, "app-settings.json");
@@ -42,7 +47,12 @@ export function getActiveCoreEngine(): string {
         }
       }
     }
-  } catch {}
+  } catch (engineReadError) {
+    console.warn(
+      "[dsh] Failed to read active_core_engine from app-settings.json, defaulting to opencode-full-engine:",
+      engineReadError,
+    );
+  }
   return "opencode-full-engine";
 }
 

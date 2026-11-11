@@ -35,9 +35,18 @@ export async function executeBash(
   }
 }
 
+function resolveWithinBase(baseDir: string | undefined, filePath: string, label: string): string {
+  const root = path.resolve(baseDir ?? process.cwd());
+  const resolved = path.resolve(root, filePath);
+  if (resolved !== root && !resolved.startsWith(root + path.sep)) {
+    throw new Error(`${label} path escapes allowed directory: ${filePath}`);
+  }
+  return resolved;
+}
+
 export function readProjectFile(filePath: string, baseDir?: string): ToolResult {
   try {
-    const resolved = baseDir ? path.resolve(baseDir, filePath) : path.resolve(filePath);
+    const resolved = resolveWithinBase(baseDir, filePath, "read");
     if (!fs.existsSync(resolved)) {
       return { ok: false, error: `File not found: ${filePath}` };
     }
@@ -50,7 +59,7 @@ export function readProjectFile(filePath: string, baseDir?: string): ToolResult 
 
 export function writeProjectFile(filePath: string, content: string, baseDir?: string): ToolResult {
   try {
-    const resolved = baseDir ? path.resolve(baseDir, filePath) : path.resolve(filePath);
+    const resolved = resolveWithinBase(baseDir, filePath, "write");
     const dir = path.dirname(resolved);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });

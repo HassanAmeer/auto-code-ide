@@ -100,16 +100,18 @@ export const SidebarResourceStats = memo(function SidebarResourceStats() {
   }
 
   return (
-    <div className="w-full border-y border-border/40 bg-muted/20 select-none">
-      <div
-        className={cn(
-          "flex items-center gap-2.5 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden",
-          "py-1.5 px-3",
-        )}
-      >
+    <div
+      className="w-full border-y border-border/40 bg-muted/20 select-none"
+      title={
+        stats
+          ? `CPU: ${stats.cpuPercent}% | RAM: ${stats.memUsedGb}/${stats.memTotalGb}GB (${stats.memPercent}%) | SWAP: ${stats.swapUsedGb || "0"}/${stats.swapTotalGb || "0"}GB (${stats.swapPercent ?? 0}%) | ROM: ${stats.diskFreeGb}GB free (${stats.diskPercent}%)${stats.uptimeStr ? ` | Up: ${stats.uptimeStr}` : ""}`
+          : undefined
+      }
+    >
+      <div className="flex items-center gap-1.5 whitespace-nowrap px-2 py-1.5">
         {isLoading && !stats ? (
           // Cupertino shimmer skeleton loader
-          <div className="flex items-center gap-2 animate-pulse min-w-max">
+          <div className="flex items-center gap-1.5 animate-pulse">
             <div className="h-2.5 w-12 rounded-sm bg-zinc-700/50" />
             <div className="w-px h-2.5 bg-zinc-700/50 shrink-0" />
             <div className="h-2.5 w-12 rounded-sm bg-zinc-700/50" />
@@ -120,7 +122,7 @@ export const SidebarResourceStats = memo(function SidebarResourceStats() {
           </div>
         ) : stats ? (
           // Cupertino iOS style live metrics with separators
-          <div className="flex items-center gap-2 font-mono text-[10px] min-w-max leading-none text-zinc-400">
+          <div className="flex items-center gap-1.5 font-mono text-[9px] leading-none text-zinc-400">
             {/* CPU */}
             <div
               className="flex items-center gap-1 shrink-0"
@@ -142,7 +144,7 @@ export const SidebarResourceStats = memo(function SidebarResourceStats() {
             </div>
 
             {/* Separator line */}
-            <div className="w-px h-2.5 bg-zinc-700/60 shrink-0" />
+            <div className="w-px h-2 bg-zinc-700/60 shrink-0" />
 
             {/* RAM */}
             <div
@@ -165,7 +167,7 @@ export const SidebarResourceStats = memo(function SidebarResourceStats() {
             </div>
 
             {/* Separator line */}
-            <div className="w-px h-2.5 bg-zinc-700/60 shrink-0" />
+            <div className="w-px h-2 bg-zinc-700/60 shrink-0" />
 
             {/* SWAP */}
             <div
@@ -188,7 +190,7 @@ export const SidebarResourceStats = memo(function SidebarResourceStats() {
             </div>
 
             {/* Separator line */}
-            <div className="w-px h-2.5 bg-zinc-700/60 shrink-0" />
+            <div className="w-px h-2 bg-zinc-700/60 shrink-0" />
 
             {/* ROM / Storage */}
             <div
@@ -209,17 +211,6 @@ export const SidebarResourceStats = memo(function SidebarResourceStats() {
                 {stats.diskPercent}%
               </span>
             </div>
-
-            {/* Optional extra: Uptime */}
-            {stats.uptimeStr && (
-              <>
-                <div className="w-px h-2.5 bg-zinc-700/60 shrink-0" />
-                <div className="flex items-center gap-1 shrink-0 text-zinc-500 text-[9px]">
-                  <span>Up:</span>
-                  <span className="text-zinc-400">{stats.uptimeStr}</span>
-                </div>
-              </>
-            )}
           </div>
         ) : null}
       </div>

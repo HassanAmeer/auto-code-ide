@@ -51,7 +51,13 @@ export async function processSuperBotTurn(options: BotTurnOptions): Promise<BotT
 
   // 1. Farewell / Exit
   if (analysis.intent === "FAREWELL_OR_EXIT") {
+    const reply =
+      lang === "urdu"
+        ? "Allah hafiz! Kabhi bhi zaroorat ho, main yahin hoon. 👋"
+        : "Goodbye! Whenever you need me, I'm here. 👋";
     return {
+      reply,
+      spokenReply: reply,
       intent: analysis.intent,
       actionTaken: "farewell_ack",
       systemPrompt: buildSmartBotSystemPrompt({ intentAnalysis: analysis, language: lang }),
@@ -60,7 +66,13 @@ export async function processSuperBotTurn(options: BotTurnOptions): Promise<BotT
 
   // 2. Greeting / ChitChat
   if (analysis.intent === "GREETING_OR_CHITCHAT") {
+    const reply =
+      lang === "urdu"
+        ? "Salam! Main theek hoon, shukriya. Aap batain, aaj kya kaam karna hai? 😊"
+        : "Hello! I'm doing well, thanks. What would you like to work on today? 😊";
     return {
+      reply,
+      spokenReply: reply,
       intent: analysis.intent,
       actionTaken: "greeting_ack",
       systemPrompt: buildSmartBotSystemPrompt({ intentAnalysis: analysis, language: lang }),
@@ -69,7 +81,16 @@ export async function processSuperBotTurn(options: BotTurnOptions): Promise<BotT
 
   // 2.1 Capabilities Inquiry (e.g. "aap kya kar sakte hain", "اپ کیا کر سکتے ہیں")
   if (analysis.intent === "CAPABILITIES_INQUIRY") {
+    const reply =
+      lang === "urdu"
+        ? "Main yeh kar sakta hoon:\n\n• 🏗️ Project bana sakta hoon (worker agents ke zariye code likhwa kar)\n• 🐛 Bugs diagnose aur auto-fix (auto-healer)\n• 📋 Wishlist / feature backlog manage\n• 💬 WhatsApp messages (send/edit/delete/schedule)\n• 👀 Away-mode watchdog (errors aur preview monitor)\n• 🧠 Brainstorming aur mashwara\n\nBatain, kahan se shuru karein?"
+        : "Here's what I can do:\n\n• 🏗️ Build projects (delegate to worker agents)\n• 🐛 Diagnose & auto-fix bugs (auto-healer)\n• 📋 Manage wishlist / feature backlog\n• 💬 WhatsApp messages (send/edit/delete/schedule)\n• 👀 Away-mode watchdog (monitor errors & preview)\n• 🧠 Brainstorming & consulting\n\nWhere would you like to start?";
     return {
+      reply,
+      spokenReply:
+        lang === "urdu"
+          ? "Main project build, bug fixing, wishlist, WhatsApp aur watchdog kar sakta hoon."
+          : "I can build projects, fix bugs, manage your wishlist, handle WhatsApp, and watch your project while you're away.",
       intent: analysis.intent,
       actionTaken: "capabilities_ack",
       systemPrompt: buildSmartBotSystemPrompt({ intentAnalysis: analysis, language: lang }),
@@ -211,10 +232,12 @@ export async function processSuperBotTurn(options: BotTurnOptions): Promise<BotT
     // Run AI Thinking & Intent Extraction with full conversation history
     const parsed = await parseWhatsAppInstructionWithThinking(userText, {
       activeSessionDisplayName: sessionDisplayName,
-      activeSessionPhone: activeSessionObj?.phone,
+      activeSessionPhone: activeSessionObj?.phone ?? undefined,
       priorityTarget,
       priorityTargets,
-      knownChats: allChats,
+      knownChats: allChats
+        .slice(0, 100)
+        .map((c) => ({ id: c.id, name: c.name, isGroup: c.isGroup, kind: c.kind, phone: c.phone })),
       lastSentState: lastSent,
       conversationHistory: options.messages,
     });

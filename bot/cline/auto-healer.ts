@@ -20,6 +20,17 @@ export interface HealResult {
 /**
  * Parses raw terminal or runtime logs to identify the broken file and cause
  */
+function detectBuildCommand(projectRoot: string): string {
+  try {
+    if (fs.existsSync(path.join(projectRoot, "pnpm-lock.yaml"))) return "pnpm run build";
+    if (fs.existsSync(path.join(projectRoot, "yarn.lock"))) return "yarn build";
+    if (fs.existsSync(path.join(projectRoot, "package-lock.json")))
+      return "npm run build --if-present";
+    if (fs.existsSync(path.join(projectRoot, "package.json"))) return "npm run build --if-present";
+  } catch {}
+  return "npm run build --if-present";
+}
+
 export function diagnoseError(logOutput: string, projectRoot: string): HealDiagnosis {
   if (!logOutput || !logOutput.trim()) {
     return { hasError: false };
@@ -65,7 +76,7 @@ export async function autoHealProject(
   // Step 1: Detect current error if not provided
   let errorLog = errorHint || "";
   if (!errorLog) {
-    const buildCheck = await executeBash("npm run build --if-present", projectRoot, 20000);
+    const buildCheck = await executeBash(detectBuildCommand(projectRoot), projectRoot, 20000);
     if (!buildCheck.ok && buildCheck.error) {
       errorLog = `${buildCheck.output || ""} ${buildCheck.error || ""}`;
     }
@@ -84,7 +95,7 @@ export async function autoHealProject(
   if (diagnosis.affectedFile) {
     const fullPath = path.resolve(projectRoot, diagnosis.affectedFile);
     if (fs.existsSync(fullPath)) {
-      const fileData = readProjectFile(fullPath);
+      const fileData = readProjectFile(diagnosis.affectedFile, projectRoot);
       if (fileData.ok && fileData.output) {
         let content = fileData.output;
         let modified = false;
@@ -108,21 +119,28 @@ export async function autoHealProject(
           }
         }
 
-        // Healing Pattern 2: Common React JSX unclosed tag or bracket repairs
+        // Healing Pattern 2: JSX unclosed-tag detection.
+        // We do NOT blindly append closing tags — that corrupts valid JSX.
+        // Instead, report that an AI-driven structural patch is required.
         if (/\.(tsx|jsx)$/i.test(fullPath)) {
-          // Check for trailing broken syntax
           const openDivs = (content.match(/<div\b[^>]*>/gi) || []).length;
           const closeDivs = (content.match(/<\/div>/gi) || []).length;
           if (openDivs > closeDivs) {
-            content += "\n" + "</div>".repeat(openDivs - closeDivs);
-            modified = true;
+            return {
+              healed: false,
+              actionTaken: `Diagnosed likely unclosed JSX tag(s) in ${diagnosis.affectedFile} (${openDivs - closeDivs} extra <div>). Refusing blind auto-patch to avoid corrupting the file.`,
+              affectedFile: diagnosis.affectedFile,
+              verifiedClean: false,
+              details:
+                "An AI structural patch (balanced-tag rewrite) is required instead of naive append.",
+            };
           }
         }
 
         if (modified) {
-          writeProjectFile(fullPath, content);
+          writeProjectFile(diagnosis.affectedFile, content, projectRoot);
           // Step 3: Verify fix
-          const retest = await executeBash("npm run build --if-present", projectRoot, 15000);
+          const retest = await executeBash(detectBuildCommand(projectRoot), projectRoot, 15000);
           return {
             healed: true,
             actionTaken: `Auto-healer repaired ${diagnosis.errorType || "syntax"} issues in ${diagnosis.affectedFile}`,

@@ -142,20 +142,57 @@ class NetworkLoggerService {
     return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${pad(date.getMilliseconds(), 3)}`;
   }
 
+  private static readonly MAX_STORED_CHARS = 64 * 1024;
+
+  /** Keys whose values must never be stored or shown in the logs UI. */
+  private static readonly SENSITIVE_HEADER_KEYS = new Set([
+    "authorization",
+    "proxy-authorization",
+    "x-api-key",
+    "api-key",
+    "x-auth-token",
+    "x-access-token",
+    "cookie",
+    "set-cookie",
+    "x-amz-security-token",
+    "x-goog-api-key",
+  ]);
+
+  private redactHeaders(headers: Record<string, string>): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const [key, value] of Object.entries(headers)) {
+      out[key] = NetworkLoggerService.SENSITIVE_HEADER_KEYS.has(key.toLowerCase())
+        ? "[REDACTED]"
+        : value;
+    }
+    return out;
+  }
+
+  private capStoredBody(text: string): string {
+    return text.length > NetworkLoggerService.MAX_STORED_CHARS
+      ? `${text.slice(0, NetworkLoggerService.MAX_STORED_CHARS)}\n… [truncated ${text.length - NetworkLoggerService.MAX_STORED_CHARS} chars]`
+      : text;
+  }
+
+  private maskBearerTokens(text: string): string {
+    return text
+      .replace(/Bearer\s+[A-Za-z0-9._\-+/=]+/gi, "Bearer [REDACTED]")
+      .replace(/"(?:api[_-]?key|access[_-]?token|secret|password)"\s*:\s*"[^"]*"/gi, (m) =>
+        m.replace(/:\s*"[^"]*"/, ': "[REDACTED]"'),
+      );
+  }
+
   private safeStringify(data: unknown): string {
     if (data === null || data === undefined) return "";
     if (typeof data === "string") {
-      try {
-        const parsed = JSON.parse(data);
-        return JSON.stringify(parsed, null, 2);
-      } catch {
-        return data;
-      }
+      // Keep the raw string as-is (bounded); pretty-parsing a whole payload is
+      // expensive and doubles memory for large bodies.
+      return this.capStoredBody(this.maskBearerTokens(data));
     }
     try {
-      return JSON.stringify(data, null, 2);
+      return this.capStoredBody(this.maskBearerTokens(JSON.stringify(data, null, 2)));
     } catch {
-      return String(data);
+      return this.capStoredBody(String(data));
     }
   }
 
@@ -235,7 +272,7 @@ class NetworkLoggerService {
         type: "fetch",
         method: method.toUpperCase(),
         url,
-        requestHeaders,
+        requestHeaders: self.redactHeaders(requestHeaders),
         requestBody,
         state: "pending",
       });
@@ -272,7 +309,7 @@ class NetworkLoggerService {
                   status: response.status,
                   statusText: response.statusText,
                   durationMs,
-                  responseHeaders,
+                  responseHeaders: self.redactHeaders(responseHeaders),
                   responseBody,
                   state: response.ok ? "completed" : "error",
                 });
@@ -282,7 +319,7 @@ class NetworkLoggerService {
                   status: response.status,
                   statusText: response.statusText,
                   durationMs,
-                  responseHeaders,
+                  responseHeaders: self.redactHeaders(responseHeaders),
                   responseBody: "[Stream / unreadable]",
                   state: response.ok ? "completed" : "error",
                 });
@@ -298,7 +335,7 @@ class NetworkLoggerService {
           status: response.status,
           statusText: response.statusText,
           durationMs,
-          responseHeaders,
+          responseHeaders: self.redactHeaders(responseHeaders),
           responseBody: responseBody ?? "[Reading response...]",
           state: response.ok ? "completed" : "error",
         });
@@ -366,7 +403,7 @@ class NetworkLoggerService {
           type: "xhr",
           method: xhrInfo.method,
           url: xhrInfo.url,
-          requestHeaders: xhrInfo.requestHeaders,
+          requestHeaders: self.redactHeaders(xhrInfo.requestHeaders),
           requestBody,
           state: "pending",
         });
@@ -400,7 +437,7 @@ class NetworkLoggerService {
             status: this.status,
             statusText: this.statusText,
             durationMs,
-            responseHeaders,
+            responseHeaders: self.redactHeaders(responseHeaders),
             responseBody,
             state: this.status >= 200 && this.status < 400 ? "completed" : "error",
           });

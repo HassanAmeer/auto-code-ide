@@ -90,7 +90,7 @@ export async function runClineAutonomousTask(
   onStepUpdate?.(step2);
 
   // Final summary step
-  const finalSummary = `Cline Autonomous Worker finished inspecting and running checks on project "${projectName}". Task: "${taskPrompt}". Status: Verified healthy.`;
+  const finalSummary = `Sanity checks only — the requested task was NOT executed: "${taskPrompt}". Ran git status and a build check on project "${projectName}"; no files were edited. Worker task execution requires an actual coding agent/model loop.`;
 
   return {
     ok: true,

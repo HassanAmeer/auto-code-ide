@@ -847,3 +847,28 @@ describe("literal editor answer cursor state", () => {
     expect(composerStateAtPromptEnd("Use $my").trigger?.kind).toBe("skill");
   });
 });
+
+describe("slash-command segment cursor mapping", () => {
+  const text = "run /parallel-subagents please";
+  // The chip occupies one collapsed character; the sent text keeps the full command.
+  const collapsedCursorAfterChip = "run ".length + 2;
+  const expandedCursorAfterChip = "run /parallel-subagents ".length;
+
+  it("expands a collapsed cursor past a slash-command chip without crashing", () => {
+    expect(expandCollapsedComposerCursor(text, collapsedCursorAfterChip)).toBe(
+      expandedCursorAfterChip,
+    );
+  });
+
+  it("collapses an expanded cursor back past a slash-command chip without crashing", () => {
+    expect(collapseExpandedComposerCursor(text, expandedCursorAfterChip)).toBe(
+      collapsedCursorAfterChip,
+    );
+  });
+
+  it("round-trips the caret for a trailing slash-command chip", () => {
+    const trailing = "ask /parallel-subagents ";
+    const collapsed = collapseExpandedComposerCursor(trailing, trailing.length);
+    expect(expandCollapsedComposerCursor(trailing, collapsed)).toBe(trailing.length);
+  });
+});

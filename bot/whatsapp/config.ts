@@ -9,10 +9,8 @@ const DEFAULT_SETTINGS: WhatsAppSettings = {
   autoReply: true,
   mediaEnabled: true,
   voiceNotesEnabled: true,
-  gatewayUrl: process.env.OPENWA_GATEWAY_URL || "https://w.tokendeal.cloud",
-  apiKey:
-    process.env.OPENWA_API_KEY ||
-    "owa_k1_bd105b7013973116841acdc2fa381a87499a47f09c67fad26fb7cf5a3da2f973",
+  gatewayUrl: process.env.OPENWA_GATEWAY_URL || "",
+  apiKey: process.env.OPENWA_API_KEY || "",
   activeSessionId: null,
   humanDelayMs: 2500,
   priorityTargets: [],
@@ -46,7 +44,9 @@ export function updateWhatsAppSettings(updates: Partial<WhatsAppSettings>): What
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
-    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(updated, null, 2), "utf-8");
+    const tmpFile = `${SETTINGS_FILE}.tmp-${process.pid}-${Date.now()}`;
+    fs.writeFileSync(tmpFile, JSON.stringify(updated, null, 2), "utf-8");
+    fs.renameSync(tmpFile, SETTINGS_FILE);
   } catch {
     // ignore
   }

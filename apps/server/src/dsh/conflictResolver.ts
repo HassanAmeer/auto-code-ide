@@ -2,6 +2,7 @@
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 import * as NodeChildProcess from "node:child_process";
+import { shq } from "./shellEscape.ts";
 
 export interface ConflictResolutionResult {
   ok: boolean;
@@ -256,13 +257,16 @@ export function autoResolveMergeConflicts(
       }
 
       NodeFS.writeFileSync(absolutePath, resolved, "utf8");
-      NodeChildProcess.execSync(`git add "${relativePath}"`, { cwd: projectRoot, stdio: "ignore" });
+      NodeChildProcess.execSync(`git add -- ${shq(relativePath)}`, {
+        cwd: projectRoot,
+        stdio: "ignore",
+      });
       successfullyHealed.push(relativePath);
     }
 
     // 3. Complete the merge commit
     NodeChildProcess.execSync(
-      `git commit -m "merge(auto-heal): resolved conflicts between main and ${branchName} [${taskTitle.slice(0, 40).replace(/"/g, "")}]"`,
+      `git commit -m ${shq(`merge(auto-heal): resolved conflicts between main and ${branchName} [${taskTitle.slice(0, 40)}]`)}`,
       { cwd: projectRoot, stdio: "ignore" },
     );
 

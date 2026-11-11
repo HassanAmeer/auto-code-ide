@@ -97,7 +97,10 @@ function readJsonFile<T>(filePath: string, fallback: T): T {
       const content = NodeFS.readFileSync(filePath, "utf-8");
       return JSON.parse(content) as T;
     }
-  } catch {}
+  } catch (err) {
+    // Corrupt mirror — say so loudly instead of silently pretending it is empty.
+    console.warn(`[app-settings] Failed to read/parse ${filePath}, using fallback:`, err);
+  }
   return fallback;
 }
 
@@ -107,7 +110,11 @@ function writeJsonFile(filePath: string, data: unknown): void {
     if (!NodeFS.existsSync(dir)) {
       NodeFS.mkdirSync(dir, { recursive: true });
     }
-    NodeFS.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf-8");
+    // Atomic write: serialize to a temp file then rename so a crash can never
+    // leave a truncated settings file behind.
+    const tmpPath = `${filePath}.tmp-${process.pid}-${Date.now()}`;
+    NodeFS.writeFileSync(tmpPath, JSON.stringify(data, null, 2), "utf-8");
+    NodeFS.renameSync(tmpPath, filePath);
   } catch (err) {
     console.error(`Failed writing to ${filePath}:`, err);
   }
@@ -131,10 +138,29 @@ export function getAllAppSettings(dbPath: string): Record<string, any> {
     }
     // Settings that only ever lived in the JSON mirror (written before the
     // store could reach SQLite) move into the live database on first read.
-    for (const [key, value] of Object.entries(fileSettings)) {
-      if (key in dbSettings) continue;
-      setAppSetting(dbPath, key, value);
-      dbSettings[key] = value;
+    // Batch the migration: one INSERT prepared once, one JSON rewrite at the end —
+    // calling setAppSetting per key re-read and re-wrote both stores N times.
+    const mirrorOnlyKeys = Object.entries(fileSettings).filter(([key]) => !(key in dbSettings));
+    if (mirrorOnlyKeys.length > 0) {
+      const upsert = db.prepare(`
+        INSERT INTO app_user_settings (key, value, updated_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+      `);
+      const now = new Date().toISOString();
+      for (const [key, value] of mirrorOnlyKeys) {
+        try {
+          upsert.run(key, JSON.stringify(value), now);
+          dbSettings[key] = value;
+        } catch (migrationErr) {
+          console.warn(
+            `[app-settings] Failed to migrate setting "${key}" into SQLite:`,
+            migrationErr,
+          );
+        }
+      }
+      // Keep the mirror in sync once, preserving the db-wins semantics on conflicts.
+      writeJsonFile(getAppSettingsFilePath(dbPath), { ...fileSettings, ...dbSettings });
     }
     return { ...fileSettings, ...dbSettings };
   } catch (err) {

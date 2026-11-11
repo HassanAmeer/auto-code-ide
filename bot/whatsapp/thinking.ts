@@ -80,7 +80,7 @@ export async function parseWhatsAppInstructionWithThinking(
   // A. Search inside Priority Targets first (Match against digits e.g. 0349 matching +92 349 2830546)
   for (const digit of digitClusters) {
     const cleanDigit = digit.replace(/^0/, ""); // e.g. "0349" -> "349"
-    const matched = allPriorityTargets.find((pt) => {
+    const matches = allPriorityTargets.filter((pt) => {
       const cleanPhone = (pt.phone || "").replace(/\D/g, "");
       const cleanName = (pt.name || "").replace(/\D/g, "");
       const cleanJid = (pt.jid || "").replace(/\D/g, "");
@@ -93,6 +93,10 @@ export async function parseWhatsAppInstructionWithThinking(
         cleanJid.includes(digit)
       );
     });
+
+    // Only auto-select when the match is unambiguous. Short fragments like "0349"
+    // can match several contacts — mis-sending to the wrong person is worse than asking.
+    const matched = matches.length === 1 ? matches[0] : undefined;
 
     if (matched) {
       recipient = matched.jid;
@@ -124,7 +128,7 @@ export async function parseWhatsAppInstructionWithThinking(
   if (!recipient && context.knownChats && context.knownChats.length > 0) {
     for (const digit of digitClusters) {
       const cleanDigit = digit.replace(/^0/, "");
-      const matchedChat = context.knownChats.find((c) => {
+      const chatMatches = context.knownChats.filter((c) => {
         const cleanId = (c.id || "").replace(/\D/g, "");
         const cleanNameDigits = (c.name || "").replace(/\D/g, "");
         return (
@@ -134,6 +138,8 @@ export async function parseWhatsAppInstructionWithThinking(
           cleanNameDigits.includes(digit)
         );
       });
+      // Same ambiguity guard: only accept a unique match.
+      const matchedChat = chatMatches.length === 1 ? chatMatches[0] : undefined;
       if (matchedChat) {
         recipient = matchedChat.id;
         recipientName = matchedChat.name;

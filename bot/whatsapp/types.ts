@@ -28,20 +28,20 @@ export interface WhatsAppChat {
   id: string;
   name: string;
   isGroup: boolean;
-  kind?: "group" | "individual" | "channel" | string;
+  kind?: "group" | "individual" | "channel" | string | undefined;
   unreadCount?: number;
-  phone?: string;
-  timestamp?: number;
-  lastMessage?: string;
-  lastMessageType?: string;
+  phone?: string | undefined;
+  timestamp?: number | undefined;
+  lastMessage?: string | undefined;
+  lastMessageType?: string | undefined;
 }
 
 export interface WhatsAppPriorityTarget {
   jid: string;
   name: string;
   isGroup: boolean;
-  phone?: string;
-  selectedAt?: string;
+  phone?: string | undefined;
+  selectedAt?: string | undefined;
 }
 
 export interface WhatsAppLogEntry {
@@ -52,7 +52,7 @@ export interface WhatsAppLogEntry {
   from?: string;
   to?: string;
   body?: string;
-  caption?: string;
+  caption?: string | undefined;
   mediaUrl?: string;
   mediaType?: "image" | "video" | "audio" | "document" | "voice";
   messageId?: string;

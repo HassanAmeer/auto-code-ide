@@ -23,7 +23,9 @@ export interface ProjectBacklog {
   lastUpdated: number;
 }
 
-const MEMORY_DIR = path.resolve(process.cwd(), "userdata", "bot-memory");
+const MEMORY_DIR = process.env.AUTOCODE_BOT_MEMORY_DIR
+  ? path.resolve(process.env.AUTOCODE_BOT_MEMORY_DIR)
+  : path.resolve(process.cwd(), "userdata", "bot-memory");
 
 function ensureDir() {
   if (!fs.existsSync(MEMORY_DIR)) {
@@ -58,7 +60,9 @@ export function saveProjectBacklog(backlog: ProjectBacklog): void {
   ensureDir();
   backlog.lastUpdated = Date.now();
   const filePath = getBacklogFilePath(backlog.projectName);
-  fs.writeFileSync(filePath, JSON.stringify(backlog, null, 2), "utf-8");
+  const tmpFile = `${filePath}.tmp-${process.pid}-${Date.now()}`;
+  fs.writeFileSync(tmpFile, JSON.stringify(backlog, null, 2), "utf-8");
+  fs.renameSync(tmpFile, filePath);
 }
 
 export function addBacklogItem(

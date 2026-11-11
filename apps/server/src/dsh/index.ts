@@ -84,7 +84,7 @@ export async function runAutonomousHarnessWorkflow(
     onLog?.(formatted);
   };
 
-  const taskId = `${Date.now()}`;
+  const taskId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   logStep(
     "init",
     `🚀 Autonomous Harness Worker [worker-${taskId}] started for "${taskTitle}" (${model}).`,
@@ -168,7 +168,7 @@ export async function runAutonomousHarnessWorkflow(
   // 3. Concurrent Subtask Execution via OpenCode Engine & DeepSeek Harness (Promise.all)
   const filesModifiedSet = new Set<string>();
 
-  const parallelResults = await Promise.all(
+  const parallelSettled = await Promise.allSettled(
     workerAllocations.map(async ({ st, allocation, workerId }) => {
       if (isWorkerAborted(workerId)) {
         st.status = "failed";
@@ -266,9 +266,11 @@ export async function runAutonomousHarnessWorkflow(
           completedAt: Date.now(),
           filesModified: subtaskRes.filesModified,
         });
-        updateGoalTelemetryStatus(`goal-${taskId}-${st.order}`, "completed", {
-          completedAt: Date.now(),
-        });
+        if (subtasks.length > 1) {
+          updateGoalTelemetryStatus(`goal-${taskId}-${st.order}`, "completed", {
+            completedAt: Date.now(),
+          });
+        }
         clearWorkerAbort(workerId);
         logStep(
           `worker-${st.order}`,
@@ -284,9 +286,11 @@ export async function runAutonomousHarnessWorkflow(
               ? "Worker produced 0 files (model error, rate-limit, or no actionable steps)"
               : "Worker reported failure"),
         });
-        updateGoalTelemetryStatus(`goal-${taskId}-${st.order}`, "failed", {
-          completedAt: Date.now(),
-        });
+        if (subtasks.length > 1) {
+          updateGoalTelemetryStatus(`goal-${taskId}-${st.order}`, "failed", {
+            completedAt: Date.now(),
+          });
+        }
         clearWorkerAbort(workerId);
         logStep(
           `worker-${st.order}`,
@@ -297,6 +301,34 @@ export async function runAutonomousHarnessWorkflow(
       return { st, allocation, workerId, subtaskRes };
     }),
   );
+
+  // One worker throwing must not wedge the whole harness: mark it failed, keep telemetry honest.
+  const parallelResults = parallelSettled.map((settled, index) => {
+    if (settled.status === "fulfilled") {
+      return settled.value;
+    }
+    const { st, allocation, workerId } = workerAllocations[index]!;
+    const reason = settled.reason;
+    const message = reason instanceof Error ? reason.message : String(reason);
+    console.error(`[dsh] Worker ${workerId} crashed:`, reason);
+    st.status = "failed";
+    updateWorkerTelemetryStatus(workerId, "failed", {
+      completedAt: Date.now(),
+      error: message,
+    });
+    if (subtasks.length > 1) {
+      updateGoalTelemetryStatus(`goal-${taskId}-${st.order}`, "failed", {
+        completedAt: Date.now(),
+      });
+    }
+    clearWorkerAbort(workerId);
+    logStep(`worker-${st.order}`, `❌ [Worker #${st.order}] Crashed before reporting: ${message}`);
+    // Drop any half-created worktree so the merge phase never sees it.
+    if (allocation.isIsolated) {
+      cleanupWorkerWorktree(projectRoot, allocation.worktreePath, allocation.branchName);
+    }
+    return null;
+  });
 
   // 4. Sequential Merge of Parallel Worktree Branches into Main Workspace with Conflict Auto-Resolution
   logStep("merge", `🔀 Merging parallel worker branches back into main workspace...`);

@@ -11,8 +11,8 @@
     "migrate-dev-db": "node apps/server/scripts/migrate-dev-db.ts",
     "start": "vp run --filter t3 start",
     "build": "vp run --filter './apps/*' build",
-    "typecheck": "vp run -r --concurrency-limit 2 typecheck",
-    "tc": "vp run -r --concurrency-limit 2 typecheck",
+    "typecheck": "vp run -r --concurrency-limit 2 typecheck && tsc --noEmit -p bot/tsconfig.json",
+    "tc": "vp run -r --concurrency-limit 2 typecheck && tsc --noEmit -p bot/tsconfig.json",
     "lint": "vp lint --report-unused-disable-directives",
     "knip": "knip --preprocessor ./scripts/knip-schemas.ts",
     "knip:check": "knip --include files,dependencies --no-config-hints && knip --workspace apps/server --workspace apps/web --workspace packages/client-runtime --workspace packages/contracts --workspace packages/effect-acp --workspace packages/effect-codex-app-server --workspace packages/shared --workspace packages/provider-core --workspace packages/provider-acp --workspace packages/provider-acp-registry --workspace packages/provider-testing --workspace packages/provider-pi --workspace packages/provider-muse --workspace packages/provider-opencode --workspace packages/provider-cursor --workspace packages/provider-grok --exports --preprocessor ./scripts/knip-schemas.ts --no-config-hints",
@@ -23,7 +23,8 @@
     "deploy": "./deploy/deploy-vps.sh",
     "deploy:vps": "./deploy/deploy-vps.sh",
     "deploy:quick": "./deploy/deploy-vps.sh --skip-build",
-    "clean": "rm -rf node_modules apps/*/node_modules packages/*/node_modules apps/*/dist packages/*/dist .vite-plus apps/*/.vite-plus packages/*/.vite-plus"
+    "clean": "rm -rf node_modules apps/*/node_modules packages/*/node_modules apps/*/dist packages/*/dist .vite-plus apps/*/.vite-plus packages/*/.vite-plus",
+    "typecheck:bot": "tsc --noEmit -p bot/tsconfig.json"
   },
   "devDependencies": {
     "@effect/tsgo": "catalog:",

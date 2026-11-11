@@ -49,18 +49,29 @@ export function startWatchdog(
     activeWatchdog.status.checksCount++;
     activeWatchdog.status.lastCheckedAt = Date.now();
 
+    // Cap the error history so long-running watchdogs don't grow memory unboundedly
+    if (activeWatchdog.status.errorsDetected.length > 50) {
+      activeWatchdog.status.errorsDetected = activeWatchdog.status.errorsDetected.slice(-50);
+    }
+
     // 1. Check Git Status for unexpected issues
     try {
       const gitRes = await executeBash("git status --short", projectRoot, 8000);
-      if (!gitRes.ok && gitRes.error) {
-        activeWatchdog.status.errorsDetected.push(`Git error: ${gitRes.error}`);
-        onAlert?.(`⚠️ Watchdog noticed git issue in ${projectName}: ${gitRes.error}`);
+      if (!gitRes.ok) {
+        const looksFatal = /fatal|not a git repository|permission denied|error/i.test(
+          gitRes.error || "",
+        );
+        if (looksFatal) {
+          activeWatchdog.status.errorsDetected.push(`Git error: ${gitRes.error}`);
+          onAlert?.(`⚠️ Watchdog noticed git issue in ${projectName}: ${gitRes.error}`);
+        }
       }
     } catch {}
 
     // 2. Health check preview endpoint
     try {
-      const preview = await inspectPreviewEndpoint(3000);
+      const previewPort = Number(process.env.WATCHDOG_PREVIEW_PORT || 3000);
+      const preview = await inspectPreviewEndpoint(previewPort);
       if (!preview.ok) {
         activeWatchdog.status.errorsDetected.push(`Preview unreachable: ${preview.error}`);
       }

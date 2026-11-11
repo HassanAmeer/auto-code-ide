@@ -3,6 +3,7 @@ import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 import * as NodeChildProcess from "node:child_process";
 import { autoResolveMergeConflicts } from "./conflictResolver.ts";
+import { shq } from "./shellEscape.ts";
 
 export interface WorktreeAllocation {
   worktreePath: string;
@@ -41,7 +42,7 @@ export function createWorkerWorktree(projectRoot: string, taskId: string): Workt
     // If leftover worktree path exists, clean it first
     if (NodeFS.existsSync(worktreePath)) {
       try {
-        NodeChildProcess.execSync(`git worktree remove --force "${worktreePath}"`, {
+        NodeChildProcess.execSync(`git worktree remove --force ${shq(worktreePath)}`, {
           cwd: projectRoot,
           stdio: "ignore",
         });
@@ -51,7 +52,7 @@ export function createWorkerWorktree(projectRoot: string, taskId: string): Workt
     }
 
     // Spawn isolated git worktree tracking current HEAD
-    NodeChildProcess.execSync(`git worktree add -b "${branchName}" "${worktreePath}" HEAD`, {
+    NodeChildProcess.execSync(`git worktree add -b ${shq(branchName)} ${shq(worktreePath)} HEAD`, {
       cwd: projectRoot,
       stdio: "ignore",
     });
@@ -108,14 +109,14 @@ export function mergeWorkerWorktree(
 
     // 1. Stage and commit changes in worktree
     NodeChildProcess.execSync(
-      `git add . && git commit -m "feat(worker): ${taskTitle.slice(0, 50).replace(/"/g, "")}" --allow-empty`,
+      `git add . && git commit -m ${shq(`feat(worker): ${taskTitle.slice(0, 50)}`)} --allow-empty`,
       { cwd: worktreePath, stdio: "ignore" },
     );
 
     // 2. Safe merge into main projectRoot with automated conflict auto-resolver
     try {
       NodeChildProcess.execSync(
-        `git merge "${branchName}" --no-edit -m "merge: ${taskTitle.slice(0, 50).replace(/"/g, "")}"`,
+        `git merge ${shq(branchName)} --no-edit -m ${shq(`merge: ${taskTitle.slice(0, 50)}`)}`,
         {
           cwd: projectRoot,
           stdio: "ignore",
@@ -155,7 +156,7 @@ export function cleanupWorkerWorktree(
     if (worktreePath === projectRoot || branchName === "main") return;
 
     try {
-      NodeChildProcess.execSync(`git worktree remove --force "${worktreePath}"`, {
+      NodeChildProcess.execSync(`git worktree remove --force ${shq(worktreePath)}`, {
         cwd: projectRoot,
         stdio: "ignore",
       });
@@ -166,7 +167,7 @@ export function cleanupWorkerWorktree(
     }
 
     try {
-      NodeChildProcess.execSync(`git branch -D "${branchName}"`, {
+      NodeChildProcess.execSync(`git branch -D ${shq(branchName)}`, {
         cwd: projectRoot,
         stdio: "ignore",
       });

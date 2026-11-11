@@ -9,6 +9,31 @@ export interface OthersAdapterConfig {
   readonly socketPath?: string;
 }
 
+import * as fs from "node:fs";
+import * as path from "node:path";
+
+function commandExistsOnPath(command: string): boolean {
+  // Absolute path given?
+  if (path.isAbsolute(command)) {
+    return fs.existsSync(command);
+  }
+  const pathVar = process.env.PATH || "";
+  const extensions = process.platform === "win32" ? [".exe", ".cmd", ".bat", ""] : [""];
+  for (const dir of pathVar.split(path.delimiter)) {
+    if (!dir) continue;
+    for (const ext of extensions) {
+      try {
+        const candidate = path.join(dir, command + ext);
+        fs.accessSync(candidate, fs.constants.X_OK);
+        return true;
+      } catch {
+        // keep looking
+      }
+    }
+  }
+  return false;
+}
+
 export class OthersAdapter {
   readonly name = "others";
   readonly type = "third-party-cli";
@@ -29,7 +54,8 @@ export class OthersAdapter {
   }
 
   isSupported(): boolean {
-    return true;
+    // Honest health check: only report supported when the CLI actually exists.
+    return commandExistsOnPath(this.agentCommand);
   }
 }
 
