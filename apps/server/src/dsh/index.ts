@@ -23,12 +23,16 @@ import {
   formatSupervisorWorkerPrompt,
   type SupervisorWorkerTaskEnvelope,
 } from "@t3tools/shared/taskEnvelope";
+import { superAgentManager, type SuperAgentManagerInput } from "./superAgentManager.ts";
+import { reviewerSubAgent, type ReviewerSubAgentInput } from "./reviewerSubAgent.ts";
 
 export * from "./types.ts";
 export * from "./worktreeRunner.ts";
 export * from "./selfReviewLoop.ts";
 export * from "./opencodeBridge.ts";
 export * from "./taskDecomposer.ts";
+export * from "./reviewerSubAgent.ts";
+export * from "./superAgentManager.ts";
 
 export interface HarnessExecutionResult {
   ok: boolean;
@@ -472,6 +476,34 @@ export async function runAutonomousHarnessWorkflow(
       ? `Autonomous Harness Worker completed "${taskTitle}" (${doneCount}/${subtasks.length} milestones).${reviewResult ? ` 3-Level Review passed (${reviewResult.rounds.length} rounds). Auto-healed ${reviewResult.allFixedIssues.length} issues.` : ""}`
       : `Task "${taskTitle}" ended without producing changes — milestones aborted or failed; no files were merged.`,
   };
+}
+
+/**
+ * Super Agent Managed Workflow — Manager → Workers → Reviewer → Super Agent
+ *
+ * The Super Agent stays FREE — it only dispatches tasks and receives final
+ * verified results. Workers run in parallel isolated worktrees; Reviewer
+ * Sub-Agent verifies merged code (build, preview, checklist).
+ *
+ * Use this when you want the Super Agent available for chat, discussion,
+ * brainstorming, or new tasks while subagents work autonomously.
+ */
+export async function runSuperAgentManagedWorkflow(
+  input: SuperAgentManagerInput,
+  onLog?: (msg: string) => void,
+): Promise<{
+  ok: boolean;
+  taskId: string;
+  workersCompleted: number;
+  workersTotal: number;
+  filesModified: string[];
+  previewUrl: string;
+  reviewPassed: boolean;
+  reviewerMessage: string;
+  message: string;
+  superAgentFree: boolean;
+}> {
+  return superAgentManager.dispatchTask(input, onLog);
 }
 
 export * from "./conflictResolver.ts";
