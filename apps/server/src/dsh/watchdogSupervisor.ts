@@ -290,6 +290,27 @@ export const WATCHDOG_FALLBACK_MODELS = [
   "kimi-k3",
 ] as const;
 
+/**
+ * Model lanes for the parallel workers. Two workers on the SAME provider share
+ * one upstream queue, so their "parallel" calls serialise behind a rate limit.
+ * Spreading the workers over different models/providers is what makes the
+ * parallelism real.
+ *
+ * Override with SUPER_AGENT_WORKER_LANES="model-a,model-b,model-c".
+ */
+export function resolveWorkerLaneModels(baseModel: string, workerCount: number): string[] {
+  const override = (process.env.SUPER_AGENT_WORKER_LANES || "")
+    .split(",")
+    .map((m) => m.trim())
+    .filter((m) => m.length > 0);
+  const pool = override.length > 0 ? override : [...WATCHDOG_FALLBACK_MODELS];
+  const lanes: string[] = [];
+  for (let i = 0; i < Math.max(1, workerCount); i++) {
+    lanes.push(i === 0 ? baseModel : (pool[i % pool.length] ?? baseModel));
+  }
+  return lanes;
+}
+
 export function resolveFallbackModel(current: string): string | undefined {
   const idx = (WATCHDOG_FALLBACK_MODELS as readonly string[]).indexOf(current);
   if (idx >= 0) {
@@ -453,6 +474,10 @@ export async function startWatchdogSupervision(
       allocation: createWorkerWorktree(projectRoot, `${watchdogId}-${st.order}`),
     }));
 
+    // Each worker gets its own model lane so the calls really run in parallel
+    // instead of queueing behind one provider's rate limit.
+    const laneModels = resolveWorkerLaneModels(model, allocations.length);
+
     // ── Workers run in parallel; the watchdog watches each completion ──
     const settled = await Promise.allSettled(
       allocations.map(async ({ st, allocation }) => {
@@ -461,7 +486,7 @@ export async function startWatchdogSupervision(
           id: workerId,
           role: state.workers.find((w) => w.id === workerId)?.role ?? "Autonomous Specialist",
           status: "running",
-          model,
+          model: laneModels[st.order - 1] ?? model,
           cwd: allocation.worktreePath,
           goal: st.title,
           projectName,
@@ -469,12 +494,17 @@ export async function startWatchdogSupervision(
           startedAt: now(),
         });
 
+        const laneModel = laneModels[st.order - 1] ?? model;
+        if (laneModel !== model) {
+          log?.(`[Watchdog/${st.order}] using model lane: ${laneModel}`);
+        }
+
         let res = await executeOpenCodeTask({
           worktreePath: allocation.worktreePath,
           projectName,
           taskTitle: st.title,
           prompt: st.description,
-          model,
+          model: laneModel,
           onLog: (m) => log?.(`[Watchdog/${st.order}] ${m}`),
         });
 
@@ -502,151 +532,173 @@ export async function startWatchdogSupervision(
       }),
     );
 
-    // ── Watchdog reviews each completed worker, then builds/tests ──
-    for (const outcome of settled) {
-      if (outcome.status === "rejected") {
-        state.issues.push(`Worker crashed: ${String(outcome.reason)}`);
-        continue;
-      }
-      const { st, allocation, workerId, res } = outcome.value;
-      const row = state.workers.find((w) => w.id === workerId);
-      if (!row) continue;
+    // ── PHASE 2: Review every worker's output IN PARALLEL (cheap, no build) ──
+    state.status = "reviewing";
+    touch("Reviewing all sub-agent outputs in parallel");
 
-      if (!res.ok) {
-        row.status = "failed";
-        row.reviewNotes.push(res.error ?? "worker failed");
-        state.issues.push(`${row.role}: ${res.error ?? "worker failed"}`);
-        updateWorkerTelemetryStatus(workerId, "failed", {
+    const reviewed = await Promise.all(
+      settled.map(async (outcome) => {
+        if (outcome.status === "rejected") {
+          return { crashed: true as const, reason: String(outcome.reason) };
+        }
+        const { st, allocation, workerId, res } = outcome.value;
+        const row = state.workers.find((w) => w.id === workerId);
+        if (!row) return { crashed: true as const, reason: "row missing" };
+
+        if (!res.ok) {
+          row.status = "failed";
+          row.reviewNotes.push(res.error ?? "worker failed");
+          state.issues.push(`${row.role}: ${res.error ?? "worker failed"}`);
+          updateWorkerTelemetryStatus(workerId, "failed", {
+            completedAt: now(),
+            error: res.error ?? "worker failed",
+          });
+          return { crashed: false as const, workerId, st, allocation, changed: [] as string[] };
+        }
+
+        const changed = listChangedFiles(allocation.worktreePath);
+        row.filesChanged = changed.length;
+        const reviewIssues = reviewWorkerOutput(changed, allocation.worktreePath);
+        row.reviewNotes.push(...reviewIssues);
+        state.issues.push(...reviewIssues);
+        row.status = "completed";
+        updateWorkerTelemetryStatus(workerId, "completed", {
           completedAt: now(),
-          error: res.error ?? "worker failed",
+          filesModified: changed,
         });
-        if (allocation.isIsolated) {
-          cleanupWorkerWorktree(projectRoot, allocation.worktreePath, allocation.branchName);
-        }
+        return { crashed: false as const, workerId, st, allocation, changed, reviewIssues };
+      }),
+    );
+
+    // ── PHASE 3: Merge workers SEQUENTIALLY (git needs a stable order) ──
+    const mergeable = reviewed.filter(
+      (r): r is Extract<typeof r, { crashed: false }> =>
+        !r.crashed && r.reviewIssues.length === 0 && r.changed.length > 0,
+    );
+    const allChangedFiles = reviewed.flatMap((r) => (r.crashed ? [] : r.changed));
+
+    for (const r of reviewed) {
+      if (r.crashed) {
+        state.issues.push(`Worker crashed: ${r.reason}`);
         continue;
       }
-
-      // Review the worker's own output before it is merged.
-      state.status = "reviewing";
-      touch(`Reviewing ${row.role} output`);
-      const changed = listChangedFiles(allocation.worktreePath);
-      row.filesChanged = changed.length;
-      const reviewIssues = reviewWorkerOutput(changed, allocation.worktreePath);
-      row.reviewNotes.push(...reviewIssues);
-      state.issues.push(...reviewIssues);
-
-      // Merge only a worker whose review found no blocking problem.
-      if (reviewIssues.length === 0 && allocation.isIsolated) {
-        const merged = mergeWorkerWorktree(
-          projectRoot,
-          allocation.worktreePath,
-          allocation.branchName,
-          st.title,
-        );
-        if (!merged.ok) {
-          row.reviewNotes.push(`merge failed: ${merged.error ?? "unknown"}`);
-          state.issues.push(`Merge failed for ${row.role}: ${merged.error ?? "unknown"}`);
-        }
-      } else if (reviewIssues.length > 0 && allocation.isIsolated) {
+      const row = state.workers.find((w) => w.id === r.workerId);
+      if (!row) continue;
+      if (r.reviewIssues.length > 0) {
         row.reviewNotes.push("skipped merge — review found issues");
+        continue;
       }
-
-      if (allocation.isIsolated) {
-        cleanupWorkerWorktree(projectRoot, allocation.worktreePath, allocation.branchName);
+      if (!r.allocation.isIsolated) continue;
+      const merged = mergeWorkerWorktree(
+        projectRoot,
+        r.allocation.worktreePath,
+        r.allocation.branchName,
+        r.st.title,
+      );
+      if (!merged.ok) {
+        row.reviewNotes.push(`merge failed: ${merged.error ?? "unknown"}`);
+        state.issues.push(`Merge failed for ${row.role}: ${merged.error ?? "unknown"}`);
       }
-      row.status = "completed";
-      updateWorkerTelemetryStatus(workerId, "completed", {
-        completedAt: now(),
-        filesModified: changed,
-      });
+    }
 
-      // ── Build only when the change can break the build ──
-      const pm = detectPackageManager(projectRoot);
-      const scripts = readProjectScripts(projectRoot);
-      if (requiresBuild(changed, projectRoot)) {
-        state.status = "building";
-        touch(`Build required — running ${pm} build`);
-        const buildCmd =
-          pm === "pnpm" ? "pnpm run build" : pm === "yarn" ? "yarn build" : "npm run build";
-        const build = runCommand(buildCmd, projectRoot, 120_000);
-        row.buildRan = true;
-        row.buildPassed = build.ok;
-        if (!build.ok) {
-          row.reviewNotes.push(`build failed: ${build.output}`);
-          // Watchdog self-heal #2: dispatch a repair sub-agent with the real
-          // build error, merge its fix, then re-run the build.
-          state.recoveries += 1;
-          touch(`Build failed — dispatching repair sub-agent`);
-          const repair = await dispatchRepairSubAgent({
-            projectRoot,
-            projectName,
-            taskTitle: st.title,
-            reason: build.output,
-            kind: "build",
-            model,
-            onLog: (m) => log?.(`[Watchdog/repair] ${m}`),
-          });
-          if (repair.ok) {
-            const rebuild = runCommand(buildCmd, projectRoot, 120_000);
-            row.buildPassed = rebuild.ok;
-            if (rebuild.ok) {
-              row.reviewNotes.push("build repaired and re-verified ✓");
-              touch(`Build repaired by sub-agent — verified clean`);
-            } else {
-              row.reviewNotes.push(`rebuild still failing: ${rebuild.output}`);
-              state.issues.push(`Build failed after ${row.role}: ${build.output}`);
-              state.status = "failed";
-              continue;
-            }
-          } else {
-            row.reviewNotes.push(`repair failed: ${repair.output}`);
-            state.issues.push(`Build failed after ${row.role}: ${build.output}`);
-            state.status = "failed";
-            continue;
-          }
+    for (const r of reviewed) {
+      if (r.crashed) continue;
+      if (r.allocation.isIsolated) {
+        cleanupWorkerWorktree(projectRoot, r.allocation.worktreePath, r.allocation.branchName);
+      }
+    }
+
+    // ── PHASE 4: ONE build + ONE test for the whole merged workspace ──
+    // Running a build per worker was the biggest waste: N workers meant N
+    // builds and N test suites. The merged workspace is verified once.
+    const pm = detectPackageManager(projectRoot);
+    const scripts = readProjectScripts(projectRoot);
+    const buildRequired = requiresBuild(allChangedFiles, projectRoot);
+
+    if (mergeable.length === 0) {
+      touch("Nothing merged — skipping build and tests");
+    } else if (buildRequired) {
+      state.status = "building";
+      touch(`Build required — running ${pm} build once for the merged workspace`);
+      const buildCmd =
+        pm === "pnpm" ? "pnpm run build" : pm === "yarn" ? "yarn build" : "npm run build";
+      const build = runCommand(buildCmd, projectRoot, 120_000);
+      for (const row of state.workers) {
+        if (row.status === "completed") {
+          row.buildRan = true;
+          row.buildPassed = build.ok;
         }
-      } else {
-        touch(`Build not required — skipping (${row.role} change is safe)`);
       }
-
-      // ── Test (only when the project actually has tests) ──
-      if (scripts.test) {
-        state.status = "testing";
-        touch(`Running ${pm} test suite`);
-        const testCmd = pm === "pnpm" ? "pnpm run test" : pm === "yarn" ? "yarn test" : "npm test";
-        const test = runCommand(testCmd, projectRoot, 120_000);
-        row.testRan = true;
-        row.testPassed = test.ok;
-        if (!test.ok) {
-          row.reviewNotes.push(`tests failed: ${test.output}`);
-          // Watchdog self-heal #3: same repair loop for a failing test suite.
-          state.recoveries += 1;
-          touch(`Tests failed — dispatching repair sub-agent`);
-          const repair = await dispatchRepairSubAgent({
-            projectRoot,
-            projectName,
-            taskTitle: st.title,
-            reason: test.output,
-            kind: "test",
-            model,
-            onLog: (m) => log?.(`[Watchdog/repair] ${m}`),
-          });
-          if (repair.ok) {
-            const retest = runCommand(testCmd, projectRoot, 120_000);
-            row.testPassed = retest.ok;
-            if (retest.ok) {
-              row.reviewNotes.push("tests repaired and re-verified ✓");
-              touch(`Tests repaired by sub-agent — verified clean`);
-            } else {
-              state.issues.push(`Tests failed after ${row.role}: ${test.output}`);
-            }
-          } else {
-            state.issues.push(`Tests failed after ${row.role}: ${test.output}`);
+      if (!build.ok) {
+        // Watchdog self-heal: one repair sub-agent with the real build error.
+        state.recoveries += 1;
+        touch("Build failed — dispatching repair sub-agent");
+        const repair = await dispatchRepairSubAgent({
+          projectRoot,
+          projectName,
+          taskTitle,
+          reason: build.output,
+          kind: "build",
+          model,
+          onLog: (m) => log?.(`[Watchdog/repair] ${m}`),
+        });
+        if (repair.ok) {
+          const rebuild = runCommand(buildCmd, projectRoot, 120_000);
+          for (const row of state.workers) {
+            if (row.status === "completed") row.buildPassed = rebuild.ok;
           }
+          if (rebuild.ok) {
+            touch("Build repaired by sub-agent — verified clean");
+          } else {
+            state.issues.push(`Build failed: ${rebuild.output}`);
+          }
+        } else {
+          state.issues.push(`Build failed: ${build.output}`);
         }
-      } else {
-        touch(`No test script — skipping tests`);
       }
+    } else {
+      touch("Build not required — change is safe, skipping build");
+    }
+
+    if (mergeable.length > 0 && scripts.test) {
+      state.status = "testing";
+      touch(`Running ${pm} test suite once`);
+      const testCmd = pm === "pnpm" ? "pnpm run test" : pm === "yarn" ? "yarn test" : "npm test";
+      const test = runCommand(testCmd, projectRoot, 120_000);
+      for (const row of state.workers) {
+        if (row.status === "completed") {
+          row.testRan = true;
+          row.testPassed = test.ok;
+        }
+      }
+      if (!test.ok) {
+        state.recoveries += 1;
+        touch("Tests failed — dispatching repair sub-agent");
+        const repair = await dispatchRepairSubAgent({
+          projectRoot,
+          projectName,
+          taskTitle,
+          reason: test.output,
+          kind: "test",
+          model,
+          onLog: (m) => log?.(`[Watchdog/repair] ${m}`),
+        });
+        if (repair.ok) {
+          const retest = runCommand(testCmd, projectRoot, 120_000);
+          for (const row of state.workers) {
+            if (row.status === "completed") row.testPassed = retest.ok;
+          }
+          if (retest.ok) {
+            touch("Tests repaired by sub-agent — verified clean");
+          } else {
+            state.issues.push(`Tests failed: ${retest.output}`);
+          }
+        } else {
+          state.issues.push(`Tests failed: ${test.output}`);
+        }
+      }
+    } else if (mergeable.length > 0) {
+      touch("No test script — skipping tests");
     }
 
     const completed = state.workers.filter((w) => w.status === "completed").length;

@@ -1,0 +1,496 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Watchdog Card — Design</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family:
+          "Segoe UI",
+          system-ui,
+          -apple-system,
+          sans-serif;
+        background: #0b1120;
+        color: #e2e8f0;
+        padding: 24px;
+        min-height: 100vh;
+      }
+      .wrap {
+        max-width: 1180px;
+        margin: 0 auto;
+      }
+      h1 {
+        text-align: center;
+        font-size: 25px;
+        color: #38bdf8;
+        margin-bottom: 6px;
+      }
+      .sub {
+        text-align: center;
+        color: #64748b;
+        font-size: 14px;
+        margin-bottom: 30px;
+      }
+      h2 {
+        font-size: 15px;
+        color: #94a3b8;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        margin: 26px 0 12px;
+        text-align: center;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+        gap: 16px;
+      }
+
+      .card {
+        background: #111827;
+        border: 1px solid #1f2937;
+        border-radius: 12px;
+        padding: 14px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+        font-size: 12px;
+      }
+      .card.active {
+        border-color: #a78bfa;
+        box-shadow:
+          0 0 0 1px rgba(167, 139, 250, 0.25),
+          0 10px 30px rgba(0, 0, 0, 0.45);
+      }
+      .card.done {
+        border-color: rgba(16, 185, 129, 0.45);
+      }
+      .card.fail {
+        border-color: rgba(244, 63, 94, 0.45);
+      }
+
+      .card-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: 28px;
+        padding: 0 6px;
+        border-radius: 8px;
+      }
+      .title {
+        font-size: 12px;
+        font-weight: 500;
+        color: rgba(255, 255, 255, 0.88);
+      }
+      .pill {
+        font-family: ui-monospace, monospace;
+        font-size: 10px;
+        padding: 2px 7px;
+        border-radius: 999px;
+        background: rgba(148, 163, 184, 0.16);
+        color: #94a3b8;
+      }
+      .pill.cyan {
+        background: rgba(34, 211, 238, 0.15);
+        color: #22d3ee;
+      }
+      .pill.violet {
+        background: rgba(167, 139, 250, 0.16);
+        color: #a78bfa;
+      }
+      .pill.green {
+        background: rgba(16, 185, 129, 0.15);
+        color: #34d399;
+      }
+      .pill.red {
+        background: rgba(244, 63, 94, 0.15);
+        color: #fb7185;
+      }
+      .pill.amber {
+        background: rgba(251, 191, 36, 0.15);
+        color: #fbbf24;
+      }
+      .flowbtn {
+        margin-left: auto;
+        font-family: ui-monospace, monospace;
+        font-size: 10px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: rgba(167, 139, 250, 0.16);
+        color: #a78bfa;
+        border: 0;
+      }
+      .chev {
+        color: #64748b;
+        font-size: 13px;
+      }
+
+      .action {
+        font-family: ui-monospace, monospace;
+        font-size: 10.5px;
+        color: #94a3b8;
+        padding: 3px 0 6px 26px;
+      }
+
+      .worker {
+        padding: 2px 0 2px 26px;
+      }
+      .wrow {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+      }
+      .wrole {
+        font-size: 11.5px;
+        color: rgba(255, 255, 255, 0.82);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .wfiles {
+        font-family: ui-monospace, monospace;
+        font-size: 10px;
+        color: #64748b;
+      }
+      .badges {
+        margin-left: auto;
+        display: flex;
+        gap: 4px;
+      }
+      .badge {
+        font-family: ui-monospace, monospace;
+        font-size: 9px;
+        padding: 1px 5px;
+        border-radius: 4px;
+        background: rgba(148, 163, 184, 0.14);
+        color: #94a3b8;
+      }
+      .badge.g {
+        background: rgba(16, 185, 129, 0.15);
+        color: #34d399;
+      }
+      .badge.r {
+        background: rgba(244, 63, 94, 0.15);
+        color: #fb7185;
+      }
+      .badge.a {
+        background: rgba(251, 191, 36, 0.15);
+        color: #fbbf24;
+      }
+      .badge.c {
+        background: rgba(34, 211, 238, 0.15);
+        color: #22d3ee;
+      }
+
+      .note {
+        font-size: 10.5px;
+        color: #fbbf24;
+        padding: 2px 0 2px 34px;
+      }
+      .verdict {
+        font-size: 10.5px;
+        color: #94a3b8;
+        padding: 6px 0 0 26px;
+      }
+      .heal {
+        display: inline-block;
+        font-family: ui-monospace, monospace;
+        font-size: 9px;
+        padding: 2px 7px;
+        border-radius: 5px;
+        background: rgba(167, 139, 250, 0.16);
+        color: #a78bfa;
+        margin: 6px 0 0 26px;
+      }
+
+      .spin {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        border: 2px solid rgba(34, 211, 238, 0.35);
+        border-top-color: #22d3ee;
+        animation: sp 0.9s linear infinite;
+        flex: none;
+      }
+      .spin.v {
+        border-color: rgba(167, 139, 250, 0.35);
+        border-top-color: #a78bfa;
+      }
+      .spin.a {
+        border-color: rgba(251, 191, 36, 0.35);
+        border-top-color: #fbbf24;
+      }
+      .spin.s {
+        border-color: rgba(56, 189, 248, 0.35);
+        border-top-color: #38bdf8;
+      }
+      @keyframes sp {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      .ok {
+        color: #34d399;
+        font-size: 12px;
+      }
+      .no {
+        color: #fb7185;
+        font-size: 12px;
+      }
+
+      .flow {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin: 8px 0 4px;
+      }
+      .fnode {
+        font-size: 11px;
+        padding: 7px 12px;
+        border-radius: 9px;
+        border: 1.5px solid;
+        font-weight: 600;
+      }
+      .fnode.mgr {
+        background: rgba(30, 58, 95, 0.85);
+        border-color: #38bdf8;
+        color: #fff;
+      }
+      .fnode.wd {
+        background: rgba(76, 29, 149, 0.85);
+        border-color: #a78bfa;
+        color: #fff;
+      }
+      .fnode.wk {
+        background: rgba(29, 78, 216, 0.85);
+        border-color: #60a5fa;
+        color: #fff;
+      }
+      .fnode.chk {
+        background: rgba(63, 98, 18, 0.85);
+        border-color: #4ade80;
+        color: #fff;
+      }
+      .farrow {
+        color: #64748b;
+      }
+
+      .tip {
+        margin-top: 26px;
+        text-align: center;
+        color: #64748b;
+        font-size: 13px;
+        line-height: 1.7;
+        padding: 16px;
+        background: rgba(17, 24, 39, 0.6);
+        border-radius: 10px;
+        border-left: 4px solid #a78bfa;
+      }
+      .tip b {
+        color: #e2e8f0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>🐕 Watchdog Card — UI Design</h1>
+      <p class="sub">Sidebar / right-panel mein yahi card live dikhta hai — har state ke sath</p>
+
+      <h2>Card ke states</h2>
+      <div class="grid">
+        <!-- 1. WATCHING -->
+        <div class="card active">
+          <div class="card-head">
+            <span class="title">Watchdog</span>
+            <span class="pill">1</span>
+            <span class="pill cyan">1 active</span>
+            <button class="flowbtn">flow: watchdog</button>
+            <span class="chev">▾</span>
+          </div>
+          <div class="action">Watching 3 sub-agents…</div>
+          <div class="worker">
+            <div class="wrow">
+              <span class="spin"></span
+              ><span class="wrole">Worker #1: Frontend &amp; UI Specialist</span>
+            </div>
+          </div>
+          <div class="worker">
+            <div class="wrow">
+              <span class="spin"></span
+              ><span class="wrole">Worker #2: Backend API &amp; Logic</span>
+            </div>
+          </div>
+          <div class="worker">
+            <div class="wrow">
+              <span class="spin"></span><span class="wrole">Worker #3: Database &amp; State</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. REVIEWING -->
+        <div class="card active">
+          <div class="card-head">
+            <span class="title">Watchdog</span>
+            <span class="pill">1</span>
+            <span class="pill cyan">1 active</span>
+            <button class="flowbtn">flow: watchdog</button>
+            <span class="chev">▾</span>
+          </div>
+          <div class="action">Reviewing all sub-agent outputs in parallel</div>
+          <div class="worker">
+            <div class="wrow">
+              <span class="spin v"></span><span class="wrole">Worker #1: Frontend &amp; UI</span
+              ><span class="wfiles">3 files</span>
+            </div>
+          </div>
+          <div class="worker">
+            <div class="wrow">
+              <span class="ok">✓</span><span class="wrole">Worker #2: Backend API</span
+              ><span class="wfiles">2 files</span>
+            </div>
+          </div>
+          <div class="worker">
+            <div class="wrow">
+              <span class="ok">✓</span><span class="wrole">Worker #3: Database</span
+              ><span class="wfiles">1 file</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. BUILDING -->
+        <div class="card active">
+          <div class="card-head">
+            <span class="title">Watchdog</span>
+            <span class="pill">1</span>
+            <span class="pill amber">building</span>
+            <button class="flowbtn">flow: watchdog</button>
+            <span class="chev">▾</span>
+          </div>
+          <div class="action">Build required — running pnpm build once</div>
+          <div class="worker">
+            <div class="wrow">
+              <span class="ok">✓</span><span class="wrole">Worker #1: Frontend &amp; UI</span
+              ><span class="wfiles">3 files</span>
+              <span class="badges"><span class="badge a">build …</span></span>
+            </div>
+          </div>
+          <div class="worker">
+            <div class="wrow">
+              <span class="ok">✓</span><span class="wrole">Worker #2: Backend API</span
+              ><span class="wfiles">2 files</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. TESTING + SELF HEAL -->
+        <div class="card active">
+          <div class="card-head">
+            <span class="title">Watchdog</span>
+            <span class="pill">1</span>
+            <span class="pill cyan">testing</span>
+            <button class="flowbtn">flow: watchdog</button>
+            <span class="chev">▾</span>
+          </div>
+          <div class="action">Tests failed — dispatching repair sub-agent</div>
+          <div class="worker">
+            <div class="wrow">
+              <span class="ok">✓</span><span class="wrole">Worker #1: Frontend &amp; UI</span
+              ><span class="wfiles">3 files</span>
+              <span class="badges"
+                ><span class="badge g">build ✓</span><span class="badge r">test ✗</span></span
+              >
+            </div>
+            <div class="note">⚠ tests failed: 2 assertions in api.spec.ts</div>
+          </div>
+          <span class="heal">🛠 1 self-heal</span>
+        </div>
+
+        <!-- 5. DONE -->
+        <div class="card done">
+          <div class="card-head">
+            <span class="title">Watchdog</span>
+            <span class="pill">1</span>
+            <span class="pill green">verified</span>
+            <button class="flowbtn">flow: watchdog</button>
+            <span class="chev">▾</span>
+          </div>
+          <div class="action">All 3 sub-agents verified clean</div>
+          <div class="worker">
+            <div class="wrow">
+              <span class="ok">✓</span><span class="wrole">Worker #1: Frontend &amp; UI</span
+              ><span class="wfiles">3 files</span>
+              <span class="badges"
+                ><span class="badge g">build ✓</span><span class="badge g">test ✓</span></span
+              >
+            </div>
+          </div>
+          <div class="worker">
+            <div class="wrow">
+              <span class="ok">✓</span><span class="wrole">Worker #2: Backend API</span
+              ><span class="wfiles">2 files</span>
+              <span class="badges"
+                ><span class="badge g">build ✓</span><span class="badge g">test ✓</span></span
+              >
+            </div>
+          </div>
+          <div class="verdict">
+            Watchdog verdict: all 3 sub-agent(s) verified clean (review + build/test)
+          </div>
+        </div>
+
+        <!-- 6. FAILED -->
+        <div class="card fail">
+          <div class="card-head">
+            <span class="title">Watchdog</span>
+            <span class="pill">1</span>
+            <span class="pill red">failed</span>
+            <button class="flowbtn">flow: watchdog</button>
+            <span class="chev">▾</span>
+          </div>
+          <div class="action">Build failed after repair attempt</div>
+          <div class="worker">
+            <div class="wrow">
+              <span class="no">✗</span><span class="wrole">Worker #2: Backend API</span
+              ><span class="wfiles">0 files</span>
+              <span class="badges"><span class="badge r">build ✗</span></span>
+            </div>
+            <div class="note">⚠ model error: upstream returned 408</div>
+          </div>
+          <span class="heal">🛠 2 self-heals</span>
+          <div class="verdict">
+            Watchdog verdict: 2/3 sub-agent(s) done, 1 issue(s) found • 2 self-heal(s)
+          </div>
+        </div>
+      </div>
+
+      <h2>Flow — jo card ke andar chalta hai</h2>
+      <div class="flow">
+        <span class="fnode mgr">MANAGER</span><span class="farrow">→ task</span>
+        <span class="fnode wd">🐕 WATCHDOG</span><span class="farrow">→ assign</span>
+        <span class="fnode wk">W1</span><span class="fnode wk">W2</span
+        ><span class="fnode wk">W3</span>
+        <span class="farrow">→ review</span>
+        <span class="fnode chk">BUILD? → TEST</span><span class="farrow">→ verdict</span>
+        <span class="fnode mgr">MANAGER (free)</span>
+      </div>
+
+      <div class="tip">
+        <b>Card kya dikhata hai:</b> live status (watching / reviewing / building / testing /
+        verified / failed) • current action • har sub-agent ka role, kitne files •
+        <b>build ✓/✗/skipped</b> • <b>test ✓/✗/no tests</b> • review notes (tooltip) • 🛠 self-heal
+        count • stop button<br />
+        <b>Manager hamesha free</b> — card chalte hue bhi chat, discussion, brainstorming aur naya
+        task de sakte ho.
+      </div>
+    </div>
+  </body>
+</html>

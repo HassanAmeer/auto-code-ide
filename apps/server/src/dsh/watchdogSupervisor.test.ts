@@ -12,6 +12,7 @@ import {
   getWatchdogSnapshot,
   stopWatchdog,
   resolveFallbackModel,
+  resolveWorkerLaneModels,
   WATCHDOG_FALLBACK_MODELS,
 } from "./watchdogSupervisor.ts";
 
@@ -115,6 +116,23 @@ describe("watchdog self-healing ladder", () => {
   it("returns undefined at the end of the ladder", () => {
     const last = WATCHDOG_FALLBACK_MODELS[WATCHDOG_FALLBACK_MODELS.length - 1]!;
     expect(resolveFallbackModel(last)).toBeUndefined();
+  });
+});
+
+describe("watchdog model lanes", () => {
+  it("gives the first worker the requested model", () => {
+    const lanes = resolveWorkerLaneModels("my-model", 3);
+    expect(lanes[0]).toBe("my-model");
+    expect(lanes.length).toBe(3);
+  });
+
+  it("spreads the remaining workers over different models", () => {
+    const lanes = resolveWorkerLaneModels("my-model", 3);
+    expect(new Set(lanes).size).toBeGreaterThan(1);
+  });
+
+  it("always returns at least one lane", () => {
+    expect(resolveWorkerLaneModels("my-model", 0).length).toBe(1);
   });
 });
 
