@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Watchdog — Card Design & Flow</title>
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+        font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        background: #0b1120; color: #e2e8f0; padding: 28px; min-height: 100vh;
+      }
+      .wrap { max-width: 1240px; margin: 0 auto; }
+      h1 { text-align: center; font-size: 26px; color: #38bdf8; margin-bottom: 6px; }
+      .sub { text-align: center; color: #64748b; font-size: 14px; margin-bottom: 34px; }
+      h2 {
+        font-size: 14px; color: #94a3b8; text-transform: uppercase; letter-spacing: .1em;
+        margin: 34px 0 14px; text-align: center;
+      }
+      h2 span { color: #38bdf8; }
+
+      /* ── real card styling (mirrors WatchdogCard.tsx) ── */
+      .card {
+        background: #111827; border: 1px solid #1f2937; border-radius: 12px; padding: 12px 10px;
+        box-shadow: 0 10px 30px rgba(0,0,0,.5); font-size: 12px; width: 330px;
+      }
+      .card.active { border-color: #a78bfa; box-shadow: 0 0 0 1px rgba(167,139,250,.25), 0 10px 30px rgba(0,0,0,.5); }
+      .card.done { border-color: rgba(16,185,129,.45); }
+      .card.fail { border-color: rgba(244,63,94,.45); }
+      .card-head { display: flex; align-items: center; gap: 7px; height: 28px; padding: 0 6px; border-radius: 8px; cursor: pointer; }
+      .card-head:hover { background: rgba(255,255,255,.05); }
+      .title { font-size: 12px; font-weight: 500; color: rgba(255,255,255,.88); }
+      .pill { font-family: ui-monospace, monospace; font-size: 10px; padding: 2px 7px; border-radius: 999px; background: rgba(148,163,184,.16); color: #94a3b8; }
+      .pill.cyan { background: rgba(34,211,238,.15); color: #22d3ee; }
+      .pill.green { background: rgba(16,185,129,.15); color: #34d399; }
+      .pill.red { background: rgba(244,63,94,.15); color: #fb7185; }
+      .pill.amber { background: rgba(251,191,36,.15); color: #fbbf24; }
+      .flowbtn { margin-left: auto; font-family: ui-monospace, monospace; font-size: 10px; padding: 2px 8px; border-radius: 999px; background: rgba(167,139,250,.16); color: #a78bfa; border: 0; cursor: pointer; }
+      .chev { color: #64748b; font-size: 13px; }
+      .action { font-family: ui-monospace, monospace; font-size: 10.5px; color: #94a3b8; padding: 4px 0 6px 26px; }
+      .worker { padding: 2px 0 2px 26px; }
+      .wrow { display: flex; align-items: center; gap: 6px; min-width: 0; }
+      .wrole { font-size: 11.5px; color: rgba(255,255,255,.82); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .wmodel { font-size: 9px; color: #64748b; font-family: ui-monospace, monospace; max-width: 92px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .wfiles { font-family: ui-monospace, monospace; font-size: 10px; color: #64748b; }
+      .badges { margin-left: auto; display: flex; gap: 4px; }
+      .badge { font-family: ui-monospace, monospace; font-size: 9px; padding: 1px 5px; border-radius: 4px; background: rgba(148,163,184,.14); color: #94a3b8; white-space: nowrap; }
+      .badge.g { background: rgba(16,185,129,.15); color: #34d399; }
+      .badge.r { background: rgba(244,63,94,.15); color: #fb7185; }
+      .badge.a { background: rgba(251,191,36,.15); color: #fbbf24; }
+      .log { truncate; }
+      .logline { font-size: 9.5px; font-family: ui-monospace, monospace; color: rgba(34,211,238,.8); padding-left: 34px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .note { font-size: 10.5px; color: #fbbf24; padding: 2px 0 2px 34px; }
+      .verdict { font-size: 10.5px; color: #94a3b8; padding: 6px 0 0 26px; line-height: 1.5; }
+      .heal { display: inline-block; font-family: ui-monospace, monospace; font-size: 9px; padding: 2px 7px; border-radius: 5px; background: rgba(167,139,250,.16); color: #a78bfa; margin: 7px 0 0 26px; }
+      .stop { margin-left: auto; color: #64748b; font-size: 10px; }
+      .spin { display: inline-block; width: 12px; height: 12px; border-radius: 50%; border: 2px solid rgba(34,211,238,.35); border-top-color: #22d3ee; animation: sp .9s linear infinite; flex: none; }
+      .spin.v { border-color: rgba(167,139,250,.35); border-top-color: #a78bfa; }
+      .spin.a { border-color: rgba(251,191,36,.35); border-top-color: #fbbf24; }
+      .spin.s { border-color: rgba(56,189,248,.35); border-top-color: #38bdf8; }
+      @keyframes sp { to { transform: rotate(360deg); } }
+      .ok { color: #34d399; font-size: 12px; }
+      .no { color: #fb7185; font-size: 12px; }
+
+      /* layout */
+      .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 18px; justify-items: center; }
+      .anatomy { display: grid; grid-template-columns: 340px 1fr; gap: 26px; align-items: start; }
+      @media (max-width: 860px) { .anatomy { grid-template-columns: 1fr; } }
+      .legend { background: #0f172a; border: 1px solid #1e293b; border-radius: 12px; padding: 18px 20px; }
+      .legend h3 { color: #a78bfa; font-size: 15px; margin-bottom: 12px; }
+      .legend li { list-style: none; font-size: 13px; color: #cbd5e1; line-height: 1.6; margin-bottom: 9px; padding-left: 26px; position: relative; }
+      .legend li b { color: #f1f5f9; }
+      .num { position: absolute; left: 0; top: 1px; width: 18px; height: 18px; border-radius: 50%; background: rgba(167,139,250,.2); color: #a78bfa; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; font-family: ui-monospace, monospace; }
+
+      /* flow */
+      .flow { display: flex; align-items: center; justify-content: center; gap: 9px; flex-wrap: wrap; }
+      .fnode { font-size: 11px; padding: 8px 13px; border-radius: 9px; border: 1.5px solid; font-weight: 600; text-align: center; }
+      .fnode small { display: block; font-weight: 400; font-size: 9.5px; opacity: .8; margin-top: 2px; }
+      .fnode.mgr { background: rgba(30,58,95,.85); border-color: #38bdf8; color: #fff; }
+      .fnode.wd { background: rgba(76,29,149,.85); border-color: #a78bfa; color: #fff; }
+      .fnode.wk { background: rgba(29,78,216,.85); border-color: #60a5fa; color: #fff; }
+      .fnode.chk { background: rgba(63,98,18,.85); border-color: #4ade80; color: #fff; }
+      .fnode.rep { background: rgba(190,24,93,.8); border-color: #f472b6; color: #fff; }
+      .farrow { color: #64748b; font-size: 13px; }
+
+      .phases { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; }
+      .phase { background: #0f172a; border: 1px solid #1e293b; border-radius: 12px; padding: 16px; }
+      .phase .pn { font-family: ui-monospace, monospace; font-size: 10px; color: #64748b; letter-spacing: .1em; }
+      .phase h4 { color: #38bdf8; font-size: 14px; margin: 5px 0 8px; }
+      .phase p { color: #94a3b8; font-size: 12.5px; line-height: 1.6; }
+      .phase .time { margin-top: 9px; font-family: ui-monospace, monospace; font-size: 10px; color: #34d399; }
+
+      /* comparison */
+      table { width: 100%; border-collapse: collapse; font-size: 13px; }
+      th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #1e293b; }
+      th { color: #94a3b8; font-size: 11px; text-transform: uppercase; letter-spacing: .07em; font-weight: 600; }
+      td.old { color: #fb7185; }
+      td.new { color: #34d399; font-weight: 600; }
+      td { color: #cbd5e1; }
+
+      .verdict-box { margin-top: 18px; border-radius: 12px; border: 1px solid rgba(16,185,129,.35); background: rgba(16,185,129,.06); padding: 18px 20px; }
+      .verdict-box h3 { color: #34d399; font-size: 15px; margin-bottom: 8px; }
+      .verdict-box p { color: #cbd5e1; font-size: 13px; line-height: 1.7; }
+      .warn { border-color: rgba(251,191,36,.35); background: rgba(251,191,36,.06); }
+      .warn h3 { color: #fbbf24; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>🐕 Watchdog — Card Design &amp; Flow</h1>
+      <p class="sub">AutoCode IDE · Manager → Watchdog → Sub-Agents → Review / Build / Test</p>
+
+      <h2><span>1 · Card Anatomy</span> — card kaise bana hai</h2>
+      <div class="anatomy">
+        <div class="card active">
+          <div class="card-head">
+            <span class="title">Watchdog</span>
+            <span class="pill">3</span>
+            <span class="pill cyan">2 active</span>
+            <button class="flowbtn">flow: watchdog</button>
+            <span class="chev">▾</span>
+          </div>
+          <div class="action">Reviewing all sub-agent outputs in parallel</div>
+          <div class="worker">
+            <div class="wrow">
+              <span class="spin v"></span>
+              <span class="wrole">Worker #1: Frontend &amp; UI</span>
+              <span class="wmodel">gemini-2.5-flash</span>
+              <span class="wfiles">3 files</span>
+              <span class="badges"><span class="badge a">build …</span></span>
+            </div>
+            <div class="logline">⏳ streaming… 1,240 chars</div>
+          </div>
+          <div class="worker">
+            <div class="wrow">
+              <span class="ok">✓</span>
+              <span class="wrole">Worker #2: Backend API</span>
+              <span class="wmodel">glm-5.3-flash-free</span>
+              <span class="wfiles">2 files</span>
+              <span class="badges"
+                ><span class="badge g">build ✓</span><span class="badge g">test ✓</span></span
+              >
+            </div>
+          </div>
+          <div class="worker">
+            <div class="wrow">
+              <span class="no">✗</span>
+              <span class="wrole">Worker #3: Database</span>
+              <span class="wmodel">minimax-m3.1</span>
+              <span class="wfiles">0 files</span>
+              <span class="badges"><span class="badge r">build ✗</span></span>
+            </div>
+            <div class="note">⚠ model error: upstream returned 408</div>
+          </div>
+          <span class="heal">🛠 1 self-heal</span>
+          <div class="verdict">
+            Watchdog verdict: 2/3 sub-agent(s) done, 1 issue(s) found • 1 self-heal(s)
+          </div>
+        </div>
+
+        <div class="legend">
+          <h3>Har hissa kya batata hai</h3>
+          <ul>
+            <li>
+              <span class="num">1</span><b>Watchdog + count</b> — is run mein kitne sub-agents hain
+            </li>
+            <li>
+              <span class="num">2</span><b>Active badge</b> — kitne abhi chal rahe hain (cyan =
+              live)
+            </li>
+            <li>
+              <span class="num">3</span><b>flow: watchdog</b> — flow toggle. Click →
+              <b>direct</b> (plain model path) / <b>watchdog</b>. Setting mein save hota hai
+            </li>
+            <li>
+              <span class="num">4</span><b>Action line</b> — watchdog abhi kya kar raha hai
+              (watching / reviewing / building / testing)
+            </li>
+            <li>
+              <span class="num">5</span><b>Sub-agent row</b> — role, <b>model lane</b>, kitne files
+            </li>
+            <li>
+              <span class="num">6</span><b>Live log</b> — model ka streaming output (frozen spinner
+              nahi)
+            </li>
+            <li>
+              <span class="num">7</span><b>build ✓/✗/…</b> — build chala ya skip hua (sirf zarurat
+              par)
+            </li>
+            <li><span class="num">8</span><b>test ✓/✗</b> — test suite ka nateeja</li>
+            <li>
+              <span class="num">9</span><b>Review note</b> — empty file / TODO / DOCTYPE / tags ki
+              koi finding
+            </li>
+            <li>
+              <span class="num">10</span><b>🛠 self-heal</b> — watchdog ne kitni baar khud fix kiya
+            </li>
+            <li><span class="num">11</span><b>Verdict</b> — Manager ko jo final result milega</li>
+            <li><span class="num">12</span><b>Stop</b> — purana run rok dein (right side ⏹)</li>
+          </ul>
+        </div>
+      </div>
+
+      <h2><span>2 · Flow</span> — card ke andar jo hota hai</h2>
+      <div class="flow">
+        <span class="fnode mgr">MANAGER<small>chat · brainstorm</small></span>
+        <span class="farrow">→ task</span>
+        <span class="fnode wd">🐕 WATCHDOG<small>split · assign · watch</small></span>
+        <span class="farrow">→</span>
+        <span class="fnode wk">W1<small>gemini</small></span>
+        <span class="fnode wk">W2<small>glm</small></span>
+        <span class="fnode wk">W3<small>minimax</small></span>
+        <span class="farrow">→ review</span>
+        <span class="fnode chk">BUILD? → TEST<small>ek baar, merged workspace par</small></span>
+        <span class="farrow">→ fail?</span>
+        <span class="fnode rep">REPAIR AGENT<small>khud fix kare</small></span>
+        <span class="farrow">→ verdict</span>
+        <span class="fnode mgr">MANAGER<small>free</small></span>
+      </div>
+
+      <h2><span>3 · Phases</span> — timing ke sath</h2>
+      <div class="phases">
+        <div class="phase">
+          <div class="pn">PHASE 1</div>
+          <h4>Workers parallel</h4>
+          <p>
+            Task split → har part sahi role wale sub-agent ko. Har worker <b>alag model lane</b> par
+            — is liye queue ek hi provider ke andar nahi atki.
+          </p>
+          <div class="time">⏱ sabse bada hissa — parallel chal raha hai</div>
+        </div>
+        <div class="phase">
+          <div class="pn">PHASE 2</div>
+          <h4>Review parallel</h4>
+          <p>
+            Har worker ke changed files check: empty file, TODO/placeholder, missing DOCTYPE,
+            unclosed tags. Koi build nahi — sasta aur parallel.
+          </p>
+          <div class="time">⏱ seconds</div>
+        </div>
+        <div class="phase">
+          <div class="pn">PHASE 3</div>
+          <h4>Merge sequential</h4>
+          <p>
+            Workers ke branches merge hote hain. Ye sequence mein hi hota hai (git ko stable order
+            chahiye). Review fail wala worker merge nahi hota.
+          </p>
+          <div class="time">⏱ seconds</div>
+        </div>
+        <div class="phase">
+          <div class="pn">PHASE 4</div>
+          <h4>Build + Test (ek baar)</h4>
+          <p>
+            Merged workspace par <b>ek</b> build (sirf jab change build toot sakta ho) aur
+            <b>ek</b> test suite. Fail → repair agent → dobara verify.
+          </p>
+          <div class="time">⏱ pehle N×, ab 1×</div>
+        </div>
+      </div>
+
+      <h2><span>4 · Pehle vs Ab</span></h2>
+      <table>
+        <tr>
+          <th>Cheez</th>
+          <th>Pehle</th>
+          <th>Ab</th>
+        </tr>
+        <tr>
+          <td>Build runs</td>
+          <td class="old">har worker ke liye (N×)</td>
+          <td class="new">ek (merged workspace par)</td>
+        </tr>
+        <tr>
+          <td>Test runs</td>
+          <td class="old">har worker ke liye (N×)</td>
+          <td class="new">ek</td>
+        </tr>
+        <tr>
+          <td>Worker parallelism</td>
+          <td class="old">sab ek hi model → ek queue</td>
+          <td class="new">alag model lane per worker</td>
+        </tr>
+        <tr>
+          <td>Worktree cost</td>
+          <td class="old">har task pe full checkout</td>
+          <td class="new">pool — reuse + pre-warm</td>
+        </tr>
+        <tr>
+          <td>Review</td>
+          <td class="old">per worker sequential</td>
+          <td class="new">sab parallel</td>
+        </tr>
+        <tr>
+          <td>UI feedback</td>
+          <td class="old">end tak frozen spinner</td>
+          <td class="new">live streaming per worker</td>
+        </tr>
+        <tr>
+          <td>Token budget</td>
+          <td class="old">4096 (truncate)</td>
+          <td class="new">16384</td>
+        </tr>
+        <tr>
+          <td>Build timeout</td>
+          <td class="old">120s (false fail)</td>
+          <td class="new">300s</td>
+        </tr>
+        <tr>
+          <td>Error handling</td>
+          <td class="old">report only</td>
+          <td class="new">retry → repair → restart (4 levels)</td>
+        </tr>
+        <tr>
+          <td>Worker count</td>
+          <td class="old">auto, unbounded</td>
+          <td class="new">cap 4 · command se pin: /parallel-subagents 5</td>
+        </tr>
+      </table>
+
+      <div class="verdict-box">
+        <h3>✅ Verdict — kya yeh behtar hai?</h3>
+        <p>
+          <b>Haan, structurally behtar hai.</b> Pehle system "workers bana do, phir dekhte hain"
+          tha. Ab system <b>supervise</b> karta hai: kaam assign → dekhna → review → verify → khud
+          fix → verdict. Manager har waqt free rehta hai, aur user ko
+          <b>har step ka live pata</b> chalta hai card se.<br />
+          Performance side pe bhi yeh sach mein behtar hai — build/test N× se 1×, aur workers ab
+          asli parallel hain (alag model lanes).
+        </p>
+      </div>
+
+      <div class="verdict-box warn">
+        <h3>⚠️ Honest gaps — jo ab bhi slow kar sakta hai</h3>
+        <p>
+          1. <b>Free model lanes slow hain</b> (30–90s/call, 429s). Code perfect hai, magar speed
+          provider tak limited hai. <b>Ek paid lane add karte hi 2–3× jump</b> aayega.<br />
+          2. <b>Merge sequential hai</b> — git ki wajah se, unavoidable (conflicts tabhi safe
+          hain).<br />
+          3. <b>Build/test merged workspace par</b> — matlab ek worker ka bug doosron ka kaam rok
+          sakta hai (watchdog repair agent se theek hota hai).<br />
+          4. <b>Review heuristic hai</b> — semantic quality (kya code sahi hai) ke liye abhi ek
+          model pass nahi; sirf static checks.<br />
+          5. <b>UI mein card ek jagah hai</b> — thread-level panel me bhi chahiye to extra wiring
+          hogi.
+        </p>
+      </div>
+    </div>
+  </body>
+</html>
