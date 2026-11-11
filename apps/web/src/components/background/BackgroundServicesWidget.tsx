@@ -32,6 +32,8 @@ import { usePrimaryEnvironmentId } from "../../state/environments";
 import { useKnownTerminalSessions } from "../../state/terminalSessions";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { WatchdogCard } from "./WatchdogCard";
+import { SleekSpinnerRing } from "./sleekSpinner";
 
 // --- Custom SVGs matching the exact screenshot design ---
 
@@ -39,21 +41,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
  * Sleek circular spinner ring matching the exact screenshot layout.
  * Arc spans ~270 degrees with a smooth gap on the top-right and spins clockwise.
  */
-export function SleekSpinnerRing({ className }: { className?: string }) {
-  return (
-    <svg
-      className={cn("size-3.5 shrink-0 animate-spin text-muted-foreground", className)}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      aria-hidden="true"
-    >
-      <path d="M12 3a9 9 0 1 0 9 9" />
-    </svg>
-  );
-}
+export { SleekSpinnerRing } from "./sleekSpinner";
 
 export function CancelledCircleIcon({ className }: { className?: string }) {
   return (
@@ -747,6 +735,9 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
 
   return (
     <div className={cn("flex flex-col gap-1 py-0.5 px-0.5 select-none", className)}>
+      {/* 0. Watchdog Section — watches every sub-agent and reports the verdict */}
+      <WatchdogCard projectName={projectName} />
+
       {/* 1. Subagents Section */}
       <div className="flex flex-col">
         <div

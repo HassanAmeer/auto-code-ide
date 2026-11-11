@@ -33,6 +33,7 @@ export * from "./opencodeBridge.ts";
 export * from "./taskDecomposer.ts";
 export * from "./reviewerSubAgent.ts";
 export * from "./superAgentManager.ts";
+export * from "./watchdogSupervisor.ts";
 
 export interface HarnessExecutionResult {
   ok: boolean;

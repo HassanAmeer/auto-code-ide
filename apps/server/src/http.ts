@@ -116,7 +116,6 @@ import {
   formatServerLedgerBulletSummary,
 } from "./multiTurnSessionLedger.ts";
 import {
-  runAutonomousHarnessWorkflow,
   getTelemetrySnapshot,
   registerWorkerTelemetry,
   updateWorkerTelemetryStatus,
@@ -127,6 +126,11 @@ import {
   pruneStaleTelemetry,
 } from "./dsh/index.ts";
 import { isComplexTask } from "./dsh/taskDecomposer.ts";
+import {
+  getWatchdogSnapshot,
+  startWatchdogSupervision,
+  stopWatchdog,
+} from "./dsh/watchdogSupervisor.ts";
 import { getProjectChatEngineSkillPrompt } from "@t3tools/shared/superpowerSkills";
 import {
   createSupervisorWorkerEnvelope,
@@ -1400,34 +1404,45 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
         workspaceRoot: "/root/autojobs",
       };
 
-      const harnessRes = yield* Effect.promise(() =>
-        runAutonomousHarnessWorkflow({
+      // The Watchdog supervises this run end to end: it assigns the related
+      // work to the matching sub-agents, watches every one of them, and when a
+      // sub-agent finishes it reviews the output, builds only when the change
+      // can break the build, and runs the test suite.
+      const watchdogRes = yield* Effect.promise(() =>
+        startWatchdogSupervision({
           projectId: targetProject.projectId,
           projectName: targetProject.projectName,
           projectRoot: targetProject.workspaceRoot,
-          projectIdOrName: targetProject.projectName,
           taskTitle: cleanPrompt.slice(0, 50),
           prompt: cleanPrompt,
           model: bodyJson?.model || "deepseek-v4.1-flash-free",
+          onLog: (msg: string) => console.log(msg),
         }),
       );
 
-      const milestonesText = (harnessRes.subtasks || [])
+      const watchdogSnapshot = getWatchdogSnapshot({
+        projectName: targetProject.projectName,
+      });
+      const watchdogState = watchdogSnapshot.watchdogs.find((w) => w.id === watchdogRes.watchdogId);
+
+      const workerRows = (watchdogState?.workers ?? [])
         .map(
-          (st) =>
-            `• **Milestone ${st.order} (${st.category}):** ${st.title} (${st.status === "completed" ? "✓ Done" : st.status})`,
+          (w) =>
+            `• **${w.role}:** ${w.goal} — ${w.status === "completed" ? "✓ Done" : w.status}${
+              w.buildRan ? ` (build ${w.buildPassed ? "✓" : "✗"})` : " (build skipped)"
+            }${w.testRan ? ` (test ${w.testPassed ? "✓" : "✗"})` : ""}`,
         )
         .join("\n");
 
-      const reply = `### 🚀 DeepSeek Autonomous Parallel Workers Dispatched & Completed!\n\nSupervisor ne composite task ko **${harnessRes.subtasks?.length || 1} milestones** mein divide kar ke isolated git worktrees mein parallel execute kiya:\n\n${milestonesText}\n\n• **Files Checked:** ${harnessRes.checklist?.length || 0}\n• **3-Level Review Loop:** ${harnessRes.reviewLoop?.length || 1} rounds verified clean\n• **Auto-Healed Issues:** ${harnessRes.errorsFixed?.length || 0}\n• **Live Preview URL:** ${harnessRes.previewUrl || "Ready"}\n\nHar worker ka live progress aur telemetry timeline aur sidebar widget mein sync ho chuki hai.`;
+      const reply = `### 🐕 Watchdog Supervised Parallel Workers — ${watchdogRes.verdict}\n\nWatchdog ne task ko related sub-agents mein divide kiya, har ek par nazar rakhi, aur complete hone par **review + build (agar zaruri ho) + test** kiya:\n\n${workerRows}\n\n• **Sub-Agents:** ${watchdogRes.workersCompleted}/${watchdogRes.workersTotal}\n• **Issues:** ${watchdogRes.issues.length}\n• **Live Preview URL:** ${watchdogState ? `/api/projects/preview/${targetProject.projectName}/index.html` : "Ready"}\n\nWatchdog card sidebar mein live status dikha raha hai — Super Agent is dauran free hai, aap discussion ya naya task de sakte hain.`;
 
       return HttpServerResponse.jsonUnsafe({
-        ok: true,
+        ok: watchdogRes.ok,
         reply,
-        spokenReply: `DeepSeek parallel workers ne task divide karke mukammal kar diya hai.`,
-        actionTaken: "autonomous_harness_dispatched",
-        model: "deepseek-supervisor",
-        harnessResult: harnessRes,
+        spokenReply: `Watchdog ne parallel workers supervise karke task mukammal kar diya hai.`,
+        actionTaken: "watchdog_supervised_dispatch",
+        model: "watchdog-supervisor",
+        watchdogResult: watchdogRes,
       });
     }
     // ── End DeepSeek Parallel Worker Auto-Dispatch Trigger ──────────────────────
@@ -3455,25 +3470,53 @@ export const layerSuperAgentDispatchWorkerRoute = HttpRouter.add(
       `🚀 Super Bot (Senior Supervisor) initiated task: "${taskTitle}" with Task Envelope (${envelope.rules.length} strict bounds).`,
     );
 
-    const harnessResult = yield* Effect.promise(() =>
-      runAutonomousHarnessWorkflow({
+    // Every Manager task runs UNDER the Watchdog: the watchdog assigns the
+    // related work to the matching sub-agents, watches each one, and reviews +
+    // builds/tests every result before reporting back.
+    const watchdogResult = yield* Effect.promise(() =>
+      startWatchdogSupervision({
         projectId: project.projectId,
         projectName: project.projectName,
         projectRoot: targetRoot,
-        projectIdOrName: targetName,
         taskTitle,
-        // Raw user task — the harness decomposes THIS, not the formatted
+        // Raw user task — the watchdog decomposes THIS, not the formatted
         // envelope (whose bullet/numbered rule lines would be misparsed as milestones).
         prompt: bodyJson?.prompt?.trim() || formattedEnvelopePrompt,
-        envelope,
         model: bodyJson?.model || "default",
-        stream: isStream,
-        clientNotificationTarget: bodyJson?.clientNotificationTarget,
         onLog: (line) => {
-          sendStreamLog("harness", line);
+          sendStreamLog("watchdog", line);
         },
       }),
     );
+
+    const watchdogSnapshot = getWatchdogSnapshot({ projectName: project.projectName });
+    const watchdogState = watchdogSnapshot.watchdogs.find(
+      (w) => w.id === watchdogResult.watchdogId,
+    );
+
+    const harnessResult = {
+      ok: watchdogResult.ok,
+      workerId: `watchdog-${watchdogResult.watchdogId}`,
+      projectId: project.projectId,
+      projectName: project.projectName,
+      taskTitle,
+      status: watchdogResult.status === "completed" ? ("completed" as const) : ("error" as const),
+      subtasks: (watchdogState?.workers ?? []).map((w, idx) => ({
+        id: w.id,
+        order: idx + 1,
+        title: w.goal,
+        description: w.reviewNotes.join("\n"),
+        category: "integration_polish" as const,
+        status: w.status === "completed" ? ("completed" as const) : ("failed" as const),
+      })),
+      reviewLoop: [],
+      checklist: [],
+      errorsFixed: (watchdogState?.issues ?? []).length,
+      previewUrl: `/api/projects/preview/${project.projectName}/index.html`,
+      clientNotificationSent: false,
+      filesModified: (watchdogState?.workers ?? []).flatMap((w) => []),
+      summary: watchdogResult.verdict,
+    };
 
     const verificationSteps = [
       {
@@ -3602,6 +3645,83 @@ export const layerSuperAgentWorkersPostRoute = HttpRouter.add(
       projectId: bodyJson?.projectId,
     });
     return HttpServerResponse.jsonUnsafe(snapshot);
+  }),
+);
+
+export const layerSuperAgentWatchdogRoute = HttpRouter.add(
+  "GET",
+  "/api/super-agent/watchdog",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const url = new URL(request.url, "http://127.0.0.1");
+    const projectName =
+      url.searchParams.get("project") || url.searchParams.get("projectName") || undefined;
+    const projectId = url.searchParams.get("projectId") || undefined;
+
+    const snapshot = getWatchdogSnapshot({ projectName, projectId });
+    return HttpServerResponse.jsonUnsafe(snapshot);
+  }),
+);
+
+export const layerSuperAgentWatchdogDispatchRoute = HttpRouter.add(
+  "POST",
+  "/api/super-agent/watchdog",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as any;
+
+    const projectName = bodyJson?.projectName || "Workspace";
+    const projectRoot = bodyJson?.projectRoot;
+    const taskTitle = bodyJson?.taskTitle;
+    const prompt = bodyJson?.prompt;
+
+    if (!projectRoot || !taskTitle || !prompt) {
+      return HttpServerResponse.jsonUnsafe(
+        { ok: false, error: "projectRoot, taskTitle and prompt are required" },
+        { status: 400 },
+      );
+    }
+
+    // The watchdog owns the whole run: it assigns sub-agents, watches them and
+    // reviews + builds/tests each result before reporting back to the Manager.
+    const result = yield* Effect.promise(() =>
+      startWatchdogSupervision({
+        projectId: bodyJson?.projectId || "default",
+        projectName,
+        projectRoot,
+        taskTitle,
+        prompt,
+        model: bodyJson?.model,
+        onLog: (msg: string) => console.log(msg),
+      }),
+    );
+
+    return HttpServerResponse.jsonUnsafe(result);
+  }),
+);
+
+export const layerSuperAgentWatchdogStopRoute = HttpRouter.add(
+  "POST",
+  "/api/super-agent/watchdog/stop",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      watchdogId?: string;
+    };
+    const watchdogId = bodyJson?.watchdogId?.trim();
+    if (!watchdogId) {
+      return HttpServerResponse.jsonUnsafe(
+        { ok: false, error: "watchdogId is required" },
+        { status: 400 },
+      );
+    }
+    const stopped = stopWatchdog(watchdogId);
+    return HttpServerResponse.jsonUnsafe(
+      stopped
+        ? { ok: true, stoppedWatchdog: watchdogId }
+        : { ok: false, error: "Watchdog not found" },
+      stopped ? { status: 200 } : { status: 404 },
+    );
   }),
 );
 
