@@ -120,6 +120,7 @@ export const WatchdogCard = memo(function WatchdogCard({
   const [expanded, setExpanded] = useState(initiallyExpanded);
   const [error, setError] = useState<string | null>(null);
   const [stoppingId, setStoppingId] = useState<string | null>(null);
+  const [flowMode, setFlowMode] = useState<"watchdog" | "direct">("watchdog");
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -132,6 +133,9 @@ export const WatchdogCard = memo(function WatchdogCard({
         const data = await res.json();
         const list: WatchdogItem[] = Array.isArray(data?.watchdogs) ? data.watchdogs : [];
         setItems(list);
+        if (data?.flowMode === "direct" || data?.flowMode === "watchdog") {
+          setFlowMode(data.flowMode);
+        }
         setError(null);
       } catch (err) {
         if ((err as any)?.name === "AbortError") return;
@@ -152,6 +156,20 @@ export const WatchdogCard = memo(function WatchdogCard({
       window.clearInterval(interval);
     };
   }, [load]);
+
+  const handleFlowModeChange = useCallback(async () => {
+    const next = flowMode === "watchdog" ? "direct" : "watchdog";
+    setFlowMode(next);
+    try {
+      await fetch("/api/app-settings/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "super_agent_flow_mode", value: next }),
+      });
+    } finally {
+      void load();
+    }
+  }, [flowMode, load]);
 
   const handleStop = useCallback(
     async (watchdogId: string) => {
@@ -202,6 +220,21 @@ export const WatchdogCard = memo(function WatchdogCard({
               {activeCount} active
             </span>
           ) : null}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              void handleFlowModeChange();
+            }}
+            className="rounded-full bg-violet-500/15 px-1.5 py-0.5 text-[10px] font-mono text-violet-400 leading-none hover:bg-violet-500/25 transition-colors cursor-pointer"
+            title={
+              flowMode === "watchdog"
+                ? "Manager task flow: WATCHDOG (every task runs under the Watchdog). Click to switch to direct."
+                : "Manager task flow: DIRECT (tasks run on the plain model path). Click to switch to watchdog."
+            }
+          >
+            flow: {flowMode}
+          </button>
         </div>
         <ChevronDownIcon
           className={cn(

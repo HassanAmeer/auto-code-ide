@@ -1382,9 +1382,16 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
 
     const config = yield* ServerConfig.ServerConfig;
 
-    // ── DeepSeek Parallel Worker Auto-Dispatch Trigger ─────────────────────────
-    // If prompt starts with /teamwork-preview or is a multi-requirement complex task,
-    // dispatch runAutonomousHarnessWorkflow directly across parallel isolated worktrees.
+    // ── Watchdog Flow Trigger ──────────────────────────────────────────────────
+    // Every Manager task runs UNDER the Watchdog (default flow mode):
+    //   Manager → Watchdog → parallel Sub-Agents → review → build? → test → Manager
+    //
+    // The flow mode is a setting so the behaviour can be changed without a
+    // rebuild: "watchdog" (default) sends every task-type message to the
+    // watchdog; "direct" keeps the plain single-model path.
+    const appSettings = getAllAppSettings(config.dbPath);
+    const superAgentFlowMode =
+      appSettings.super_agent_flow_mode === "direct" ? "direct" : "watchdog";
     const isTeamworkTrigger =
       lastUserMsg.startsWith("/teamwork-preview") ||
       lastUserMsg.includes("/teamwork-preview") ||
@@ -1392,8 +1399,15 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
         /\b(banao|create|build|fix|implement|develop|karo|kaam|task|milestone|feature|system|app)\b/i.test(
           lastUserMsg,
         ));
+    // The bot's own intent tells us the user is asking for work to be done
+    // ("bana do", "shuru karo") — those go under the watchdog too, so the
+    // Super Agent stays free instead of blocking on the work itself.
+    const isTaskIntent =
+      botResult?.intent === "CONFIRM_AND_BUILD" || botResult?.intent === "AUTO_HEAL_REQUEST";
+    const shouldUseWatchdog =
+      superAgentFlowMode === "watchdog" && (isTeamworkTrigger || isTaskIntent);
 
-    if (isTeamworkTrigger) {
+    if (shouldUseWatchdog) {
       const cleanPrompt = lastUserMsg.replace(/^\/teamwork-preview\s*/i, "").trim() || lastUserMsg;
       const targetProject = resolveProjectTarget(
         config.dbPath,
@@ -1479,7 +1493,6 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
       "code-free",
     ];
 
-    const appSettings = getAllAppSettings(config.dbPath);
     const activeCoreEngine = String(appSettings?.active_core_engine || "opencode-full-engine");
 
     const isOpenCode =
@@ -3658,8 +3671,16 @@ export const layerSuperAgentWatchdogRoute = HttpRouter.add(
       url.searchParams.get("project") || url.searchParams.get("projectName") || undefined;
     const projectId = url.searchParams.get("projectId") || undefined;
 
+    const config = yield* ServerConfig.ServerConfig;
+    const settings = getAllAppSettings(config.dbPath);
+    // Persist the default once so the flow mode is explicit and visible.
+    if (settings?.super_agent_flow_mode === undefined) {
+      setAppSetting(config.dbPath, "super_agent_flow_mode", "watchdog");
+    }
+    const flowMode = settings?.super_agent_flow_mode === "direct" ? "direct" : "watchdog";
+
     const snapshot = getWatchdogSnapshot({ projectName, projectId });
-    return HttpServerResponse.jsonUnsafe(snapshot);
+    return HttpServerResponse.jsonUnsafe({ ...snapshot, flowMode });
   }),
 );
 

@@ -84,11 +84,23 @@ function now(): number {
   return Date.now();
 }
 
+/**
+ * The active Manager → Watchdog flow mode. "watchdog" (default) routes every
+ * Manager task through the watchdog; "direct" keeps the plain model path.
+ */
+export const SUPER_AGENT_FLOW_MODE_KEY = "super_agent_flow_mode";
+
 /** Live snapshot for the UI watchdog card. */
 export function getWatchdogSnapshot(filter?: {
   projectName?: string | undefined;
   projectId?: string | undefined;
-}): { ok: boolean; watchdogs: WatchdogState[]; active: number; timestamp: number } {
+}): {
+  ok: boolean;
+  watchdogs: WatchdogState[];
+  active: number;
+  flowMode: "watchdog" | "direct";
+  timestamp: number;
+} {
   let list = Array.from(watchdogs.values());
   if (filter?.projectName && filter.projectName !== "all" && filter.projectName !== "Workspace") {
     const needle = filter.projectName.toLowerCase();
@@ -102,6 +114,7 @@ export function getWatchdogSnapshot(filter?: {
     ok: true,
     watchdogs: list,
     active: list.filter((w) => w.status !== "completed" && w.status !== "failed").length,
+    flowMode: "watchdog",
     timestamp: now(),
   };
 }
