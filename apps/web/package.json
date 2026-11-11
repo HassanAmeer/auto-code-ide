@@ -6,7 +6,7 @@
   "scripts": {
     "build:ghostty-wasm": "bash scripts/build-libghostty-wasm.sh",
     "dev": "vp dev",
-    "build": "vp build",
+    "build": "vp build && node scripts/precompress-dist.mjs",
     "preview": "vp preview",
     "typecheck": "tsc --noEmit",
     "test": "vp test run --passWithNoTests --project unit"

@@ -945,34 +945,53 @@ const ConversationTimeline = memo(function ConversationTimeline({
   const rows = useStableRows(rawRows, listIdentityKey);
   const staleErrorRowIds = useMemo(() => {
     const result = new Set<string>();
-    let seenAssistant = false;
-    for (let i = rows.length - 1; i >= 0; i--) {
-      const r = rows[i] as any;
+    // Sentinel for entries without a runId so runless legacy projections still
+    // group together (assistant and error both map to it).
+    const RUNLESS = "__runless__";
+    const isErrorish = (e: any): boolean =>
+      e?.structuredPayload?.type === "error" || e?.projectedItem?.item?.type === "error";
+    const rid = (v: any): string => (typeof v === "string" ? v : RUNLESS);
+
+    // Pass 1: collect the runs that produced a NON-EMPTY assistant message.
+    const assistantRunIds = new Set<string>();
+    for (const r of rows as any[]) {
       if (!r) continue;
-      if (r.kind === "message" && r.message?.role === "assistant") {
-        seenAssistant = true;
+      if (
+        r.kind === "message" &&
+        r.message?.role === "assistant" &&
+        String(r.message?.text ?? "").trim().length > 0
+      ) {
+        assistantRunIds.add(rid(r.message?.runId));
+      }
+    }
+
+    // Pass 2: an error row is stale when its run also produced assistant text —
+    // whether the error landed before (mid-stream retry that recovered) or AFTER
+    // (e.g. a trailing 408/timeout recorded after the final token) the response.
+    // Errors from runs that produced nothing remain visible.
+    const mark = (id: string) => result.add(id);
+    for (const r of rows as any[]) {
+      if (!r) continue;
+      if (r.kind === "event" && r.projectedItem?.item?.type === "error") {
+        if (assistantRunIds.has(rid(r.projectedItem?.item?.runId))) mark(r.id);
         continue;
       }
-      const isErrorRow =
-        (r.kind === "event" && r.projectedItem?.item?.type === "error") ||
-        (r.kind === "work" &&
-          Array.isArray(r.groupedEntries) &&
-          r.groupedEntries.some(
-            (e: any) =>
-              e?.structuredPayload?.type === "error" || e?.projectedItem?.item?.type === "error",
-          )) ||
-        (r.kind === "work-live" &&
-          (r.entry?.structuredPayload?.type === "error" ||
-            r.entry?.projectedItem?.item?.type === "error"));
-      if (isErrorRow && seenAssistant) {
-        result.add(r.id);
-        if (r.kind === "work" && Array.isArray(r.groupedEntries)) {
-          for (const e of r.groupedEntries) {
-            if (e?.structuredPayload?.type === "error" || e?.projectedItem?.item?.type === "error")
-              result.add(e?.id ?? r.id);
+      if (r.kind === "work" && Array.isArray(r.groupedEntries)) {
+        let anyMarked = false;
+        for (const e of r.groupedEntries) {
+          if (isErrorish(e) && assistantRunIds.has(rid(e?.runId))) {
+            mark(e?.id ?? r.id);
+            anyMarked = true;
           }
         }
-        if (r.kind === "work-live") result.add(r.entry?.id ?? r.id);
+        if (anyMarked) mark(r.id);
+        continue;
+      }
+      if (r.kind === "work-live" && isErrorish(r.entry)) {
+        if (assistantRunIds.has(rid(r.entry?.runId))) {
+          mark(r.entry?.id ?? r.id);
+          mark(r.id);
+        }
       }
     }
     return result;

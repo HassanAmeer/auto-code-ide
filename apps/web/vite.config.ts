@@ -66,12 +66,16 @@ const sourcemapEnv = process.env.T3CODE_WEB_SOURCEMAP?.trim().toLowerCase();
 const bundledDevEnv = process.env.T3CODE_BUNDLED_DEV?.trim().toLowerCase();
 const bundledDev = bundledDevEnv === "1" || bundledDevEnv === "true";
 
+// Production default is NO sourcemaps: they double the dist payload (116 MB
+// of .map files were previously emitted), slow down CI, builds and rsync, and
+// are only useful to developers. Set T3CODE_WEB_SOURCEMAP=1 (or "hidden") to
+// re-enable when debugging a production build.
 const buildSourcemap: boolean | "hidden" =
-  sourcemapEnv === "0" || sourcemapEnv === "false"
-    ? false
+  sourcemapEnv === "1" || sourcemapEnv === "true"
+    ? true
     : sourcemapEnv === "hidden"
       ? "hidden"
-      : true;
+      : false;
 
 const unitTestProject = {
   extends: true,
