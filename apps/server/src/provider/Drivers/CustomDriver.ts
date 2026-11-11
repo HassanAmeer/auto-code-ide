@@ -2332,7 +2332,7 @@ export function syncCustomProviderToOpenCode(
       baseUrl = "https://openrouter.ai/api/v1";
     }
 
-    const apiKey = (config.apiKey ?? "").trim() || "no-key";
+    const apiKey = (config.apiKey ?? "").trim();
     // Models are never expanded or hard-coded into opencode.json.
     // The app's storage layer keeps the real catalog (SQLite `app_custom_providers`
     // + `custom-providers-cache.json`) and refreshes it from the provider's
@@ -2364,14 +2364,13 @@ export function syncCustomProviderToOpenCode(
       name: displayName || cleanId,
       options: {
         baseURL: baseUrl,
-        apiKey,
+        ...(apiKey ? { apiKey } : {}),
         ...(Object.keys(headersObj).length > 0 ? { headers: headersObj } : {}),
       },
       models: modelsMap,
     };
-    // All opencode.json targets (including ~/.config/opencode/opencode.json which the
-    // running CLI reads) need the real API key; masking it to "no-key" would make
-    // custom providers fail with "invalid API key" at runtime.
+    // API key is optional — when empty, no Authorization header is sent, allowing
+    // gateway-proxied providers (e.g. kilo.ai free models) to work without a key.
     const sharedProviderEntry = providerEntry;
 
     const cleanName = displayName
