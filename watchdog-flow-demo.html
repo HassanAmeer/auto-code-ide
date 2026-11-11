@@ -1,0 +1,909 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Watchdog Flow — Live Demo</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family:
+          "Segoe UI",
+          system-ui,
+          -apple-system,
+          sans-serif;
+        background: #0b1120;
+        color: #e2e8f0;
+        padding: 22px;
+        min-height: 100vh;
+      }
+      .wrap {
+        max-width: 1420px;
+        margin: 0 auto;
+      }
+      h1 {
+        text-align: center;
+        font-size: 24px;
+        color: #38bdf8;
+        margin-bottom: 4px;
+      }
+      .sub {
+        text-align: center;
+        color: #64748b;
+        font-size: 13px;
+        margin-bottom: 20px;
+      }
+
+      .controls {
+        display: flex;
+        gap: 8px;
+        justify-content: center;
+        margin-bottom: 18px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .btn {
+        background: rgba(56, 189, 248, 0.12);
+        color: #38bdf8;
+        border: 1px solid rgba(56, 189, 248, 0.3);
+        padding: 6px 14px;
+        border-radius: 8px;
+        font-size: 12px;
+        cursor: pointer;
+        font-weight: 600;
+      }
+      .btn:hover {
+        background: rgba(56, 189, 248, 0.22);
+      }
+      .btn.v {
+        background: rgba(167, 139, 250, 0.14);
+        color: #a78bfa;
+        border-color: rgba(167, 139, 250, 0.32);
+      }
+      .step {
+        font-family: ui-monospace, monospace;
+        font-size: 11px;
+        color: #64748b;
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: 360px 1fr 340px;
+        gap: 16px;
+        align-items: start;
+      }
+      @media (max-width: 1180px) {
+        .layout {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      .panel {
+        background: #0f172a;
+        border: 1px solid #1e293b;
+        border-radius: 12px;
+        padding: 14px;
+      }
+      .panel h3 {
+        font-size: 12px;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 0.09em;
+        margin-bottom: 11px;
+      }
+
+      /* ─────── REAL CARD (mirrors WatchdogCard.tsx exactly) ─────── */
+      .card {
+        background: #111827;
+        border: 1px solid #1f2937;
+        border-radius: 12px;
+        padding: 10px 8px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        font-size: 12px;
+      }
+      .card.active {
+        border-color: #a78bfa;
+        box-shadow:
+          0 0 0 1px rgba(167, 139, 250, 0.25),
+          0 10px 30px rgba(0, 0, 0, 0.5);
+      }
+      .card.done {
+        border-color: rgba(16, 185, 129, 0.45);
+      }
+      .card.fail {
+        border-color: rgba(244, 63, 94, 0.45);
+      }
+      .card-head {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        height: 28px;
+        padding: 0 6px;
+        border-radius: 8px;
+      }
+      .title {
+        font-size: 12px;
+        font-weight: 500;
+        color: rgba(255, 255, 255, 0.88);
+      }
+      .pill {
+        font-family: ui-monospace, monospace;
+        font-size: 10px;
+        padding: 2px 7px;
+        border-radius: 999px;
+        background: rgba(148, 163, 184, 0.16);
+        color: #94a3b8;
+      }
+      .pill.cyan {
+        background: rgba(34, 211, 238, 0.15);
+        color: #22d3ee;
+      }
+      .pill.green {
+        background: rgba(16, 185, 129, 0.15);
+        color: #34d399;
+      }
+      .pill.red {
+        background: rgba(244, 63, 94, 0.15);
+        color: #fb7185;
+      }
+      .pill.amber {
+        background: rgba(251, 191, 36, 0.15);
+        color: #fbbf24;
+      }
+      .flowbtn {
+        margin-left: auto;
+        font-family: ui-monospace, monospace;
+        font-size: 10px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: rgba(167, 139, 250, 0.16);
+        color: #a78bfa;
+        border: 0;
+      }
+      .chev {
+        color: #64748b;
+        font-size: 13px;
+      }
+      .action {
+        font-family: ui-monospace, monospace;
+        font-size: 10.5px;
+        color: #94a3b8;
+        padding: 4px 0 6px 26px;
+        min-height: 22px;
+      }
+      .worker {
+        padding: 2px 0 2px 26px;
+      }
+      .wrow {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+      }
+      .wrole {
+        font-size: 11.5px;
+        color: rgba(255, 255, 255, 0.82);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .wmodel {
+        font-size: 9px;
+        color: #64748b;
+        font-family: ui-monospace, monospace;
+        max-width: 84px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .wfiles {
+        font-family: ui-monospace, monospace;
+        font-size: 10px;
+        color: #64748b;
+      }
+      .badges {
+        margin-left: auto;
+        display: flex;
+        gap: 4px;
+      }
+      .badge {
+        font-family: ui-monospace, monospace;
+        font-size: 9px;
+        padding: 1px 5px;
+        border-radius: 4px;
+        background: rgba(148, 163, 184, 0.14);
+        color: #94a3b8;
+        white-space: nowrap;
+      }
+      .badge.g {
+        background: rgba(16, 185, 129, 0.15);
+        color: #34d399;
+      }
+      .badge.r {
+        background: rgba(244, 63, 94, 0.15);
+        color: #fb7185;
+      }
+      .badge.a {
+        background: rgba(251, 191, 36, 0.15);
+        color: #fbbf24;
+      }
+      .logline {
+        font-size: 9.5px;
+        font-family: ui-monospace, monospace;
+        color: rgba(34, 211, 238, 0.85);
+        padding-left: 34px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .note {
+        font-size: 10.5px;
+        color: #fbbf24;
+        padding: 2px 0 2px 34px;
+      }
+      .verdict {
+        font-size: 10.5px;
+        color: #94a3b8;
+        padding: 6px 0 0 26px;
+        line-height: 1.5;
+      }
+      .heal {
+        display: inline-block;
+        font-family: ui-monospace, monospace;
+        font-size: 9px;
+        padding: 2px 7px;
+        border-radius: 5px;
+        background: rgba(167, 139, 250, 0.16);
+        color: #a78bfa;
+        margin: 7px 0 0 26px;
+      }
+      .spin {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        border: 2px solid rgba(34, 211, 238, 0.35);
+        border-top-color: #22d3ee;
+        animation: sp 0.9s linear infinite;
+        flex: none;
+      }
+      .spin.v {
+        border-color: rgba(167, 139, 250, 0.35);
+        border-top-color: #a78bfa;
+      }
+      .spin.a {
+        border-color: rgba(251, 191, 36, 0.35);
+        border-top-color: #fbbf24;
+      }
+      @keyframes sp {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .ok {
+        color: #34d399;
+        font-size: 12px;
+      }
+      .no {
+        color: #fb7185;
+        font-size: 12px;
+      }
+
+      /* ─────── PROMPT JOURNEY ─────── */
+      .journey {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .msg {
+        border-radius: 10px;
+        padding: 10px 12px;
+        font-size: 12px;
+        line-height: 1.55;
+        position: relative;
+      }
+      .msg .who {
+        font-size: 10px;
+        font-family: ui-monospace, monospace;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        margin-bottom: 5px;
+        opacity: 0.9;
+      }
+      .msg.user {
+        background: rgba(30, 58, 95, 0.55);
+        border: 1px solid rgba(56, 189, 248, 0.3);
+      }
+      .msg.user .who {
+        color: #38bdf8;
+      }
+      .msg.wd {
+        background: rgba(76, 29, 149, 0.5);
+        border: 1px solid rgba(167, 139, 250, 0.32);
+      }
+      .msg.wd .who {
+        color: #a78bfa;
+      }
+      .msg.wk {
+        background: rgba(29, 78, 216, 0.4);
+        border: 1px solid rgba(96, 165, 250, 0.3);
+      }
+      .msg.wk .who {
+        color: #60a5fa;
+      }
+      .msg.rep {
+        background: rgba(190, 24, 93, 0.32);
+        border: 1px solid rgba(244, 114, 182, 0.32);
+      }
+      .msg.rep .who {
+        color: #f472b6;
+      }
+      .msg.ok {
+        background: rgba(21, 128, 61, 0.34);
+        border: 1px solid rgba(74, 222, 128, 0.3);
+      }
+      .msg.ok .who {
+        color: #4ade80;
+      }
+      .msg pre {
+        font-family: ui-monospace, monospace;
+        font-size: 10.5px;
+        white-space: pre-wrap;
+        color: #cbd5e1;
+        margin-top: 4px;
+        line-height: 1.5;
+      }
+      .msg.dim {
+        opacity: 0.45;
+      }
+      .arrowdown {
+        text-align: center;
+        color: #475569;
+        font-size: 14px;
+        line-height: 1;
+      }
+
+      /* ─────── TIMELINE ─────── */
+      .tl {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+        max-height: 560px;
+        overflow-y: auto;
+      }
+      .tli {
+        display: flex;
+        gap: 9px;
+        padding: 5px 0;
+        font-size: 11.5px;
+        opacity: 0.35;
+        transition: opacity 0.3s;
+      }
+      .tli.on {
+        opacity: 1;
+      }
+      .tli .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #334155;
+        margin-top: 4px;
+        flex: none;
+      }
+      .tli.on .dot {
+        background: #38bdf8;
+        box-shadow: 0 0 8px rgba(56, 189, 248, 0.6);
+      }
+      .tli.on.warn .dot {
+        background: #fbbf24;
+        box-shadow: 0 0 8px rgba(251, 191, 36, 0.6);
+      }
+      .tli.on.err .dot {
+        background: #fb7185;
+        box-shadow: 0 0 8px rgba(244, 63, 94, 0.6);
+      }
+      .tli .t {
+        font-family: ui-monospace, monospace;
+        color: #64748b;
+        font-size: 10px;
+        flex: none;
+        width: 46px;
+      }
+      .tli .x {
+        color: #cbd5e1;
+        line-height: 1.45;
+      }
+
+      .legend-note {
+        margin-top: 12px;
+        font-size: 11.5px;
+        color: #64748b;
+        line-height: 1.7;
+        border-top: 1px solid #1e293b;
+        padding-top: 10px;
+      }
+      .legend-note b {
+        color: #94a3b8;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>🐕 Watchdog Flow — Live Demo</h1>
+      <p class="sub">
+        Manager ka prompt → Watchdog → Sub-Agents → Review / Build / Test → Manager (free)
+      </p>
+
+      <div class="controls">
+        <button class="btn" id="playBtn">▶ Play</button>
+        <button class="btn v" id="restartBtn">↻ Restart</button>
+        <button class="btn" id="speedBtn">Speed: 1×</button>
+        <span class="step" id="stepLabel">step 0 / 0</span>
+      </div>
+
+      <div class="layout">
+        <!-- LEFT: exact card -->
+        <div class="panel">
+          <h3>Sidebar card (as shipped)</h3>
+          <div class="card" id="card">
+            <div class="card-head">
+              <span class="title">Watchdog</span>
+              <span class="pill" id="cCount">1</span>
+              <span class="pill cyan" id="cActive" style="display: none">1 active</span>
+              <span class="pill amber" id="cPhase" style="display: none">working</span>
+              <button class="flowbtn">flow: watchdog</button>
+              <span class="chev">▾</span>
+            </div>
+            <div class="action" id="cAction">Idle</div>
+            <div id="cWorkers"></div>
+            <span class="heal" id="cHeal" style="display: none">🛠 1 self-heal</span>
+            <div class="verdict" id="cVerdict"></div>
+          </div>
+          <div class="legend-note">
+            <b>Card live update hota hai</b> — 5 second poll. Action line, worker rows, build/test
+            badges, review notes aur self-heal count sab asli state se aate hain.
+          </div>
+        </div>
+
+        <!-- MIDDLE: prompt journey -->
+        <div class="panel">
+          <h3>Prompt journey — Manager se worker tak, aur wapas</h3>
+          <div class="journey" id="journey"></div>
+        </div>
+
+        <!-- RIGHT: timeline -->
+        <div class="panel">
+          <h3>Timeline</h3>
+          <div class="tl" id="timeline"></div>
+          <div class="legend-note">
+            <b>Har step ka hisaab:</b> Workers parallel hain (alag model lane) → review parallel →
+            merge serial → build/test ek baar.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const T = (s) => `[${s}]`;
+
+      // ── the real worker envelope (matches packages/shared/src/taskEnvelope.ts)
+      const envelope = (task, project, path, rules, expected) =>
+        `
+==================================================
+📋 SUPERVISOR-TO-WORKER TASK ENVELOPE
+==================================================
+
+[TASK OBJECTIVE]:
+${task}
+
+[OPERATIONAL CONTEXT]:
+• Target Project: ${project}
+• Workspace Root: ${path}
+
+[STRICT RULES & BOUNDS]:
+${rules}
+
+[EXPECTED DELIVERABLES & VERIFICATION CRITERIA]:
+${expected}
+
+==================================================
+CRITICAL DIRECTIVE FOR WORKER AGENT:
+You are the Hands-On Worker Coder. Execute this task strictly within the bounds specified above.
+Deliver 100% complete, working code. Do NOT add dummy placeholders or stop halfway.
+==================================================`.trim();
+
+      const RULES = `1. No placeholders, TODOs, or dummy values.
+2. Modify ONLY the files that belong to this milestone.
+3. Keep existing public APIs and styling intact.
+4. Verify syntax before finishing.`;
+
+      const WORKERS = [
+        {
+          id: "w1",
+          role: "Worker #1: Frontend & UI Specialist",
+          model: "gemini-2.5-flash",
+          task: "Restaurant menu page + table booking form (UI only)",
+          desc: "Build the menu grid, dish cards, and the table-booking form component. Styling must match the existing Tailwind theme.",
+        },
+        {
+          id: "w2",
+          role: "Worker #2: Backend API & Logic",
+          model: "glm-5.3-flash-free",
+          task: "Booking API routes + availability logic",
+          desc: "Implement POST /api/bookings and GET /api/availability with validation and conflict detection.",
+        },
+        {
+          id: "w3",
+          role: "Worker #3: Database & State",
+          model: "minimax-m3.1-flash-free",
+          task: "SQLite schema + seed data",
+          desc: "Create tables for restaurants, tables and bookings, plus seed data and migrations.",
+        },
+      ];
+
+      // ── demo steps: [timelineLabel, promptPanelHTML, cardState]
+      const STEPS = [];
+      const t0 = 0;
+
+      STEPS.push({
+        label: "Manager receives the task (Super Agent stays free)",
+        card: { status: "idle", action: "Idle", workers: [] },
+        panel: `
+        <div class="msg user">
+          <div class="who">User → Manager (Super Agent)</div>
+          "Restaurant app banao jisme table booking bhi ho"
+        </div>
+        <div class="arrowdown">↓</div>
+        <div class="msg wd">
+          <div class="who">Manager → Watchdog</div>
+          <pre>{
+  "taskTitle": "Restaurant app banao jisme table booking bhi ho",
+  "prompt":      "Restaurant app banao jisme table booking bhi ho",
+  "projectRoot": "/root/autojobs/data/projects/demo-parallel",
+  "maxWorkers":  4,
+  "lanes":       "gemini-2.5-flash,glm-5.3-flash-free,minimax-m3.1-flash-free"
+}</pre>
+          <span style="color:#a78bfa">Task koi explicit /parallel-subagents nahi tha — flow mode "watchdog" hone ki wajah se yahan aa gaya.</span>
+        </div>`,
+      });
+
+      STEPS.push({
+        label: "Watchdog splits the task into role-matched milestones",
+        card: { status: "active", action: "Splitting task and assigning sub-agents", workers: [] },
+        panel: `
+        <div class="msg wd">
+          <div class="who">Watchdog → decomposeTask()</div>
+          <pre>3 milestones:
+ 1. frontend_ui        → Restaurant menu page + table booking form
+ 2. core_logic_api    → Booking API routes + availability logic
+ 3. architecture_schema→ SQLite schema + seed data</pre>
+          <span style="color:#a78bfa">Role decide: deriveSpecialistRole() — frontend / backend / database specialist.</span>
+        </div>
+        <div class="arrowdown">↓</div>
+        <div class="msg wd">
+          <div class="who">Watchdog → worktree pool + model lanes</div>
+          <pre>W1 → .worktrees/worker-…-1   (reused from pool)  lane: gemini-2.5-flash
+W2 → .worktrees/worker-…-2   (reused from pool)  lane: glm-5.3-flash-free
+W3 → .worktrees/worker-…-3   (reused from pool)  lane: minimax-m3.1-flash-free</pre>
+          <span style="color:#a78bfa">Alag lane = alag upstream queue = asli parallelism (ek free lane pe sab queue nahi lagte).</span>
+        </div>`,
+      });
+
+      WORKERS.forEach((w, i) => {
+        STEPS.push({
+          label: `Prompt sent to ${w.role}`,
+          card: {
+            status: "active",
+            action: `Dispatching ${w.role}`,
+            workers: WORKERS.slice(0, i + 1).map((x, idx) => ({
+              role: x.role,
+              model: x.model,
+              state: idx < i ? "done" : "run",
+              files: 0,
+              log: idx < i ? null : "⏳ streaming… 0 chars",
+            })),
+          },
+          panel: `
+          <div class="msg wk">
+            <div class="who">Watchdog → ${w.role}  (${w.model})</div>
+            <pre>${envelope(
+              `[Milestone ${i + 1}/3 for demo-parallel]: ${w.task}`,
+              "demo-parallel",
+              `/root/autojobs/data/projects/demo-parallel/.worktrees/worker-…-${i + 1}`,
+              RULES,
+              i === 0
+                ? "Clean HTML/TSX/CSS UI implementation verified for live preview rendering."
+                : i === 1
+                  ? "Complete, production-ready implementation of types, state models, and business logic."
+                  : "Complete, production-ready implementation of types, state models, and business logic.",
+            )}</pre>
+            <span style="color:#60a5fa">${w.desc}</span>
+          </div>`,
+        });
+      });
+
+      STEPS.push({
+        label: "All three workers finished — watchdog reviews every output in parallel",
+        card: {
+          status: "active",
+          phase: "reviewing",
+          action: "Reviewing all sub-agent outputs in parallel",
+          workers: WORKERS.map((x, idx) => ({
+            role: x.role,
+            model: x.model,
+            state: "done",
+            files: [3, 2, 1][idx],
+            log: idx === 2 ? "⚠️ model error: upstream returned 408" : null,
+            note: idx === 2 ? "model error: upstream returned 408" : null,
+          })),
+        },
+        panel: `
+        <div class="msg wd">
+          <div class="who">Phase 2 — Review (parallel, no build)</div>
+          <pre>W1  3 files changed  → no issues
+W2  2 files changed  → no issues
+W3  1 file changed   → review clean, but worker reported 408 on its last call</pre>
+          <span style="color:#a78bfa">Static checks: empty file · TODO/placeholder · missing DOCTYPE · unclosed tags.</span>
+        </div>
+        <div class="arrowdown">↓</div>
+        <div class="msg wd">
+          <div class="who">Watchdog self-heal #1 — retry with the next model on the ladder</div>
+          <pre>minimax-m3.1-flash-free → kimi-k3   (retry #1)</pre>
+        </div>`,
+      });
+
+      STEPS.push({
+        label: "Merged into the main workspace",
+        card: {
+          status: "active",
+          phase: "reviewing",
+          action: "Merging worker branches into main workspace",
+          workers: WORKERS.map((x, idx) => ({
+            role: x.role,
+            model: x.model,
+            state: "done",
+            files: [3, 2, 2][idx],
+            log: null,
+          })),
+        },
+        panel: `
+        <div class="msg wd">
+          <div class="who">Phase 3 — Merge (sequential, git needs a stable order)</div>
+          <pre>git merge worker/task-…-1  → clean
+git merge worker/task-…-2  → clean
+git merge worker/task-…-3  → clean
+
+Worktrees parked back into the pool for the next task.</pre>
+        </div>`,
+      });
+
+      STEPS.push({
+        label: "ONE build for the whole merged workspace",
+        card: {
+          status: "active",
+          phase: "building",
+          action: "Build required — running pnpm build once for the merged workspace",
+          workers: WORKERS.map((x) => ({
+            role: x.role,
+            model: x.model,
+            state: "done",
+            files: 3,
+            building: true,
+          })),
+        },
+        panel: `
+        <div class="msg wd">
+          <div class="who">Phase 4 — Build (ek baar, merged workspace par)</div>
+          <pre>requiresBuild(changedFiles) → true  (src/*.tsx + package.json touched)
+$ pnpm run build
+
+✗ ERROR: Cannot find name 'BookingForm' in src/pages/Booking.tsx</pre>
+          <span style="color:#fbbf24">Pehle har worker ka apna build tha (N×). Ab ek hi build — 3× sifar.</span>
+        </div>`,
+      });
+
+      STEPS.push({
+        label: "Build failed → watchdog dispatches a repair sub-agent",
+        card: {
+          status: "active",
+          phase: "building",
+          action: "Build failed — dispatching repair sub-agent",
+          workers: WORKERS.map((x) => ({
+            role: x.role,
+            model: x.model,
+            state: "done",
+            files: 3,
+            building: true,
+            buildFailed: true,
+          })),
+          heal: 1,
+        },
+        panel: `
+        <div class="msg rep">
+          <div class="who">Watchdog → Repair Sub-Agent (QA &amp; Verification)</div>
+          <pre>The build of this project is FAILING after a recent change.
+
+Failure output:
+Cannot find name 'BookingForm' in src/pages/Booking.tsx
+
+Fix ONLY the cause of this failure. Touch as few files as possible.
+Do not add placeholders, TODOs, or explanatory comments.</pre>
+        </div>
+        <div class="arrowdown">↓</div>
+        <div class="msg ok">
+          <div class="who">Repair applied → merged → rebuilt</div>
+          <pre>repair applied (1 file) → $ pnpm run build → ✓ PASS</pre>
+        </div>`,
+      });
+
+      STEPS.push({
+        label: "ONE test suite for the merged workspace",
+        card: {
+          status: "active",
+          phase: "testing",
+          action: "Running pnpm test suite once",
+          workers: WORKERS.map((x) => ({
+            role: x.role,
+            model: x.model,
+            state: "done",
+            files: 3,
+            buildOk: true,
+            testRunning: true,
+          })),
+          heal: 1,
+        },
+        panel: `
+        <div class="msg wd">
+          <div class="who">Phase 4 — Test (ek baar)</div>
+          <pre>package.json has scripts.test → $ pnpm run test
+✓ 42 passed</pre>
+        </div>`,
+      });
+
+      STEPS.push({
+        label: "Final verdict → back to the Manager",
+        card: {
+          status: "done",
+          action: "All 3 sub-agents verified clean",
+          workers: WORKERS.map((x) => ({
+            role: x.role,
+            model: x.model,
+            state: "done",
+            files: 3,
+            buildOk: true,
+            testOk: true,
+          })),
+          heal: 1,
+          verdict:
+            "Watchdog verdict: all 3 sub-agent(s) verified clean (review + build/test) • 1 self-heal(s)",
+        },
+        panel: `
+        <div class="msg ok">
+          <div class="who">Watchdog → Manager (final verdict)</div>
+          <pre>✓ Task "Restaurant app banao jisme table booking bhi ho" completed:
+  3/3 sub-agents done · 6 files changed · build ✓ · test ✓
+  Live preview: /api/projects/preview/demo-parallel/index.html</pre>
+        </div>
+        <div class="arrowdown">↓</div>
+        <div class="msg user">
+          <div class="who">Manager → User  (Super Agent ab bhi FREE hai)</div>
+          "Kaam ho gaya — restaurant app ready hai. Live preview yahan se khol lo.<br/>
+          <span style="color:#94a3b8">Aap is dauran discussion / brainstorming / naya task de sakte the — Manager block nahi hua tha.</span>"
+        </div>`,
+      });
+
+      // ── renderers ──────────────────────────────────────────────
+      const $ = (id) => document.getElementById(id);
+
+      function renderCard(st) {
+        const card = $("card");
+        card.className =
+          "card" +
+          (st.status === "active"
+            ? " active"
+            : st.status === "done"
+              ? " done"
+              : st.status === "fail"
+                ? " fail"
+                : "");
+        $("cCount").textContent = "1";
+        const active = $("cActive"),
+          phase = $("cPhase");
+        const running = (st.workers || []).filter((w) => w.state === "run").length;
+        if (running > 0) {
+          active.style.display = "";
+          active.textContent = `${running} active`;
+        } else active.style.display = "none";
+        if (st.phase) {
+          phase.style.display = "";
+          phase.textContent = st.phase;
+        } else phase.style.display = "none";
+        $("cAction").textContent = st.action || "Idle";
+        $("cHeal").style.display = st.heal ? "" : "none";
+        $("cVerdict").textContent = st.verdict || "";
+
+        const box = $("cWorkers");
+        box.innerHTML = "";
+        (st.workers || []).forEach((w) => {
+          const d = document.createElement("div");
+          d.className = "worker";
+          const badges = [];
+          if (w.building) badges.push('<span class="badge a">build …</span>');
+          else if (w.buildFailed) badges.push('<span class="badge r">build ✗</span>');
+          else if (w.buildOk) badges.push('<span class="badge g">build ✓</span>');
+          else badges.push('<span class="badge">build skipped</span>');
+          if (w.testRunning) badges.push('<span class="badge a">test …</span>');
+          else if (w.testOk) badges.push('<span class="badge g">test ✓</span>');
+          else badges.push('<span class="badge">no tests</span>');
+          const icon =
+            w.state === "run"
+              ? '<span class="spin"></span>'
+              : w.state === "done"
+                ? '<span class="ok">✓</span>'
+                : '<span class="no">✗</span>';
+          d.innerHTML =
+            `<div class="wrow">${icon}<span class="wrole">${w.role}</span><span class="wmodel">${w.model || ""}</span><span class="wfiles">${w.files || 0} file${(w.files || 0) === 1 ? "" : "s"}</span><span class="badges">${badges.join("")}</span></div>` +
+            (w.log ? `<div class="logline">${w.log}</div>` : "") +
+            (w.note ? `<div class="note">⚠ ${w.note}</div>` : "");
+          box.appendChild(d);
+        });
+      }
+
+      function renderStep(i) {
+        const st = STEPS[i];
+        renderCard(st.card);
+        $("journey").innerHTML = st.panel;
+        const tl = $("timeline");
+        tl.innerHTML = "";
+        STEPS.forEach((s, idx) => {
+          const d = document.createElement("div");
+          d.className = "tli" + (idx <= i ? " on" : "") + (idx === i ? " warn" : "");
+          d.innerHTML = `<span class="dot"></span><span class="t">${T(i * 7 + "s")}</span><span class="x">${s.label}</span>`;
+          tl.appendChild(d);
+        });
+        tl.scrollTop = tl.scrollHeight;
+        $("stepLabel").textContent = `step ${i + 1} / ${STEPS.length}`;
+      }
+
+      // ── player ──────────────────────────────────────────────────
+      let idx = 0,
+        timer = null,
+        speed = 1;
+      function tick() {
+        if (idx >= STEPS.length) {
+          stop();
+          return;
+        }
+        renderStep(idx);
+        idx++;
+      }
+      function play() {
+        stop();
+        timer = setInterval(tick, 2600 / speed);
+        $("playBtn").textContent = "⏸ Pause";
+      }
+      function stop() {
+        if (timer) clearInterval(timer);
+        timer = null;
+        $("playBtn").textContent = "▶ Play";
+      }
+      $("playBtn").onclick = () => (timer ? stop() : play());
+      $("restartBtn").onclick = () => {
+        idx = 0;
+        renderStep(0);
+      };
+      $("speedBtn").onclick = () => {
+        speed = speed === 1 ? 2 : speed === 2 ? 4 : 1;
+        $("speedBtn").textContent = `Speed: ${speed}×`;
+        if (timer) play();
+      };
+
+      renderStep(0);
+      play();
+    </script>
+  </body>
+</html>
