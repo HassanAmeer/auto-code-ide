@@ -46,6 +46,8 @@ node_modules/
 
 # pnpm content-addressable store; never belongs in the repo.
 .pnpm-store/
+# Runtime-written provider config (contains live API keys) — never track it.
+apps/server/opencode.json
 
 
 # Runtime skill mirrors: the canonical tree is .agents/skills; the manager

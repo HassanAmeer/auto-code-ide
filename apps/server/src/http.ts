@@ -1434,6 +1434,7 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
             typeof appSettings?.super_agent_worker_lanes === "string"
               ? appSettings.super_agent_worker_lanes
               : undefined,
+          maxWorkers: parseRequestedWorkerCount(lastUserMsg),
           onLog: (msg: string) => console.log(msg),
         }),
       );
@@ -3499,6 +3500,10 @@ export const layerSuperAgentDispatchWorkerRoute = HttpRouter.add(
           typeof getAllAppSettings(config.dbPath)?.super_agent_worker_lanes === "string"
             ? String(getAllAppSettings(config.dbPath).super_agent_worker_lanes)
             : undefined,
+        maxWorkers:
+          typeof bodyJson?.maxWorkers === "number"
+            ? Math.max(1, Math.min(12, Math.floor(bodyJson.maxWorkers)))
+            : undefined,
         taskTitle,
         // Raw user task — the watchdog decomposes THIS, not the formatted
         // envelope (whose bullet/numbered rule lines would be misparsed as milestones).
@@ -3668,6 +3673,18 @@ export const layerSuperAgentWorkersPostRoute = HttpRouter.add(
     return HttpServerResponse.jsonUnsafe(snapshot);
   }),
 );
+
+/**
+ * Reads an explicit worker count from the request, e.g. "/parallel-subagents 5".
+ * Returns undefined when the user did not pin a count.
+ */
+export function parseRequestedWorkerCount(text: string): number | undefined {
+  const match = text.match(/\/parallel-subagents\s+(\d{1,2})/i);
+  if (!match) return undefined;
+  const parsed = Number.parseInt(match[1]!, 10);
+  if (!Number.isFinite(parsed)) return undefined;
+  return Math.max(1, Math.min(12, parsed));
+}
 
 export const layerSuperAgentWatchdogRoute = HttpRouter.add(
   "GET",

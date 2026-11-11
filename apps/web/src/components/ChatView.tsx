@@ -9661,10 +9661,26 @@ export default function ChatView(props: ChatViewProps) {
       // Explicit, user-triggered parallel worker dispatch. The sidebar card is the
       // only place subagent status is shown; the message sent to the model is the
       // user's actual task text, untouched.
-      const cleanPrompt = messageTextForSend.replace(/^\/parallel-subagents\s*/i, "").trim();
+      //
+      // "/parallel-subagents 5 task..." pins the worker count. Without a number
+      // the watchdog uses its own cap, so the command never fans out into an
+      // accidental army of workers.
+      const requestedWorkers = (() => {
+        const match = messageTextForSend.match(/^\/parallel-subagents\s+(\d{1,2})\b/i);
+        if (!match) return undefined;
+        const parsed = Number.parseInt(match[1]!, 10);
+        if (!Number.isFinite(parsed)) return undefined;
+        return Math.max(1, Math.min(12, parsed));
+      })();
+      const cleanPrompt = messageTextForSend
+        .replace(/^\/parallel-subagents\s*\d{1,2}\b/i, "")
+        .replace(/^\/parallel-subagents\s*/i, "")
+        .trim();
       toastManager.add({
         type: "neutral",
-        title: "Parallel workers dispatched",
+        title: requestedWorkers
+          ? `Parallel workers dispatched (${requestedWorkers})`
+          : "Parallel workers dispatched",
       });
       const targetProjName = activeProject?.title || projectForSend?.title || "Workspace";
       const dispatchPrompt =
@@ -9677,6 +9693,7 @@ export default function ChatView(props: ChatViewProps) {
           taskTitle: cleanPrompt.slice(0, 60) || "Autonomous Parallel Worker Task",
           prompt: dispatchPrompt,
           ...(ctxSelectedModel ? { model: ctxSelectedModel } : {}),
+          ...(requestedWorkers ? { maxWorkers: requestedWorkers } : {}),
           stream: true,
         }),
       })

@@ -403,6 +403,12 @@ export interface WatchdogDispatchParams {
   model?: string;
   /** Comma-separated model lanes for the parallel workers. */
   lanes?: string | undefined;
+  /**
+   * How many sub-agents may run for this task. An explicit request (the
+   * /parallel-subagents command) pins the count so a task never fans out into
+   * an accidental army of workers.
+   */
+  maxWorkers?: number | undefined;
   onLog?: (msg: string) => undefined | ((msg: string) => void);
   /** Internal guard: the watchdog retries itself once with a fallback model. */
   __isRetry?: boolean | undefined;
@@ -485,7 +491,11 @@ export async function startWatchdogSupervision(
 
     // Worker count is capped so one huge task cannot fan out into a dozen
     // workers; the overflow is folded into the last worker instead of dropped.
-    const maxWorkers = Math.max(1, Number(process.env.SUPER_AGENT_MAX_WORKERS || 4));
+    // An explicit request (the /parallel-subagents command) pins the count.
+    const maxWorkers = Math.max(
+      1,
+      Math.min(12, params.maxWorkers ?? Number(process.env.SUPER_AGENT_MAX_WORKERS || 4)),
+    );
     let planned = subtasks;
     if (planned.length > maxWorkers) {
       const overflow = planned.slice(maxWorkers - 1);

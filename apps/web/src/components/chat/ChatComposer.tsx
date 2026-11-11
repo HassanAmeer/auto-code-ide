@@ -2785,7 +2785,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           command: "parallel-subagents",
           label: "/parallel-subagents",
           description:
-            "Dispatch autonomous parallel workers — coordinates multiple workers in isolated Git worktrees",
+            "Dispatch autonomous parallel workers — coordinates multiple workers in isolated Git worktrees (add a number to pick the worker count, e.g. /parallel-subagents 5)",
         },
         ...(planModeUiEnabled
           ? [
