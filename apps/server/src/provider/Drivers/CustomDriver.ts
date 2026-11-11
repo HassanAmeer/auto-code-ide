@@ -2347,6 +2347,18 @@ export function syncCustomProviderToOpenCode(
       }
     }
 
+    // Build the full model map from config.models so the OpenCode CLI can resolve
+    // custom provider models (e.g. "respan/gemini-4-carbon:free") instead of only
+    // a "default" stub. Without this, the CLI returns "Model unavailable".
+    const modelsMap: Record<string, { name: string }> = {};
+    if (config.models && config.models.length > 0) {
+      for (const m of config.models) {
+        modelsMap[m.id] = { name: m.name ?? m.id };
+      }
+    } else {
+      modelsMap.default = { name: displayName || cleanId };
+    }
+
     const providerEntry = {
       npm: "@ai-sdk/openai-compatible",
       name: displayName || cleanId,
@@ -2355,14 +2367,12 @@ export function syncCustomProviderToOpenCode(
         apiKey,
         ...(Object.keys(headersObj).length > 0 ? { headers: headersObj } : {}),
       },
-      // Keep a single stub — the real catalog lives in app storage.
-      models: { default: { name: displayName || cleanId } },
+      models: modelsMap,
     };
-    // Credentialed entry — only for the runtime path, never the git checkout.
-    const sharedProviderEntry = {
-      ...providerEntry,
-      options: { ...providerEntry.options, apiKey: "no-key" },
-    };
+    // All opencode.json targets (including ~/.config/opencode/opencode.json which the
+    // running CLI reads) need the real API key; masking it to "no-key" would make
+    // custom providers fail with "invalid API key" at runtime.
+    const sharedProviderEntry = providerEntry;
 
     const cleanName = displayName
       .trim()
@@ -2414,7 +2424,7 @@ export function syncCustomProviderToOpenCode(
           json.permission = { "*": "allow" };
         }
         if (!json.provider) json.provider = {};
-        const entry = p === RUNTIME_CONFIG_PATH ? providerEntry : sharedProviderEntry;
+        const entry = sharedProviderEntry;
         json.provider[cleanId] = entry;
         if (cleanName && cleanName !== cleanId) {
           json.provider[cleanName] = entry;

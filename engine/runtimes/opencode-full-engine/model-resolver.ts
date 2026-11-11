@@ -8,9 +8,10 @@ import {
   ProviderConfigurationError,
 } from "@opencode/ai/effect";
 import { Auth } from "@opencode/ai/route";
-import { Context, Effect, Layer, Schema, Struct } from "effect";
+import { Context, Effect, Layer, Scope, Schema, Struct } from "effect";
 import { AISDK } from "./aisdk.js";
 import { Credential } from "./credential.js";
+import { CustomProviders } from "./custom-providers.js";
 import { Integration } from "./integration.js";
 import { Capabilities, ID, Info, Model, Ref, VariantID } from "./model.js";
 import type { RuntimeInfo } from "./model.js";
@@ -398,6 +399,7 @@ export const hasPackage = (model: Info) => Boolean(model.package);
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
+    const scope = yield* Effect.scope;
     const providers = yield* Provider.Service;
     const models = yield* Model.Service;
     const integrations = yield* Integration.Service;
@@ -450,7 +452,7 @@ export const layer = Layer.effect(
     });
     return Service.of({
       resolve: Effect.fn("ModelResolver.resolve")(function* (requested) {
-        const selected = requested
+        let selected = requested
           ? yield* models.get(requested.providerID, requested.id)
           : yield* models
               .default()
@@ -463,6 +465,13 @@ export const layer = Layer.effect(
                       ),
                 ),
               );
+        if (!selected && requested) {
+          // The app can register custom providers while the server is running; pull the
+          // selection from its storage on demand instead of failing until a restart.
+          if (yield* CustomProviders.ensure(requested.providerID, providers, models, scope)) {
+            selected = yield* models.get(requested.providerID, requested.id);
+          }
+        }
         if (!selected) return undefined;
         return yield* load(selected, requested?.variant);
       }),

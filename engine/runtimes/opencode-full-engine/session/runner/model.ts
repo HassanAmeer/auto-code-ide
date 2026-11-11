@@ -4,9 +4,12 @@ import { makeLocationNode } from "@opencode/util/effect/app-node";
 import { LanguageModel } from "@opencode/ai/effect";
 import { Model } from "@opencode/schema/model";
 import { Provider } from "@opencode/schema/provider";
-import { Context, Effect, Layer, Schema } from "effect";
+import { Context, Effect, Layer, Scope, Schema } from "effect";
 import { Agent } from "../../agent.js";
+import { CustomProviders } from "../../custom-providers.js";
+import { Model as RuntimeModel } from "../../model.js";
 import { ModelResolver } from "../../model-resolver.js";
+import { Provider as RuntimeProvider } from "../../provider.js";
 import { SessionSchema } from "../schema.js";
 
 export class ModelNotSelectedError extends Schema.TaggedError<ModelNotSelectedError>()(
@@ -73,8 +76,11 @@ export const resolved = (
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
+    const scope = yield* Effect.scope;
     const resolver = yield* ModelResolver.Service;
     const agents = yield* Agent.Service;
+    const catalog = yield* RuntimeProvider.Service;
+    const models = yield* RuntimeModel.Service;
     return Service.of({
       resolve: Effect.fn("SessionRunnerModel.resolve")(function* (session, available) {
         // Location plugins populate and filter the catalog asynchronously during layer startup.
@@ -91,10 +97,21 @@ const layer = Layer.effect(
           if (resolved) return resolved;
           return yield* new ModelNotSelectedError({ sessionID: session.id });
         }
-        const selected = (yield* available()).find(
-          (model) =>
-            model.providerID === session.model?.providerID && model.id === session.model.id,
-        );
+        const find = Effect.fn("SessionRunnerModel.findSelected")(function* () {
+          return (yield* available()).find(
+            (candidate) =>
+              candidate.providerID === session.model?.providerID &&
+              candidate.id === session.model?.id,
+          );
+        });
+        let selected = yield* find();
+        if (!selected) {
+          // The app can register custom providers while the server is running; pull the
+          // selection from its storage on demand instead of failing until a restart.
+          if (yield* CustomProviders.ensure(session.model.providerID, catalog, models, scope)) {
+            selected = yield* find();
+          }
+        }
         if (!selected)
           return yield* new ModelUnavailableError({
             providerID: session.model.providerID,
@@ -109,5 +126,5 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [ModelResolver.node, Agent.node],
+  deps: [ModelResolver.node, Agent.node, RuntimeProvider.node, RuntimeModel.node],
 });
