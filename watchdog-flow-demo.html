@@ -460,6 +460,7 @@
             </div>
             <div class="action" id="cAction">Idle</div>
             <div id="cWorkers"></div>
+            <div id="cChecklist" class="flex flex-col gap-0.5 pl-5.5" style="display: none"></div>
             <span class="heal" id="cHeal" style="display: none">🛠 1 self-heal</span>
             <div class="verdict" id="cVerdict"></div>
           </div>
@@ -765,7 +766,76 @@ Do not add placeholders, TODOs, or explanatory comments.</pre>
       });
 
       STEPS.push({
-        label: "Final verdict → back to the Manager",
+        label: "Phase 3.5 — requirement checklist audited against the merged diff",
+        card: {
+          status: "active",
+          phase: "reviewing",
+          action: "Auditing requirements against the merged diff",
+          workers: WORKERS.map((x, idx) => ({
+            role: x.role,
+            model: x.model,
+            state: "done",
+            files: [3, 2, 2][idx],
+          })),
+          checklist: [
+            { id: "req-1", requirement: "menu page renders dishes", status: "passed" },
+            { id: "req-2", requirement: "table booking form validates guests", status: "passed" },
+            { id: "req-3", requirement: "availability prevents double booking", status: "missing" },
+          ],
+          heal: 1,
+        },
+        panel: `
+          <div class="msg wd">
+            <div class="who">Phase 3.5 — Requirement checklist audit</div>
+            <pre>req-1  menu page renders dishes .............. ✓ traced to diff
+req-2  table booking form validates guests ....... ✓ traced to diff
+req-3  availability prevents double booking ..... ✗ NOT in the diff</pre>
+            <span style="color:#fbbf24">Build aur tests pass ho sakte hain jabki ek requirement implement hi na hui ho — yahi gap tha.</span>
+          </div>`,
+      });
+
+      STEPS.push({
+        label: "Phase 5 — Verification Sub-Agent (semantic gate)",
+        card: {
+          status: "active",
+          phase: "reviewing",
+          action: "Verification sub-agent checking the requirements",
+          workers: WORKERS.map((x) => ({ role: x.role, model: x.model, state: "done", files: 3 })),
+          checklist: [
+            { id: "req-1", requirement: "menu page renders dishes", status: "passed" },
+            { id: "req-2", requirement: "table booking form validates guests", status: "passed" },
+            { id: "req-3", requirement: "availability prevents double booking", status: "missing" },
+          ],
+          heal: 1,
+        },
+        panel: `
+          <div class="msg wd">
+            <div class="who">Verification Sub-Agent → merged diff + checklist</div>
+            <pre>You are a strict VERIFIER. Check whether the following code changes
+actually satisfy the requirements. Answer PASS or FAIL on the first line.
+
+REQUIREMENTS:
+1. menu page renders dishes
+2. table booking form validates guests
+3. availability prevents double booking
+
+CHANGES:
+(diff shown to the verifier)</pre>
+          </div>
+          <div class="arrowdown">↓</div>
+          <div class="msg rep">
+            <div class="who">FAIL → fix sub-agent dispatched</div>
+            <pre>The previous changes do NOT satisfy the requirements below.
+
+Reason: requirement 3 (availability prevents double booking) is missing
+the conflict check in POST /api/bookings.
+
+Fix ONLY the cause of this failure. Touch as few files as possible.</pre>
+          </div>`,
+      });
+
+      STEPS.push({
+        label: "Re-verified → final verdict to the Manager",
         card: {
           status: "done",
           action: "All 3 sub-agents verified clean",
@@ -777,9 +847,14 @@ Do not add placeholders, TODOs, or explanatory comments.</pre>
             buildOk: true,
             testOk: true,
           })),
-          heal: 1,
+          checklist: [
+            { id: "req-1", requirement: "menu page renders dishes", status: "passed" },
+            { id: "req-2", requirement: "table booking form validates guests", status: "passed" },
+            { id: "req-3", requirement: "availability prevents double booking", status: "passed" },
+          ],
+          heal: 2,
           verdict:
-            "Watchdog verdict: all 3 sub-agent(s) verified clean (review + build/test) • 1 self-heal(s)",
+            "Watchdog verdict: all 3 sub-agent(s) verified clean (review + build/test) • 2 self-heal(s)",
         },
         panel: `
         <div class="msg ok">
