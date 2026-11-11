@@ -39,6 +39,8 @@ export interface WatchdogItem {
   readonly updatedAt: number;
   readonly completedAt: number | undefined;
   readonly verdict: string;
+  /** How many times the watchdog repaired itself (model retry / repair agent). */
+  readonly recoveries?: number | undefined;
 }
 
 export interface WatchdogCardProps {
@@ -305,6 +307,13 @@ export const WatchdogCard = memo(function WatchdogCard({
                   {item.verdict ? (
                     <div className="text-[10px] text-muted-foreground/80 pl-5.5">
                       {item.verdict}
+                    </div>
+                  ) : null}
+                  {item.recoveries && item.recoveries > 0 ? (
+                    <div className="pl-5.5">
+                      <span className="rounded bg-violet-500/15 px-1 py-0.5 text-[9px] font-mono text-violet-400">
+                        🛠 {item.recoveries} self-heal{item.recoveries === 1 ? "" : "s"}
+                      </span>
                     </div>
                   ) : null}
                 </div>

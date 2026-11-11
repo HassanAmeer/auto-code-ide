@@ -70,6 +70,8 @@ export interface WatchdogState {
   lastAction: string;
   workers: WatchdogWorkerRow[];
   issues: string[];
+  /** How many times the watchdog recovered itself (model retry / repair agent). */
+  recoveries: number;
   startedAt: number;
   updatedAt: number;
   completedAt: number | undefined;
@@ -260,6 +262,90 @@ function runCommand(command: string, cwd: string, timeoutMs: number): CommandRun
   }
 }
 
+/* ────────────────────── watchdog self-healing helpers ────────────────────── */
+
+/**
+ * Fallback ladder for the watchdog. When the primary model fails (rate limit,
+ * model error, empty output) the watchdog retries with the next model instead
+ * of writing the worker off.
+ */
+export const WATCHDOG_FALLBACK_MODELS = [
+  "deepseek-v4.1-flash-free",
+  "gemini-2.5-flash",
+  "glm-5.3-flash-free",
+  "minimax-m3.1-flash-free",
+  "kimi-k3",
+] as const;
+
+export function resolveFallbackModel(current: string): string | undefined {
+  const idx = (WATCHDOG_FALLBACK_MODELS as readonly string[]).indexOf(current);
+  if (idx >= 0) {
+    return WATCHDOG_FALLBACK_MODELS[idx + 1];
+  }
+  return WATCHDOG_FALLBACK_MODELS[0];
+}
+
+/**
+ * Dispatch a repair sub-agent for a failing build/test and merge its fix back.
+ * This is how the watchdog fixes its own findings instead of only reporting.
+ */
+async function dispatchRepairSubAgent(opts: {
+  projectRoot: string;
+  projectName: string;
+  taskTitle: string;
+  reason: string;
+  kind: "build" | "test";
+  model: string;
+  onLog?: (msg: string) => undefined | ((msg: string) => void);
+}): Promise<{ ok: boolean; output: string }> {
+  const repairId = `repair-${now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const worktree = createWorkerWorktree(opts.projectRoot, repairId);
+  try {
+    const prompt = [
+      `The ${opts.kind} of this project is FAILING after a recent change.`,
+      "",
+      "Failure output:",
+      opts.reason.slice(0, 2000),
+      "",
+      "Fix ONLY the cause of this failure. Touch as few files as possible.",
+      "Do not add placeholders, TODOs, or explanatory comments.",
+    ].join("\n");
+
+    const res = await executeOpenCodeTask({
+      worktreePath: worktree.worktreePath,
+      projectName: opts.projectName,
+      taskTitle: `Repair ${opts.kind} failure`,
+      prompt,
+      model: opts.model,
+      onLog: (m) => opts.onLog?.(m),
+    });
+
+    if (!res.ok) {
+      return { ok: false, output: res.error ?? "repair sub-agent failed" };
+    }
+    const changed = listChangedFiles(worktree.worktreePath);
+    if (changed.length === 0) {
+      return { ok: false, output: "repair sub-agent produced no changes" };
+    }
+    const merged = mergeWorkerWorktree(
+      opts.projectRoot,
+      worktree.worktreePath,
+      worktree.branchName,
+      `fix(${opts.kind}): ${opts.taskTitle.slice(0, 40)}`,
+    );
+    if (!merged.ok) {
+      return { ok: false, output: merged.error ?? "repair merge failed" };
+    }
+    return { ok: true, output: `repair applied (${changed.length} file(s))` };
+  } catch (err: any) {
+    return { ok: false, output: err?.message ?? String(err) };
+  } finally {
+    if (worktree.isIsolated) {
+      cleanupWorkerWorktree(opts.projectRoot, worktree.worktreePath, worktree.branchName);
+    }
+  }
+}
+
 /* ───────────────────────────── the watchdog ───────────────────────────── */
 
 export interface WatchdogDispatchParams {
@@ -270,6 +356,8 @@ export interface WatchdogDispatchParams {
   prompt: string;
   model?: string;
   onLog?: (msg: string) => undefined | ((msg: string) => void);
+  /** Internal guard: the watchdog retries itself once with a fallback model. */
+  __isRetry?: boolean | undefined;
 }
 
 export interface WatchdogDispatchResult {
@@ -314,6 +402,7 @@ export async function startWatchdogSupervision(
     lastAction: "Splitting task and assigning sub-agents",
     workers: [],
     issues: [],
+    recoveries: 0,
     startedAt: now(),
     updatedAt: now(),
     completedAt: undefined,
@@ -367,7 +456,7 @@ export async function startWatchdogSupervision(
           startedAt: now(),
         });
 
-        const res = await executeOpenCodeTask({
+        let res = await executeOpenCodeTask({
           worktreePath: allocation.worktreePath,
           projectName,
           taskTitle: st.title,
@@ -375,6 +464,26 @@ export async function startWatchdogSupervision(
           model,
           onLog: (m) => log?.(`[Watchdog/${st.order}] ${m}`),
         });
+
+        // Watchdog self-heal #1: a failed model call is retried once with the
+        // next model on the ladder before the worker is written off.
+        if (!res.ok) {
+          const fallback = resolveFallbackModel(model);
+          if (fallback && fallback !== model) {
+            state.recoveries += 1;
+            touch(`Sub-agent ${st.order} failed — retrying with ${fallback}`);
+            const row = state.workers.find((w) => w.id === workerId);
+            row?.reviewNotes.push(`retried with fallback model ${fallback}`);
+            res = await executeOpenCodeTask({
+              worktreePath: allocation.worktreePath,
+              projectName,
+              taskTitle: st.title,
+              prompt: st.description,
+              model: fallback,
+              onLog: (m) => log?.(`[Watchdog/${st.order}] ${m}`),
+            });
+          }
+        }
 
         return { st, allocation, workerId, res };
       }),
@@ -451,9 +560,37 @@ export async function startWatchdogSupervision(
         row.buildPassed = build.ok;
         if (!build.ok) {
           row.reviewNotes.push(`build failed: ${build.output}`);
-          state.issues.push(`Build failed after ${row.role}: ${build.output}`);
-          state.status = "failed";
-          continue;
+          // Watchdog self-heal #2: dispatch a repair sub-agent with the real
+          // build error, merge its fix, then re-run the build.
+          state.recoveries += 1;
+          touch(`Build failed — dispatching repair sub-agent`);
+          const repair = await dispatchRepairSubAgent({
+            projectRoot,
+            projectName,
+            taskTitle: st.title,
+            reason: build.output,
+            kind: "build",
+            model,
+            onLog: (m) => log?.(`[Watchdog/repair] ${m}`),
+          });
+          if (repair.ok) {
+            const rebuild = runCommand(buildCmd, projectRoot, 120_000);
+            row.buildPassed = rebuild.ok;
+            if (rebuild.ok) {
+              row.reviewNotes.push("build repaired and re-verified ✓");
+              touch(`Build repaired by sub-agent — verified clean`);
+            } else {
+              row.reviewNotes.push(`rebuild still failing: ${rebuild.output}`);
+              state.issues.push(`Build failed after ${row.role}: ${build.output}`);
+              state.status = "failed";
+              continue;
+            }
+          } else {
+            row.reviewNotes.push(`repair failed: ${repair.output}`);
+            state.issues.push(`Build failed after ${row.role}: ${build.output}`);
+            state.status = "failed";
+            continue;
+          }
         }
       } else {
         touch(`Build not required — skipping (${row.role} change is safe)`);
@@ -469,7 +606,30 @@ export async function startWatchdogSupervision(
         row.testPassed = test.ok;
         if (!test.ok) {
           row.reviewNotes.push(`tests failed: ${test.output}`);
-          state.issues.push(`Tests failed after ${row.role}: ${test.output}`);
+          // Watchdog self-heal #3: same repair loop for a failing test suite.
+          state.recoveries += 1;
+          touch(`Tests failed — dispatching repair sub-agent`);
+          const repair = await dispatchRepairSubAgent({
+            projectRoot,
+            projectName,
+            taskTitle: st.title,
+            reason: test.output,
+            kind: "test",
+            model,
+            onLog: (m) => log?.(`[Watchdog/repair] ${m}`),
+          });
+          if (repair.ok) {
+            const retest = runCommand(testCmd, projectRoot, 120_000);
+            row.testPassed = retest.ok;
+            if (retest.ok) {
+              row.reviewNotes.push("tests repaired and re-verified ✓");
+              touch(`Tests repaired by sub-agent — verified clean`);
+            } else {
+              state.issues.push(`Tests failed after ${row.role}: ${test.output}`);
+            }
+          } else {
+            state.issues.push(`Tests failed after ${row.role}: ${test.output}`);
+          }
         }
       } else {
         touch(`No test script — skipping tests`);
@@ -483,9 +643,10 @@ export async function startWatchdogSupervision(
     state.status = failed ? "failed" : "completed";
     state.completedAt = now();
     state.updatedAt = now();
+    const recoveryNote = state.recoveries > 0 ? ` • ${state.recoveries} self-heal(s)` : "";
     state.verdict = failed
-      ? `Watchdog verdict: ${completed}/${total} sub-agent(s) done, ${state.issues.length} issue(s) found`
-      : `Watchdog verdict: all ${total} sub-agent(s) verified clean (review + build/test)`;
+      ? `Watchdog verdict: ${completed}/${total} sub-agent(s) done, ${state.issues.length} issue(s) found${recoveryNote}`
+      : `Watchdog verdict: all ${total} sub-agent(s) verified clean (review + build/test)${recoveryNote}`;
     state.lastAction = state.verdict;
 
     return {
@@ -498,11 +659,22 @@ export async function startWatchdogSupervision(
       issues: state.issues,
     };
   } catch (err: any) {
+    const message = err?.message ?? String(err);
+    // Watchdog self-heal #4: if the watchdog itself crashes, it restarts the
+    // whole supervision once with a fallback model instead of failing the task.
+    const fallback = resolveFallbackModel(model);
+    if (!params.__isRetry && fallback && fallback !== model) {
+      state.recoveries += 1;
+      state.lastAction = `Watchdog crashed (${message}) — restarting with ${fallback}`;
+      state.updatedAt = now();
+      log?.(`[Watchdog] crashed (${message}) — restarting supervision with ${fallback}`);
+      return startWatchdogSupervision({ ...params, model: fallback, __isRetry: true });
+    }
     state.status = "failed";
     state.completedAt = now();
     state.updatedAt = now();
-    state.issues.push(err?.message ?? String(err));
-    state.verdict = `Watchdog failed: ${err?.message ?? String(err)}`;
+    state.issues.push(message);
+    state.verdict = `Watchdog failed: ${message}`;
     return {
       ok: false,
       watchdogId,

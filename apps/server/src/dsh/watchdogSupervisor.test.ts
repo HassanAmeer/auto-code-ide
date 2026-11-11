@@ -11,6 +11,8 @@ import {
   listChangedFiles,
   getWatchdogSnapshot,
   stopWatchdog,
+  resolveFallbackModel,
+  WATCHDOG_FALLBACK_MODELS,
 } from "./watchdogSupervisor.ts";
 
 function makeProject(files: Record<string, string>): string {
@@ -98,6 +100,21 @@ describe("watchdog worker review", () => {
   it("lists changed files only inside a git repo", () => {
     // Not a git repo — the helper must not throw, it returns an empty list.
     expect(listChangedFiles(projectRoot)).toEqual([]);
+  });
+});
+
+describe("watchdog self-healing ladder", () => {
+  it("falls back to the next model in the ladder", () => {
+    expect(resolveFallbackModel(WATCHDOG_FALLBACK_MODELS[0]!)).toBe(WATCHDOG_FALLBACK_MODELS[1]!);
+  });
+
+  it("uses the first model when the current one is unknown", () => {
+    expect(resolveFallbackModel("some-unknown-model")).toBe(WATCHDOG_FALLBACK_MODELS[0]);
+  });
+
+  it("returns undefined at the end of the ladder", () => {
+    const last = WATCHDOG_FALLBACK_MODELS[WATCHDOG_FALLBACK_MODELS.length - 1]!;
+    expect(resolveFallbackModel(last)).toBeUndefined();
   });
 });
 
