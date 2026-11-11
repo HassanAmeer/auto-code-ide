@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Super Agent → Workers → Reviewer Flow</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family:
+          "Segoe UI",
+          system-ui,
+          -apple-system,
+          sans-serif;
+        background: #0f172a;
+        color: #e2e8f0;
+        padding: 24px;
+        min-height: 100vh;
+      }
+      .container {
+        max-width: 1000px;
+        margin: 0 auto;
+      }
+      h1 {
+        text-align: center;
+        margin-bottom: 32px;
+        font-size: 26px;
+        color: #38bdf8;
+        text-shadow: 0 0 20px rgba(56, 189, 248, 0.3);
+      }
+
+      /* Flow nodes */
+      .flow {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 30px;
+      }
+      .row {
+        display: flex;
+        gap: 24px;
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+      .node {
+        width: 200px;
+        padding: 18px 16px;
+        border-radius: 12px;
+        text-align: center;
+        font-weight: 700;
+        font-size: 15px;
+        border: 2px solid;
+        position: relative;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+      }
+      .node.super {
+        background: linear-gradient(135deg, #1e3a5f, #0f2a4a);
+        border-color: #38bdf8;
+        color: #fff;
+        box-shadow: 0 0 30px rgba(56, 189, 248, 0.25);
+      }
+      .node.worker {
+        background: linear-gradient(135deg, #1d4ed8, #1e3a8a);
+        border-color: #60a5fa;
+        color: #fff;
+      }
+      .node.reviewer {
+        background: linear-gradient(135deg, #3f6212, #2d4a12);
+        border-color: #4ade80;
+        color: #fff;
+      }
+
+      /* Arrows */
+      .arrow-row {
+        display: flex;
+        gap: 24px;
+        justify-content: center;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .arrow {
+        font-size: 24px;
+        color: #94a3b8;
+        animation: pulse 2s infinite;
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 0.5;
+        }
+        50% {
+          opacity: 1;
+        }
+      }
+
+      /* Cards */
+      .cards {
+        display: flex;
+        gap: 16px;
+        margin-top: 40px;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+      .card {
+        background: #1e293b;
+        border: 1px solid #334155;
+        border-radius: 12px;
+        padding: 20px;
+        min-width: 290px;
+        flex: 1;
+        max-width: 340px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+      }
+      .card .tag {
+        display: inline-block;
+        background: rgba(56, 189, 248, 0.15);
+        color: #38bdf8;
+        border: 1px solid rgba(56, 189, 248, 0.3);
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-size: 12px;
+        margin-bottom: 8px;
+      }
+      .card h3 {
+        color: #38bdf8;
+        margin-bottom: 10px;
+        font-size: 17px;
+      }
+      .card p {
+        color: #cbd5e1;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+
+      .note {
+        margin-top: 30px;
+        text-align: center;
+        color: #64748b;
+        font-size: 14px;
+        line-height: 1.6;
+        padding: 16px;
+        background: rgba(30, 41, 59, 0.4);
+        border-radius: 10px;
+        border-left: 4px solid #38bdf8;
+      }
+      .badge {
+        display: inline-block;
+        margin-top: 10px;
+        padding: 6px 12px;
+        background: rgba(16, 185, 129, 0.15);
+        color: #34d399;
+        border: 1px solid rgba(16, 185, 129, 0.3);
+        border-radius: 6px;
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      @media (max-width: 640px) {
+        .node {
+          width: 160px;
+          font-size: 13px;
+          padding: 14px 10px;
+        }
+        .arrow {
+          font-size: 18px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🤖 Super Agent → Workers → Reviewer Flow</h1>
+
+      <div class="flow">
+        <!-- Top row -->
+        <div class="row">
+          <div class="node super">
+            SUPER AGENT<br /><span style="font-weight: 400; font-size: 13px"
+              >Manager — chat/discussion/brainstorming</span
+            >
+          </div>
+        </div>
+        <div class="arrow-row"><span class="arrow">↓ splits task</span></div>
+
+        <!-- Workers row -->
+        <div class="row">
+          <div class="node worker">
+            WORKER 1<br /><span style="font-weight: 400; font-size: 13px"
+              >Isolated worktree, task part 1</span
+            >
+          </div>
+          <div class="node worker">
+            WORKER 2<br /><span style="font-weight: 400; font-size: 13px"
+              >Isolated worktree, task part 2</span
+            >
+          </div>
+          <div class="node worker">
+            WORKER 3<br /><span style="font-weight: 400; font-size: 13px"
+              >Isolated worktree, task part 3</span
+            >
+          </div>
+        </div>
+        <div class="arrow-row"><span class="arrow">↓ sends code</span></div>
+
+        <!-- Reviewer -->
+        <div class="row">
+          <div class="node reviewer">
+            REVIEWER SUB-AGENT<br /><span style="font-weight: 400; font-size: 13px"
+              >Build + Preview + Checklist verify</span
+            >
+          </div>
+        </div>
+        <div class="arrow-row"><span class="arrow">↓ verified result</span></div>
+
+        <!-- Bottom -->
+        <div class="row">
+          <div class="node super">
+            SUPER AGENT<br /><span style="font-weight: 400; font-size: 13px"
+              >Final verified result — FREE for next task</span
+            >
+          </div>
+        </div>
+      </div>
+
+      <div class="cards">
+        <div class="card">
+          <div class="tag">SUPER AGENT</div>
+          <h3>Super Agent</h3>
+          <p>Receives task, splits into workers, stays <strong>FREE</strong> during execution.</p>
+        </div>
+        <div class="card">
+          <div class="tag">WORKER</div>
+          <h3>Worker Sub-Agents</h3>
+          <p>Write code in parallel isolated worktrees — no conflicts between workers.</p>
+        </div>
+        <div class="card">
+          <div class="tag">REVIEWER</div>
+          <h3>Reviewer Sub-Agent</h3>
+          <p>Checks merged code: build, preview HTTP 200, checklist audit, auto-heals.</p>
+        </div>
+      </div>
+
+      <div class="note">
+        ✓ Super Agent receives only the final verified result — available immediately for new
+        discussion, brainstorming, or tasks.
+        <div class="badge">Manager → Workers → Reviewer → Super Agent</div>
+      </div>
+    </div>
+  </body>
+</html>
