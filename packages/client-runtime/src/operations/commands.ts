@@ -870,6 +870,52 @@ export const dismissThreadUserInput = Effect.fn("EnvironmentCommands.dismissThre
   },
 );
 
+/**
+ * Picks the checkpoint a turn-count rollback restores.
+ *
+ * A turn only owns a checkpoint row when it settled *and* the capture ran, so
+ * an exact `appRunOrdinal === turnCount` lookup misses whenever the turn before
+ * it failed, was interrupted before capture, or the app restarted mid-turn.
+ * (Proven in the field: a completed turn right after a failed one could never
+ * be reverted, because the ordinal it asks for was never captured.)
+ *
+ * Those turns must still be revertible, so fall back to the newest settled
+ * checkpoint at or below the requested ordinal: it holds the workspace *and*
+ * provider state the undo has to land on, so files and conversation stay
+ * consistent. When no settled turn exists at all (every turn failed) the
+ * thread start is the only coherent target.
+ */
+export function resolveRollbackCheckpoint<
+  T extends {
+    readonly ordinalWithinScope: number;
+    readonly appRunOrdinal: number | null;
+    readonly status: string;
+  },
+>(checkpoints: ReadonlyArray<T>, turnCount: number): T | undefined {
+  const ready = checkpoints.filter((candidate) => candidate.status === "ready");
+  const threadStart = () =>
+    ready.find(
+      (candidate) => candidate.ordinalWithinScope === 0 && candidate.appRunOrdinal === null,
+    ) ?? ready.find((candidate) => candidate.ordinalWithinScope === 0);
+  if (turnCount <= 0) return threadStart();
+
+  const exact = ready.find((candidate) => candidate.appRunOrdinal === turnCount);
+  if (exact !== undefined) return exact;
+
+  // Newest settled turn at or below the target. Only settled turns have a
+  // provider turn to roll the conversation to, so a baseline row above it
+  // would restore files without the matching conversation state.
+  let best: T | undefined;
+  let bestOrdinal = -1;
+  for (const candidate of ready) {
+    if (candidate.appRunOrdinal === null) continue;
+    if (candidate.appRunOrdinal > turnCount || candidate.appRunOrdinal <= bestOrdinal) continue;
+    best = candidate;
+    bestOrdinal = candidate.appRunOrdinal;
+  }
+  return best ?? threadStart();
+}
+
 export const revertThreadCheckpoint = Effect.fn("EnvironmentCommands.revertThreadCheckpoint")(
   function* (input: RevertThreadCheckpointInput) {
     if (
@@ -894,11 +940,9 @@ export const revertThreadCheckpoint = Effect.fn("EnvironmentCommands.revertThrea
       projection.checkpoints.find(
         (candidate) => candidate.id === input.checkpointId && candidate.scopeId === input.scopeId,
       ) ??
-      projection.checkpoints.findLast((candidate) =>
-        input.turnCount === 0
-          ? candidate.ordinalWithinScope === 0 && candidate.appRunOrdinal === null
-          : candidate.appRunOrdinal === input.turnCount,
-      );
+      (input.turnCount === undefined
+        ? undefined
+        : resolveRollbackCheckpoint(projection.checkpoints, input.turnCount));
     if (checkpoint === undefined || checkpoint.status !== "ready") {
       const target =
         input.checkpointId === undefined

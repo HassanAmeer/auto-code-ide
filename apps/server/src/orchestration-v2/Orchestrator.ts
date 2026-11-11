@@ -93,6 +93,7 @@ import * as EffectOutbox from "./EffectOutbox.ts";
 import type { OrchestrationEffectRequestV2, PendingOrchestrationEffectV2 } from "./EffectOutbox.ts";
 import { IdAllocatorV2 } from "@t3tools/provider-core/server/IdAllocator";
 import * as ThreadCommandExecutor from "./ThreadCommandExecutor.ts";
+import { findRollbackProviderTurn, providerTurnForRun } from "./RollbackTargetLookup.ts";
 import { DispatchModeLimit, exceededDispatchModeLimit } from "./DispatchModeLimit.ts";
 import {
   applyToProjection,
@@ -644,23 +645,6 @@ function providerThreadForRun(
   return run.providerThreadId === null
     ? undefined
     : projection.providerThreads.find((candidate) => candidate.id === run.providerThreadId);
-}
-
-function providerTurnForRun(
-  projection: Pick<OrchestrationV2ThreadProjection, "providerTurns" | "attempts">,
-  run: OrchestrationV2Run,
-): OrchestrationV2ProviderTurn | undefined {
-  if (run.activeAttemptId === null) {
-    return undefined;
-  }
-
-  return (
-    latestProviderTurnForAttempt(projection.providerTurns, run.activeAttemptId) ??
-    projection.providerTurns.find((turn) => {
-      const attempt = projection.attempts.find((candidate) => candidate.id === run.activeAttemptId);
-      return attempt?.providerTurnId === turn.id;
-    })
-  );
 }
 
 function contextSourcePointForRun(
@@ -9218,23 +9202,40 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           });
       }
 
-      const targetOrdinal = targetCheckpoint.appRunOrdinal ?? 0;
+      // Baseline rows (appRunOrdinal null) still identify a real rollback point:
+      // the state before run `ordinalWithinScope + 1`. Defaulting them to 0 made
+      // every baseline rollback target "thread start" instead of one turn back.
+      const targetOrdinal =
+        targetCheckpoint.appRunOrdinal ?? targetCheckpoint.ordinalWithinScope ?? 0;
       if (targetOrdinal > 0 && command.restoreFilesOnly !== true) {
         const targetRun = projection.runs.find((run) => run.ordinal === targetOrdinal);
         const targetProviderTurn =
           targetRun === undefined ? undefined : providerTurnForRun(projection, targetRun);
-        if (targetRun === undefined || targetProviderTurn === undefined) {
-          return yield* new OrchestratorDispatchError({
-            commandId: command.commandId,
-            commandType: command.type,
-            cause: `Cannot roll back to checkpoint ${targetCheckpoint.id}: its provider turn is unavailable.`,
-          });
-        }
-        if (targetProviderTurn.providerThreadId !== providerThread.id) {
+        if (
+          targetProviderTurn !== undefined &&
+          targetProviderTurn.providerThreadId !== providerThread.id
+        ) {
           return yield* new OrchestratorDispatchError({
             commandId: command.commandId,
             commandType: command.type,
             cause: `Cannot roll back provider thread ${providerThread.id} to checkpoint ${targetCheckpoint.id}: target provider turn ${targetProviderTurn.id} belongs to provider thread ${targetProviderTurn.providerThreadId}.`,
+          });
+        }
+        // A turn that never reached the provider (preparation failure, early
+        // interrupt, rejected turn) has no provider turn of its own; its
+        // rollback lands on the newest turn that does exist at or before it.
+        const resolved =
+          targetProviderTurn === undefined
+            ? findRollbackProviderTurn(projection, {
+                ordinal: targetOrdinal,
+                providerThreadId: providerThread.id,
+              })
+            : undefined;
+        if (targetProviderTurn === undefined && resolved === undefined) {
+          return yield* new OrchestratorDispatchError({
+            commandId: command.commandId,
+            commandType: command.type,
+            cause: `Cannot roll back to checkpoint ${targetCheckpoint.id}: its provider turn is unavailable.`,
           });
         }
       }

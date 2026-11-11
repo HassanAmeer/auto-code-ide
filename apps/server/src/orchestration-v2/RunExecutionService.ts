@@ -678,14 +678,17 @@ export const layer: Layer.Layer<
         const checkpointCaptureCommandId = CommandId.make(
           `command:effect:checkpoint.capture:${input.run.id}`,
         );
-        // Stopped runs capture too: their checkpoint is the rollback point for
-        // the next message. The capture is enqueued with these terminal events,
-        // ahead of any later run's start on this thread's effect lane.
+        // Stopped and failed runs capture too: their checkpoint is the rollback
+        // point for the next message, and without a row a thread whose turns
+        // all failed had no revert target at all. The capture is enqueued with
+        // these terminal events, ahead of any later run's start on this
+        // thread's effect lane.
         const finalization = {
           effects:
             input.terminal.status === "completed" ||
             input.terminal.status === "interrupted" ||
-            input.terminal.status === "cancelled"
+            input.terminal.status === "cancelled" ||
+            input.terminal.status === "failed"
               ? [
                   {
                     id: `effect:checkpoint.capture:${input.run.id}`,

@@ -67,16 +67,21 @@ export const layer: Layer.Layer<
     }) {
       const { run, rootNode, scope, providerThread, readyCheckpointOrdinals } =
         yield* projections.getCheckpointCaptureContext(input.threadId, input);
-      // A stopped run is already terminal. Its checkpoint is the rollback point
-      // for the message after it, so capture leaves its status alone.
+      // A stopped or failed run is already terminal. Its checkpoint is the
+      // rollback point for the message after it, so capture leaves its status
+      // alone instead of promoting it to completed. Failed turns need this
+      // row too: without it a thread whose turns all failed had no revert
+      // target, so none of its messages could be undone.
       const stopped = run?.status === "interrupted" || run?.status === "cancelled";
+      const failed = run?.status === "failed";
+      const terminalWithoutCapture = stopped || failed;
 
       // The effect is at-least-once. A settled run with a checkpoint proves
       // that an earlier execution committed its result.
       if (
         run !== undefined &&
         run.checkpointId !== null &&
-        (run.status === "completed" || stopped)
+        (run.status === "completed" || terminalWithoutCapture)
       ) {
         return;
       }
@@ -89,7 +94,7 @@ export const layer: Layer.Layer<
 
       if (
         run === undefined ||
-        (run.status !== "waiting" && !stopped) ||
+        (run.status !== "waiting" && !terminalWithoutCapture) ||
         rootNode === undefined ||
         scope === undefined ||
         rootNode.checkpointScopeId !== scope.id ||
@@ -206,7 +211,7 @@ export const layer: Layer.Layer<
             nodeId: rootNode.id,
             providerInstanceId: run.providerInstanceId,
             occurredAt: capturedAt,
-            payload: stopped
+            payload: terminalWithoutCapture
               ? { ...runWithoutDelegatedCompletion, checkpointId: checkpoint.id }
               : {
                   ...runWithoutDelegatedCompletion,
@@ -215,7 +220,7 @@ export const layer: Layer.Layer<
                   checkpointId: checkpoint.id,
                 },
           },
-          ...(stopped
+          ...(terminalWithoutCapture
             ? []
             : [
                 {

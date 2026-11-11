@@ -3376,6 +3376,20 @@ it.effect("emits run_interrupt_result when hard-stop finalizes the active attemp
   }),
 );
 
+it.effect("enqueues a checkpoint capture for failed runs so their messages stay revertible", () =>
+  Effect.gen(function* () {
+    const { committedEffects } = yield* captureRootRunTermination({
+      key: "failed-run-capture",
+      shouldFinalizeRun: () => Effect.succeed(true),
+      events: (ids) => Stream.make(rootTerminalEvent(ids, "failed")),
+    });
+    assert.deepEqual(
+      committedEffects.map((effect) => effect.request.type),
+      ["checkpoint.capture"],
+    );
+  }),
+);
+
 it.effect.each(["completed", "interrupted", "cancelled", "failed"] as const)(
   "refreshes pull requests after the current root run %s",
   (status) =>

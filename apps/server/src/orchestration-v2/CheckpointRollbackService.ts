@@ -1,7 +1,6 @@
 import {
   CheckpointId,
   CheckpointScopeId,
-  latestProviderTurnForAttempt,
   type OrchestrationV2DomainEvent,
   ProviderThreadId,
   ThreadId,
@@ -23,6 +22,7 @@ import { EventSinkV2 } from "./EventSink.ts";
 import { IdAllocatorV2 } from "@t3tools/provider-core/server/IdAllocator";
 import { ProjectionStoreV2 } from "./ProjectionStore.ts";
 import * as ProjectStore from "./ProjectStore.ts";
+import { findRollbackProviderTurn } from "./RollbackTargetLookup.ts";
 import type { ProviderAdapterV2RollbackTarget } from "@t3tools/provider-core/server/ProviderAdapter";
 import { ProviderSessionManagerV2 } from "./ProviderSessionManager.ts";
 import { RuntimePolicyV2 } from "./RuntimePolicy.ts";
@@ -239,7 +239,13 @@ export const layer: Layer.Layer<
             }),
       });
 
-      const targetOrdinal = checkpoint.appRunOrdinal ?? 0;
+      // A baseline row carries no app ordinal, but it is still a real rollback
+      // point: it holds the workspace and provider state before run
+      // `ordinalWithinScope + 1`. Reading it as 0 forced every baseline rollback
+      // to "thread start" (the whole conversation + workspace), which is why a
+      // message that followed a failed turn wiped the thread instead of undoing
+      // one turn. Only ordinal 0 actually means thread start.
+      const targetOrdinal = checkpoint.appRunOrdinal ?? checkpoint.ordinalWithinScope ?? 0;
       // Stopped and failed runs after the target leave the provider
       // conversation too, so they must not stay visible.
       const runsToRollback = projection.runs.filter(
@@ -273,15 +279,15 @@ export const layer: Layer.Layer<
               appRunOrdinal: 0,
             }
           : yield* Effect.gen(function* () {
-              const targetRun = projection.runs.find((run) => run.ordinal === targetOrdinal);
-              const targetAttempt = projection.attempts.find(
-                (attempt) => attempt.id === targetRun?.activeAttemptId,
-              );
-              // A goal run can span several native turns; roll back to its last.
-              const targetTurn =
-                latestProviderTurnForAttempt(projection.providerTurns, targetAttempt?.id) ??
-                projection.providerTurns.find((turn) => turn.id === targetAttempt?.providerTurnId);
-              if (targetTurn === undefined || targetTurn.providerThreadId !== providerThread.id) {
+              // A run can settle without a provider turn (preparation failure,
+              // early interrupt, rejected turn). Its checkpoint is still the
+              // state to restore, so the conversation rolls back to the newest
+              // turn that does exist at or before it instead of refusing.
+              const targetTurn = findRollbackProviderTurn(projection, {
+                ordinal: targetOrdinal,
+                providerThreadId: providerThread.id,
+              })?.turn;
+              if (targetTurn === undefined) {
                 return yield* new CheckpointRollbackExecutionError({
                   reason: "provider-turn-unavailable",
                   threadId: input.threadId,
@@ -309,8 +315,7 @@ export const layer: Layer.Layer<
       const staleCheckpoints = projection.checkpoints.filter(
         (candidate) =>
           candidate.scopeId === scope.id &&
-          candidate.appRunOrdinal !== null &&
-          candidate.appRunOrdinal > targetOrdinal &&
+          (candidate.appRunOrdinal ?? candidate.ordinalWithinScope ?? 0) > targetOrdinal &&
           candidate.status === "ready",
       );
       if (staleCheckpoints.length > 0) {

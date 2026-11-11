@@ -48,6 +48,7 @@ import {
   promoteQueuedRun,
   reorderActiveThread,
   reorderQueuedRun,
+  resolveRollbackCheckpoint,
   revertThreadCheckpoint,
   settleThread,
   startThreadTurn,
@@ -1023,4 +1024,48 @@ describe("V2 environment commands", () => {
       ]);
     }).pipe(Effect.provide(layerTestCrypto)),
   );
+});
+
+describe("resolveRollbackCheckpoint", () => {
+  const checkpoint = (
+    ordinalWithinScope: number,
+    appRunOrdinal: number | null,
+    status: "ready" | "stale" | "missing" = "ready",
+  ) => ({ ordinalWithinScope, appRunOrdinal, status });
+
+  it("uses the exact checkpoint of the requested turn", () => {
+    const exact = checkpoint(4, 4);
+    expect(resolveRollbackCheckpoint([checkpoint(0, null), checkpoint(3, 3), exact], 4)).toBe(
+      exact,
+    );
+  });
+
+  it("falls back to the newest settled turn when the previous turn failed", () => {
+    // Field case: run 4 failed, so no checkpoint carries appRunOrdinal 4. The
+    // message of run 5 asked for ordinal 4 and the rollback used to be refused.
+    const settled = checkpoint(3, 3);
+    expect(
+      resolveRollbackCheckpoint(
+        [checkpoint(0, null), checkpoint(1, 1), settled, checkpoint(5, 5)],
+        4,
+      ),
+    ).toBe(settled);
+  });
+
+  it("never targets a baseline row or a stale checkpoint for a later turn", () => {
+    const stale = checkpoint(6, 6, "stale");
+    expect(
+      resolveRollbackCheckpoint([checkpoint(0, null), checkpoint(5, 5), stale], 6)?.appRunOrdinal,
+    ).toBe(5);
+  });
+
+  it("reverts to the thread start when every turn failed", () => {
+    const baseline = checkpoint(0, null);
+    expect(resolveRollbackCheckpoint([baseline], 0)).toBe(baseline);
+    expect(resolveRollbackCheckpoint([baseline], 7)).toBe(baseline);
+  });
+
+  it("returns nothing when the thread has no checkpoint yet", () => {
+    expect(resolveRollbackCheckpoint([], 3)).toBeUndefined();
+  });
 });
