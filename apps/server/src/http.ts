@@ -1430,6 +1430,10 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
           taskTitle: cleanPrompt.slice(0, 50),
           prompt: cleanPrompt,
           model: bodyJson?.model || "deepseek-v4.1-flash-free",
+          lanes:
+            typeof appSettings?.super_agent_worker_lanes === "string"
+              ? appSettings.super_agent_worker_lanes
+              : undefined,
           onLog: (msg: string) => console.log(msg),
         }),
       );
@@ -3491,6 +3495,10 @@ export const layerSuperAgentDispatchWorkerRoute = HttpRouter.add(
         projectId: project.projectId,
         projectName: project.projectName,
         projectRoot: targetRoot,
+        lanes:
+          typeof getAllAppSettings(config.dbPath)?.super_agent_worker_lanes === "string"
+            ? String(getAllAppSettings(config.dbPath).super_agent_worker_lanes)
+            : undefined,
         taskTitle,
         // Raw user task — the watchdog decomposes THIS, not the formatted
         // envelope (whose bullet/numbered rule lines would be misparsed as milestones).

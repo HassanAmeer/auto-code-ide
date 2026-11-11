@@ -33,6 +33,7 @@ import {
   cleanupWorkerWorktree,
   getWorktreeDiff,
 } from "./worktreeRunner.ts";
+import { acquireWorktree, releaseWorktree, prewarmWorktrees } from "./worktreePool.ts";
 import { executeOpenCodeTask } from "./opencodeBridge.ts";
 import {
   deriveSpecialistRole,
@@ -59,6 +60,10 @@ export interface WatchdogWorkerRow {
   buildPassed: boolean | undefined;
   testRan: boolean;
   testPassed: boolean | undefined;
+  /** Model lane this worker runs on — different lanes = real parallelism. */
+  model?: string | undefined;
+  /** Live streamed output from the worker (newest last, capped). */
+  logs?: string[] | undefined;
 }
 
 export interface WatchdogState {
@@ -132,6 +137,9 @@ export function stopWatchdog(id: string): boolean {
 /* ───────────────────────── build & test helpers ───────────────────────── */
 
 export type PackageManager = "pnpm" | "yarn" | "npm";
+
+/** Build/test timeout. Big repos need more than the old 120s ceiling. */
+const BUILD_TIMEOUT_MS = Number(process.env.SUPER_AGENT_BUILD_TIMEOUT_MS || 300_000);
 
 export function detectPackageManager(cwd: string): PackageManager {
   try {
@@ -298,8 +306,12 @@ export const WATCHDOG_FALLBACK_MODELS = [
  *
  * Override with SUPER_AGENT_WORKER_LANES="model-a,model-b,model-c".
  */
-export function resolveWorkerLaneModels(baseModel: string, workerCount: number): string[] {
-  const override = (process.env.SUPER_AGENT_WORKER_LANES || "")
+export function resolveWorkerLaneModels(
+  baseModel: string,
+  workerCount: number,
+  explicitLanes?: string | undefined,
+): string[] {
+  const override = (explicitLanes ?? process.env.SUPER_AGENT_WORKER_LANES ?? "")
     .split(",")
     .map((m) => m.trim())
     .filter((m) => m.length > 0);
@@ -389,6 +401,8 @@ export interface WatchdogDispatchParams {
   taskTitle: string;
   prompt: string;
   model?: string;
+  /** Comma-separated model lanes for the parallel workers. */
+  lanes?: string | undefined;
   onLog?: (msg: string) => undefined | ((msg: string) => void);
   /** Internal guard: the watchdog retries itself once with a fallback model. */
   __isRetry?: boolean | undefined;
@@ -454,7 +468,7 @@ export async function startWatchdogSupervision(
     const subtasks: SubtaskPlanItem[] = decomposeTask(taskTitle, prompt, projectRoot);
     touch(`Assigned ${subtasks.length} sub-agent(s) to watch`);
 
-    for (const st of subtasks) {
+    for (const st of planned) {
       state.workers.push({
         id: `${watchdogId}-w${st.order}`,
         role: deriveSpecialistRole(st.title, st.category, st.order),
@@ -469,14 +483,34 @@ export async function startWatchdogSupervision(
       });
     }
 
-    const allocations = subtasks.map((st) => ({
+    // Worker count is capped so one huge task cannot fan out into a dozen
+    // workers; the overflow is folded into the last worker instead of dropped.
+    const maxWorkers = Math.max(1, Number(process.env.SUPER_AGENT_MAX_WORKERS || 4));
+    let planned = subtasks;
+    if (planned.length > maxWorkers) {
+      const overflow = planned.slice(maxWorkers - 1);
+      const kept = planned.slice(0, maxWorkers - 1);
+      const last = overflow[0]!;
+      kept.push({
+        ...last,
+        title: `${last.title} (+${overflow.length - 1} folded milestones)`,
+        description: [last.description, ...overflow.slice(1).map((o) => o.description)].join("\n"),
+      });
+      planned = kept;
+      touch(`Folding ${subtasks.length} milestones into ${maxWorkers} workers`);
+    }
+
+    // Park a few worktrees ahead of time so the first dispatch is instant too.
+    prewarmWorktrees(projectRoot);
+
+    const allocations = planned.map((st) => ({
       st,
-      allocation: createWorkerWorktree(projectRoot, `${watchdogId}-${st.order}`),
+      allocation: acquireWorktree(projectRoot, `${watchdogId}-${st.order}`),
     }));
 
     // Each worker gets its own model lane so the calls really run in parallel
     // instead of queueing behind one provider's rate limit.
-    const laneModels = resolveWorkerLaneModels(model, allocations.length);
+    const laneModels = resolveWorkerLaneModels(model, allocations.length, params.lanes);
 
     // ── Workers run in parallel; the watchdog watches each completion ──
     const settled = await Promise.allSettled(
@@ -499,13 +533,30 @@ export async function startWatchdogSupervision(
           log?.(`[Watchdog/${st.order}] using model lane: ${laneModel}`);
         }
 
+        const row = state.workers.find((w) => w.id === workerId);
+        if (row) {
+          row.model = laneModel;
+          row.logs = [];
+        }
+        const workerLog = (m: string) => {
+          log?.(`[Watchdog/${st.order}] ${m}`);
+          const target = state.workers.find((w) => w.id === workerId);
+          if (target) {
+            const lines = target.logs ?? [];
+            lines.push(m);
+            // Keep only the newest lines so a long stream cannot grow forever.
+            target.logs = lines.slice(-12);
+          }
+        };
+
         let res = await executeOpenCodeTask({
           worktreePath: allocation.worktreePath,
           projectName,
+          projectRoot,
           taskTitle: st.title,
           prompt: st.description,
           model: laneModel,
-          onLog: (m) => log?.(`[Watchdog/${st.order}] ${m}`),
+          onLog: workerLog,
         });
 
         // Watchdog self-heal #1: a failed model call is retried once with the
@@ -520,10 +571,11 @@ export async function startWatchdogSupervision(
             res = await executeOpenCodeTask({
               worktreePath: allocation.worktreePath,
               projectName,
+              projectRoot,
               taskTitle: st.title,
               prompt: st.description,
               model: fallback,
-              onLog: (m) => log?.(`[Watchdog/${st.order}] ${m}`),
+              onLog: workerLog,
             });
           }
         }
@@ -601,11 +653,10 @@ export async function startWatchdogSupervision(
       }
     }
 
+    // Park the worktrees instead of deleting them — the next task reuses them.
     for (const r of reviewed) {
       if (r.crashed) continue;
-      if (r.allocation.isIsolated) {
-        cleanupWorkerWorktree(projectRoot, r.allocation.worktreePath, r.allocation.branchName);
-      }
+      releaseWorktree(projectRoot, r.allocation);
     }
 
     // ── PHASE 4: ONE build + ONE test for the whole merged workspace ──
@@ -622,7 +673,7 @@ export async function startWatchdogSupervision(
       touch(`Build required — running ${pm} build once for the merged workspace`);
       const buildCmd =
         pm === "pnpm" ? "pnpm run build" : pm === "yarn" ? "yarn build" : "npm run build";
-      const build = runCommand(buildCmd, projectRoot, 120_000);
+      const build = runCommand(buildCmd, projectRoot, BUILD_TIMEOUT_MS);
       for (const row of state.workers) {
         if (row.status === "completed") {
           row.buildRan = true;
@@ -643,7 +694,7 @@ export async function startWatchdogSupervision(
           onLog: (m) => log?.(`[Watchdog/repair] ${m}`),
         });
         if (repair.ok) {
-          const rebuild = runCommand(buildCmd, projectRoot, 120_000);
+          const rebuild = runCommand(buildCmd, projectRoot, BUILD_TIMEOUT_MS);
           for (const row of state.workers) {
             if (row.status === "completed") row.buildPassed = rebuild.ok;
           }
@@ -664,7 +715,7 @@ export async function startWatchdogSupervision(
       state.status = "testing";
       touch(`Running ${pm} test suite once`);
       const testCmd = pm === "pnpm" ? "pnpm run test" : pm === "yarn" ? "yarn test" : "npm test";
-      const test = runCommand(testCmd, projectRoot, 120_000);
+      const test = runCommand(testCmd, projectRoot, BUILD_TIMEOUT_MS);
       for (const row of state.workers) {
         if (row.status === "completed") {
           row.testRan = true;
@@ -684,7 +735,7 @@ export async function startWatchdogSupervision(
           onLog: (m) => log?.(`[Watchdog/repair] ${m}`),
         });
         if (repair.ok) {
-          const retest = runCommand(testCmd, projectRoot, 120_000);
+          const retest = runCommand(testCmd, projectRoot, BUILD_TIMEOUT_MS);
           for (const row of state.workers) {
             if (row.status === "completed") row.testPassed = retest.ok;
           }

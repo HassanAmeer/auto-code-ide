@@ -62,6 +62,8 @@ export function getActiveCoreEngine(): string {
 export async function executeOpenCodeTask(opts: {
   worktreePath: string;
   projectName: string;
+  /** Project root — used to keep the system prompt identical across workers. */
+  projectRoot?: string | undefined;
   taskTitle: string;
   prompt: string;
   model: string;
@@ -106,12 +108,10 @@ export async function executeOpenCodeTask(opts: {
     let filesWrittenCount = 0;
     let llmErrorMessage: string | null = null;
     try {
-      const bypassMod = await import(
-        "../../../../opencode-bypass-api/src/server/bypass/client.ts" as string
-      );
-      const bypassChat = bypassMod.bypassChat;
-
-      const codingSkillsPrompt = getProjectChatEngineSkillPrompt(worktreePath);
+      // Skills come from the PROJECT root (not the worktree) so the system
+      // prompt is identical for every worker — that is what lets the provider
+      // cache the prefix instead of re-processing it per worker.
+      const codingSkillsPrompt = getProjectChatEngineSkillPrompt(opts.projectRoot ?? worktreePath);
       const systemMsg = [
         "You are an autonomous AI coding subagent within an isolated Git worktree.",
         "Your task is to write real, production-ready, clean code without placeholder comments.",
@@ -128,27 +128,48 @@ export async function executeOpenCodeTask(opts: {
         .filter(Boolean)
         .join("\n\n");
 
-      const response = await bypassChat({
-        model: modelToUse,
-        messages: [
-          { role: "system", content: systemMsg },
-          {
-            role: "user",
-            content: `[PROJECT: ${projectName} in ${worktreePath}]\nTask: ${taskTitle}\n\nRequirements:\n${prompt}\n\nPlease generate full implementation files.`,
-          },
-        ],
-        maxTokens: 4096,
-      });
+      // Stream the model output so the watchdog card shows live progress
+      // instead of a frozen spinner. The system prompt stays byte-identical
+      // across workers so the gateway can serve it from its prompt cache.
+      const messages = [
+        { role: "system" as const, content: systemMsg },
+        {
+          role: "user" as const,
+          content: `[PROJECT: ${projectName} in ${worktreePath}]\nTask: ${taskTitle}\n\nRequirements:\n${prompt}\n\nPlease generate full implementation files.`,
+        },
+      ];
+
+      let streamedContent = "";
+      let streamedChars = 0;
+      let lastReport = 0;
+      const bypassStreamMod = await import(
+        "../../../../opencode-bypass-api/src/server/bypass/client.ts" as string
+      );
+      await bypassStreamMod.bypassChatStream(
+        {
+          model: modelToUse,
+          messages,
+          maxTokens: Number(process.env.SUPER_AGENT_MAX_TOKENS || 16384),
+        },
+        (chunk: string) => {
+          streamedContent += chunk;
+          streamedChars += chunk.length;
+          if (streamedChars - lastReport >= 400) {
+            lastReport = streamedChars;
+            onLog?.(`   ⏳ streaming… ${streamedChars} chars`);
+          }
+        },
+      );
 
       if (opts.abortCheck?.()) {
         onLog?.("⛔ Aborted by user — response discarded, no files written.");
         return abortedResult();
       }
 
+      const response = { content: streamedContent };
+
       if (response && response.content) {
-        onLog?.(
-          `✓ DeepSeek response received (${response.content.length} chars). Parsing files...`,
-        );
+        onLog?.(`✓ Response received (${response.content.length} chars). Parsing files...`);
 
         // Match ```filepath:relative/path/file.ext or ```path/to/file.ext
         const fileBlockRegex =

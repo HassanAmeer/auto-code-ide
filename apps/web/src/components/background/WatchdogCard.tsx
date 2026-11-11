@@ -311,6 +311,11 @@ export const WatchdogCard = memo(function WatchdogCard({
                           {testBadge(worker)}
                         </span>
                       </div>
+                      {worker.logs && worker.logs.length > 0 ? (
+                        <div className="truncate pl-4.5 text-[9.5px] font-mono text-cyan-400/75">
+                          {worker.logs[worker.logs.length - 1]}
+                        </div>
+                      ) : null}
                       {worker.reviewNotes.length > 0 ? (
                         <div className="flex items-center gap-1 pl-4.5">
                           <Tooltip>
