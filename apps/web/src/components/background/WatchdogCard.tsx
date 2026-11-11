@@ -41,6 +41,15 @@ export interface WatchdogItem {
   readonly verdict: string;
   /** How many times the watchdog repaired itself (model retry / repair agent). */
   readonly recoveries?: number | undefined;
+  /** Requirement checklist audited against the merged changes. */
+  readonly checklist?:
+    | ReadonlyArray<{
+        readonly id: string;
+        readonly requirement: string;
+        readonly status: string;
+        readonly evidence?: string | undefined;
+      }>
+    | undefined;
 }
 
 export interface WatchdogCardProps {
@@ -345,6 +354,22 @@ export const WatchdogCard = memo(function WatchdogCard({
                   {item.verdict ? (
                     <div className="text-[10px] text-muted-foreground/80 pl-5.5">
                       {item.verdict}
+                    </div>
+                  ) : null}
+                  {item.checklist && item.checklist.length > 0 ? (
+                    <div className="flex flex-col gap-0.5 pl-5.5">
+                      {item.checklist.map((c) => (
+                        <div key={c.id} className="flex items-start gap-1.5">
+                          {c.status === "passed" ? (
+                            <CheckCircle2 className="size-3 text-emerald-400 shrink-0 mt-px" />
+                          ) : (
+                            <AlertCircle className="size-3 text-amber-400 shrink-0 mt-px" />
+                          )}
+                          <span className="text-[10px] text-foreground/70 truncate">
+                            {c.requirement}
+                          </span>
+                        </div>
+                      ))}
                     </div>
                   ) : null}
                   {item.recoveries && item.recoveries > 0 ? (

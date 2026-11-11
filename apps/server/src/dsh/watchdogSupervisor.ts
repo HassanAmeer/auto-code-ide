@@ -35,6 +35,8 @@ import {
 } from "./worktreeRunner.ts";
 import { acquireWorktree, releaseWorktree, prewarmWorktrees } from "./worktreePool.ts";
 import { executeOpenCodeTask } from "./opencodeBridge.ts";
+import { extractChecklistFromPrompt } from "./selfReviewLoop.ts";
+import type { ChecklistItem } from "./types.ts";
 import {
   deriveSpecialistRole,
   registerWorkerTelemetry,
@@ -77,6 +79,8 @@ export interface WatchdogState {
   issues: string[];
   /** How many times the watchdog recovered itself (model retry / repair agent). */
   recoveries: number;
+  /** Requirement checklist extracted from the user's task and audited vs the diff. */
+  checklist: ChecklistItem[];
   startedAt: number;
   updatedAt: number;
   completedAt: number | undefined;
@@ -283,6 +287,37 @@ function runCommand(command: string, cwd: string, timeoutMs: number): CommandRun
   }
 }
 
+/**
+ * Audit the requirement checklist against the merged diff. Every requirement
+ * the user asked for must be traceable to something that actually changed —
+ * a missing requirement is a real accuracy failure, not a warning.
+ */
+export function auditRequirementChecklist(
+  checklist: ChecklistItem[],
+  diff: string,
+): { passed: number; missing: string[] } {
+  const haystack = diff.toLowerCase();
+  const missing: string[] = [];
+  let passed = 0;
+  for (const item of checklist) {
+    const keywords = item.requirement
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((k) => k.length > 3);
+    const matched = keywords.some((k) => haystack.includes(k));
+    if (matched || (haystack.length > 50 && keywords.length === 0)) {
+      item.status = "passed";
+      item.evidence = "Matched changes in the merged diff";
+      passed += 1;
+    } else {
+      item.status = "missing";
+      item.evidence = "No matching change found in the merged diff";
+      missing.push(item.requirement);
+    }
+  }
+  return { passed, missing };
+}
+
 /* ────────────────────── watchdog self-healing helpers ────────────────────── */
 
 /**
@@ -340,7 +375,7 @@ async function dispatchRepairSubAgent(opts: {
   projectName: string;
   taskTitle: string;
   reason: string;
-  kind: "build" | "test";
+  kind: "build" | "test" | "requirement";
   model: string;
   onLog?: (msg: string) => undefined | ((msg: string) => void);
 }): Promise<{ ok: boolean; output: string }> {
@@ -348,7 +383,9 @@ async function dispatchRepairSubAgent(opts: {
   const worktree = createWorkerWorktree(opts.projectRoot, repairId);
   try {
     const prompt = [
-      `The ${opts.kind} of this project is FAILING after a recent change.`,
+      opts.kind === "requirement"
+        ? "The previous changes do NOT satisfy the requirements below."
+        : `The ${opts.kind} of this project is FAILING after a recent change.`,
       "",
       "Failure output:",
       opts.reason.slice(0, 2000),
@@ -389,6 +426,72 @@ async function dispatchRepairSubAgent(opts: {
     if (worktree.isIsolated) {
       cleanupWorkerWorktree(opts.projectRoot, worktree.worktreePath, worktree.branchName);
     }
+  }
+}
+
+/**
+ * Verification Sub-Agent — the accuracy gate.
+ *
+ * Build and tests can pass while the code still does not do what was asked.
+ * This agent reads the merged diff against the requirement checklist and
+ * answers PASS or FAIL. On FAIL the watchdog dispatches a fix sub-agent with
+ * the reason and re-verifies once.
+ */
+async function runVerificationSubAgent(opts: {
+  projectRoot: string;
+  projectName: string;
+  taskTitle: string;
+  requirements: ReadonlyArray<string>;
+  diff: string;
+  model: string;
+  onLog?: (msg: string) => undefined | ((msg: string) => void);
+}): Promise<{ passed: boolean; reason: string }> {
+  const requirements = opts.requirements.length > 0 ? opts.requirements : ["the requested task"];
+  const prompt = [
+    "You are a strict VERIFIER. Check whether the following code changes actually",
+    "satisfy the requirements. Answer with PASS or FAIL on the first line, then one",
+    "short paragraph of reasoning. Do not write any code.",
+    "",
+    "REQUIREMENTS:",
+    ...requirements.map((r, i) => `${i + 1}. ${r}`),
+    "",
+    "CHANGES:",
+    opts.diff.slice(0, 6000) || "(no diff available)",
+  ].join("\n");
+
+  try {
+    const worktree = acquireWorktree(
+      opts.projectRoot,
+      `verify-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    );
+    try {
+      const res = await executeOpenCodeTask({
+        worktreePath: worktree.worktreePath,
+        projectName: opts.projectName,
+        projectRoot: opts.projectRoot,
+        taskTitle: "Verify requirements",
+        prompt,
+        model: opts.model,
+        onLog: (m) => opts.onLog?.(m),
+      });
+      const content = res.outputSummary ?? "";
+      // The verifier answers in its log stream; treat an explicit FAIL as a failure.
+      const failed = /\bFAIL\b/i.test(content);
+      const passed = res.ok && !failed;
+      return {
+        passed,
+        reason: passed
+          ? "Verification sub-agent confirmed the requirements are met"
+          : `Verification sub-agent reported a problem: ${content.slice(0, 400) || "no reason recorded"}`,
+      };
+    } finally {
+      releaseWorktree(opts.projectRoot, worktree);
+    }
+  } catch (err: any) {
+    return {
+      passed: false,
+      reason: `verification sub-agent failed: ${err?.message ?? String(err)}`,
+    };
   }
 }
 
@@ -457,6 +560,7 @@ export async function startWatchdogSupervision(
     workers: [],
     issues: [],
     recoveries: 0,
+    checklist: [],
     startedAt: now(),
     updatedAt: now(),
     completedAt: undefined,
@@ -472,6 +576,9 @@ export async function startWatchdogSupervision(
 
   try {
     const subtasks: SubtaskPlanItem[] = decomposeTask(taskTitle, prompt, projectRoot);
+    // The requirement checklist is the accuracy target: it is what the merged
+    // code is audited against at the end.
+    state.checklist = extractChecklistFromPrompt(prompt);
     touch(`Assigned ${subtasks.length} sub-agent(s) to watch`);
 
     for (const st of planned) {
@@ -669,6 +776,25 @@ export async function startWatchdogSupervision(
       releaseWorktree(projectRoot, r.allocation);
     }
 
+    // ── PHASE 3.5: Requirement checklist audit ──
+    // Build and tests can pass while a requirement was never implemented.
+    // The checklist is traced against the real merged diff.
+    let mergedDiff = "";
+    if (mergeable.length > 0) {
+      state.status = "reviewing";
+      touch("Auditing requirements against the merged diff");
+      mergedDiff = getWorktreeDiff(projectRoot);
+      const audit = auditRequirementChecklist(state.checklist, mergedDiff);
+      if (audit.missing.length > 0) {
+        for (const missing of audit.missing) {
+          state.issues.push(`Requirement not found in changes: ${missing}`);
+        }
+        touch(`${audit.missing.length} requirement(s) missing from the changes`);
+      } else {
+        touch(`All ${audit.passed} requirement(s) traced to the changes`);
+      }
+    }
+
     // ── PHASE 4: ONE build + ONE test for the whole merged workspace ──
     // Running a build per worker was the biggest waste: N workers meant N
     // builds and N test suites. The merged workspace is verified once.
@@ -760,6 +886,64 @@ export async function startWatchdogSupervision(
       }
     } else if (mergeable.length > 0) {
       touch("No test script — skipping tests");
+    }
+
+    // ── PHASE 5: Verification Sub-Agent (semantic accuracy gate) ──
+    // The verifier reads the merged diff against the requirement checklist and
+    // decides PASS/FAIL. On FAIL the watchdog dispatches a fix sub-agent and
+    // verifies once more.
+    if (mergeable.length > 0) {
+      state.status = "reviewing";
+      touch("Verification sub-agent checking the requirements");
+      const requirements = state.checklist.map((c) => c.requirement);
+      const verification = await runVerificationSubAgent({
+        projectRoot,
+        projectName,
+        taskTitle,
+        requirements,
+        diff: mergedDiff,
+        model,
+        onLog: (m) => log?.(`[Watchdog/verify] ${m}`),
+      });
+
+      if (verification.passed) {
+        state.checklist.forEach((c) => {
+          if (c.status === "missing") {
+            c.status = "passed";
+            c.evidence = "Confirmed by the verification sub-agent";
+          }
+        });
+        touch("Verification passed — requirements met");
+      } else {
+        state.recoveries += 1;
+        state.issues.push(verification.reason);
+        touch("Verification failed — dispatching fix sub-agent");
+        const fix = await dispatchRepairSubAgent({
+          projectRoot,
+          projectName,
+          taskTitle,
+          reason: verification.reason,
+          kind: "requirement",
+          model,
+          onLog: (m) => log?.(`[Watchdog/fix] ${m}`),
+        });
+        if (fix.ok) {
+          const recheck = await runVerificationSubAgent({
+            projectRoot,
+            projectName,
+            taskTitle,
+            requirements,
+            diff: getWorktreeDiff(projectRoot),
+            model,
+            onLog: (m) => log?.(`[Watchdog/verify] ${m}`),
+          });
+          if (recheck.passed) {
+            touch("Fix applied — re-verified ✓");
+          } else {
+            state.issues.push(recheck.reason);
+          }
+        }
+      }
     }
 
     const completed = state.workers.filter((w) => w.status === "completed").length;

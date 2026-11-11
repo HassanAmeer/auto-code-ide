@@ -5,6 +5,7 @@ import * as NodePath from "node:path";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 
 import {
+  auditRequirementChecklist,
   detectPackageManager,
   requiresBuild,
   reviewWorkerOutput,
@@ -133,6 +134,34 @@ describe("watchdog model lanes", () => {
 
   it("always returns at least one lane", () => {
     expect(resolveWorkerLaneModels("my-model", 0).length).toBe(1);
+  });
+});
+
+describe("requirement checklist audit", () => {
+  it("marks a requirement as passed when the diff mentions it", () => {
+    const checklist = [
+      { id: "req-1", requirement: "build the table booking form", status: "pending" as const },
+    ];
+    const result = auditRequirementChecklist(
+      checklist,
+      "diff --git a/BookingForm.tsx\n+export function BookingForm() {}",
+    );
+    expect(result.passed).toBe(1);
+    expect(result.missing).toEqual([]);
+    expect(checklist[0]?.status).toBe("passed");
+  });
+
+  it("flags a requirement that never appears in the diff", () => {
+    const checklist = [
+      { id: "req-1", requirement: "implement the payment gateway", status: "pending" as const },
+    ];
+    const result = auditRequirementChecklist(
+      checklist,
+      "diff --git a/menu.tsx\n+export const menu = [];",
+    );
+    expect(result.passed).toBe(0);
+    expect(result.missing.length).toBe(1);
+    expect(checklist[0]?.status).toBe("missing");
   });
 });
 
