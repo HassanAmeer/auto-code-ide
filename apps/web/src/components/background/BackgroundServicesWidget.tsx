@@ -738,6 +738,7 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
       {/* 0. Watchdog Section — watches every sub-agent and reports the verdict */}
       <WatchdogCard
         projectName={projectName}
+        initiallyExpanded={true}
         backgroundTasks={visibleBackgroundTasks.map((task) => ({
           id: task.id,
           title: task.title,
@@ -751,6 +752,20 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
               : undefined,
         }))}
       />
+
+      {/* Watchdog → Subagents link */}
+      <div className="flex items-stretch gap-0 px-2 py-0.5" aria-hidden="true">
+        <div className="ml-3 flex flex-col items-center">
+          <div className="h-2 w-px bg-cyan-500/40" />
+          <div className="size-1.5 rounded-full bg-cyan-400/70 ring-2 ring-cyan-500/20" />
+          <div className="h-2 w-px bg-cyan-500/40" />
+        </div>
+        <div className="ml-2 flex items-center">
+          <span className="text-[9.5px] font-mono uppercase tracking-wider text-cyan-400/70">
+            supervises &amp; controls
+          </span>
+        </div>
+      </div>
 
       {/* 1. Subagents Section */}
       <div className="flex flex-col">
@@ -784,7 +799,8 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
         </div>
 
         {subagentsExpanded && (
-          <div className="flex flex-col gap-0.5 pt-0.5 pl-1">
+          <div className="relative ml-3 flex flex-col gap-0.5 pt-0.5 pl-3 border-l border-cyan-500/25">
+            <span className="pointer-events-none absolute -left-[3.5px] top-2 size-1.5 rounded-full bg-cyan-500/40" />
             {workersError ? (
               <div
                 role="status"
@@ -798,7 +814,7 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
                 No active subagents
               </div>
             ) : (
-              combinedSubagents.map((agent) => {
+              combinedSubagents.map((agent, agentIdx) => {
                 const status = agent.status ?? "running";
                 const isRunning = status === "running";
                 const isCompleted = status === "completed";
@@ -807,8 +823,10 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
                 return (
                   <div
                     key={agent.id}
-                    className="flex h-7 items-center justify-between gap-2 px-2 rounded-md hover:bg-black/[0.035] dark:hover:bg-white/[0.08] transition-colors group cursor-default"
+                    className="relative flex h-7 items-center justify-between gap-2 px-2 rounded-md hover:bg-black/[0.035] dark:hover:bg-white/[0.08] transition-colors group cursor-default"
                   >
+                    <span className="pointer-events-none absolute -left-[15px] top-1/2 h-px w-2 -translate-y-1/2 bg-cyan-500/30" />
+                    <span className="pointer-events-none absolute -left-[18px] top-1/2 size-1 -translate-y-1/2 rounded-full bg-cyan-500/35" />
                     <div className="flex items-center gap-2 min-w-0 flex-1">
                       {isCompleted ? (
                         <CheckCircle2 className="size-3.5 text-emerald-400 shrink-0" />
