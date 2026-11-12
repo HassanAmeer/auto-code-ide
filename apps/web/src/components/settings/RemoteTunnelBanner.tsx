@@ -5,21 +5,24 @@ import { writeTextToClipboard } from "../../hooks/useCopyToClipboard";
 import { detectSshHost, sshTunnelCommand } from "./remoteTunnel";
 
 /**
- * Cheaprouter-style "Remote VPS Browser Login Tunnel" banner. Shown while a
- * browser sign-in advertises a loopback redirect on the (possibly remote)
- * environment, so the user can forward that exact port to their laptop and
- * Google's redirect lands on the agent without pasting URLs.
+ * Cheaprouter-style "Remote VPS Browser Login Tunnel" banner, always visible
+ * in the Antigravity sign-in section. Before sign-in starts we do not know the
+ * agent's loopback port (it is ephemeral), so the banner shows a placeholder
+ * until the Google sign-in URL is known, then swaps in the exact command.
  */
 export function RemoteTunnelBanner({
   port,
   host,
 }: {
-  readonly port: number;
+  readonly port: number | null;
   readonly host?: string | undefined;
 }) {
   const [copied, setCopied] = useState(false);
   const sshHost = host ?? detectSshHost();
-  const command = sshTunnelCommand(port, sshHost);
+  const command =
+    port !== null
+      ? sshTunnelCommand(port, sshHost)
+      : `ssh -L <port>:127.0.0.1:<port> root@${sshHost}`;
 
   return (
     <div className="relative my-2 overflow-hidden rounded-xl border border-amber-500/40 bg-gradient-to-r from-amber-500/15 via-orange-500/10 to-amber-500/15 p-3.5 shadow-sm">
@@ -41,7 +44,9 @@ export function RemoteTunnelBanner({
           <code className="select-all break-all font-mono text-xs text-foreground">{command}</code>
           <button
             type="button"
+            disabled={port === null}
             onClick={() => {
+              if (port === null) return;
               void writeTextToClipboard(command, "SSH tunnel command")
                 .then(() => {
                   setCopied(true);
@@ -49,12 +54,12 @@ export function RemoteTunnelBanner({
                 })
                 .catch(() => setCopied(false));
             }}
-            className={`flex shrink-0 items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium transition-all ${
+            className={`flex shrink-0 items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium transition-all disabled:cursor-not-allowed disabled:opacity-40 ${
               copied
                 ? "border-emerald-500/30 bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
                 : "border-transparent bg-zinc-200/80 text-muted-foreground hover:bg-zinc-300 hover:text-foreground dark:bg-zinc-800 dark:hover:bg-zinc-700"
             }`}
-            title="Copy command"
+            title={port === null ? "Sign in start hone ke baad asli port aayega" : "Copy command"}
             aria-label="Copy SSH tunnel command"
           >
             {copied ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
@@ -65,9 +70,9 @@ export function RemoteTunnelBanner({
         <div className="flex items-center gap-1.5 text-[11px] text-amber-700/90 dark:text-amber-400/90">
           <InfoIcon className="size-3 shrink-0" />
           <span>
-            Command chalane ke baad <strong>Open browser</strong> par click karein — Google sign-in
-            ke baad redirect khud tunnel ke zariye sign-in tak pohanch kar login complete kar degi.
-            URL paste karne ki zaroorat nahi padegi.
+            {port === null
+              ? "Pehle Sign in dabayein — Google sign-in link ke asli port ke saath command yahan automatically aa jayegi. Phir laptop terminal mein command chalakar Open browser par click karein."
+              : "Command chalane ke baad Open browser par click karein — Google sign-in ke baad redirect khud tunnel ke zariye sign-in tak pohanch kar login complete kar degi. URL paste karne ki zaroorat nahi padegi."}
           </span>
         </div>
       </div>
