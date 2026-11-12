@@ -1224,6 +1224,7 @@ export function ProviderInstanceCard({
           </FoldedSettingsSection>
         </div>
       ) : instance.driver !== "opencodebypasssetup" &&
+        instance.driver !== "antigravity" &&
         (!driverOption || deriveProviderSettingsFields(driverOption).length > 0) ? (
         <SettingsSection
           title="Runtime"
@@ -1235,7 +1236,7 @@ export function ProviderInstanceCard({
         </SettingsSection>
       ) : null}
 
-      {instance.driver !== "opencodebypasssetup" ? (
+      {instance.driver !== "opencodebypasssetup" && instance.driver !== "antigravity" ? (
         <SettingsSection
           title="Environment"
           inert={readOnly}
