@@ -21,6 +21,7 @@ import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { SettingsRow } from "./settingsLayout";
 import { ProviderAuthenticationSection } from "./ProviderAuthenticationSection";
+import { AntigravityWebConnect } from "./AntigravityWebConnect";
 
 interface ProviderSetupSectionProps {
   readonly environmentId: EnvironmentId;
@@ -99,6 +100,7 @@ function ProviderSetupActions({
   provider,
   enabled,
   binaryPath,
+  authMethod,
 }: Pick<
   ProviderSetupSectionProps,
   "environmentId" | "environmentLabel" | "instanceId" | "enabled" | "binaryPath"
@@ -292,13 +294,23 @@ function ProviderSetupActions({
         }
       />
 
-      <ProviderAuthenticationSection
-        environmentId={environmentId}
-        environmentLabel={environmentLabel}
-        instanceId={instanceId}
-        provider={provider}
-        readOnly={false}
-      />
+      {authMethod === "oauth-personal" ? (
+        <AntigravityWebConnect
+          environmentId={environmentId}
+          environmentLabel={environmentLabel}
+          instanceId={instanceId}
+          provider={provider}
+          readOnly={false}
+        />
+      ) : (
+        <ProviderAuthenticationSection
+          environmentId={environmentId}
+          environmentLabel={environmentLabel}
+          instanceId={instanceId}
+          provider={provider}
+          readOnly={false}
+        />
+      )}
 
       <p className="sr-only" role="status">
         {pendingLabel ? `${pendingLabel}.` : null}
