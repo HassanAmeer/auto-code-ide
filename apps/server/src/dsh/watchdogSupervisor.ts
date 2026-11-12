@@ -582,21 +582,6 @@ export async function startWatchdogSupervision(
     state.checklist = extractChecklistFromPrompt(prompt);
     touch(`Assigned ${subtasks.length} sub-agent(s) to watch`);
 
-    for (const st of planned) {
-      state.workers.push({
-        id: `${watchdogId}-w${st.order}`,
-        role: deriveSpecialistRole(st.title, st.category, st.order),
-        goal: st.title,
-        status: "running",
-        filesChanged: 0,
-        reviewNotes: [],
-        buildRan: false,
-        buildPassed: undefined,
-        testRan: false,
-        testPassed: undefined,
-      });
-    }
-
     // Worker count is capped so one huge task cannot fan out into a dozen
     // workers; the overflow is folded into the last worker instead of dropped.
     // An explicit request (the /parallel-subagents command) pins the count.
@@ -616,6 +601,24 @@ export async function startWatchdogSupervision(
       });
       planned = kept;
       touch(`Folding ${subtasks.length} milestones into ${maxWorkers} workers`);
+    }
+
+    // Build one worker row per planned milestone. This must run AFTER the
+    // fold above: the rows have to match the allocations the watchdog really
+    // dispatches, and `planned` does not exist before it is computed.
+    for (const st of planned) {
+      state.workers.push({
+        id: `${watchdogId}-w${st.order}`,
+        role: deriveSpecialistRole(st.title, st.category, st.order),
+        goal: st.title,
+        status: "running",
+        filesChanged: 0,
+        reviewNotes: [],
+        buildRan: false,
+        buildPassed: undefined,
+        testRan: false,
+        testPassed: undefined,
+      });
     }
 
     // Park a few worktrees ahead of time so the first dispatch is instant too.
