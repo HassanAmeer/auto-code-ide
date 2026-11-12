@@ -24,6 +24,8 @@ import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { SettingsRow } from "./settingsLayout";
 import { RedactedSensitiveText } from "./RedactedSensitiveText";
+import { RemoteTunnelBanner } from "./RemoteTunnelBanner";
+import { loopbackRedirectPort } from "./remoteTunnel";
 
 const ProviderAuthTerminal = lazy(() => import("./ProviderAuthTerminal"));
 
@@ -99,6 +101,8 @@ export function ProviderAuthenticationSection({
     interaction?.type === "browser" || interaction?.type === "deviceCode"
       ? interaction.url
       : auth?.authorizationUrl;
+  // Remote (VPS) browsers cannot reach the environment's loopback redirect; offer the SSH tunnel.
+  const tunnelPort = interaction?.type === "browser" ? loopbackRedirectPort(url) : null;
 
   async function run(command: () => Promise<AtomCommandResult<unknown, unknown>>) {
     if (pendingRef.current) return false;
@@ -423,6 +427,7 @@ export function ProviderAuthenticationSection({
               </Button>
             </form>
           ) : null}
+          {tunnelPort !== null ? <RemoteTunnelBanner port={tunnelPort} /> : null}
           {url && (interaction?.type === "browser" ? interaction.acceptsCallback : !interaction) ? (
             <form
               className="grid gap-2 py-2 text-sm leading-normal"
