@@ -735,179 +735,7 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
 
   return (
     <div className={cn("flex flex-col gap-1 py-0.5 px-0.5 select-none", className)}>
-      {/* 0. Watchdog Section — watches every sub-agent and reports the verdict */}
-      <WatchdogCard
-        projectName={projectName}
-        initiallyExpanded={true}
-        backgroundTasks={visibleBackgroundTasks.map((task) => ({
-          id: task.id,
-          title: task.title,
-          status: task.status,
-          busy: task.terminalTarget ? stoppingTerminalId === task.terminalTarget.terminalId : false,
-          onStop:
-            task.terminalTarget && canOperateTerminal
-              ? () => {
-                  void handleStopTerminal(task.terminalTarget!, task.title);
-                }
-              : undefined,
-        }))}
-      />
-
-      {/* Watchdog → Subagents link */}
-      <div className="flex items-stretch gap-0 px-2 py-0.5" aria-hidden="true">
-        <div className="ml-3 flex flex-col items-center">
-          <div className="h-2 w-px bg-cyan-500/40" />
-          <div className="size-1.5 rounded-full bg-cyan-400/70 ring-2 ring-cyan-500/20" />
-          <div className="h-2 w-px bg-cyan-500/40" />
-        </div>
-        <div className="ml-2 flex items-center">
-          <span className="text-[9.5px] font-mono uppercase tracking-wider text-cyan-400/70">
-            supervises &amp; controls
-          </span>
-        </div>
-      </div>
-
-      {/* 1. Subagents Section */}
-      <div className="flex flex-col">
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={() => setSubagentsExpanded(!subagentsExpanded)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              setSubagentsExpanded(!subagentsExpanded);
-            }
-          }}
-          className="flex h-7 items-center justify-between px-2 rounded-lg hover:bg-black/[0.035] dark:hover:bg-white/[0.08] transition-colors cursor-pointer group/header"
-          aria-expanded={subagentsExpanded}
-        >
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-foreground/85 group-hover/header:text-foreground transition-colors">
-              Subagents
-            </span>
-            <span className="rounded-full bg-muted/60 px-1.5 py-0.5 text-[11px] font-mono text-muted-foreground leading-none">
-              {subagentsCount}
-            </span>
-          </div>
-          <ChevronDownIcon
-            className={cn(
-              "size-3.5 text-muted-foreground transition-transform duration-200",
-              !subagentsExpanded && "-rotate-90",
-            )}
-          />
-        </div>
-
-        {subagentsExpanded && (
-          <div className="relative ml-3 flex flex-col gap-0.5 pt-0.5 pl-3 border-l border-cyan-500/25">
-            <span className="pointer-events-none absolute -left-[3.5px] top-2 size-1.5 rounded-full bg-cyan-500/40" />
-            {workersError ? (
-              <div
-                role="status"
-                className="py-0.5 px-2 text-[10px] text-amber-500/90 flex items-center gap-1"
-              >
-                <AlertCircle className="size-3 shrink-0" /> {workersError}
-              </div>
-            ) : null}
-            {combinedSubagents.length === 0 ? (
-              <div className="py-1 px-2 text-[11px] text-muted-foreground font-mono">
-                No active subagents
-              </div>
-            ) : (
-              combinedSubagents.map((agent, agentIdx) => {
-                const status = agent.status ?? "running";
-                const isRunning = status === "running";
-                const isCompleted = status === "completed";
-                const isFailed = status === "failed" || status === "error";
-                const isCancelled = status === "cancelled";
-                return (
-                  <div
-                    key={agent.id}
-                    className="relative flex h-7 items-center justify-between gap-2 px-2 rounded-md hover:bg-black/[0.035] dark:hover:bg-white/[0.08] transition-colors group cursor-default"
-                  >
-                    <span className="pointer-events-none absolute -left-[15px] top-1/2 h-px w-2 -translate-y-1/2 bg-cyan-500/30" />
-                    <span className="pointer-events-none absolute -left-[18px] top-1/2 size-1 -translate-y-1/2 rounded-full bg-cyan-500/35" />
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      {isCompleted ? (
-                        <CheckCircle2 className="size-3.5 text-emerald-400 shrink-0" />
-                      ) : isFailed ? (
-                        <AlertCircle className="size-3.5 text-rose-400 shrink-0" />
-                      ) : isCancelled ? (
-                        <CancelledCircleIcon className="size-3.5 text-muted-foreground shrink-0" />
-                      ) : (
-                        <SleekSpinnerRing className="size-3.5 text-cyan-400 shrink-0 animate-spin" />
-                      )}
-                      <span className="text-xs text-foreground/85 group-hover:text-foreground font-normal truncate">
-                        {agent.title}
-                      </span>
-                    </div>
-                    {isRunning ? (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          void handleStopSubagent(agent);
-                        }}
-                        disabled={busyTaskId === agent.id}
-                        className="p-1 rounded text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-default"
-                        title="Stop Subagent"
-                        aria-label={`Stop ${agent.title}`}
-                      >
-                        <SquareIcon className="size-3 fill-current" />
-                      </button>
-                    ) : isFailed ? (
-                      <span className="flex items-center gap-1 shrink-0">
-                        <Tooltip>
-                          <TooltipTrigger
-                            render={
-                              <button
-                                type="button"
-                                className="rounded p-0.5 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-colors cursor-pointer"
-                                aria-label={`Why ${agent.title} failed`}
-                              >
-                                <InfoIcon className="size-3.5" />
-                              </button>
-                            }
-                          />
-                          <TooltipPopup side="left" className="max-w-80 text-left">
-                            <span className="flex flex-col gap-1 text-[11px] leading-snug">
-                              <span className="font-semibold text-rose-300">
-                                Why this subagent failed
-                              </span>
-                              {agent.goal ? (
-                                <span className="text-muted-foreground">Goal: {agent.goal}</span>
-                              ) : null}
-                              {agent.role ? (
-                                <span className="text-muted-foreground/70">Role: {agent.role}</span>
-                              ) : null}
-                              {agent.model ? (
-                                <span className="font-mono text-muted-foreground/70">
-                                  Model: {agent.model}
-                                </span>
-                              ) : null}
-                              <span className="text-foreground/85">
-                                {agent.error ??
-                                  "No failure reason was recorded by the worker. Most often: the model hit a rate-limit (HTTP 429) or produced zero usable files."}
-                              </span>
-                            </span>
-                          </TooltipPopup>
-                        </Tooltip>
-                        <span className="rounded-full bg-rose-500/10 px-1.5 py-0.5 text-[10px] font-mono text-rose-400 uppercase leading-none">
-                          failed
-                        </span>
-                      </span>
-                    ) : null}
-                  </div>
-                );
-              })
-            )}
-          </div>
-        )}
-
-        <div className="my-1 border-b border-border/40" />
-      </div>
-
-      {/* 2. Background Tasks Section */}
+      {/* 1. Background Tasks Section */}
       <div className="flex flex-col">
         <div
           role="button"
@@ -1157,7 +985,7 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
         <div className="my-1 border-b border-border/40" />
       </div>
 
-      {/* 3. Goals Section */}
+      {/* 2. Goals Section */}
       <div className="flex flex-col">
         <div
           role="button"
@@ -1231,6 +1059,177 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
             )}
           </div>
         )}
+      </div>
+      {/* 3. Watchdog Section — watches every sub-agent and reports the verdict */}
+      <WatchdogCard
+        projectName={projectName}
+        initiallyExpanded={true}
+        backgroundTasks={visibleBackgroundTasks.map((task) => ({
+          id: task.id,
+          title: task.title,
+          status: task.status,
+          busy: task.terminalTarget ? stoppingTerminalId === task.terminalTarget.terminalId : false,
+          onStop:
+            task.terminalTarget && canOperateTerminal
+              ? () => {
+                  void handleStopTerminal(task.terminalTarget!, task.title);
+                }
+              : undefined,
+        }))}
+      />
+
+      {/* Watchdog → Subagents link */}
+      <div className="flex items-stretch gap-0 px-2 py-0.5" aria-hidden="true">
+        <div className="ml-3 flex flex-col items-center">
+          <div className="h-2 w-px bg-cyan-500/40" />
+          <div className="size-1.5 rounded-full bg-cyan-400/70 ring-2 ring-cyan-500/20" />
+          <div className="h-2 w-px bg-cyan-500/40" />
+        </div>
+        <div className="ml-2 flex items-center">
+          <span className="text-[9.5px] font-mono uppercase tracking-wider text-cyan-400/70">
+            supervises &amp; controls
+          </span>
+        </div>
+      </div>
+
+      {/* 4. Subagents Section */}
+      <div className="flex flex-col">
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => setSubagentsExpanded(!subagentsExpanded)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              setSubagentsExpanded(!subagentsExpanded);
+            }
+          }}
+          className="flex h-7 items-center justify-between px-2 rounded-lg hover:bg-black/[0.035] dark:hover:bg-white/[0.08] transition-colors cursor-pointer group/header"
+          aria-expanded={subagentsExpanded}
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-foreground/85 group-hover/header:text-foreground transition-colors">
+              Subagents
+            </span>
+            <span className="rounded-full bg-muted/60 px-1.5 py-0.5 text-[11px] font-mono text-muted-foreground leading-none">
+              {subagentsCount}
+            </span>
+          </div>
+          <ChevronDownIcon
+            className={cn(
+              "size-3.5 text-muted-foreground transition-transform duration-200",
+              !subagentsExpanded && "-rotate-90",
+            )}
+          />
+        </div>
+
+        {subagentsExpanded && (
+          <div className="relative ml-3 flex flex-col gap-0.5 pt-0.5 pl-3 border-l border-cyan-500/25">
+            <span className="pointer-events-none absolute -left-[3.5px] top-2 size-1.5 rounded-full bg-cyan-500/40" />
+            {workersError ? (
+              <div
+                role="status"
+                className="py-0.5 px-2 text-[10px] text-amber-500/90 flex items-center gap-1"
+              >
+                <AlertCircle className="size-3 shrink-0" /> {workersError}
+              </div>
+            ) : null}
+            {combinedSubagents.length === 0 ? (
+              <div className="py-1 px-2 text-[11px] text-muted-foreground font-mono">
+                No active subagents
+              </div>
+            ) : (
+              combinedSubagents.map((agent, agentIdx) => {
+                const status = agent.status ?? "running";
+                const isRunning = status === "running";
+                const isCompleted = status === "completed";
+                const isFailed = status === "failed" || status === "error";
+                const isCancelled = status === "cancelled";
+                return (
+                  <div
+                    key={agent.id}
+                    className="relative flex h-7 items-center justify-between gap-2 px-2 rounded-md hover:bg-black/[0.035] dark:hover:bg-white/[0.08] transition-colors group cursor-default"
+                  >
+                    <span className="pointer-events-none absolute -left-[15px] top-1/2 h-px w-2 -translate-y-1/2 bg-cyan-500/30" />
+                    <span className="pointer-events-none absolute -left-[18px] top-1/2 size-1 -translate-y-1/2 rounded-full bg-cyan-500/35" />
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      {isCompleted ? (
+                        <CheckCircle2 className="size-3.5 text-emerald-400 shrink-0" />
+                      ) : isFailed ? (
+                        <AlertCircle className="size-3.5 text-rose-400 shrink-0" />
+                      ) : isCancelled ? (
+                        <CancelledCircleIcon className="size-3.5 text-muted-foreground shrink-0" />
+                      ) : (
+                        <SleekSpinnerRing className="size-3.5 text-cyan-400 shrink-0 animate-spin" />
+                      )}
+                      <span className="text-xs text-foreground/85 group-hover:text-foreground font-normal truncate">
+                        {agent.title}
+                      </span>
+                    </div>
+                    {isRunning ? (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void handleStopSubagent(agent);
+                        }}
+                        disabled={busyTaskId === agent.id}
+                        className="p-1 rounded text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-default"
+                        title="Stop Subagent"
+                        aria-label={`Stop ${agent.title}`}
+                      >
+                        <SquareIcon className="size-3 fill-current" />
+                      </button>
+                    ) : isFailed ? (
+                      <span className="flex items-center gap-1 shrink-0">
+                        <Tooltip>
+                          <TooltipTrigger
+                            render={
+                              <button
+                                type="button"
+                                className="rounded p-0.5 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                                aria-label={`Why ${agent.title} failed`}
+                              >
+                                <InfoIcon className="size-3.5" />
+                              </button>
+                            }
+                          />
+                          <TooltipPopup side="left" className="max-w-80 text-left">
+                            <span className="flex flex-col gap-1 text-[11px] leading-snug">
+                              <span className="font-semibold text-rose-300">
+                                Why this subagent failed
+                              </span>
+                              {agent.goal ? (
+                                <span className="text-muted-foreground">Goal: {agent.goal}</span>
+                              ) : null}
+                              {agent.role ? (
+                                <span className="text-muted-foreground/70">Role: {agent.role}</span>
+                              ) : null}
+                              {agent.model ? (
+                                <span className="font-mono text-muted-foreground/70">
+                                  Model: {agent.model}
+                                </span>
+                              ) : null}
+                              <span className="text-foreground/85">
+                                {agent.error ??
+                                  "No failure reason was recorded by the worker. Most often: the model hit a rate-limit (HTTP 429) or produced zero usable files."}
+                              </span>
+                            </span>
+                          </TooltipPopup>
+                        </Tooltip>
+                        <span className="rounded-full bg-rose-500/10 px-1.5 py-0.5 text-[10px] font-mono text-rose-400 uppercase leading-none">
+                          failed
+                        </span>
+                      </span>
+                    ) : null}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
+
+        <div className="my-1 border-b border-border/40" />
       </div>
     </div>
   );
