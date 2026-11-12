@@ -760,7 +760,16 @@ export async function startWatchdogSupervision(
             completedAt: now(),
             error: res.error ?? "worker failed",
           });
-          return { crashed: false as const, workerId, st, allocation, changed: [] as string[] };
+          // A failed worker still has to carry the same shape as a reviewed
+          // one: the merge phase reads `reviewIssues`/`changed` off every row.
+          return {
+            crashed: false as const,
+            workerId,
+            st,
+            allocation,
+            changed: [] as string[],
+            reviewIssues: [] as string[],
+          };
         }
 
         const changed = listChangedFiles(allocation.worktreePath);
@@ -780,7 +789,7 @@ export async function startWatchdogSupervision(
     // ── PHASE 3: Merge workers SEQUENTIALLY (git needs a stable order) ──
     const mergeable = reviewed.filter(
       (r): r is Extract<typeof r, { crashed: false }> =>
-        !r.crashed && r.reviewIssues.length === 0 && r.changed.length > 0,
+        !r.crashed && (r.reviewIssues ?? []).length === 0 && r.changed.length > 0,
     );
     const allChangedFiles = reviewed.flatMap((r) => (r.crashed ? [] : r.changed));
 
@@ -791,7 +800,7 @@ export async function startWatchdogSupervision(
       }
       const row = state.workers.find((w) => w.id === r.workerId);
       if (!row) continue;
-      if (r.reviewIssues.length > 0) {
+      if ((r.reviewIssues ?? []).length > 0) {
         row.reviewNotes.push("skipped merge — review found issues");
         continue;
       }
