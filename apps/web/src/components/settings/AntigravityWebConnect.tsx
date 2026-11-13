@@ -45,9 +45,44 @@ export function AntigravityWebConnect({
   const [phase, setPhase] = useState<ConnectPhase>("idle");
   const [error, setError] = useState<string | null>(null);
   const [waitingUrl, setWaitingUrl] = useState<string | null>(null);
+  const [pastedInput, setPastedInput] = useState("");
+  const [isSubmittingPaste, setIsSubmittingPaste] = useState(false);
   // Generation counter; bumping cancels any in-flight poll loop.
   const generationRef = useRef(0);
   const tunnelPort = loopbackRedirectPort(waitingUrl);
+
+  async function handlePasteSubmit() {
+    if (!pastedInput.trim()) return;
+    setIsSubmittingPaste(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/antigravity-connect/paste-callback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          callbackUrl: pastedInput.trim(),
+          instanceId,
+        }),
+      });
+      const data = (await res.json().catch(() => null)) as {
+        ok?: boolean;
+        message?: string;
+      } | null;
+      if (!res.ok || !data?.ok) {
+        setError(data?.message ?? "Invalid callback code or URL. Please try again.");
+        setIsSubmittingPaste(false);
+        return;
+      }
+      setPhase("idle");
+      setWaitingUrl(null);
+      setPastedInput("");
+      await refresh({ environmentId, input: { instanceId, refreshModels: true } });
+    } catch {
+      setError("Could not complete sign-in. Check server connection.");
+    } finally {
+      setIsSubmittingPaste(false);
+    }
+  }
 
   async function pollUntilSettled(state: string, generation: number) {
     for (;;) {
@@ -212,7 +247,41 @@ export function AntigravityWebConnect({
         </div>
       }
     >
-      {signedIn ? null : <RemoteTunnelBanner port={tunnelPort} />}
+      {signedIn ? null : (
+        <div className="flex flex-col gap-2 w-full pt-1">
+          {phase === "waiting" ? (
+            <div className="flex flex-col gap-1.5 p-2.5 rounded-lg border border-border/40 bg-muted/20 text-xs">
+              <span className="font-medium text-foreground">Remote VPS Sign-In Helper:</span>
+              <span className="text-muted-foreground">
+                If the browser opens and cannot connect to <code>127.0.0.1</code>, copy the full
+                redirected URL (containing <code>code=</code>) from your browser address bar and
+                paste it below:
+              </span>
+              <div className="flex items-center gap-1.5 pt-1">
+                <input
+                  type="text"
+                  value={pastedInput}
+                  onChange={(e) => setPastedInput(e.target.value)}
+                  placeholder="http://127.0.0.1:.../api/antigravity-connect/callback?code=..."
+                  className="flex-1 px-2.5 py-1 text-xs rounded border border-border bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") void handlePasteSubmit();
+                  }}
+                />
+                <Button
+                  size="sm"
+                  variant="default"
+                  disabled={!pastedInput.trim() || isSubmittingPaste}
+                  onClick={() => void handlePasteSubmit()}
+                >
+                  {isSubmittingPaste ? "Connecting…" : "Complete"}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+          <RemoteTunnelBanner port={tunnelPort} />
+        </div>
+      )}
     </SettingsRow>
   );
 }

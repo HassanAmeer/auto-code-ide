@@ -405,6 +405,66 @@ export const layerAntigravityConnectRoute = Layer.mergeAll(
     }),
   ),
   HttpRouter.add(
+    "POST",
+    "/api/antigravity-connect/paste-callback",
+    Effect.gen(function* () {
+      const request = yield* HttpServerRequest.HttpServerRequest;
+      const body = (yield* request.json.pipe(
+        Effect.orElseSucceed(() => ({}) as Record<string, unknown>),
+      )) as {
+        callbackUrl?: unknown;
+        code?: unknown;
+        state?: unknown;
+        instanceId?: unknown;
+      };
+      let code = typeof body.code === "string" ? body.code.trim() : "";
+      let state = typeof body.state === "string" ? body.state.trim() : "";
+      if (typeof body.callbackUrl === "string" && body.callbackUrl.trim()) {
+        try {
+          const parsed = new URL(body.callbackUrl.trim());
+          const c = parsed.searchParams.get("code");
+          const s = parsed.searchParams.get("state");
+          if (c) code = c.trim();
+          if (s) state = s.trim();
+        } catch {
+          if (!code) code = body.callbackUrl.trim();
+        }
+      }
+      if (!code) {
+        return HttpServerResponse.jsonUnsafe(
+          { ok: false, message: "Authorization code not found in pasted URL or input." },
+          { status: 400 },
+        );
+      }
+      sweepExpired();
+      let entry = state ? pendingConnects.get(state) : undefined;
+      if (!entry) {
+        const instanceId =
+          typeof body.instanceId === "string" && instanceIdPattern.test(body.instanceId.trim())
+            ? body.instanceId.trim()
+            : "antigravity";
+        entry = {
+          instanceId,
+          expiresAt: Date.now() + CONNECT_TTL_MS,
+          status: "pending",
+        };
+      }
+      const serverConfig = yield* ServerConfig.ServerConfig;
+      const outcome = yield* Effect.promise(() =>
+        runConnect({
+          code,
+          stateDir: serverConfig.stateDir,
+          instanceId: entry!.instanceId,
+          port: serverConfig.port,
+        }),
+      );
+      if (state && pendingConnects.has(state)) {
+        pendingConnects.delete(state);
+      }
+      return HttpServerResponse.jsonUnsafe(outcome, { status: outcome.ok ? 200 : 400 });
+    }),
+  ),
+  HttpRouter.add(
     "GET",
     "/api/antigravity-connect/tunnel-config",
     Effect.gen(function* () {

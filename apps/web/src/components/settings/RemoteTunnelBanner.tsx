@@ -54,7 +54,7 @@ export function RemoteTunnelBanner({
   readonly host?: string | undefined;
 }) {
   const [copied, setCopied] = useState(false);
-  const [fetched] = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const fetched = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
   const resolvedPort = port ?? fetched?.port ?? null;
   const sshHost = host ?? detectSshHost();
   const command =

@@ -5353,11 +5353,26 @@ export default function Sidebar() {
                 </button>
                 {projectGroups.map((group) => {
                   const isSelected = projectScopeKey === group.projectKey;
-                  const isWorking = workingThreads.some((thread) =>
-                    group.memberProjects.some(
+                  const isWorking = workingThreads.some((thread) => {
+                    const matchesProject = group.memberProjects.some(
                       (m) => m.environmentId === thread.environmentId && m.id === thread.projectId,
-                    ),
-                  );
+                    );
+                    if (!matchesProject) return false;
+                    const runStatus = thread.latestRun?.status;
+                    const runtimeActive =
+                      thread.runtime?.status === "running" ||
+                      thread.runtime?.status === "starting" ||
+                      thread.runtime?.status === "preparing";
+                    if (
+                      !runtimeActive &&
+                      (runStatus === "completed" ||
+                        runStatus === "failed" ||
+                        runStatus === "cancelled")
+                    ) {
+                      return false;
+                    }
+                    return true;
+                  });
                   return (
                     <button
                       key={group.projectKey}
@@ -5857,12 +5872,27 @@ export default function Sidebar() {
                   <div className="flex flex-col gap-1 w-full">
                     {projectGroups.map((group) => {
                       const isSelected = projectScopeKey === group.projectKey;
-                      const isWorking = workingThreads.some((thread) =>
-                        group.memberProjects.some(
+                      const isWorking = workingThreads.some((thread) => {
+                        const matchesProject = group.memberProjects.some(
                           (m) =>
                             m.environmentId === thread.environmentId && m.id === thread.projectId,
-                        ),
-                      );
+                        );
+                        if (!matchesProject) return false;
+                        const runStatus = thread.latestRun?.status;
+                        const runtimeActive =
+                          thread.runtime?.status === "running" ||
+                          thread.runtime?.status === "starting" ||
+                          thread.runtime?.status === "preparing";
+                        if (
+                          !runtimeActive &&
+                          (runStatus === "completed" ||
+                            runStatus === "failed" ||
+                            runStatus === "cancelled")
+                        ) {
+                          return false;
+                        }
+                        return true;
+                      });
                       return (
                         <button
                           key={group.projectKey}
