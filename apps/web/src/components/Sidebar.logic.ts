@@ -595,6 +595,18 @@ export function filterSidebarV2VisibleThreads<
   });
 }
 
+/**
+ * Legacy sidebar visibility: hide archived threads AND sub-agent child
+ * threads. Sub-agents live in the right-side "Subagents" panel only — they must
+ * never appear as separate chat-history entries in the left sidebar. Mirrors
+ * `filterSidebarV2VisibleThreads` so both sidebar modes behave the same.
+ */
+export function filterLegacySidebarVisibleThreads<
+  T extends Pick<SidebarThreadSummary, "archivedAt" | "lineage">,
+>(threads: readonly T[]): T[] {
+  return threads.filter((thread) => thread.archivedAt === null && !isSidebarSubagentThread(thread));
+}
+
 export function getSidebarForkParentThreadId(
   thread: Pick<SidebarThreadSummary, "forkedFrom" | "lineage">,
 ) {

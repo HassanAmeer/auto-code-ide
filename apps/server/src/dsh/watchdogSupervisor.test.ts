@@ -170,7 +170,7 @@ describe("watchdog snapshot", () => {
     const snapshot = getWatchdogSnapshot();
     expect(snapshot.ok).toBe(true);
     expect(Array.isArray(snapshot.watchdogs)).toBe(true);
-    expect(snapshot.flowMode).toBe("watchdog");
+    expect(snapshot.active).toBe(0);
   });
 
   it("does not stop an unknown watchdog", () => {

@@ -1,15 +1,14 @@
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import {
   ChevronDownIcon,
   InfoIcon,
   Loader2Icon,
-  PlayIcon,
   SquareIcon,
   CheckCircle2,
   AlertCircle,
 } from "lucide-react";
 import {
-  AuthOrchestrationOperateScope,
   AuthTerminalOperateScope,
   type EnvironmentId,
   type ScheduledTask,
@@ -34,6 +33,7 @@ import { stackedThreadToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { WatchdogCard } from "./WatchdogCard";
 import { SleekSpinnerRing } from "./sleekSpinner";
+import { buildThreadRouteParams } from "../../threadRoutes";
 
 // --- Custom SVGs matching the exact screenshot design ---
 
@@ -190,6 +190,60 @@ export interface BackgroundServicesWidgetProps {
   readonly goals?: ReadonlyArray<GoalItem>;
 }
 
+/** Minimal shape of a projection turn item we care about. */
+export interface BackgroundTurnItem {
+  readonly id: string;
+  readonly type: string;
+  readonly status: string;
+  readonly input?: string | undefined;
+  readonly query?: string | undefined;
+  readonly pattern?: string | undefined;
+  readonly exitCode?: number | undefined;
+}
+
+/**
+ * Turn-item commands are chat *history* (echo ..., "Preparing workspace", build
+ * logs), not live background services. Only commands still RUNNING belong in
+ * the Background Tasks list — completed/failed ones are deliberately dropped.
+ * Exported as a pure helper so this rule is directly testable.
+ */
+export function collectRunningTurnItemTasks(
+  turnItems: ReadonlyArray<BackgroundTurnItem> | undefined,
+): UnifiedBackgroundTaskItem[] {
+  const list: UnifiedBackgroundTaskItem[] = [];
+  for (const item of (turnItems ?? []).slice().reverse()) {
+    if (!item || item.status !== "running") continue;
+    if (list.length >= 25) break;
+    if (item.type === "command_execution") {
+      const cleanCmd = (item.input || "").replace(/\s+/g, " ").trim();
+      list.push({
+        id: `turn-cmd-${item.id}`,
+        title: cleanCmd || "Command execution",
+        kind: "command",
+        status: "running",
+        detail: (item.input || "").trim().slice(0, 400),
+        exitCode: item.exitCode ?? null,
+      });
+    } else if (item.type === "web_search" || item.type === "file_search") {
+      const queryText = item.query || item.pattern || item.type;
+      list.push({
+        id: `turn-search-${item.id}`,
+        title: `Search ${queryText} in codebase`,
+        kind: "command",
+        status: "running",
+      });
+    }
+  }
+  return list;
+}
+
+/** Only tasks actually running in the background are shown in the sidebar. */
+export function filterLiveBackgroundTasks(
+  tasks: ReadonlyArray<UnifiedBackgroundTaskItem>,
+): UnifiedBackgroundTaskItem[] {
+  return tasks.filter((t) => t.status === "running").slice(0, 30);
+}
+
 // Fallback showcase items matching the user's screenshot when no active thread or tasks exist
 const DEMO_SHOWCASE_SUBAGENTS: ReadonlyArray<SubagentItem> = [];
 
@@ -255,6 +309,22 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
   const activeEnvId = useActiveEnvironmentId();
   const primaryEnvId = usePrimaryEnvironmentId();
   const environmentId = propEnvironmentId ?? activeEnvId ?? primaryEnvId;
+  const navigate = useNavigate();
+
+  // Open a sub-agent's own chat screen. Only delegated sub-agents have a real
+  // child thread (projection.subagents[].childThreadId); dsh telemetry workers
+  // have no thread to open, so their rows stay non-clickable. Sub-agents never
+  // appear as separate left-sidebar chat entries (see LegacySidebar).
+  const openSubagentChat = useCallback(
+    (childThreadId: ThreadId | undefined) => {
+      if (!childThreadId || !environmentId) return;
+      void navigate({
+        to: "/$environmentId/$threadId",
+        params: buildThreadRouteParams(scopeThreadRef(environmentId, childThreadId)),
+      });
+    },
+    [environmentId, navigate],
+  );
 
   // Subagents and Goals are expanded by default as in the screenshot
   // Collapsed by default — the sidebar stays quiet until something is running.
@@ -264,9 +334,11 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
 
   const [busyTaskId, setBusyTaskId] = useState<string | null>(null);
   const [stoppingTerminalId, setStoppingTerminalId] = useState<string | null>(null);
-  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
 
-  // Stored & API state for workers and goals
+  // Stored & API state for workers and goals. Once a sub-agent has appeared it
+  // stays in the list (greyed out when finished/failed/cancelled) even after
+  // the server prunes its telemetry — it must never vanish from this panel.
+  const seenSubagentsRef = useRef<Map<string, SubagentItem>>(new Map());
   const [storedWorkers, setStoredWorkers] = useState<SubagentItem[]>(() => readStoredWorkers());
   const [storedGoals, setStoredGoals] = useState<GoalItem[]>(() => readStoredGoals());
   const [apiWorkers, setApiWorkers] = useState<SubagentItem[]>([]);
@@ -360,7 +432,6 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
     };
   }, [scope, projectName, threadId]);
 
-  const canOperate = useEnvironmentScope(environmentId, AuthOrchestrationOperateScope);
   const canOperateTerminal = useEnvironmentScope(environmentId, AuthTerminalOperateScope);
 
   // 1. Thread Projection for subagents & turn execution commands
@@ -387,16 +458,30 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
     }));
   }, [rawSubagents]);
 
-  // Aggregate subagents from all sources (deduped by id, then by normalized
-  // title/role — the same worker reappears across projection/API/storage), and
-  // pruned by a 3-minute freshness gate so old completed agents clear out.
+  // Aggregate subagents from all sources. Every sub-agent that has appeared is
+  // retained here (running / completed / failed / cancelled — old ones grey out
+  // in place instead of disappearing). This is the ONLY place they are listed;
+  // left-sidebar chat history excludes them (see LegacySidebar).
   const combinedSubagents = useMemo<SubagentItem[]>(() => {
     if (propSubagents && propSubagents.length > 0) return [...propSubagents];
 
-    const map = new Map<string, SubagentItem>();
-    for (const item of projectionSubagents) map.set(item.id, item);
-    for (const item of apiWorkers) if (!map.has(item.id)) map.set(item.id, item);
-    for (const item of storedWorkers) if (!map.has(item.id)) map.set(item.id, item);
+    // Merge live sources into the retained history keyed by id. A live row wins
+    // over the retained copy, but a missing live row never removes its history
+    // entry — the server prunes telemetry after a few minutes.
+    const map = new Map<string, SubagentItem>(seenSubagentsRef.current);
+    for (const item of storedWorkers) {
+      const prev = map.get(item.id);
+      map.set(item.id, prev ? { ...prev, ...item, childThreadId: prev.childThreadId } : item);
+    }
+    for (const item of apiWorkers) {
+      const prev = map.get(item.id);
+      map.set(item.id, prev ? { ...prev, ...item, childThreadId: prev.childThreadId } : item);
+    }
+    for (const item of projectionSubagents) {
+      const prev = map.get(item.id);
+      map.set(item.id, prev ? { ...prev, ...item } : item);
+    }
+    seenSubagentsRef.current = new Map(map);
 
     // Dedupe by normalized title + role: the same specialist reported by
     // multiple sources must collapse into a single row.
@@ -424,13 +509,11 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
       }
     }
 
-    // Freshness gate: drop completed/failed entries older than 3 minutes (or
-    // without a known finish timestamp) — the sidebar must read "No active
-    // subagents" once the run is truly done, not pile up ghost rows.
-    const FRESH_CUTOFF = Date.now() - 3 * 60 * 1000;
-    return [...byTitle.values()].filter((item) => {
-      if (item.status === "running") return true;
-      return typeof item.completedAt === "number" && item.completedAt > FRESH_CUTOFF;
+    // Running first, then most-recently finished — old rows simply stay grey.
+    return [...byTitle.values()].sort((a, b) => {
+      const rank = (s?: string) => (s === "running" ? 1 : 0);
+      if (rank(a.status) !== rank(b.status)) return rank(b.status) - rank(a.status);
+      return (b.completedAt ?? 0) - (a.completedAt ?? 0);
     });
   }, [propSubagents, projectionSubagents, apiWorkers, storedWorkers]);
 
@@ -473,10 +556,6 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
   });
 
   // Action mutations
-  const runTaskNow = useAtomCommand(serverEnvironment.runScheduledTaskNow, {
-    label: "run scheduled task from background services",
-  });
-
   const closeTerminalMutation = useAtomCommand(terminalEnvironment.close, {
     label: "stop background command from background services",
   });
@@ -587,36 +666,6 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
     [busyTaskId, environmentId, interruptTurn],
   );
 
-  const handleRunTask = useCallback(
-    async (task: ScheduledTask) => {
-      if (!environmentId || !canOperate || busyTaskId !== null) return;
-      setBusyTaskId(task.id);
-      const result = await runTaskNow({
-        environmentId,
-        input: { id: task.id },
-      });
-      setBusyTaskId(null);
-      if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
-        toastManager.add(
-          stackedThreadToast({
-            type: "error",
-            title: `Failed to run ${task.title}`,
-            description: String(squashAtomCommandFailure(result)),
-          }),
-        );
-      } else {
-        toastManager.add(
-          stackedThreadToast({
-            type: "info",
-            title: `Started ${task.title}`,
-            description: "Task is executing in background",
-          }),
-        );
-      }
-    },
-    [busyTaskId, canOperate, environmentId, runTaskNow],
-  );
-
   // Aggregate Background Tasks
   const backgroundTasks = useMemo<UnifiedBackgroundTaskItem[]>(() => {
     const list: UnifiedBackgroundTaskItem[] = [];
@@ -673,41 +722,14 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
       });
     }
 
-    // C. Turn Items from Thread Projection (command executions & searches)
-    const turnItems = threadDetails?.projection?.turnItems ?? [];
-    let addedTurnItems = 0;
-    for (let i = turnItems.length - 1; i >= 0 && addedTurnItems < 25; i--) {
-      const item = turnItems[i];
-      if (!item) continue;
-
-      if (item.type === "command_execution") {
-        const isFailed =
-          item.status === "failed" ||
-          item.outputIndicatesFailure === true ||
-          (item.exitCode !== undefined && item.exitCode !== 0);
-        const isRunning = item.status === "running";
-        const cleanCmd = (item.input || "").replace(/\s+/g, " ").trim();
-        addedTurnItems += 1;
-        list.push({
-          id: `turn-cmd-${item.id}`,
-          title: cleanCmd || "Command execution",
-          kind: isFailed ? "cancelled" : "command",
-          status: isRunning ? "running" : isFailed ? "failed" : "completed",
-          detail: (item.input || "").trim().slice(0, 400),
-          exitCode: item.exitCode ?? null,
-        });
-      } else if (item.type === "web_search" || item.type === "file_search") {
-        const isFailed = item.status === "failed";
-        const queryText = (item as any).query || (item as any).pattern || item.type;
-        addedTurnItems += 1;
-        list.push({
-          id: `turn-search-${item.id}`,
-          title: `Search ${queryText} in codebase`,
-          kind: isFailed ? "cancelled" : "command",
-          status: item.status === "running" ? "running" : isFailed ? "failed" : "completed",
-        });
-      }
-    }
+    // C. Turn Items from Thread Projection — ONLY commands still RUNNING in the
+    // background. Completed/failed commands are turn *history* (echo ..., build
+    // logs, "Preparing workspace"), not live background services.
+    list.push(
+      ...collectRunningTurnItemTasks(
+        threadDetails?.projection?.turnItems as ReadonlyArray<BackgroundTurnItem> | undefined,
+      ),
+    );
 
     return list;
   }, [
@@ -718,12 +740,13 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
     projectRoot,
   ]);
 
-  const visibleBackgroundTasks = useMemo(() => {
-    if (scope !== "project") return backgroundTasks;
-    const running = backgroundTasks.filter((t) => t.status === "running");
-    const rest = backgroundTasks.filter((t) => t.status !== "running");
-    return [...running, ...rest].slice(0, 30);
-  }, [backgroundTasks, scope]);
+  // Only tasks actually running in the background belong here. Finished
+  // commands, scheduled/pending timers and failed runs are not "running
+  // background services" and stay out of the sidebar card.
+  const visibleBackgroundTasks = useMemo(
+    () => filterLiveBackgroundTasks(backgroundTasks),
+    [backgroundTasks],
+  );
 
   const runningBackgroundTasks = useMemo(
     () => visibleBackgroundTasks.filter((t) => t.status === "running").length,
@@ -782,199 +805,54 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
               </div>
             ) : (
               visibleBackgroundTasks.map((task) => {
-                const isRunning = task.status === "running";
-                const isTaskBusy = task.rawTask && busyTaskId === task.rawTask.id;
                 const isTermBusy =
                   task.terminalTarget && stoppingTerminalId === task.terminalTarget.terminalId;
-                const isExpanded = expandedTaskId === task.id;
-                const hasDetails = isRunning || task.kind !== "scheduled" || Boolean(task.detail);
 
+                // Only LIVE background tasks are listed. The row shows a single
+                // stop control; the section header is the collapse toggle.
                 return (
                   <div
                     key={task.id}
-                    className="flex flex-col rounded-md hover:bg-black/[0.035] dark:hover:bg-white/[0.08] transition-colors"
+                    className="flex h-7 items-center justify-between gap-2 px-2 rounded-md hover:bg-black/[0.035] dark:hover:bg-white/[0.08] transition-colors"
                   >
-                    <div
-                      role="button"
-                      tabIndex={0}
-                      aria-expanded={isExpanded}
-                      onClick={() => setExpandedTaskId(isExpanded ? null : task.id)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          setExpandedTaskId(isExpanded ? null : task.id);
-                        }
-                      }}
-                      className="flex h-7 items-center justify-between gap-2 px-2 rounded-md cursor-pointer group"
-                    >
-                      <div className="flex items-center gap-2 min-w-0 flex-1">
-                        {task.kind === "cancelled" ? (
-                          <CancelledCircleIcon className="size-3.5 shrink-0 text-muted-foreground" />
-                        ) : task.kind === "timer" ? (
-                          <TimerIcon className="size-3.5 shrink-0 text-muted-foreground" />
-                        ) : isRunning ? (
-                          <div className="relative flex items-center justify-center shrink-0">
-                            <TerminalBoxIcon className="size-3.5 text-foreground/80" />
-                            <span className="absolute -top-0.5 -right-0.5 size-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                          </div>
-                        ) : (
-                          <TerminalBoxIcon className="size-3.5 shrink-0 text-muted-foreground" />
-                        )}
-
-                        <span
-                          className="text-xs text-foreground/85 group-hover:text-foreground font-normal truncate leading-normal"
-                          title={task.title}
-                        >
-                          {task.title}
-                        </span>
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <div className="relative flex items-center justify-center shrink-0">
+                        <TerminalBoxIcon className="size-3.5 text-foreground/80" />
+                        <span className="absolute -top-0.5 -right-0.5 size-1.5 rounded-full bg-emerald-400 animate-pulse" />
                       </div>
-
-                      {/* Actions (Stop terminal / Run scheduled task) */}
-                      <div className="flex items-center gap-1 shrink-0">
-                        {task.terminalTarget && canOperateTerminal && isRunning && (
-                          <Tooltip>
-                            <TooltipTrigger
-                              render={
-                                <button
-                                  type="button"
-                                  disabled={isTermBusy}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    void handleStopTerminal(task.terminalTarget!, task.title);
-                                  }}
-                                  className="size-5 rounded hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 flex items-center justify-center transition-colors"
-                                  aria-label={`Stop ${task.title}`}
-                                >
-                                  {isTermBusy ? (
-                                    <Loader2Icon className="size-3 animate-spin text-rose-400" />
-                                  ) : (
-                                    <SquareIcon className="size-3 fill-current" />
-                                  )}
-                                </button>
-                              }
-                            />
-                            <TooltipPopup side="left">Stop service</TooltipPopup>
-                          </Tooltip>
-                        )}
-
-                        {task.rawTask && canOperate && (
-                          <Tooltip>
-                            <TooltipTrigger
-                              render={
-                                <button
-                                  type="button"
-                                  disabled={isTaskBusy}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    void handleRunTask(task.rawTask!);
-                                  }}
-                                  className="size-5 rounded hover:bg-white/10 text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors"
-                                  aria-label={`Run ${task.title} now`}
-                                >
-                                  {isTaskBusy ? (
-                                    <Loader2Icon className="size-3 animate-spin text-sky-400" />
-                                  ) : (
-                                    <PlayIcon className="size-3 text-emerald-400" />
-                                  )}
-                                </button>
-                              }
-                            />
-                            <TooltipPopup side="left">Run now</TooltipPopup>
-                          </Tooltip>
-                        )}
-
-                        {hasDetails && (
-                          <ChevronDownIcon
-                            aria-hidden="true"
-                            className={cn(
-                              "size-3.5 text-muted-foreground transition-transform duration-200",
-                              isExpanded && "rotate-180",
-                            )}
-                          />
-                        )}
-                      </div>
+                      <span
+                        className="text-xs text-foreground/85 font-normal truncate leading-normal"
+                        title={task.title}
+                      >
+                        {task.title}
+                      </span>
                     </div>
 
-                    {/* Uncollapsed detail: server, path, pid or command + exit code */}
-                    {isExpanded && hasDetails && (
-                      <div className="mx-2 mb-1.5 rounded-md border border-border/40 bg-muted/20 px-2 py-1.5 font-mono text-[10.5px] leading-relaxed text-muted-foreground">
-                        {task.terminalTarget ? (
-                          <>
-                            <div>
-                              <span className="text-foreground/60">server: </span>
-                              <span className="break-all text-foreground/85">{task.title}</span>
-                            </div>
-                            {task.path ? (
-                              <div>
-                                <span className="text-foreground/60">path: </span>
-                                <span className="break-all">{task.path}</span>
-                              </div>
-                            ) : null}
-                            {task.pid != null ? (
-                              <div>
-                                <span className="text-foreground/60">pid: </span>
-                                {task.pid}
-                              </div>
-                            ) : null}
-                            <div>
-                              <span className="text-foreground/60">status: </span>
-                              {isRunning ? (
-                                <span className="text-emerald-400">running</span>
+                    {task.terminalTarget && canOperateTerminal ? (
+                      <Tooltip>
+                        <TooltipTrigger
+                          render={
+                            <button
+                              type="button"
+                              disabled={isTermBusy}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void handleStopTerminal(task.terminalTarget!, task.title);
+                              }}
+                              className="size-5 shrink-0 rounded hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 flex items-center justify-center transition-colors"
+                              aria-label={`Stop ${task.title}`}
+                            >
+                              {isTermBusy ? (
+                                <Loader2Icon className="size-3 animate-spin text-rose-400" />
                               ) : (
-                                task.status
+                                <SquareIcon className="size-3 fill-current" />
                               )}
-                            </div>
-                            {canOperateTerminal && isRunning ? (
-                              <button
-                                type="button"
-                                disabled={isTermBusy}
-                                onClick={() =>
-                                  void handleStopTerminal(task.terminalTarget!, task.title)
-                                }
-                                className="mt-1 inline-flex cursor-pointer items-center gap-1.5 rounded border border-rose-400/40 bg-rose-500/10 px-2 py-0.5 text-[10.5px] text-rose-400 hover:bg-rose-500/20 hover:text-rose-300 disabled:opacity-50"
-                              >
-                                {isTermBusy ? (
-                                  <Loader2Icon className="size-3 animate-spin" />
-                                ) : (
-                                  <SquareIcon className="size-3 fill-current" />
-                                )}
-                                Stop service
-                              </button>
-                            ) : null}
-                          </>
-                        ) : task.detail ? (
-                          <>
-                            <div className="whitespace-pre-wrap break-all">
-                              <span className="text-foreground/60">command: </span>
-                              <span className="text-foreground/85">{task.detail}</span>
-                            </div>
-                            {typeof task.exitCode === "number" ? (
-                              <div>
-                                <span className="text-foreground/60">exit code: </span>
-                                {task.exitCode}
-                              </div>
-                            ) : null}
-                            <div>
-                              <span className="text-foreground/60">status: </span>
-                              {task.status}
-                            </div>
-                          </>
-                        ) : (
-                          <>
-                            {task.detail ? (
-                              <div className="whitespace-pre-wrap break-all">
-                                <span className="text-foreground/60">prompt: </span>
-                                {task.detail}
-                              </div>
-                            ) : null}
-                            <div>
-                              <span className="text-foreground/60">last run: </span>
-                              {String(task.rawTask?.lastRunStatus ?? "pending")}
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    )}
+                            </button>
+                          }
+                        />
+                        <TooltipPopup side="left">Stop service</TooltipPopup>
+                      </Tooltip>
+                    ) : null}
                   </div>
                 );
               })
@@ -1060,37 +938,8 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
           </div>
         )}
       </div>
-      {/* 3. Watchdog Section — watches every sub-agent and reports the verdict */}
-      <WatchdogCard
-        projectName={projectName}
-        initiallyExpanded={true}
-        backgroundTasks={visibleBackgroundTasks.map((task) => ({
-          id: task.id,
-          title: task.title,
-          status: task.status,
-          busy: task.terminalTarget ? stoppingTerminalId === task.terminalTarget.terminalId : false,
-          onStop:
-            task.terminalTarget && canOperateTerminal
-              ? () => {
-                  void handleStopTerminal(task.terminalTarget!, task.title);
-                }
-              : undefined,
-        }))}
-      />
-
-      {/* Watchdog → Subagents link */}
-      <div className="flex items-stretch gap-0 px-2 py-0.5" aria-hidden="true">
-        <div className="ml-3 flex flex-col items-center">
-          <div className="h-2 w-px bg-cyan-500/40" />
-          <div className="size-1.5 rounded-full bg-cyan-400/70 ring-2 ring-cyan-500/20" />
-          <div className="h-2 w-px bg-cyan-500/40" />
-        </div>
-        <div className="ml-2 flex items-center">
-          <span className="text-[9.5px] font-mono uppercase tracking-wider text-cyan-400/70">
-            supervises &amp; controls
-          </span>
-        </div>
-      </div>
+      {/* 3. Watchdog Section — only live supervision of sub-agents + final handoff */}
+      <WatchdogCard projectName={projectName} initiallyExpanded={true} />
 
       {/* 4. Subagents Section */}
       <div className="flex flex-col">
@@ -1145,10 +994,33 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
                 const isCompleted = status === "completed";
                 const isFailed = status === "failed" || status === "error";
                 const isCancelled = status === "cancelled";
+                // Only delegated sub-agents with a real child thread can open a
+                // chat screen. Dsh telemetry workers have no thread, so their
+                // rows stay inert. Finished/old rows simply grey out in place.
+                const canOpen = Boolean(agent.childThreadId);
                 return (
                   <div
                     key={agent.id}
-                    className="relative flex h-7 items-center justify-between gap-2 px-2 rounded-md hover:bg-black/[0.035] dark:hover:bg-white/[0.08] transition-colors group cursor-default"
+                    {...(canOpen
+                      ? {
+                          role: "button" as const,
+                          tabIndex: 0,
+                          "aria-label": `Open ${agent.title} chat`,
+                          title: `Open ${agent.title} chat`,
+                          onClick: () => openSubagentChat(agent.childThreadId),
+                          onKeyDown: (e: KeyboardEvent<HTMLDivElement>) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              openSubagentChat(agent.childThreadId);
+                            }
+                          },
+                        }
+                      : {})}
+                    className={cn(
+                      "relative flex h-7 items-center justify-between gap-2 px-2 rounded-md hover:bg-black/[0.035] dark:hover:bg-white/[0.08] transition-colors group",
+                      canOpen ? "cursor-pointer" : "cursor-default",
+                      !isRunning ? "opacity-70" : undefined,
+                    )}
                   >
                     <span className="pointer-events-none absolute -left-[15px] top-1/2 h-px w-2 -translate-y-1/2 bg-cyan-500/30" />
                     <span className="pointer-events-none absolute -left-[18px] top-1/2 size-1 -translate-y-1/2 rounded-full bg-cyan-500/35" />
@@ -1187,6 +1059,7 @@ export const BackgroundServicesWidget = memo(function BackgroundServicesWidget({
                             render={
                               <button
                                 type="button"
+                                onClick={(e) => e.stopPropagation()}
                                 className="rounded p-0.5 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-colors cursor-pointer"
                                 aria-label={`Why ${agent.title} failed`}
                               >

@@ -208,6 +208,7 @@ import {
 import { isCommandPaletteOpen, openCommandPalette } from "../commandPaletteBus";
 import {
   archiveSelectedThreadEntries,
+  filterLegacySidebarVisibleThreads,
   buildMultiSelectThreadContextMenuItems,
   deleteSelectedThreadEntries,
   getSidebarThreadIdsToPrewarm,
@@ -1426,7 +1427,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
   const sidebarThreads = useThreadShellsForProjectRefs(project.memberProjectRefs);
   const projectThreads = useMemo(() => {
     const seen = new Set<string>();
-    return sidebarThreads.filter((thread) => {
+    return filterLegacySidebarVisibleThreads(sidebarThreads).filter((thread) => {
       if (terminalIdsSet.has(thread.id)) return false;
       if (seen.has(thread.id)) return false;
       seen.add(thread.id);
@@ -1526,7 +1527,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       });
     };
     const visibleProjectThreads = sortThreads(
-      projectThreads.filter((thread) => thread.archivedAt === null),
+      filterLegacySidebarVisibleThreads(projectThreads),
       threadSortOrder,
     );
     const projectStatus = resolveProjectStatusIndicator(
@@ -4134,8 +4135,10 @@ export default function LegacySidebar() {
     animatedThreadListsRef.current.add(node);
   }, []);
 
+  // Sub-agent child threads live in the right-side "Subagents" panel, not as
+  // separate chat-history entries in the left sidebar.
   const visibleThreads = useMemo(
-    () => sidebarThreads.filter((thread) => thread.archivedAt === null),
+    () => filterLegacySidebarVisibleThreads(sidebarThreads),
     [sidebarThreads],
   );
   const sortedProjects = useMemo(() => {
@@ -4182,9 +4185,7 @@ export default function LegacySidebar() {
     () =>
       sortedProjects.flatMap((project) => {
         const projectThreads = sortThreads(
-          (threadsByProjectKey.get(project.projectKey) ?? []).filter(
-            (thread) => thread.archivedAt === null,
-          ),
+          filterLegacySidebarVisibleThreads(threadsByProjectKey.get(project.projectKey) ?? []),
           sidebarThreadSortOrder,
         );
         const projectExpanded = resolveProjectExpanded(

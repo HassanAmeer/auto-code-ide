@@ -25,6 +25,10 @@ export interface WatchdogWorkerRow {
   readonly buildPassed: boolean | undefined;
   readonly testRan: boolean;
   readonly testPassed: boolean | undefined;
+  /** Model lane this worker runs on (different lanes = real parallelism). */
+  readonly model?: string | undefined;
+  /** Live streamed worker output, newest last. */
+  readonly logs?: ReadonlyArray<string> | undefined;
 }
 
 export interface WatchdogItem {
@@ -53,21 +57,47 @@ export interface WatchdogItem {
     | undefined;
 }
 
-export interface WatchdogBackgroundTask {
-  readonly id: string;
-  readonly title: string;
-  readonly status: string;
-  /** Stop handler — when present the row shows a stop icon. */
-  readonly onStop?: (() => void) | undefined;
-  readonly busy?: boolean | undefined;
-}
-
 export interface WatchdogCardProps {
   readonly projectName?: string | undefined;
   readonly className?: string;
   readonly initiallyExpanded?: boolean;
-  /** App-level background tasks (terminals, scheduled runs) shown in the card. */
-  readonly backgroundTasks?: ReadonlyArray<WatchdogBackgroundTask> | undefined;
+}
+
+/** Short live label for what the watchdog is doing to its sub-agents right now. */
+function phaseLabel(status: WatchdogStatus): string {
+  switch (status) {
+    case "watching":
+      return "Sub-agents par nazar rakh raha hai";
+    case "reviewing":
+      return "Sub-agents ka output review / fix karwa raha hai";
+    case "building":
+      return "Merged workspace par build chala raha hai";
+    case "testing":
+      return "Test suite chala raha hai";
+    case "completed":
+      return "Sab sub-agents verified — kaam mukammal";
+    case "failed":
+      return "Masla mila — repair / manage kar raha hai";
+    default:
+      return "Sub-agents ko sahi track par chalaa raha hai";
+  }
+}
+
+function phaseTone(status: WatchdogStatus): string {
+  switch (status) {
+    case "reviewing":
+      return "bg-violet-500/15 text-violet-400";
+    case "building":
+      return "bg-amber-500/15 text-amber-400";
+    case "testing":
+      return "bg-sky-500/15 text-sky-400";
+    case "completed":
+      return "bg-emerald-500/15 text-emerald-400";
+    case "failed":
+      return "bg-rose-500/15 text-rose-400";
+    default:
+      return "bg-cyan-500/15 text-cyan-400";
+  }
 }
 
 function statusIcon(status: WatchdogStatus) {
@@ -136,13 +166,11 @@ export const WatchdogCard = memo(function WatchdogCard({
   projectName,
   className,
   initiallyExpanded = true,
-  backgroundTasks,
 }: WatchdogCardProps) {
   const [items, setItems] = useState<WatchdogItem[]>([]);
   const [expanded, setExpanded] = useState(initiallyExpanded);
   const [error, setError] = useState<string | null>(null);
   const [stoppingId, setStoppingId] = useState<string | null>(null);
-  const [flowMode, setFlowMode] = useState<"watchdog" | "direct">("watchdog");
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -150,14 +178,13 @@ export const WatchdogCard = memo(function WatchdogCard({
         const params = new URLSearchParams();
         if (projectName) params.set("projectName", projectName);
         const query = params.size > 0 ? `?${params.toString()}` : "";
-        const res = await fetch(`/api/super-agent/watchdog${query}`, { signal });
+        const res = await fetch(`/api/super-agent/watchdog${query}`, {
+          ...(signal ? { signal } : {}),
+        });
         if (!res.ok) throw new Error(`Watchdog API returned ${res.status}`);
         const data = await res.json();
         const list: WatchdogItem[] = Array.isArray(data?.watchdogs) ? data.watchdogs : [];
         setItems(list);
-        if (data?.flowMode === "direct" || data?.flowMode === "watchdog") {
-          setFlowMode(data.flowMode);
-        }
         setError(null);
       } catch (err) {
         if ((err as any)?.name === "AbortError") return;
@@ -178,20 +205,6 @@ export const WatchdogCard = memo(function WatchdogCard({
       window.clearInterval(interval);
     };
   }, [load]);
-
-  const handleFlowModeChange = useCallback(async () => {
-    const next = flowMode === "watchdog" ? "direct" : "watchdog";
-    setFlowMode(next);
-    try {
-      await fetch("/api/app-settings/save", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key: "super_agent_flow_mode", value: next }),
-      });
-    } finally {
-      void load();
-    }
-  }, [flowMode, load]);
 
   const [stoppingWorkerId, setStoppingWorkerId] = useState<string | null>(null);
 
@@ -277,21 +290,6 @@ export const WatchdogCard = memo(function WatchdogCard({
               {activeCount} active
             </span>
           ) : null}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              void handleFlowModeChange();
-            }}
-            className="rounded-full bg-violet-500/15 px-1.5 py-0.5 text-[10px] font-mono text-violet-400 leading-none hover:bg-violet-500/25 transition-colors cursor-pointer"
-            title={
-              flowMode === "watchdog"
-                ? "Manager task flow: WATCHDOG (every task runs under the Watchdog). Click to switch to direct."
-                : "Manager task flow: DIRECT (tasks run on the plain model path). Click to switch to watchdog."
-            }
-          >
-            flow: {flowMode}
-          </button>
         </div>
         <ChevronDownIcon
           className={cn(
@@ -311,44 +309,7 @@ export const WatchdogCard = memo(function WatchdogCard({
               <AlertCircle className="size-3 shrink-0" /> {error}
             </div>
           ) : null}
-          {backgroundTasks && backgroundTasks.length > 0 ? (
-            <div className="flex flex-col gap-0.5 pb-1">
-              <div className="px-2 pt-0.5 text-[9.5px] uppercase tracking-wider text-muted-foreground/70">
-                Background tasks
-              </div>
-              {backgroundTasks.map((task) => (
-                <div key={task.id} className="flex items-center gap-1.5 px-2">
-                  {task.status === "running" ? (
-                    <SleekSpinnerRing className="size-2.5 text-cyan-400 shrink-0 animate-spin" />
-                  ) : (
-                    <SquareIcon className="size-2.5 text-muted-foreground/60 shrink-0" />
-                  )}
-                  <span
-                    className="text-[10.5px] text-foreground/75 truncate flex-1"
-                    title={task.title}
-                  >
-                    {task.title}
-                  </span>
-                  {task.onStop ? (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        task.onStop?.();
-                      }}
-                      disabled={task.busy}
-                      className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer disabled:opacity-40"
-                      title="Stop this background task"
-                      aria-label={`Stop ${task.title}`}
-                    >
-                      <SquareIcon className="size-2.5 fill-current" />
-                    </button>
-                  ) : null}
-                </div>
-              ))}
-            </div>
-          ) : null}
-          {items.length === 0 && (!backgroundTasks || backgroundTasks.length === 0) ? (
+          {items.length === 0 ? (
             <div className="py-1 px-2 text-[11px] text-muted-foreground font-mono">
               No active watchdog
             </div>
@@ -357,6 +318,8 @@ export const WatchdogCard = memo(function WatchdogCard({
             ? null
             : items.map((item) => {
                 const isActive = item.status !== "completed" && item.status !== "failed";
+                const done = item.workers.filter((w) => w.status === "completed").length;
+                const running = item.workers.filter((w) => w.status === "running").length;
                 return (
                   <div
                     key={item.id}
@@ -382,8 +345,29 @@ export const WatchdogCard = memo(function WatchdogCard({
                       ) : null}
                     </div>
 
+                    {/* Live supervision action — what the watchdog is doing to its sub-agents right now. */}
+                    <div className="flex items-center gap-1.5 pl-5.5 min-w-0">
+                      <span
+                        className={cn(
+                          "shrink-0 rounded px-1.5 py-0.5 text-[9px] font-mono uppercase leading-none",
+                          phaseTone(item.status),
+                        )}
+                      >
+                        {item.status}
+                      </span>
+                      <span
+                        className="text-[10px] text-foreground/80 truncate"
+                        title={item.lastAction}
+                      >
+                        {phaseLabel(item.status)}
+                      </span>
+                    </div>
                     <div className="text-[10px] text-muted-foreground/85 font-mono truncate pl-5.5">
                       {item.lastAction}
+                    </div>
+                    <div className="text-[9.5px] text-muted-foreground/70 font-mono pl-5.5">
+                      {done}/{item.workers.length} sub-agents done
+                      {running > 0 ? ` · ${running} abhi parallel chal rahe hain` : ""}
                     </div>
 
                     {item.workers.map((worker) => (
@@ -460,36 +444,21 @@ export const WatchdogCard = memo(function WatchdogCard({
                         {item.verdict}
                       </div>
                     ) : null}
-                    {/* Background tasks the watchdog is running — each one is
-                      stoppable on its own, without killing the whole run. */}
-                    {item.workers.filter((w) => w.status === "running").length > 0 ? (
+                    {item.issues.length > 0 ? (
                       <div className="flex flex-col gap-0.5 pl-5.5">
-                        <div className="text-[9.5px] uppercase tracking-wider text-muted-foreground/70">
-                          Background tasks
-                        </div>
-                        {item.workers
-                          .filter((w) => w.status === "running")
-                          .map((w) => (
-                            <div key={`bg-${w.id}`} className="flex items-center gap-1.5">
-                              <SleekSpinnerRing className="size-2.5 text-cyan-400 shrink-0 animate-spin" />
-                              <span className="text-[10px] text-foreground/70 truncate flex-1">
-                                {w.goal}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  void handleStopWorker(w.id, w.role);
-                                }}
-                                disabled={stoppingWorkerId === w.id}
-                                className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer disabled:opacity-40"
-                                title="Stop this background task"
-                                aria-label={`Stop ${w.goal}`}
-                              >
-                                <SquareIcon className="size-2.5 fill-current" />
-                              </button>
-                            </div>
-                          ))}
+                        {item.issues.slice(0, 3).map((issue, index) => (
+                          <div key={`issue-${index}`} className="flex items-start gap-1.5">
+                            <AlertCircle className="size-3 text-amber-400 shrink-0 mt-px" />
+                            <span className="text-[10px] text-amber-400/90 truncate" title={issue}>
+                              {issue}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                    {item.status === "completed" ? (
+                      <div className="text-[10px] text-emerald-400/90 font-mono pl-5.5">
+                        → Super Agent ko final result de diya
                       </div>
                     ) : null}
                     {item.checklist && item.checklist.length > 0 ? (
