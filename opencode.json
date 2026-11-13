@@ -48,8 +48,38 @@
         }
       },
       "models": {
+        "anthropic/baidu/ernie-5.5-flash-preview:free[1m]": {
+          "name": "anthropic/baidu/ernie-5.5-flash-preview:free[1m]"
+        },
+        "anthropic/baidu/ernie-light-dt-1.0-intl[1m]": {
+          "name": "anthropic/baidu/ernie-light-dt-1.0-intl[1m]"
+        },
+        "anthropic/google/gemini-4-carbon[1m]": {
+          "name": "anthropic/google/gemini-4-carbon[1m]"
+        },
+        "anthropic/nex-agi/nex-n2.6": {
+          "name": "anthropic/nex-agi/nex-n2.6"
+        },
+        "anthropic/thinkingmachines/inkling-2-small:free[1m]": {
+          "name": "anthropic/thinkingmachines/inkling-2-small:free[1m]"
+        },
+        "anthropic/claude-fable-5.2[1m]": {
+          "name": "anthropic/claude-fable-5.2[1m]"
+        },
+        "anthropic/meta/muse-ember[1m]": {
+          "name": "anthropic/meta/muse-ember[1m]"
+        },
+        "anthropic/liquid/lfm-3-1.7b": {
+          "name": "anthropic/liquid/lfm-3-1.7b"
+        },
+        "anthropic/liquid/lfm-3-1.7b:free": {
+          "name": "anthropic/liquid/lfm-3-1.7b:free"
+        },
         "anthropic/google/gemini-omni-1.2-flash": {
           "name": "anthropic/google/gemini-omni-1.2-flash"
+        },
+        "anthropic/kt/midm-k-3.0-pro": {
+          "name": "anthropic/kt/midm-k-3.0-pro"
         },
         "anthropic/openrouter/auto[1m]": {
           "name": "anthropic/openrouter/auto[1m]"
@@ -66,8 +96,8 @@
         "anthropic/tencent/hy4[1m]": {
           "name": "anthropic/tencent/hy4[1m]"
         },
-        "anthropic/stealth/crouton-alpha[1m]": {
-          "name": "anthropic/stealth/crouton-alpha[1m]"
+        "anthropic/motif-technologies/motif-3": {
+          "name": "anthropic/motif-technologies/motif-3"
         },
         "anthropic/z-ai/glm-5.3-flashx-legal[1m]": {
           "name": "anthropic/z-ai/glm-5.3-flashx-legal[1m]"
@@ -77,36 +107,6 @@
         },
         "anthropic/openai/gpt-6.1-terra-pro": {
           "name": "anthropic/openai/gpt-6.1-terra-pro"
-        },
-        "anthropic/openai/gpt-6.1-terra": {
-          "name": "anthropic/openai/gpt-6.1-terra"
-        },
-        "anthropic/moonshotai/kimi-k3.1-pro[1m]": {
-          "name": "anthropic/moonshotai/kimi-k3.1-pro[1m]"
-        },
-        "anthropic/recursive/flint-v1.0:free": {
-          "name": "anthropic/recursive/flint-v1.0:free"
-        },
-        "anthropic/minimax/minimax-m3.1-flash[1m]": {
-          "name": "anthropic/minimax/minimax-m3.1-flash[1m]"
-        },
-        "anthropic/deepseek/deepseek-v4.1-flash-1017[1m]": {
-          "name": "anthropic/deepseek/deepseek-v4.1-flash-1017[1m]"
-        },
-        "anthropic/elorian/glimpse": {
-          "name": "anthropic/elorian/glimpse"
-        },
-        "anthropic/xingchen-agi/xing4.0-29b-a4b:free": {
-          "name": "anthropic/xingchen-agi/xing4.0-29b-a4b:free"
-        },
-        "anthropic/reflection/beam-1.0-501b-a23b[1m]": {
-          "name": "anthropic/reflection/beam-1.0-501b-a23b[1m]"
-        },
-        "anthropic/inception/mercury-3[1m]": {
-          "name": "anthropic/inception/mercury-3[1m]"
-        },
-        "anthropic/prism-ml/ternary-bonsai-2-9b": {
-          "name": "anthropic/prism-ml/ternary-bonsai-2-9b"
         }
       }
     },
@@ -114,8 +114,7 @@
       "npm": "@ai-sdk/openai-compatible",
       "name": "vpsm",
       "options": {
-        "baseURL": "http://187.52.117.2:8377/v1",
-        "apiKey": "no-key"
+        "baseURL": "http://187.52.117.2:8377/v1"
       },
       "models": {
         "abliterated-large-v2": {
@@ -1333,8 +1332,7 @@
       "npm": "@ai-sdk/openai-compatible",
       "name": "vpsm",
       "options": {
-        "baseURL": "http://187.52.117.2:8377/v1",
-        "apiKey": "no-key"
+        "baseURL": "http://187.52.117.2:8377/v1"
       },
       "models": {
         "abliterated-large-v2": {
@@ -2560,8 +2558,38 @@
         }
       },
       "models": {
+        "anthropic/baidu/ernie-5.5-flash-preview:free[1m]": {
+          "name": "anthropic/baidu/ernie-5.5-flash-preview:free[1m]"
+        },
+        "anthropic/baidu/ernie-light-dt-1.0-intl[1m]": {
+          "name": "anthropic/baidu/ernie-light-dt-1.0-intl[1m]"
+        },
+        "anthropic/google/gemini-4-carbon[1m]": {
+          "name": "anthropic/google/gemini-4-carbon[1m]"
+        },
+        "anthropic/nex-agi/nex-n2.6": {
+          "name": "anthropic/nex-agi/nex-n2.6"
+        },
+        "anthropic/thinkingmachines/inkling-2-small:free[1m]": {
+          "name": "anthropic/thinkingmachines/inkling-2-small:free[1m]"
+        },
+        "anthropic/claude-fable-5.2[1m]": {
+          "name": "anthropic/claude-fable-5.2[1m]"
+        },
+        "anthropic/meta/muse-ember[1m]": {
+          "name": "anthropic/meta/muse-ember[1m]"
+        },
+        "anthropic/liquid/lfm-3-1.7b": {
+          "name": "anthropic/liquid/lfm-3-1.7b"
+        },
+        "anthropic/liquid/lfm-3-1.7b:free": {
+          "name": "anthropic/liquid/lfm-3-1.7b:free"
+        },
         "anthropic/google/gemini-omni-1.2-flash": {
           "name": "anthropic/google/gemini-omni-1.2-flash"
+        },
+        "anthropic/kt/midm-k-3.0-pro": {
+          "name": "anthropic/kt/midm-k-3.0-pro"
         },
         "anthropic/openrouter/auto[1m]": {
           "name": "anthropic/openrouter/auto[1m]"
@@ -2578,8 +2606,8 @@
         "anthropic/tencent/hy4[1m]": {
           "name": "anthropic/tencent/hy4[1m]"
         },
-        "anthropic/stealth/crouton-alpha[1m]": {
-          "name": "anthropic/stealth/crouton-alpha[1m]"
+        "anthropic/motif-technologies/motif-3": {
+          "name": "anthropic/motif-technologies/motif-3"
         },
         "anthropic/z-ai/glm-5.3-flashx-legal[1m]": {
           "name": "anthropic/z-ai/glm-5.3-flashx-legal[1m]"
@@ -2589,36 +2617,6 @@
         },
         "anthropic/openai/gpt-6.1-terra-pro": {
           "name": "anthropic/openai/gpt-6.1-terra-pro"
-        },
-        "anthropic/openai/gpt-6.1-terra": {
-          "name": "anthropic/openai/gpt-6.1-terra"
-        },
-        "anthropic/moonshotai/kimi-k3.1-pro[1m]": {
-          "name": "anthropic/moonshotai/kimi-k3.1-pro[1m]"
-        },
-        "anthropic/recursive/flint-v1.0:free": {
-          "name": "anthropic/recursive/flint-v1.0:free"
-        },
-        "anthropic/minimax/minimax-m3.1-flash[1m]": {
-          "name": "anthropic/minimax/minimax-m3.1-flash[1m]"
-        },
-        "anthropic/deepseek/deepseek-v4.1-flash-1017[1m]": {
-          "name": "anthropic/deepseek/deepseek-v4.1-flash-1017[1m]"
-        },
-        "anthropic/elorian/glimpse": {
-          "name": "anthropic/elorian/glimpse"
-        },
-        "anthropic/xingchen-agi/xing4.0-29b-a4b:free": {
-          "name": "anthropic/xingchen-agi/xing4.0-29b-a4b:free"
-        },
-        "anthropic/reflection/beam-1.0-501b-a23b[1m]": {
-          "name": "anthropic/reflection/beam-1.0-501b-a23b[1m]"
-        },
-        "anthropic/inception/mercury-3[1m]": {
-          "name": "anthropic/inception/mercury-3[1m]"
-        },
-        "anthropic/prism-ml/ternary-bonsai-2-9b": {
-          "name": "anthropic/prism-ml/ternary-bonsai-2-9b"
         }
       }
     },
@@ -3529,6 +3527,2316 @@
       "models": {
         "respan/gemini-4-carbon:free": {
           "name": "respan/gemini-4-carbon:free"
+        }
+      }
+    },
+    "custom_1794412782494_0vnvu": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "kilo",
+      "options": {
+        "baseURL": "https://ai-gateway.kilo.ai/api/v1"
+      },
+      "models": {
+        "kilo-auto/efficient": {
+          "name": "Auto Efficient"
+        },
+        "kilo-auto/free": {
+          "name": "Auto Free"
+        },
+        "nvidia/nemotron-3.5-super-vl:free": {
+          "name": "NVIDIA: Nemotron 3.5 Super VL (free)"
+        },
+        "stealth/glyph-cluster": {
+          "name": "Stealth: Glyph Cluster (free)"
+        },
+        "anthropic/claude-opus-5.5": {
+          "name": "Anthropic: Claude Opus 5.5"
+        },
+        "openai/gpt-6.1-sol": {
+          "name": "OpenAI: GPT-6.1 Sol"
+        },
+        "deepseek/deepseek-v4.1-flash-1017": {
+          "name": "DeepSeek: DeepSeek V4.1 Flash 1017"
+        },
+        "z-ai/glm-5.3-flash": {
+          "name": "Z.ai: GLM 5.3 Flash"
+        },
+        "baidu/ernie-5.5-flash-preview:free": {
+          "name": "Baidu: ERNIE-5.5-Flash-Preview (free)"
+        },
+        "baidu/ernie-light-dt-1.0-intl": {
+          "name": "Baidu: ERNIE-Light-DT-1.0"
+        },
+        "google/gemini-4-carbon": {
+          "name": "Google: Gemini 4 Carbon"
+        },
+        "nex-agi/nex-n2.6": {
+          "name": "Nex AGI: Nex-N2.6"
+        },
+        "thinkingmachines/inkling-2-small:free": {
+          "name": "Thinking Machines: Inkling 2 Small (free)"
+        },
+        "anthropic/claude-fable-5.2": {
+          "name": "Anthropic: Claude Fable 5.2"
+        },
+        "meta/muse-ember": {
+          "name": "Meta: Muse Ember"
+        },
+        "liquid/lfm-3-1.7b": {
+          "name": "LiquidAI: LFM3-1.7B"
+        },
+        "liquid/lfm-3-1.7b:free": {
+          "name": "LiquidAI: LFM3-1.7B (free)"
+        },
+        "google/gemini-omni-1.2-flash": {
+          "name": "Google: Gemini Omni 1.2 Flash"
+        },
+        "kt/midm-k-3.0-pro": {
+          "name": "KT: Mi:dm K 3.0 Pro"
+        },
+        "google/gemini-omni-1.1-flash": {
+          "name": "Google: Gemini Omni 1.1 Flash"
+        },
+        "ricursiveai/ripple-65b-preview": {
+          "name": "Ricursive: Ripple 65B Preview"
+        },
+        "tencent/hy4": {
+          "name": "Tencent: Hy4"
+        },
+        "motif-technologies/motif-3": {
+          "name": "Motif Technologies: Motif 3"
+        },
+        "z-ai/glm-5.3-flashx-legal": {
+          "name": "Z.ai: GLM 5.3 FlashX Legal"
+        },
+        "particle-ai/particle-1": {
+          "name": "Particle AI: Particle-1"
+        },
+        "openai/gpt-6.1-terra-pro": {
+          "name": "OpenAI: GPT-6.1 Terra Pro"
+        },
+        "openai/gpt-6.1-terra": {
+          "name": "OpenAI: GPT-6.1 Terra"
+        },
+        "moonshotai/kimi-k3.1-pro": {
+          "name": "MoonshotAI: Kimi K3.1 Pro"
+        },
+        "minimax/minimax-m3.1-flash": {
+          "name": "MiniMax: MiniMax M3.1 Flash"
+        },
+        "elorian/glimpse": {
+          "name": "Elorian: Glimpse"
+        },
+        "reflection/beam-1.0-501b-a23b": {
+          "name": "Reflection: Beam 1.0 501B A23B"
+        },
+        "prism-ml/ternary-bonsai-2-9b": {
+          "name": "PrismML: Ternary Bonsai 2 9B"
+        },
+        "moondream/moondream3-preview": {
+          "name": "Moondream: Moondream 3 Preview"
+        },
+        "moondream/moondream3.1-9b-a2b": {
+          "name": "Moondream: Moondream 3.1"
+        },
+        "meta/muse-spark-open": {
+          "name": "Meta: Muse Spark Open"
+        },
+        "nvidia/nemotron-3.5-super-vl": {
+          "name": "NVIDIA: Nemotron 3.5 Super VL"
+        },
+        "unbiased/pareto-26.10": {
+          "name": "Pareto 26.10"
+        },
+        "~unbiased/pareto-latest": {
+          "name": "Pareto Latest"
+        },
+        "unbiased/pareto-26.9": {
+          "name": "Pareto 26.9"
+        },
+        "liquid/lfm-2.5-24b-a2b": {
+          "name": "LiquidAI: LFM2.5-24B-A2B"
+        },
+        "google/gemini-4-argon": {
+          "name": "Google: Gemini 4 Argon"
+        },
+        "scaledown/summarize": {
+          "name": "ScaleDown: Summarize"
+        },
+        "scaledown/extract": {
+          "name": "ScaleDown: Extract"
+        },
+        "meta/muse-wonder": {
+          "name": "Meta: Muse Wonder"
+        },
+        "stepfun/step-5-preview": {
+          "name": "StepFun: Step 5 Preview"
+        },
+        "anthropic/claude-haiku-5.5": {
+          "name": "Anthropic: Claude Haiku 5.5"
+        },
+        "google/gemini-nano-banana-2.1": {
+          "name": "Google: Nano Banana 2.1"
+        },
+        "mistralai/mistral-large-4-0": {
+          "name": "Mistral: Mistral Large 4"
+        },
+        "inclusionai/ling-3.1-flash": {
+          "name": "inclusionAI: Ling 3.1 Flash"
+        },
+        "openai/gpt-6.1-sol-pro": {
+          "name": "OpenAI: GPT-6.1 Sol Pro"
+        },
+        "anthropic/claude-sonnet-5.5": {
+          "name": "Anthropic: Claude Sonnet 5.5"
+        },
+        "perceptron/perceptron-mk1.5": {
+          "name": "Perceptron: Perceptron Mk1.5"
+        },
+        "fireworks/ember-1": {
+          "name": "Fireworks: Ember-1"
+        },
+        "z-ai/glm-5.3-prime": {
+          "name": "Z.ai: GLM 5.3 Prime"
+        },
+        "qwen/qwen3.8-max-prime": {
+          "name": "Qwen: Qwen3.8 Max Prime"
+        },
+        "aion-labs/aion-3.5-mini": {
+          "name": "AionLabs: Aion 3.5 Mini"
+        },
+        "aion-labs/aion-3.5": {
+          "name": "AionLabs: Aion 3.5"
+        },
+        "upstage/solar-mini4": {
+          "name": "Upstage: Solar Mini 4"
+        },
+        "cohere/command-a-plus": {
+          "name": "Cohere: Command A+"
+        },
+        "openai/gpt-6-luna-pro": {
+          "name": "OpenAI: GPT-6 Luna Pro"
+        },
+        "openai/gpt-6-luna": {
+          "name": "OpenAI: GPT-6 Luna"
+        },
+        "openai/gpt-6-sol-pro": {
+          "name": "OpenAI: GPT-6 Sol Pro"
+        },
+        "openai/gpt-6-sol": {
+          "name": "OpenAI: GPT-6 Sol"
+        },
+        "xiaomi/mimo-v2.6-pro-ultraspeed": {
+          "name": "Xiaomi: MiMo-V2.6-Pro-UltraSpeed"
+        },
+        "xiaomi/mimo-v2.6-flash": {
+          "name": "Xiaomi: MiMo-V2.6-Flash"
+        },
+        "xiaomi/mimo-v2.6-pro": {
+          "name": "Xiaomi: MiMo-V2.6-Pro"
+        },
+        "x-ai/grok-4.7": {
+          "name": "SpaceXAI: Grok 4.7"
+        },
+        "qwen/qwen3.8-omni-flash": {
+          "name": "Qwen: Qwen3.8 Omni Flash"
+        },
+        "prism-ml/ternary-bonsai-2-27b": {
+          "name": "PrismML: Ternary Bonsai 2 27B"
+        },
+        "z-ai/glm-5.3-flashx": {
+          "name": "Z.ai: GLM 5.3 FlashX"
+        },
+        "~deepseek/deepseek-pro-latest": {
+          "name": "DeepSeek: DeepSeek Pro Latest"
+        },
+        "~deepseek/deepseek-flash-latest": {
+          "name": "DeepSeek: DeepSeek Flash Latest"
+        },
+        "inference-net/schematron-v2-turbo": {
+          "name": "Inference.net: Schematron V2 Turbo"
+        },
+        "inference-net/schematron-v2-small": {
+          "name": "Inference.net: Schematron V2 Small"
+        },
+        "~openai/gpt-astra-latest": {
+          "name": "OpenAI: GPT Astra Latest ($$$$)"
+        },
+        "~openai/gpt-sol-latest": {
+          "name": "OpenAI: GPT Sol Latest"
+        },
+        "~openai/gpt-terra-latest": {
+          "name": "OpenAI: GPT Terra Latest"
+        },
+        "~openai/gpt-luna-latest": {
+          "name": "OpenAI: GPT Luna Latest"
+        },
+        "sakana/fugu-ultra-v2": {
+          "name": "Sakana: Fugu Ultra v2"
+        },
+        "sakana/fugu-max": {
+          "name": "Sakana: Fugu Max"
+        },
+        "inclusionai/ling-3.0-flash-vl": {
+          "name": "inclusionAI: Ling 3.0 Flash VL"
+        },
+        "deepseek/deepseek-v4.1-flash": {
+          "name": "DeepSeek: DeepSeek V4.1 Flash"
+        },
+        "nex-agi/nex-n2.5-mini": {
+          "name": "Nex AGI: Nex-N2.5-Mini"
+        },
+        "nex-agi/nex-n2.5-pro": {
+          "name": "Nex AGI: Nex-N2.5-Pro"
+        },
+        "openai/gpt-6-astra": {
+          "name": "OpenAI: GPT-6 Astra ($$$$)"
+        },
+        "openai/gpt-6-astra-pro": {
+          "name": "OpenAI: GPT-6 Astra Pro ($$$$)"
+        },
+        "qwen/qwen3.8-max-0902": {
+          "name": "Qwen: Qwen3.8 Max (0902)"
+        },
+        "meta/muse-spark-1.3-contributor": {
+          "name": "Meta: Muse Spark 1.3 Contributor"
+        },
+        "meta/muse-spark-1.3": {
+          "name": "Meta: Muse Spark 1.3"
+        },
+        "google/gemini-3.8-flash": {
+          "name": "Google: Gemini 3.8 Flash"
+        },
+        "anthropic/claude-fable-5.1": {
+          "name": "Anthropic: Claude Fable 5.1 ($$$$)"
+        },
+        "ibm-granite/granite-4.2-8b": {
+          "name": "IBM: Granite 4.2 8B"
+        },
+        "tencent/hy4-preview": {
+          "name": "Tencent: Hy4 preview"
+        },
+        "~z-ai/glm-flash-latest": {
+          "name": "Z.ai: GLM Flash Latest"
+        },
+        "qwen/qwen3.8-flash": {
+          "name": "Qwen: Qwen3.8 Flash"
+        },
+        "meta/muse-spark-1.2-contributor": {
+          "name": "Meta: Muse Spark 1.2 Contributor"
+        },
+        "deepseek/deepseek-v4-flash-vision-exp": {
+          "name": "DeepSeek: DeepSeek V4 Flash Vision Exp"
+        },
+        "tencent/hy-mt2-1.8b": {
+          "name": "Tencent: Hy-MT2-1.8B"
+        },
+        "tencent/hy-mt2-30b-a3b": {
+          "name": "Tencent: Hy-MT2-30B-A3B"
+        },
+        "~z-ai/glm-latest": {
+          "name": "Z.ai: GLM Latest"
+        },
+        "tencent/hy-mt2-7b": {
+          "name": "Tencent: Hy-MT2-7B"
+        },
+        "z-ai/glm-5.3": {
+          "name": "Z.ai: GLM 5.3"
+        },
+        "qwen/qwen3.8-27b": {
+          "name": "Qwen: Qwen3.8 27B"
+        },
+        "dots-studio/dots-3-note-preview:free": {
+          "name": "Dots Studio: Dots3-Note Preview (free)"
+        },
+        "google/gemini-3.7-flash": {
+          "name": "Google: Gemini 3.7 Flash"
+        },
+        "bytedance-seed/seed-2-1-turbo": {
+          "name": "ByteDance Seed: Seed 2.1 Turbo"
+        },
+        "qwen/qwen3.8-2.4t-a95b": {
+          "name": "Qwen: Qwen3.8 2.4T A95B"
+        },
+        "deepseek/deepseek-v4-pro-0813": {
+          "name": "DeepSeek: DeepSeek V4 Pro 0813"
+        },
+        "x-ai/grok-4.6": {
+          "name": "SpaceXAI: Grok 4.6"
+        },
+        "liquid/lfm-2.5-2.6b": {
+          "name": "LiquidAI: LFM2.5-2.6B (retires Nov 13)"
+        },
+        "nvidia/nemotron-3.5-lightning": {
+          "name": "NVIDIA: Nemotron 3.5 Lightning"
+        },
+        "nvidia/nemotron-3.5-lightning:free": {
+          "name": "NVIDIA: Nemotron 3.5 Lightning (free)"
+        },
+        "sakana/sakana-namazu": {
+          "name": "Sakana: Sakana Namazu"
+        },
+        "upstage/solar-pro4": {
+          "name": "Upstage: Solar Pro 4"
+        },
+        "meta/muse-glimmer-30b": {
+          "name": "Meta: Muse Glimmer 30B"
+        },
+        "inclusionai/ling-3.0-tiny": {
+          "name": "inclusionAI: Ling 3.0 Tiny"
+        },
+        "meta/muse-spark-1.2": {
+          "name": "Meta: Muse Spark 1.2"
+        },
+        "~deepseek/deepseek-v4-flash-latest": {
+          "name": "DeepSeek: DeepSeek V4 Flash Latest"
+        },
+        "deepseek/deepseek-v4-flash-0731": {
+          "name": "DeepSeek: DeepSeek V4 Flash 0731"
+        },
+        "thinkingmachines/inkling-small": {
+          "name": "Thinking Machines: Inkling Small"
+        },
+        "qwen/qwen3.7-flash": {
+          "name": "Qwen: Qwen3.7 Flash"
+        },
+        "anthropic/claude-opus-5": {
+          "name": "Anthropic: Claude Opus 5"
+        },
+        "inclusionai/ling-3.0-flash": {
+          "name": "inclusionAI: Ling 3.0 Flash"
+        },
+        "google/gemini-3.6-flash": {
+          "name": "Google: Gemini 3.6 Flash"
+        },
+        "google/gemini-3.5-flash-lite": {
+          "name": "Google: Gemini 3.5 Flash Lite"
+        },
+        "meituan/longcat-2.0": {
+          "name": "Meituan: LongCat 2.0"
+        },
+        "thinkingmachines/inkling": {
+          "name": "Thinking Machines: Inkling"
+        },
+        "moonshotai/kimi-k3": {
+          "name": "MoonshotAI: Kimi K3"
+        },
+        "meta/muse-spark-1.1": {
+          "name": "Meta: Muse Spark 1.1"
+        },
+        "openai/gpt-5.6-luna-pro": {
+          "name": "OpenAI: GPT-5.6 Luna Pro"
+        },
+        "openai/gpt-5.6-luna": {
+          "name": "OpenAI: GPT-5.6 Luna"
+        },
+        "openai/gpt-5.6-terra-pro": {
+          "name": "OpenAI: GPT-5.6 Terra Pro"
+        },
+        "openai/gpt-5.6-terra": {
+          "name": "OpenAI: GPT-5.6 Terra"
+        },
+        "openai/gpt-5.6-sol-pro": {
+          "name": "OpenAI: GPT-5.6 Sol Pro"
+        },
+        "openai/gpt-5.6-sol": {
+          "name": "OpenAI: GPT-5.6 Sol"
+        },
+        "x-ai/grok-4.5": {
+          "name": "SpaceXAI: Grok 4.5"
+        },
+        "~x-ai/grok-latest": {
+          "name": "xAI: Grok Latest"
+        },
+        "aion-labs/aion-3.0-mini": {
+          "name": "AionLabs: Aion-3.0-Mini"
+        },
+        "aion-labs/aion-3.0": {
+          "name": "AionLabs: Aion-3.0"
+        },
+        "tencent/hy3": {
+          "name": "Tencent: Hy3"
+        },
+        "anthropic/claude-sonnet-5": {
+          "name": "Anthropic: Claude Sonnet 5"
+        },
+        "google/gemini-3.1-flash-lite-image": {
+          "name": "Google: Nano Banana 2 Lite (Gemini 3.1 Flash Lite Image)"
+        },
+        "sakana/fugu-ultra": {
+          "name": "Sakana: Fugu Ultra"
+        },
+        "google/gemini-3.1-flash-image": {
+          "name": "Google: Nano Banana 2 (Gemini 3.1 Flash Image)"
+        },
+        "google/gemini-3-pro-image": {
+          "name": "Google: Nano Banana Pro (Gemini 3 Pro Image)"
+        },
+        "cohere/north-mini-code:free": {
+          "name": "Cohere: North Mini Code (free)"
+        },
+        "z-ai/glm-5.2": {
+          "name": "Z.ai: GLM 5.2"
+        },
+        "moonshotai/kimi-k2.7-code": {
+          "name": "MoonshotAI: Kimi K2.7 Code"
+        },
+        "~anthropic/claude-fable-latest": {
+          "name": "Anthropic: Claude Fable Latest"
+        },
+        "anthropic/claude-fable-5": {
+          "name": "Anthropic: Claude Fable 5 ($$$$)"
+        },
+        "nvidia/nemotron-3.5-content-safety": {
+          "name": "NVIDIA: Nemotron 3.5 Content Safety"
+        },
+        "nvidia/nemotron-3-ultra-550b-a55b": {
+          "name": "NVIDIA: Nemotron 3 Ultra"
+        },
+        "nvidia/nemotron-3-ultra-550b-a55b:free": {
+          "name": "NVIDIA: Nemotron 3 Ultra (free)"
+        },
+        "qwen/qwen3.7-plus": {
+          "name": "Qwen: Qwen3.7 Plus"
+        },
+        "minimax/minimax-m3": {
+          "name": "MiniMax: MiniMax M3"
+        },
+        "stepfun/step-3.7-flash": {
+          "name": "StepFun: Step 3.7 Flash"
+        },
+        "anthropic/claude-opus-4.8": {
+          "name": "Anthropic: Claude Opus 4.8"
+        },
+        "qwen/qwen3.7-max": {
+          "name": "Qwen: Qwen3.7 Max"
+        },
+        "x-ai/grok-build-0.1": {
+          "name": "SpaceXAI: Grok Build 0.1"
+        },
+        "google/gemini-3.5-flash": {
+          "name": "Google: Gemini 3.5 Flash"
+        },
+        "perceptron/perceptron-mk1": {
+          "name": "Perceptron: Perceptron Mk1"
+        },
+        "google/gemini-3.1-flash-lite": {
+          "name": "Google: Gemini 3.1 Flash Lite"
+        },
+        "openai/gpt-chat-latest": {
+          "name": "OpenAI: GPT Chat Latest"
+        },
+        "x-ai/grok-4.3": {
+          "name": "SpaceXAI: Grok 4.3"
+        },
+        "mistralai/mistral-medium-3-5": {
+          "name": "Mistral: Mistral Medium 3.5"
+        },
+        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free": {
+          "name": "NVIDIA: Nemotron 3 Nano Omni (free)"
+        },
+        "~anthropic/claude-haiku-latest": {
+          "name": "Anthropic: Claude Haiku Latest"
+        },
+        "~openai/gpt-mini-latest": {
+          "name": "OpenAI: GPT Mini Latest"
+        },
+        "~google/gemini-pro-latest": {
+          "name": "Google: Gemini Pro Latest"
+        },
+        "~moonshotai/kimi-latest": {
+          "name": "MoonshotAI: Kimi Latest"
+        },
+        "~google/gemini-flash-latest": {
+          "name": "Google: Gemini Flash Latest"
+        },
+        "~anthropic/claude-sonnet-latest": {
+          "name": "Anthropic: Claude Sonnet Latest"
+        },
+        "qwen/qwen3.5-plus-20260420": {
+          "name": "Qwen: Qwen3.5 Plus 2026-04-20"
+        },
+        "qwen/qwen3.6-flash": {
+          "name": "Qwen: Qwen3.6 Flash"
+        },
+        "qwen/qwen3.6-35b-a3b": {
+          "name": "Qwen: Qwen3.6 35B A3B"
+        },
+        "qwen/qwen3.6-27b": {
+          "name": "Qwen: Qwen3.6 27B"
+        },
+        "openai/gpt-5.5-pro": {
+          "name": "OpenAI: GPT-5.5 Pro ($$$$)"
+        },
+        "openai/gpt-5.5": {
+          "name": "OpenAI: GPT-5.5"
+        },
+        "deepseek/deepseek-v4-pro": {
+          "name": "DeepSeek: DeepSeek V4 Pro 0423"
+        },
+        "deepseek/deepseek-v4-flash": {
+          "name": "DeepSeek: DeepSeek V4 Flash 0423"
+        },
+        "tencent/hy3-preview": {
+          "name": "Tencent: Hy3 preview"
+        },
+        "xiaomi/mimo-v2.5-pro": {
+          "name": "Xiaomi: MiMo-V2.5-Pro"
+        },
+        "xiaomi/mimo-v2.5": {
+          "name": "Xiaomi: MiMo-V2.5"
+        },
+        "openai/gpt-5.4-image-2": {
+          "name": "OpenAI: GPT-5.4 Image 2"
+        },
+        "~anthropic/claude-opus-latest": {
+          "name": "Anthropic: Claude Opus Latest"
+        },
+        "moonshotai/kimi-k2.6": {
+          "name": "MoonshotAI: Kimi K2.6"
+        },
+        "anthropic/claude-opus-4.7": {
+          "name": "Anthropic: Claude Opus 4.7"
+        },
+        "z-ai/glm-5.1": {
+          "name": "Z.ai: GLM 5.1"
+        },
+        "google/gemma-4-26b-a4b-it": {
+          "name": "Google: Gemma 4 26B A4B"
+        },
+        "google/gemma-4-31b-it": {
+          "name": "Google: Gemma 4 31B"
+        },
+        "qwen/qwen3.6-plus": {
+          "name": "Qwen: Qwen3.6 Plus"
+        },
+        "z-ai/glm-5v-turbo": {
+          "name": "Z.ai: GLM 5V Turbo"
+        },
+        "x-ai/grok-4.20-multi-agent": {
+          "name": "SpaceXAI: Grok 4.20 Multi-Agent"
+        },
+        "x-ai/grok-4.20": {
+          "name": "SpaceXAI: Grok 4.20"
+        },
+        "google/lyria-3-pro-preview": {
+          "name": "Google: Lyria 3 Pro Preview"
+        },
+        "google/lyria-3-clip-preview": {
+          "name": "Google: Lyria 3 Clip Preview"
+        },
+        "rekaai/reka-edge": {
+          "name": "Reka Edge"
+        },
+        "minimax/minimax-m2.7": {
+          "name": "MiniMax: MiniMax M2.7"
+        },
+        "openai/gpt-5.4-nano": {
+          "name": "OpenAI: GPT-5.4 Nano"
+        },
+        "openai/gpt-5.4-mini": {
+          "name": "OpenAI: GPT-5.4 Mini"
+        },
+        "mistralai/mistral-small-2603": {
+          "name": "Mistral: Mistral Small 4"
+        },
+        "z-ai/glm-5-turbo": {
+          "name": "Z.ai: GLM 5 Turbo"
+        },
+        "nvidia/nemotron-3-super-120b-a12b": {
+          "name": "NVIDIA: Nemotron 3 Super"
+        },
+        "bytedance-seed/seed-2.0-lite": {
+          "name": "ByteDance Seed: Seed-2.0-Lite"
+        },
+        "qwen/qwen3.5-9b": {
+          "name": "Qwen: Qwen3.5-9B"
+        },
+        "openai/gpt-5.4-pro": {
+          "name": "OpenAI: GPT-5.4 Pro ($$$$)"
+        },
+        "openai/gpt-5.4": {
+          "name": "OpenAI: GPT-5.4"
+        },
+        "google/gemini-3.1-flash-lite-preview": {
+          "name": "Google: Gemini 3.1 Flash Lite Preview"
+        },
+        "bytedance-seed/seed-2.0-mini": {
+          "name": "ByteDance Seed: Seed-2.0-Mini"
+        },
+        "google/gemini-3.1-flash-image-preview": {
+          "name": "Google: Nano Banana 2 (Gemini 3.1 Flash Image Preview)"
+        },
+        "qwen/qwen3.5-35b-a3b": {
+          "name": "Qwen: Qwen3.5-35B-A3B"
+        },
+        "qwen/qwen3.5-27b": {
+          "name": "Qwen: Qwen3.5-27B"
+        },
+        "qwen/qwen3.5-122b-a10b": {
+          "name": "Qwen: Qwen3.5-122B-A10B"
+        },
+        "qwen/qwen3.5-flash-02-23": {
+          "name": "Qwen: Qwen3.5-Flash"
+        },
+        "google/gemini-3.1-pro-preview-customtools": {
+          "name": "Google: Gemini 3.1 Pro Preview Custom Tools"
+        },
+        "openai/gpt-5.3-codex": {
+          "name": "OpenAI: GPT-5.3-Codex"
+        },
+        "aion-labs/aion-2.0": {
+          "name": "AionLabs: Aion-2.0"
+        },
+        "google/gemini-3.1-pro-preview": {
+          "name": "Google: Gemini 3.1 Pro Preview"
+        },
+        "anthropic/claude-sonnet-4.6": {
+          "name": "Anthropic: Claude Sonnet 4.6"
+        },
+        "qwen/qwen3.5-plus-02-15": {
+          "name": "Qwen: Qwen3.5 Plus 2026-02-15"
+        },
+        "qwen/qwen3.5-397b-a17b": {
+          "name": "Qwen: Qwen3.5 397B A17B"
+        },
+        "minimax/minimax-m2.5": {
+          "name": "MiniMax: MiniMax M2.5"
+        },
+        "z-ai/glm-5": {
+          "name": "Z.ai: GLM 5"
+        },
+        "anthropic/claude-opus-4.6": {
+          "name": "Anthropic: Claude Opus 4.6"
+        },
+        "qwen/qwen3-coder-next": {
+          "name": "Qwen: Qwen3 Coder Next"
+        },
+        "stepfun/step-3.5-flash": {
+          "name": "StepFun: Step 3.5 Flash"
+        },
+        "moonshotai/kimi-k2.5": {
+          "name": "MoonshotAI: Kimi K2.5 (retires Nov 18)"
+        },
+        "writer/palmyra-x5": {
+          "name": "Writer: Palmyra X5"
+        },
+        "openai/gpt-audio": {
+          "name": "OpenAI: GPT Audio"
+        },
+        "openai/gpt-audio-mini": {
+          "name": "OpenAI: GPT Audio Mini"
+        },
+        "z-ai/glm-4.7-flash": {
+          "name": "Z.ai: GLM 4.7 Flash"
+        },
+        "openai/gpt-5.2-codex": {
+          "name": "OpenAI: GPT-5.2-Codex"
+        },
+        "z-ai/glm-4.7": {
+          "name": "Z.ai: GLM 4.7"
+        },
+        "google/gemini-3-flash-preview": {
+          "name": "Google: Gemini 3 Flash Preview"
+        },
+        "nvidia/nemotron-3-nano-30b-a3b": {
+          "name": "NVIDIA: Nemotron 3 Nano 30B A3B"
+        },
+        "openai/gpt-5.2-pro": {
+          "name": "OpenAI: GPT-5.2 Pro ($$$$)"
+        },
+        "openai/gpt-5.2": {
+          "name": "OpenAI: GPT-5.2"
+        },
+        "mistralai/devstral-2512": {
+          "name": "Mistral: Devstral 2 2512"
+        },
+        "relace/relace-search": {
+          "name": "Relace: Relace Search"
+        },
+        "z-ai/glm-4.6v": {
+          "name": "Z.ai: GLM 4.6V"
+        },
+        "openai/gpt-5.1-codex-max": {
+          "name": "OpenAI: GPT-5.1-Codex-Max"
+        },
+        "amazon/nova-2-lite-v1": {
+          "name": "Amazon: Nova 2 Lite"
+        },
+        "mistralai/ministral-14b-2512": {
+          "name": "Mistral: Ministral 3 14B 2512"
+        },
+        "mistralai/ministral-8b-2512": {
+          "name": "Mistral: Ministral 3 8B 2512"
+        },
+        "mistralai/ministral-3b-2512": {
+          "name": "Mistral: Ministral 3 3B 2512"
+        },
+        "mistralai/mistral-large-2512": {
+          "name": "Mistral: Mistral Large 3 2512"
+        },
+        "deepseek/deepseek-v3.2": {
+          "name": "DeepSeek: DeepSeek V3.2"
+        },
+        "anthropic/claude-opus-4.5": {
+          "name": "Anthropic: Claude Opus 4.5"
+        },
+        "google/gemini-3-pro-image-preview": {
+          "name": "Google: Nano Banana Pro (Gemini 3 Pro Image Preview)"
+        },
+        "openai/gpt-5.1": {
+          "name": "OpenAI: GPT-5.1"
+        },
+        "openai/gpt-5.1-codex": {
+          "name": "OpenAI: GPT-5.1-Codex"
+        },
+        "openai/gpt-5.1-codex-mini": {
+          "name": "OpenAI: GPT-5.1-Codex-Mini"
+        },
+        "moonshotai/kimi-k2-thinking": {
+          "name": "MoonshotAI: Kimi K2 Thinking"
+        },
+        "amazon/nova-premier-v1": {
+          "name": "Amazon: Nova Premier 1.0"
+        },
+        "perplexity/sonar-pro-search": {
+          "name": "Perplexity: Sonar Pro Search"
+        },
+        "mistralai/voxtral-small-24b-2507": {
+          "name": "Mistral: Voxtral Small 24B 2507"
+        },
+        "openai/gpt-oss-safeguard-20b": {
+          "name": "OpenAI: gpt-oss-safeguard-20b"
+        },
+        "openai/gpt-5-image-mini": {
+          "name": "OpenAI: GPT-5 Image Mini (retires Dec 1)"
+        },
+        "anthropic/claude-haiku-4.5": {
+          "name": "Anthropic: Claude Haiku 4.5"
+        },
+        "qwen/qwen3-vl-8b-instruct": {
+          "name": "Qwen: Qwen3 VL 8B Instruct"
+        },
+        "openai/gpt-5-image": {
+          "name": "OpenAI: GPT-5 Image ($$$$)"
+        },
+        "google/gemini-2.5-flash-image": {
+          "name": "Google: Nano Banana (Gemini 2.5 Flash Image)"
+        },
+        "qwen/qwen3-vl-30b-a3b-thinking": {
+          "name": "Qwen: Qwen3 VL 30B A3B Thinking"
+        },
+        "qwen/qwen3-vl-30b-a3b-instruct": {
+          "name": "Qwen: Qwen3 VL 30B A3B Instruct"
+        },
+        "openai/gpt-5-pro": {
+          "name": "OpenAI: GPT-5 Pro ($$$$)"
+        },
+        "z-ai/glm-4.6": {
+          "name": "Z.ai: GLM 4.6"
+        },
+        "anthropic/claude-sonnet-4.5": {
+          "name": "Anthropic: Claude Sonnet 4.5"
+        },
+        "deepseek/deepseek-v3.2-exp": {
+          "name": "DeepSeek: DeepSeek V3.2 Exp"
+        },
+        "thedrummer/cydonia-24b-v4.1": {
+          "name": "TheDrummer: Cydonia 24B V4.1"
+        },
+        "relace/relace-apply-3": {
+          "name": "Relace: Relace Apply 3"
+        },
+        "qwen/qwen3-vl-235b-a22b-instruct": {
+          "name": "Qwen: Qwen3 VL 235B A22B Instruct"
+        },
+        "deepseek/deepseek-v3.1-terminus": {
+          "name": "DeepSeek: DeepSeek V3.1 Terminus"
+        },
+        "qwen/qwen3-coder-flash": {
+          "name": "Qwen: Qwen3 Coder Flash"
+        },
+        "qwen/qwen3-next-80b-a3b-instruct": {
+          "name": "Qwen: Qwen3 Next 80B A3B Instruct"
+        },
+        "moonshotai/kimi-k2-0905": {
+          "name": "MoonshotAI: Kimi K2 0905"
+        },
+        "nousresearch/hermes-4-405b": {
+          "name": "Nous: Hermes 4 405B"
+        },
+        "deepseek/deepseek-chat-v3.1": {
+          "name": "DeepSeek: DeepSeek V3.1"
+        },
+        "mistralai/mistral-medium-3.1": {
+          "name": "Mistral: Mistral Medium 3.1"
+        },
+        "z-ai/glm-4.5v": {
+          "name": "Z.ai: GLM 4.5V"
+        },
+        "openai/gpt-5": {
+          "name": "OpenAI: GPT-5 (retires Dec 11)"
+        },
+        "openai/gpt-5-mini": {
+          "name": "OpenAI: GPT-5 Mini (retires Dec 11)"
+        },
+        "openai/gpt-5-nano": {
+          "name": "OpenAI: GPT-5 Nano (retires Dec 11)"
+        },
+        "openai/gpt-oss-120b": {
+          "name": "OpenAI: gpt-oss-120b"
+        },
+        "openai/gpt-oss-20b": {
+          "name": "OpenAI: gpt-oss-20b"
+        },
+        "anthropic/claude-opus-4.1": {
+          "name": "Anthropic: Claude Opus 4.1 ($$$$)"
+        },
+        "mistralai/codestral-2508": {
+          "name": "Mistral: Codestral 2508"
+        },
+        "qwen/qwen3-coder-30b-a3b-instruct": {
+          "name": "Qwen: Qwen3 Coder 30B A3B Instruct"
+        },
+        "qwen/qwen3-30b-a3b-instruct-2507": {
+          "name": "Qwen: Qwen3 30B A3B Instruct 2507"
+        },
+        "z-ai/glm-4.5": {
+          "name": "Z.ai: GLM 4.5"
+        },
+        "z-ai/glm-4.5-air": {
+          "name": "Z.ai: GLM 4.5 Air"
+        },
+        "qwen/qwen3-235b-a22b-thinking-2507": {
+          "name": "Qwen: Qwen3 235B A22B Thinking 2507"
+        },
+        "qwen/qwen3-coder": {
+          "name": "Qwen: Qwen3 Coder 480B A35B"
+        },
+        "bytedance/ui-tars-1.5-7b": {
+          "name": "ByteDance: UI-TARS 7B"
+        },
+        "google/gemini-2.5-flash-lite": {
+          "name": "Google: Gemini 2.5 Flash Lite"
+        },
+        "qwen/qwen3-235b-a22b-2507": {
+          "name": "Qwen: Qwen3 235B A22B Instruct 2507"
+        },
+        "moonshotai/kimi-k2": {
+          "name": "MoonshotAI: Kimi K2 0711"
+        },
+        "cognitivecomputations/dolphin-mistral-24b-venice-edition": {
+          "name": "Venice: Uncensored"
+        },
+        "tencent/hunyuan-a13b-instruct": {
+          "name": "Tencent: Hunyuan A13B Instruct"
+        },
+        "morph/morph-v3-large": {
+          "name": "Morph: Morph V3 Large"
+        },
+        "morph/morph-v3-fast": {
+          "name": "Morph: Morph V3 Fast"
+        },
+        "mistralai/mistral-small-3.2-24b-instruct": {
+          "name": "Mistral: Mistral Small 3.2 24B"
+        },
+        "google/gemini-2.5-flash": {
+          "name": "Google: Gemini 2.5 Flash"
+        },
+        "google/gemini-2.5-pro": {
+          "name": "Google: Gemini 2.5 Pro"
+        },
+        "openai/o3-pro": {
+          "name": "OpenAI: o3 Pro ($$$$)"
+        },
+        "google/gemini-2.5-pro-preview": {
+          "name": "Google: Gemini 2.5 Pro Preview 06-05"
+        },
+        "deepseek/deepseek-r1-0528": {
+          "name": "DeepSeek: R1 0528"
+        },
+        "mistralai/mistral-medium-3": {
+          "name": "Mistral: Mistral Medium 3"
+        },
+        "meta-llama/llama-guard-4-12b": {
+          "name": "Meta: Llama Guard 4 12B"
+        },
+        "qwen/qwen3-30b-a3b": {
+          "name": "Qwen: Qwen3 30B A3B"
+        },
+        "qwen/qwen3-14b": {
+          "name": "Qwen: Qwen3 14B"
+        },
+        "qwen/qwen3-32b": {
+          "name": "Qwen: Qwen3 32B"
+        },
+        "openai/o3": {
+          "name": "OpenAI: o3 (retires Dec 11)"
+        },
+        "openai/gpt-4.1": {
+          "name": "OpenAI: GPT-4.1"
+        },
+        "openai/gpt-4.1-mini": {
+          "name": "OpenAI: GPT-4.1 Mini"
+        },
+        "openai/gpt-4.1-nano": {
+          "name": "OpenAI: GPT-4.1 Nano"
+        },
+        "meta-llama/llama-4-maverick": {
+          "name": "Meta: Llama 4 Maverick"
+        },
+        "meta-llama/llama-4-scout": {
+          "name": "Meta: Llama 4 Scout"
+        },
+        "deepseek/deepseek-chat-v3-0324": {
+          "name": "DeepSeek: DeepSeek V3 0324"
+        },
+        "mistralai/mistral-small-3.1-24b-instruct": {
+          "name": "Mistral: Mistral Small 3.1 24B"
+        },
+        "google/gemma-3-4b-it": {
+          "name": "Google: Gemma 3 4B"
+        },
+        "google/gemma-3-12b-it": {
+          "name": "Google: Gemma 3 12B"
+        },
+        "cohere/command-a": {
+          "name": "Cohere: Command A"
+        },
+        "rekaai/reka-flash-3": {
+          "name": "Reka Flash 3"
+        },
+        "google/gemma-3-27b-it": {
+          "name": "Google: Gemma 3 27B"
+        },
+        "thedrummer/skyfall-36b-v2": {
+          "name": "TheDrummer: Skyfall 36B V2"
+        },
+        "perplexity/sonar-reasoning-pro": {
+          "name": "Perplexity: Sonar Reasoning Pro"
+        },
+        "perplexity/sonar-pro": {
+          "name": "Perplexity: Sonar Pro"
+        },
+        "perplexity/sonar-deep-research": {
+          "name": "Perplexity: Sonar Deep Research"
+        },
+        "mistralai/mistral-saba": {
+          "name": "Mistral: Saba"
+        },
+        "aion-labs/aion-rp-llama-3.1-8b": {
+          "name": "AionLabs: Aion-RP 1.0 (8B)"
+        },
+        "qwen/qwen2.5-vl-72b-instruct": {
+          "name": "Qwen: Qwen2.5 VL 72B Instruct"
+        },
+        "qwen/qwen-plus": {
+          "name": "Qwen: Qwen-Plus"
+        },
+        "mistralai/mistral-small-24b-instruct-2501": {
+          "name": "Mistral: Mistral Small 3"
+        },
+        "perplexity/sonar": {
+          "name": "Perplexity: Sonar"
+        },
+        "microsoft/phi-4": {
+          "name": "Microsoft: Phi 4"
+        },
+        "deepseek/deepseek-chat": {
+          "name": "DeepSeek: DeepSeek V3"
+        },
+        "cohere/command-r7b-12-2024": {
+          "name": "Cohere: Command R7B (12-2024)"
+        },
+        "meta-llama/llama-3.3-70b-instruct": {
+          "name": "Meta: Llama 3.3 70B Instruct"
+        },
+        "amazon/nova-lite-v1": {
+          "name": "Amazon: Nova Lite 1.0"
+        },
+        "amazon/nova-micro-v1": {
+          "name": "Amazon: Nova Micro 1.0"
+        },
+        "amazon/nova-pro-v1": {
+          "name": "Amazon: Nova Pro 1.0"
+        },
+        "openai/gpt-4o-2024-11-20": {
+          "name": "OpenAI: GPT-4o (2024-11-20)"
+        },
+        "mistralai/mistral-large-2407": {
+          "name": "Mistral Large 2407"
+        },
+        "qwen/qwen-2.5-coder-32b-instruct": {
+          "name": "Qwen2.5 Coder 32B Instruct"
+        },
+        "thedrummer/unslopnemo-12b": {
+          "name": "TheDrummer: UnslopNemo 12B"
+        },
+        "anthracite-org/magnum-v4-72b": {
+          "name": "Magnum v4 72B"
+        },
+        "meta-llama/llama-3.2-1b-instruct": {
+          "name": "Meta: Llama 3.2 1B Instruct (retires Nov 20)"
+        },
+        "meta-llama/llama-3.2-3b-instruct": {
+          "name": "Meta: Llama 3.2 3B Instruct"
+        },
+        "qwen/qwen-2.5-72b-instruct": {
+          "name": "Qwen2.5 72B Instruct"
+        },
+        "cohere/command-r-08-2024": {
+          "name": "Cohere: Command R (08-2024)"
+        },
+        "cohere/command-r-plus-08-2024": {
+          "name": "Cohere: Command R+ (08-2024)"
+        },
+        "sao10k/l3.1-euryale-70b": {
+          "name": "Sao10K: Llama 3.1 Euryale 70B v2.2"
+        },
+        "sao10k/l3-lunaris-8b": {
+          "name": "Sao10K: Llama 3 8B Lunaris"
+        },
+        "openai/gpt-4o-2024-08-06": {
+          "name": "OpenAI: GPT-4o (2024-08-06)"
+        },
+        "meta-llama/llama-3.1-70b-instruct": {
+          "name": "Meta: Llama 3.1 70B Instruct"
+        },
+        "meta-llama/llama-3.1-8b-instruct": {
+          "name": "Meta: Llama 3.1 8B Instruct"
+        },
+        "mistralai/mistral-nemo": {
+          "name": "Mistral: Mistral Nemo"
+        },
+        "openai/gpt-4o-mini": {
+          "name": "OpenAI: GPT-4o-mini"
+        },
+        "openai/gpt-4o-mini-2024-07-18": {
+          "name": "OpenAI: GPT-4o-mini (2024-07-18)"
+        },
+        "google/gemma-2-27b-it": {
+          "name": "Google: Gemma 2 27B"
+        },
+        "openai/gpt-4o": {
+          "name": "OpenAI: GPT-4o"
+        },
+        "openai/gpt-4o-2024-05-13": {
+          "name": "OpenAI: GPT-4o (2024-05-13)"
+        },
+        "mistralai/mixtral-8x22b-instruct": {
+          "name": "Mistral: Mixtral 8x22B Instruct"
+        },
+        "mistralai/mistral-large": {
+          "name": "Mistral Large"
+        },
+        "openai/gpt-3.5-turbo-0613": {
+          "name": "OpenAI: GPT-3.5 Turbo (older v0613)"
+        },
+        "openai/gpt-3.5-turbo-16k": {
+          "name": "OpenAI: GPT-3.5 Turbo 16k"
+        },
+        "mancer/weaver": {
+          "name": "Mancer: Weaver (alpha)"
+        },
+        "undi95/remm-slerp-l2-13b": {
+          "name": "ReMM SLERP 13B"
+        },
+        "gryphe/mythomax-l2-13b": {
+          "name": "MythoMax 13B"
+        },
+        "openai/gpt-4": {
+          "name": "OpenAI: GPT-4 ($$$$)"
+        },
+        "openrouter/auto": {
+          "name": "OpenRouter Auto Router"
+        },
+        "openrouter/auto-code": {
+          "name": "OpenRouter Auto Code"
+        },
+        "typesafe/jev-router": {
+          "name": "TypeSafe: Jev Router"
+        },
+        "nvidia/switchyard": {
+          "name": "NVIDIA: Switchyard"
+        },
+        "openrouter/auto-beta": {
+          "name": "OpenRouter Auto Router (Beta)"
+        },
+        "openrouter/fusion": {
+          "name": "OpenRouter: Fusion"
+        },
+        "openrouter/pareto-code": {
+          "name": "OpenRouter Pareto Code Router"
+        },
+        "openrouter/free": {
+          "name": "OpenRouter Free Models Router"
+        },
+        "openrouter/bodybuilder": {
+          "name": "OpenRouter Body Builder (beta)"
+        },
+        "kilo-auto/frontier": {
+          "name": "Auto Frontier"
+        },
+        "kilo-auto/balanced": {
+          "name": "Auto Balanced"
+        },
+        "kilo-auto/small": {
+          "name": "Auto Small"
+        }
+      }
+    },
+    "kilo": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "kilo",
+      "options": {
+        "baseURL": "https://ai-gateway.kilo.ai/api/v1"
+      },
+      "models": {
+        "kilo-auto/efficient": {
+          "name": "Auto Efficient"
+        },
+        "kilo-auto/free": {
+          "name": "Auto Free"
+        },
+        "nvidia/nemotron-3.5-super-vl:free": {
+          "name": "NVIDIA: Nemotron 3.5 Super VL (free)"
+        },
+        "stealth/glyph-cluster": {
+          "name": "Stealth: Glyph Cluster (free)"
+        },
+        "anthropic/claude-opus-5.5": {
+          "name": "Anthropic: Claude Opus 5.5"
+        },
+        "openai/gpt-6.1-sol": {
+          "name": "OpenAI: GPT-6.1 Sol"
+        },
+        "deepseek/deepseek-v4.1-flash-1017": {
+          "name": "DeepSeek: DeepSeek V4.1 Flash 1017"
+        },
+        "z-ai/glm-5.3-flash": {
+          "name": "Z.ai: GLM 5.3 Flash"
+        },
+        "baidu/ernie-5.5-flash-preview:free": {
+          "name": "Baidu: ERNIE-5.5-Flash-Preview (free)"
+        },
+        "baidu/ernie-light-dt-1.0-intl": {
+          "name": "Baidu: ERNIE-Light-DT-1.0"
+        },
+        "google/gemini-4-carbon": {
+          "name": "Google: Gemini 4 Carbon"
+        },
+        "nex-agi/nex-n2.6": {
+          "name": "Nex AGI: Nex-N2.6"
+        },
+        "thinkingmachines/inkling-2-small:free": {
+          "name": "Thinking Machines: Inkling 2 Small (free)"
+        },
+        "anthropic/claude-fable-5.2": {
+          "name": "Anthropic: Claude Fable 5.2"
+        },
+        "meta/muse-ember": {
+          "name": "Meta: Muse Ember"
+        },
+        "liquid/lfm-3-1.7b": {
+          "name": "LiquidAI: LFM3-1.7B"
+        },
+        "liquid/lfm-3-1.7b:free": {
+          "name": "LiquidAI: LFM3-1.7B (free)"
+        },
+        "google/gemini-omni-1.2-flash": {
+          "name": "Google: Gemini Omni 1.2 Flash"
+        },
+        "kt/midm-k-3.0-pro": {
+          "name": "KT: Mi:dm K 3.0 Pro"
+        },
+        "google/gemini-omni-1.1-flash": {
+          "name": "Google: Gemini Omni 1.1 Flash"
+        },
+        "ricursiveai/ripple-65b-preview": {
+          "name": "Ricursive: Ripple 65B Preview"
+        },
+        "tencent/hy4": {
+          "name": "Tencent: Hy4"
+        },
+        "motif-technologies/motif-3": {
+          "name": "Motif Technologies: Motif 3"
+        },
+        "z-ai/glm-5.3-flashx-legal": {
+          "name": "Z.ai: GLM 5.3 FlashX Legal"
+        },
+        "particle-ai/particle-1": {
+          "name": "Particle AI: Particle-1"
+        },
+        "openai/gpt-6.1-terra-pro": {
+          "name": "OpenAI: GPT-6.1 Terra Pro"
+        },
+        "openai/gpt-6.1-terra": {
+          "name": "OpenAI: GPT-6.1 Terra"
+        },
+        "moonshotai/kimi-k3.1-pro": {
+          "name": "MoonshotAI: Kimi K3.1 Pro"
+        },
+        "minimax/minimax-m3.1-flash": {
+          "name": "MiniMax: MiniMax M3.1 Flash"
+        },
+        "elorian/glimpse": {
+          "name": "Elorian: Glimpse"
+        },
+        "reflection/beam-1.0-501b-a23b": {
+          "name": "Reflection: Beam 1.0 501B A23B"
+        },
+        "prism-ml/ternary-bonsai-2-9b": {
+          "name": "PrismML: Ternary Bonsai 2 9B"
+        },
+        "moondream/moondream3-preview": {
+          "name": "Moondream: Moondream 3 Preview"
+        },
+        "moondream/moondream3.1-9b-a2b": {
+          "name": "Moondream: Moondream 3.1"
+        },
+        "meta/muse-spark-open": {
+          "name": "Meta: Muse Spark Open"
+        },
+        "nvidia/nemotron-3.5-super-vl": {
+          "name": "NVIDIA: Nemotron 3.5 Super VL"
+        },
+        "unbiased/pareto-26.10": {
+          "name": "Pareto 26.10"
+        },
+        "~unbiased/pareto-latest": {
+          "name": "Pareto Latest"
+        },
+        "unbiased/pareto-26.9": {
+          "name": "Pareto 26.9"
+        },
+        "liquid/lfm-2.5-24b-a2b": {
+          "name": "LiquidAI: LFM2.5-24B-A2B"
+        },
+        "google/gemini-4-argon": {
+          "name": "Google: Gemini 4 Argon"
+        },
+        "scaledown/summarize": {
+          "name": "ScaleDown: Summarize"
+        },
+        "scaledown/extract": {
+          "name": "ScaleDown: Extract"
+        },
+        "meta/muse-wonder": {
+          "name": "Meta: Muse Wonder"
+        },
+        "stepfun/step-5-preview": {
+          "name": "StepFun: Step 5 Preview"
+        },
+        "anthropic/claude-haiku-5.5": {
+          "name": "Anthropic: Claude Haiku 5.5"
+        },
+        "google/gemini-nano-banana-2.1": {
+          "name": "Google: Nano Banana 2.1"
+        },
+        "mistralai/mistral-large-4-0": {
+          "name": "Mistral: Mistral Large 4"
+        },
+        "inclusionai/ling-3.1-flash": {
+          "name": "inclusionAI: Ling 3.1 Flash"
+        },
+        "openai/gpt-6.1-sol-pro": {
+          "name": "OpenAI: GPT-6.1 Sol Pro"
+        },
+        "anthropic/claude-sonnet-5.5": {
+          "name": "Anthropic: Claude Sonnet 5.5"
+        },
+        "perceptron/perceptron-mk1.5": {
+          "name": "Perceptron: Perceptron Mk1.5"
+        },
+        "fireworks/ember-1": {
+          "name": "Fireworks: Ember-1"
+        },
+        "z-ai/glm-5.3-prime": {
+          "name": "Z.ai: GLM 5.3 Prime"
+        },
+        "qwen/qwen3.8-max-prime": {
+          "name": "Qwen: Qwen3.8 Max Prime"
+        },
+        "aion-labs/aion-3.5-mini": {
+          "name": "AionLabs: Aion 3.5 Mini"
+        },
+        "aion-labs/aion-3.5": {
+          "name": "AionLabs: Aion 3.5"
+        },
+        "upstage/solar-mini4": {
+          "name": "Upstage: Solar Mini 4"
+        },
+        "cohere/command-a-plus": {
+          "name": "Cohere: Command A+"
+        },
+        "openai/gpt-6-luna-pro": {
+          "name": "OpenAI: GPT-6 Luna Pro"
+        },
+        "openai/gpt-6-luna": {
+          "name": "OpenAI: GPT-6 Luna"
+        },
+        "openai/gpt-6-sol-pro": {
+          "name": "OpenAI: GPT-6 Sol Pro"
+        },
+        "openai/gpt-6-sol": {
+          "name": "OpenAI: GPT-6 Sol"
+        },
+        "xiaomi/mimo-v2.6-pro-ultraspeed": {
+          "name": "Xiaomi: MiMo-V2.6-Pro-UltraSpeed"
+        },
+        "xiaomi/mimo-v2.6-flash": {
+          "name": "Xiaomi: MiMo-V2.6-Flash"
+        },
+        "xiaomi/mimo-v2.6-pro": {
+          "name": "Xiaomi: MiMo-V2.6-Pro"
+        },
+        "x-ai/grok-4.7": {
+          "name": "SpaceXAI: Grok 4.7"
+        },
+        "qwen/qwen3.8-omni-flash": {
+          "name": "Qwen: Qwen3.8 Omni Flash"
+        },
+        "prism-ml/ternary-bonsai-2-27b": {
+          "name": "PrismML: Ternary Bonsai 2 27B"
+        },
+        "z-ai/glm-5.3-flashx": {
+          "name": "Z.ai: GLM 5.3 FlashX"
+        },
+        "~deepseek/deepseek-pro-latest": {
+          "name": "DeepSeek: DeepSeek Pro Latest"
+        },
+        "~deepseek/deepseek-flash-latest": {
+          "name": "DeepSeek: DeepSeek Flash Latest"
+        },
+        "inference-net/schematron-v2-turbo": {
+          "name": "Inference.net: Schematron V2 Turbo"
+        },
+        "inference-net/schematron-v2-small": {
+          "name": "Inference.net: Schematron V2 Small"
+        },
+        "~openai/gpt-astra-latest": {
+          "name": "OpenAI: GPT Astra Latest ($$$$)"
+        },
+        "~openai/gpt-sol-latest": {
+          "name": "OpenAI: GPT Sol Latest"
+        },
+        "~openai/gpt-terra-latest": {
+          "name": "OpenAI: GPT Terra Latest"
+        },
+        "~openai/gpt-luna-latest": {
+          "name": "OpenAI: GPT Luna Latest"
+        },
+        "sakana/fugu-ultra-v2": {
+          "name": "Sakana: Fugu Ultra v2"
+        },
+        "sakana/fugu-max": {
+          "name": "Sakana: Fugu Max"
+        },
+        "inclusionai/ling-3.0-flash-vl": {
+          "name": "inclusionAI: Ling 3.0 Flash VL"
+        },
+        "deepseek/deepseek-v4.1-flash": {
+          "name": "DeepSeek: DeepSeek V4.1 Flash"
+        },
+        "nex-agi/nex-n2.5-mini": {
+          "name": "Nex AGI: Nex-N2.5-Mini"
+        },
+        "nex-agi/nex-n2.5-pro": {
+          "name": "Nex AGI: Nex-N2.5-Pro"
+        },
+        "openai/gpt-6-astra": {
+          "name": "OpenAI: GPT-6 Astra ($$$$)"
+        },
+        "openai/gpt-6-astra-pro": {
+          "name": "OpenAI: GPT-6 Astra Pro ($$$$)"
+        },
+        "qwen/qwen3.8-max-0902": {
+          "name": "Qwen: Qwen3.8 Max (0902)"
+        },
+        "meta/muse-spark-1.3-contributor": {
+          "name": "Meta: Muse Spark 1.3 Contributor"
+        },
+        "meta/muse-spark-1.3": {
+          "name": "Meta: Muse Spark 1.3"
+        },
+        "google/gemini-3.8-flash": {
+          "name": "Google: Gemini 3.8 Flash"
+        },
+        "anthropic/claude-fable-5.1": {
+          "name": "Anthropic: Claude Fable 5.1 ($$$$)"
+        },
+        "ibm-granite/granite-4.2-8b": {
+          "name": "IBM: Granite 4.2 8B"
+        },
+        "tencent/hy4-preview": {
+          "name": "Tencent: Hy4 preview"
+        },
+        "~z-ai/glm-flash-latest": {
+          "name": "Z.ai: GLM Flash Latest"
+        },
+        "qwen/qwen3.8-flash": {
+          "name": "Qwen: Qwen3.8 Flash"
+        },
+        "meta/muse-spark-1.2-contributor": {
+          "name": "Meta: Muse Spark 1.2 Contributor"
+        },
+        "deepseek/deepseek-v4-flash-vision-exp": {
+          "name": "DeepSeek: DeepSeek V4 Flash Vision Exp"
+        },
+        "tencent/hy-mt2-1.8b": {
+          "name": "Tencent: Hy-MT2-1.8B"
+        },
+        "tencent/hy-mt2-30b-a3b": {
+          "name": "Tencent: Hy-MT2-30B-A3B"
+        },
+        "~z-ai/glm-latest": {
+          "name": "Z.ai: GLM Latest"
+        },
+        "tencent/hy-mt2-7b": {
+          "name": "Tencent: Hy-MT2-7B"
+        },
+        "z-ai/glm-5.3": {
+          "name": "Z.ai: GLM 5.3"
+        },
+        "qwen/qwen3.8-27b": {
+          "name": "Qwen: Qwen3.8 27B"
+        },
+        "dots-studio/dots-3-note-preview:free": {
+          "name": "Dots Studio: Dots3-Note Preview (free)"
+        },
+        "google/gemini-3.7-flash": {
+          "name": "Google: Gemini 3.7 Flash"
+        },
+        "bytedance-seed/seed-2-1-turbo": {
+          "name": "ByteDance Seed: Seed 2.1 Turbo"
+        },
+        "qwen/qwen3.8-2.4t-a95b": {
+          "name": "Qwen: Qwen3.8 2.4T A95B"
+        },
+        "deepseek/deepseek-v4-pro-0813": {
+          "name": "DeepSeek: DeepSeek V4 Pro 0813"
+        },
+        "x-ai/grok-4.6": {
+          "name": "SpaceXAI: Grok 4.6"
+        },
+        "liquid/lfm-2.5-2.6b": {
+          "name": "LiquidAI: LFM2.5-2.6B (retires Nov 13)"
+        },
+        "nvidia/nemotron-3.5-lightning": {
+          "name": "NVIDIA: Nemotron 3.5 Lightning"
+        },
+        "nvidia/nemotron-3.5-lightning:free": {
+          "name": "NVIDIA: Nemotron 3.5 Lightning (free)"
+        },
+        "sakana/sakana-namazu": {
+          "name": "Sakana: Sakana Namazu"
+        },
+        "upstage/solar-pro4": {
+          "name": "Upstage: Solar Pro 4"
+        },
+        "meta/muse-glimmer-30b": {
+          "name": "Meta: Muse Glimmer 30B"
+        },
+        "inclusionai/ling-3.0-tiny": {
+          "name": "inclusionAI: Ling 3.0 Tiny"
+        },
+        "meta/muse-spark-1.2": {
+          "name": "Meta: Muse Spark 1.2"
+        },
+        "~deepseek/deepseek-v4-flash-latest": {
+          "name": "DeepSeek: DeepSeek V4 Flash Latest"
+        },
+        "deepseek/deepseek-v4-flash-0731": {
+          "name": "DeepSeek: DeepSeek V4 Flash 0731"
+        },
+        "thinkingmachines/inkling-small": {
+          "name": "Thinking Machines: Inkling Small"
+        },
+        "qwen/qwen3.7-flash": {
+          "name": "Qwen: Qwen3.7 Flash"
+        },
+        "anthropic/claude-opus-5": {
+          "name": "Anthropic: Claude Opus 5"
+        },
+        "inclusionai/ling-3.0-flash": {
+          "name": "inclusionAI: Ling 3.0 Flash"
+        },
+        "google/gemini-3.6-flash": {
+          "name": "Google: Gemini 3.6 Flash"
+        },
+        "google/gemini-3.5-flash-lite": {
+          "name": "Google: Gemini 3.5 Flash Lite"
+        },
+        "meituan/longcat-2.0": {
+          "name": "Meituan: LongCat 2.0"
+        },
+        "thinkingmachines/inkling": {
+          "name": "Thinking Machines: Inkling"
+        },
+        "moonshotai/kimi-k3": {
+          "name": "MoonshotAI: Kimi K3"
+        },
+        "meta/muse-spark-1.1": {
+          "name": "Meta: Muse Spark 1.1"
+        },
+        "openai/gpt-5.6-luna-pro": {
+          "name": "OpenAI: GPT-5.6 Luna Pro"
+        },
+        "openai/gpt-5.6-luna": {
+          "name": "OpenAI: GPT-5.6 Luna"
+        },
+        "openai/gpt-5.6-terra-pro": {
+          "name": "OpenAI: GPT-5.6 Terra Pro"
+        },
+        "openai/gpt-5.6-terra": {
+          "name": "OpenAI: GPT-5.6 Terra"
+        },
+        "openai/gpt-5.6-sol-pro": {
+          "name": "OpenAI: GPT-5.6 Sol Pro"
+        },
+        "openai/gpt-5.6-sol": {
+          "name": "OpenAI: GPT-5.6 Sol"
+        },
+        "x-ai/grok-4.5": {
+          "name": "SpaceXAI: Grok 4.5"
+        },
+        "~x-ai/grok-latest": {
+          "name": "xAI: Grok Latest"
+        },
+        "aion-labs/aion-3.0-mini": {
+          "name": "AionLabs: Aion-3.0-Mini"
+        },
+        "aion-labs/aion-3.0": {
+          "name": "AionLabs: Aion-3.0"
+        },
+        "tencent/hy3": {
+          "name": "Tencent: Hy3"
+        },
+        "anthropic/claude-sonnet-5": {
+          "name": "Anthropic: Claude Sonnet 5"
+        },
+        "google/gemini-3.1-flash-lite-image": {
+          "name": "Google: Nano Banana 2 Lite (Gemini 3.1 Flash Lite Image)"
+        },
+        "sakana/fugu-ultra": {
+          "name": "Sakana: Fugu Ultra"
+        },
+        "google/gemini-3.1-flash-image": {
+          "name": "Google: Nano Banana 2 (Gemini 3.1 Flash Image)"
+        },
+        "google/gemini-3-pro-image": {
+          "name": "Google: Nano Banana Pro (Gemini 3 Pro Image)"
+        },
+        "cohere/north-mini-code:free": {
+          "name": "Cohere: North Mini Code (free)"
+        },
+        "z-ai/glm-5.2": {
+          "name": "Z.ai: GLM 5.2"
+        },
+        "moonshotai/kimi-k2.7-code": {
+          "name": "MoonshotAI: Kimi K2.7 Code"
+        },
+        "~anthropic/claude-fable-latest": {
+          "name": "Anthropic: Claude Fable Latest"
+        },
+        "anthropic/claude-fable-5": {
+          "name": "Anthropic: Claude Fable 5 ($$$$)"
+        },
+        "nvidia/nemotron-3.5-content-safety": {
+          "name": "NVIDIA: Nemotron 3.5 Content Safety"
+        },
+        "nvidia/nemotron-3-ultra-550b-a55b": {
+          "name": "NVIDIA: Nemotron 3 Ultra"
+        },
+        "nvidia/nemotron-3-ultra-550b-a55b:free": {
+          "name": "NVIDIA: Nemotron 3 Ultra (free)"
+        },
+        "qwen/qwen3.7-plus": {
+          "name": "Qwen: Qwen3.7 Plus"
+        },
+        "minimax/minimax-m3": {
+          "name": "MiniMax: MiniMax M3"
+        },
+        "stepfun/step-3.7-flash": {
+          "name": "StepFun: Step 3.7 Flash"
+        },
+        "anthropic/claude-opus-4.8": {
+          "name": "Anthropic: Claude Opus 4.8"
+        },
+        "qwen/qwen3.7-max": {
+          "name": "Qwen: Qwen3.7 Max"
+        },
+        "x-ai/grok-build-0.1": {
+          "name": "SpaceXAI: Grok Build 0.1"
+        },
+        "google/gemini-3.5-flash": {
+          "name": "Google: Gemini 3.5 Flash"
+        },
+        "perceptron/perceptron-mk1": {
+          "name": "Perceptron: Perceptron Mk1"
+        },
+        "google/gemini-3.1-flash-lite": {
+          "name": "Google: Gemini 3.1 Flash Lite"
+        },
+        "openai/gpt-chat-latest": {
+          "name": "OpenAI: GPT Chat Latest"
+        },
+        "x-ai/grok-4.3": {
+          "name": "SpaceXAI: Grok 4.3"
+        },
+        "mistralai/mistral-medium-3-5": {
+          "name": "Mistral: Mistral Medium 3.5"
+        },
+        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free": {
+          "name": "NVIDIA: Nemotron 3 Nano Omni (free)"
+        },
+        "~anthropic/claude-haiku-latest": {
+          "name": "Anthropic: Claude Haiku Latest"
+        },
+        "~openai/gpt-mini-latest": {
+          "name": "OpenAI: GPT Mini Latest"
+        },
+        "~google/gemini-pro-latest": {
+          "name": "Google: Gemini Pro Latest"
+        },
+        "~moonshotai/kimi-latest": {
+          "name": "MoonshotAI: Kimi Latest"
+        },
+        "~google/gemini-flash-latest": {
+          "name": "Google: Gemini Flash Latest"
+        },
+        "~anthropic/claude-sonnet-latest": {
+          "name": "Anthropic: Claude Sonnet Latest"
+        },
+        "qwen/qwen3.5-plus-20260420": {
+          "name": "Qwen: Qwen3.5 Plus 2026-04-20"
+        },
+        "qwen/qwen3.6-flash": {
+          "name": "Qwen: Qwen3.6 Flash"
+        },
+        "qwen/qwen3.6-35b-a3b": {
+          "name": "Qwen: Qwen3.6 35B A3B"
+        },
+        "qwen/qwen3.6-27b": {
+          "name": "Qwen: Qwen3.6 27B"
+        },
+        "openai/gpt-5.5-pro": {
+          "name": "OpenAI: GPT-5.5 Pro ($$$$)"
+        },
+        "openai/gpt-5.5": {
+          "name": "OpenAI: GPT-5.5"
+        },
+        "deepseek/deepseek-v4-pro": {
+          "name": "DeepSeek: DeepSeek V4 Pro 0423"
+        },
+        "deepseek/deepseek-v4-flash": {
+          "name": "DeepSeek: DeepSeek V4 Flash 0423"
+        },
+        "tencent/hy3-preview": {
+          "name": "Tencent: Hy3 preview"
+        },
+        "xiaomi/mimo-v2.5-pro": {
+          "name": "Xiaomi: MiMo-V2.5-Pro"
+        },
+        "xiaomi/mimo-v2.5": {
+          "name": "Xiaomi: MiMo-V2.5"
+        },
+        "openai/gpt-5.4-image-2": {
+          "name": "OpenAI: GPT-5.4 Image 2"
+        },
+        "~anthropic/claude-opus-latest": {
+          "name": "Anthropic: Claude Opus Latest"
+        },
+        "moonshotai/kimi-k2.6": {
+          "name": "MoonshotAI: Kimi K2.6"
+        },
+        "anthropic/claude-opus-4.7": {
+          "name": "Anthropic: Claude Opus 4.7"
+        },
+        "z-ai/glm-5.1": {
+          "name": "Z.ai: GLM 5.1"
+        },
+        "google/gemma-4-26b-a4b-it": {
+          "name": "Google: Gemma 4 26B A4B"
+        },
+        "google/gemma-4-31b-it": {
+          "name": "Google: Gemma 4 31B"
+        },
+        "qwen/qwen3.6-plus": {
+          "name": "Qwen: Qwen3.6 Plus"
+        },
+        "z-ai/glm-5v-turbo": {
+          "name": "Z.ai: GLM 5V Turbo"
+        },
+        "x-ai/grok-4.20-multi-agent": {
+          "name": "SpaceXAI: Grok 4.20 Multi-Agent"
+        },
+        "x-ai/grok-4.20": {
+          "name": "SpaceXAI: Grok 4.20"
+        },
+        "google/lyria-3-pro-preview": {
+          "name": "Google: Lyria 3 Pro Preview"
+        },
+        "google/lyria-3-clip-preview": {
+          "name": "Google: Lyria 3 Clip Preview"
+        },
+        "rekaai/reka-edge": {
+          "name": "Reka Edge"
+        },
+        "minimax/minimax-m2.7": {
+          "name": "MiniMax: MiniMax M2.7"
+        },
+        "openai/gpt-5.4-nano": {
+          "name": "OpenAI: GPT-5.4 Nano"
+        },
+        "openai/gpt-5.4-mini": {
+          "name": "OpenAI: GPT-5.4 Mini"
+        },
+        "mistralai/mistral-small-2603": {
+          "name": "Mistral: Mistral Small 4"
+        },
+        "z-ai/glm-5-turbo": {
+          "name": "Z.ai: GLM 5 Turbo"
+        },
+        "nvidia/nemotron-3-super-120b-a12b": {
+          "name": "NVIDIA: Nemotron 3 Super"
+        },
+        "bytedance-seed/seed-2.0-lite": {
+          "name": "ByteDance Seed: Seed-2.0-Lite"
+        },
+        "qwen/qwen3.5-9b": {
+          "name": "Qwen: Qwen3.5-9B"
+        },
+        "openai/gpt-5.4-pro": {
+          "name": "OpenAI: GPT-5.4 Pro ($$$$)"
+        },
+        "openai/gpt-5.4": {
+          "name": "OpenAI: GPT-5.4"
+        },
+        "google/gemini-3.1-flash-lite-preview": {
+          "name": "Google: Gemini 3.1 Flash Lite Preview"
+        },
+        "bytedance-seed/seed-2.0-mini": {
+          "name": "ByteDance Seed: Seed-2.0-Mini"
+        },
+        "google/gemini-3.1-flash-image-preview": {
+          "name": "Google: Nano Banana 2 (Gemini 3.1 Flash Image Preview)"
+        },
+        "qwen/qwen3.5-35b-a3b": {
+          "name": "Qwen: Qwen3.5-35B-A3B"
+        },
+        "qwen/qwen3.5-27b": {
+          "name": "Qwen: Qwen3.5-27B"
+        },
+        "qwen/qwen3.5-122b-a10b": {
+          "name": "Qwen: Qwen3.5-122B-A10B"
+        },
+        "qwen/qwen3.5-flash-02-23": {
+          "name": "Qwen: Qwen3.5-Flash"
+        },
+        "google/gemini-3.1-pro-preview-customtools": {
+          "name": "Google: Gemini 3.1 Pro Preview Custom Tools"
+        },
+        "openai/gpt-5.3-codex": {
+          "name": "OpenAI: GPT-5.3-Codex"
+        },
+        "aion-labs/aion-2.0": {
+          "name": "AionLabs: Aion-2.0"
+        },
+        "google/gemini-3.1-pro-preview": {
+          "name": "Google: Gemini 3.1 Pro Preview"
+        },
+        "anthropic/claude-sonnet-4.6": {
+          "name": "Anthropic: Claude Sonnet 4.6"
+        },
+        "qwen/qwen3.5-plus-02-15": {
+          "name": "Qwen: Qwen3.5 Plus 2026-02-15"
+        },
+        "qwen/qwen3.5-397b-a17b": {
+          "name": "Qwen: Qwen3.5 397B A17B"
+        },
+        "minimax/minimax-m2.5": {
+          "name": "MiniMax: MiniMax M2.5"
+        },
+        "z-ai/glm-5": {
+          "name": "Z.ai: GLM 5"
+        },
+        "anthropic/claude-opus-4.6": {
+          "name": "Anthropic: Claude Opus 4.6"
+        },
+        "qwen/qwen3-coder-next": {
+          "name": "Qwen: Qwen3 Coder Next"
+        },
+        "stepfun/step-3.5-flash": {
+          "name": "StepFun: Step 3.5 Flash"
+        },
+        "moonshotai/kimi-k2.5": {
+          "name": "MoonshotAI: Kimi K2.5 (retires Nov 18)"
+        },
+        "writer/palmyra-x5": {
+          "name": "Writer: Palmyra X5"
+        },
+        "openai/gpt-audio": {
+          "name": "OpenAI: GPT Audio"
+        },
+        "openai/gpt-audio-mini": {
+          "name": "OpenAI: GPT Audio Mini"
+        },
+        "z-ai/glm-4.7-flash": {
+          "name": "Z.ai: GLM 4.7 Flash"
+        },
+        "openai/gpt-5.2-codex": {
+          "name": "OpenAI: GPT-5.2-Codex"
+        },
+        "z-ai/glm-4.7": {
+          "name": "Z.ai: GLM 4.7"
+        },
+        "google/gemini-3-flash-preview": {
+          "name": "Google: Gemini 3 Flash Preview"
+        },
+        "nvidia/nemotron-3-nano-30b-a3b": {
+          "name": "NVIDIA: Nemotron 3 Nano 30B A3B"
+        },
+        "openai/gpt-5.2-pro": {
+          "name": "OpenAI: GPT-5.2 Pro ($$$$)"
+        },
+        "openai/gpt-5.2": {
+          "name": "OpenAI: GPT-5.2"
+        },
+        "mistralai/devstral-2512": {
+          "name": "Mistral: Devstral 2 2512"
+        },
+        "relace/relace-search": {
+          "name": "Relace: Relace Search"
+        },
+        "z-ai/glm-4.6v": {
+          "name": "Z.ai: GLM 4.6V"
+        },
+        "openai/gpt-5.1-codex-max": {
+          "name": "OpenAI: GPT-5.1-Codex-Max"
+        },
+        "amazon/nova-2-lite-v1": {
+          "name": "Amazon: Nova 2 Lite"
+        },
+        "mistralai/ministral-14b-2512": {
+          "name": "Mistral: Ministral 3 14B 2512"
+        },
+        "mistralai/ministral-8b-2512": {
+          "name": "Mistral: Ministral 3 8B 2512"
+        },
+        "mistralai/ministral-3b-2512": {
+          "name": "Mistral: Ministral 3 3B 2512"
+        },
+        "mistralai/mistral-large-2512": {
+          "name": "Mistral: Mistral Large 3 2512"
+        },
+        "deepseek/deepseek-v3.2": {
+          "name": "DeepSeek: DeepSeek V3.2"
+        },
+        "anthropic/claude-opus-4.5": {
+          "name": "Anthropic: Claude Opus 4.5"
+        },
+        "google/gemini-3-pro-image-preview": {
+          "name": "Google: Nano Banana Pro (Gemini 3 Pro Image Preview)"
+        },
+        "openai/gpt-5.1": {
+          "name": "OpenAI: GPT-5.1"
+        },
+        "openai/gpt-5.1-codex": {
+          "name": "OpenAI: GPT-5.1-Codex"
+        },
+        "openai/gpt-5.1-codex-mini": {
+          "name": "OpenAI: GPT-5.1-Codex-Mini"
+        },
+        "moonshotai/kimi-k2-thinking": {
+          "name": "MoonshotAI: Kimi K2 Thinking"
+        },
+        "amazon/nova-premier-v1": {
+          "name": "Amazon: Nova Premier 1.0"
+        },
+        "perplexity/sonar-pro-search": {
+          "name": "Perplexity: Sonar Pro Search"
+        },
+        "mistralai/voxtral-small-24b-2507": {
+          "name": "Mistral: Voxtral Small 24B 2507"
+        },
+        "openai/gpt-oss-safeguard-20b": {
+          "name": "OpenAI: gpt-oss-safeguard-20b"
+        },
+        "openai/gpt-5-image-mini": {
+          "name": "OpenAI: GPT-5 Image Mini (retires Dec 1)"
+        },
+        "anthropic/claude-haiku-4.5": {
+          "name": "Anthropic: Claude Haiku 4.5"
+        },
+        "qwen/qwen3-vl-8b-instruct": {
+          "name": "Qwen: Qwen3 VL 8B Instruct"
+        },
+        "openai/gpt-5-image": {
+          "name": "OpenAI: GPT-5 Image ($$$$)"
+        },
+        "google/gemini-2.5-flash-image": {
+          "name": "Google: Nano Banana (Gemini 2.5 Flash Image)"
+        },
+        "qwen/qwen3-vl-30b-a3b-thinking": {
+          "name": "Qwen: Qwen3 VL 30B A3B Thinking"
+        },
+        "qwen/qwen3-vl-30b-a3b-instruct": {
+          "name": "Qwen: Qwen3 VL 30B A3B Instruct"
+        },
+        "openai/gpt-5-pro": {
+          "name": "OpenAI: GPT-5 Pro ($$$$)"
+        },
+        "z-ai/glm-4.6": {
+          "name": "Z.ai: GLM 4.6"
+        },
+        "anthropic/claude-sonnet-4.5": {
+          "name": "Anthropic: Claude Sonnet 4.5"
+        },
+        "deepseek/deepseek-v3.2-exp": {
+          "name": "DeepSeek: DeepSeek V3.2 Exp"
+        },
+        "thedrummer/cydonia-24b-v4.1": {
+          "name": "TheDrummer: Cydonia 24B V4.1"
+        },
+        "relace/relace-apply-3": {
+          "name": "Relace: Relace Apply 3"
+        },
+        "qwen/qwen3-vl-235b-a22b-instruct": {
+          "name": "Qwen: Qwen3 VL 235B A22B Instruct"
+        },
+        "deepseek/deepseek-v3.1-terminus": {
+          "name": "DeepSeek: DeepSeek V3.1 Terminus"
+        },
+        "qwen/qwen3-coder-flash": {
+          "name": "Qwen: Qwen3 Coder Flash"
+        },
+        "qwen/qwen3-next-80b-a3b-instruct": {
+          "name": "Qwen: Qwen3 Next 80B A3B Instruct"
+        },
+        "moonshotai/kimi-k2-0905": {
+          "name": "MoonshotAI: Kimi K2 0905"
+        },
+        "nousresearch/hermes-4-405b": {
+          "name": "Nous: Hermes 4 405B"
+        },
+        "deepseek/deepseek-chat-v3.1": {
+          "name": "DeepSeek: DeepSeek V3.1"
+        },
+        "mistralai/mistral-medium-3.1": {
+          "name": "Mistral: Mistral Medium 3.1"
+        },
+        "z-ai/glm-4.5v": {
+          "name": "Z.ai: GLM 4.5V"
+        },
+        "openai/gpt-5": {
+          "name": "OpenAI: GPT-5 (retires Dec 11)"
+        },
+        "openai/gpt-5-mini": {
+          "name": "OpenAI: GPT-5 Mini (retires Dec 11)"
+        },
+        "openai/gpt-5-nano": {
+          "name": "OpenAI: GPT-5 Nano (retires Dec 11)"
+        },
+        "openai/gpt-oss-120b": {
+          "name": "OpenAI: gpt-oss-120b"
+        },
+        "openai/gpt-oss-20b": {
+          "name": "OpenAI: gpt-oss-20b"
+        },
+        "anthropic/claude-opus-4.1": {
+          "name": "Anthropic: Claude Opus 4.1 ($$$$)"
+        },
+        "mistralai/codestral-2508": {
+          "name": "Mistral: Codestral 2508"
+        },
+        "qwen/qwen3-coder-30b-a3b-instruct": {
+          "name": "Qwen: Qwen3 Coder 30B A3B Instruct"
+        },
+        "qwen/qwen3-30b-a3b-instruct-2507": {
+          "name": "Qwen: Qwen3 30B A3B Instruct 2507"
+        },
+        "z-ai/glm-4.5": {
+          "name": "Z.ai: GLM 4.5"
+        },
+        "z-ai/glm-4.5-air": {
+          "name": "Z.ai: GLM 4.5 Air"
+        },
+        "qwen/qwen3-235b-a22b-thinking-2507": {
+          "name": "Qwen: Qwen3 235B A22B Thinking 2507"
+        },
+        "qwen/qwen3-coder": {
+          "name": "Qwen: Qwen3 Coder 480B A35B"
+        },
+        "bytedance/ui-tars-1.5-7b": {
+          "name": "ByteDance: UI-TARS 7B"
+        },
+        "google/gemini-2.5-flash-lite": {
+          "name": "Google: Gemini 2.5 Flash Lite"
+        },
+        "qwen/qwen3-235b-a22b-2507": {
+          "name": "Qwen: Qwen3 235B A22B Instruct 2507"
+        },
+        "moonshotai/kimi-k2": {
+          "name": "MoonshotAI: Kimi K2 0711"
+        },
+        "cognitivecomputations/dolphin-mistral-24b-venice-edition": {
+          "name": "Venice: Uncensored"
+        },
+        "tencent/hunyuan-a13b-instruct": {
+          "name": "Tencent: Hunyuan A13B Instruct"
+        },
+        "morph/morph-v3-large": {
+          "name": "Morph: Morph V3 Large"
+        },
+        "morph/morph-v3-fast": {
+          "name": "Morph: Morph V3 Fast"
+        },
+        "mistralai/mistral-small-3.2-24b-instruct": {
+          "name": "Mistral: Mistral Small 3.2 24B"
+        },
+        "google/gemini-2.5-flash": {
+          "name": "Google: Gemini 2.5 Flash"
+        },
+        "google/gemini-2.5-pro": {
+          "name": "Google: Gemini 2.5 Pro"
+        },
+        "openai/o3-pro": {
+          "name": "OpenAI: o3 Pro ($$$$)"
+        },
+        "google/gemini-2.5-pro-preview": {
+          "name": "Google: Gemini 2.5 Pro Preview 06-05"
+        },
+        "deepseek/deepseek-r1-0528": {
+          "name": "DeepSeek: R1 0528"
+        },
+        "mistralai/mistral-medium-3": {
+          "name": "Mistral: Mistral Medium 3"
+        },
+        "meta-llama/llama-guard-4-12b": {
+          "name": "Meta: Llama Guard 4 12B"
+        },
+        "qwen/qwen3-30b-a3b": {
+          "name": "Qwen: Qwen3 30B A3B"
+        },
+        "qwen/qwen3-14b": {
+          "name": "Qwen: Qwen3 14B"
+        },
+        "qwen/qwen3-32b": {
+          "name": "Qwen: Qwen3 32B"
+        },
+        "openai/o3": {
+          "name": "OpenAI: o3 (retires Dec 11)"
+        },
+        "openai/gpt-4.1": {
+          "name": "OpenAI: GPT-4.1"
+        },
+        "openai/gpt-4.1-mini": {
+          "name": "OpenAI: GPT-4.1 Mini"
+        },
+        "openai/gpt-4.1-nano": {
+          "name": "OpenAI: GPT-4.1 Nano"
+        },
+        "meta-llama/llama-4-maverick": {
+          "name": "Meta: Llama 4 Maverick"
+        },
+        "meta-llama/llama-4-scout": {
+          "name": "Meta: Llama 4 Scout"
+        },
+        "deepseek/deepseek-chat-v3-0324": {
+          "name": "DeepSeek: DeepSeek V3 0324"
+        },
+        "mistralai/mistral-small-3.1-24b-instruct": {
+          "name": "Mistral: Mistral Small 3.1 24B"
+        },
+        "google/gemma-3-4b-it": {
+          "name": "Google: Gemma 3 4B"
+        },
+        "google/gemma-3-12b-it": {
+          "name": "Google: Gemma 3 12B"
+        },
+        "cohere/command-a": {
+          "name": "Cohere: Command A"
+        },
+        "rekaai/reka-flash-3": {
+          "name": "Reka Flash 3"
+        },
+        "google/gemma-3-27b-it": {
+          "name": "Google: Gemma 3 27B"
+        },
+        "thedrummer/skyfall-36b-v2": {
+          "name": "TheDrummer: Skyfall 36B V2"
+        },
+        "perplexity/sonar-reasoning-pro": {
+          "name": "Perplexity: Sonar Reasoning Pro"
+        },
+        "perplexity/sonar-pro": {
+          "name": "Perplexity: Sonar Pro"
+        },
+        "perplexity/sonar-deep-research": {
+          "name": "Perplexity: Sonar Deep Research"
+        },
+        "mistralai/mistral-saba": {
+          "name": "Mistral: Saba"
+        },
+        "aion-labs/aion-rp-llama-3.1-8b": {
+          "name": "AionLabs: Aion-RP 1.0 (8B)"
+        },
+        "qwen/qwen2.5-vl-72b-instruct": {
+          "name": "Qwen: Qwen2.5 VL 72B Instruct"
+        },
+        "qwen/qwen-plus": {
+          "name": "Qwen: Qwen-Plus"
+        },
+        "mistralai/mistral-small-24b-instruct-2501": {
+          "name": "Mistral: Mistral Small 3"
+        },
+        "perplexity/sonar": {
+          "name": "Perplexity: Sonar"
+        },
+        "microsoft/phi-4": {
+          "name": "Microsoft: Phi 4"
+        },
+        "deepseek/deepseek-chat": {
+          "name": "DeepSeek: DeepSeek V3"
+        },
+        "cohere/command-r7b-12-2024": {
+          "name": "Cohere: Command R7B (12-2024)"
+        },
+        "meta-llama/llama-3.3-70b-instruct": {
+          "name": "Meta: Llama 3.3 70B Instruct"
+        },
+        "amazon/nova-lite-v1": {
+          "name": "Amazon: Nova Lite 1.0"
+        },
+        "amazon/nova-micro-v1": {
+          "name": "Amazon: Nova Micro 1.0"
+        },
+        "amazon/nova-pro-v1": {
+          "name": "Amazon: Nova Pro 1.0"
+        },
+        "openai/gpt-4o-2024-11-20": {
+          "name": "OpenAI: GPT-4o (2024-11-20)"
+        },
+        "mistralai/mistral-large-2407": {
+          "name": "Mistral Large 2407"
+        },
+        "qwen/qwen-2.5-coder-32b-instruct": {
+          "name": "Qwen2.5 Coder 32B Instruct"
+        },
+        "thedrummer/unslopnemo-12b": {
+          "name": "TheDrummer: UnslopNemo 12B"
+        },
+        "anthracite-org/magnum-v4-72b": {
+          "name": "Magnum v4 72B"
+        },
+        "meta-llama/llama-3.2-1b-instruct": {
+          "name": "Meta: Llama 3.2 1B Instruct (retires Nov 20)"
+        },
+        "meta-llama/llama-3.2-3b-instruct": {
+          "name": "Meta: Llama 3.2 3B Instruct"
+        },
+        "qwen/qwen-2.5-72b-instruct": {
+          "name": "Qwen2.5 72B Instruct"
+        },
+        "cohere/command-r-08-2024": {
+          "name": "Cohere: Command R (08-2024)"
+        },
+        "cohere/command-r-plus-08-2024": {
+          "name": "Cohere: Command R+ (08-2024)"
+        },
+        "sao10k/l3.1-euryale-70b": {
+          "name": "Sao10K: Llama 3.1 Euryale 70B v2.2"
+        },
+        "sao10k/l3-lunaris-8b": {
+          "name": "Sao10K: Llama 3 8B Lunaris"
+        },
+        "openai/gpt-4o-2024-08-06": {
+          "name": "OpenAI: GPT-4o (2024-08-06)"
+        },
+        "meta-llama/llama-3.1-70b-instruct": {
+          "name": "Meta: Llama 3.1 70B Instruct"
+        },
+        "meta-llama/llama-3.1-8b-instruct": {
+          "name": "Meta: Llama 3.1 8B Instruct"
+        },
+        "mistralai/mistral-nemo": {
+          "name": "Mistral: Mistral Nemo"
+        },
+        "openai/gpt-4o-mini": {
+          "name": "OpenAI: GPT-4o-mini"
+        },
+        "openai/gpt-4o-mini-2024-07-18": {
+          "name": "OpenAI: GPT-4o-mini (2024-07-18)"
+        },
+        "google/gemma-2-27b-it": {
+          "name": "Google: Gemma 2 27B"
+        },
+        "openai/gpt-4o": {
+          "name": "OpenAI: GPT-4o"
+        },
+        "openai/gpt-4o-2024-05-13": {
+          "name": "OpenAI: GPT-4o (2024-05-13)"
+        },
+        "mistralai/mixtral-8x22b-instruct": {
+          "name": "Mistral: Mixtral 8x22B Instruct"
+        },
+        "mistralai/mistral-large": {
+          "name": "Mistral Large"
+        },
+        "openai/gpt-3.5-turbo-0613": {
+          "name": "OpenAI: GPT-3.5 Turbo (older v0613)"
+        },
+        "openai/gpt-3.5-turbo-16k": {
+          "name": "OpenAI: GPT-3.5 Turbo 16k"
+        },
+        "mancer/weaver": {
+          "name": "Mancer: Weaver (alpha)"
+        },
+        "undi95/remm-slerp-l2-13b": {
+          "name": "ReMM SLERP 13B"
+        },
+        "gryphe/mythomax-l2-13b": {
+          "name": "MythoMax 13B"
+        },
+        "openai/gpt-4": {
+          "name": "OpenAI: GPT-4 ($$$$)"
+        },
+        "openrouter/auto": {
+          "name": "OpenRouter Auto Router"
+        },
+        "openrouter/auto-code": {
+          "name": "OpenRouter Auto Code"
+        },
+        "typesafe/jev-router": {
+          "name": "TypeSafe: Jev Router"
+        },
+        "nvidia/switchyard": {
+          "name": "NVIDIA: Switchyard"
+        },
+        "openrouter/auto-beta": {
+          "name": "OpenRouter Auto Router (Beta)"
+        },
+        "openrouter/fusion": {
+          "name": "OpenRouter: Fusion"
+        },
+        "openrouter/pareto-code": {
+          "name": "OpenRouter Pareto Code Router"
+        },
+        "openrouter/free": {
+          "name": "OpenRouter Free Models Router"
+        },
+        "openrouter/bodybuilder": {
+          "name": "OpenRouter Body Builder (beta)"
+        },
+        "kilo-auto/frontier": {
+          "name": "Auto Frontier"
+        },
+        "kilo-auto/balanced": {
+          "name": "Auto Balanced"
+        },
+        "kilo-auto/small": {
+          "name": "Auto Small"
         }
       }
     }
