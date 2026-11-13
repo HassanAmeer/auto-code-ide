@@ -102,7 +102,11 @@ export function ProviderAuthenticationSection({
       ? interaction.url
       : auth?.authorizationUrl;
   // Remote (VPS) browsers cannot reach the environment's loopback redirect; offer the SSH tunnel.
-  const tunnelPort = interaction?.type === "browser" ? loopbackRedirectPort(url) : null;
+  // Antigravity's port is ephemeral, so outside an active browser sign-in the banner stays a placeholder.
+  const tunnelPort = loopbackRedirectPort(
+    interaction?.type === "browser" ? url : auth?.authorizationUrl,
+  );
+  const showTunnelBanner = provider.driver === "antigravity";
 
   async function run(command: () => Promise<AtomCommandResult<unknown, unknown>>) {
     if (pendingRef.current) return false;
@@ -324,6 +328,7 @@ export function ProviderAuthenticationSection({
         </div>
       }
     >
+      {showTunnelBanner ? <RemoteTunnelBanner port={tunnelPort} /> : null}
       {interaction?.type === "terminal" ||
       interaction?.type === "credentials" ||
       interaction?.type === "deviceCode" ||
@@ -427,7 +432,6 @@ export function ProviderAuthenticationSection({
               </Button>
             </form>
           ) : null}
-          {tunnelPort !== null ? <RemoteTunnelBanner port={tunnelPort} /> : null}
           {url && (interaction?.type === "browser" ? interaction.acceptsCallback : !interaction) ? (
             <form
               className="grid gap-2 py-2 text-sm leading-normal"

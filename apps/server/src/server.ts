@@ -27,6 +27,7 @@ import * as HostPowerMonitor from "./background/HostPowerMonitor.ts";
 import * as ServerConfig from "./config.ts";
 import { withUntracedRequests } from "./http.ts";
 import * as ServerHttp from "./http.ts";
+import * as AntigravityConnect from "./antigravityConnect.ts";
 import { guardHttpResponseWriteErrors } from "./httpResponseErrorGuard.ts";
 import { fixPath } from "./os-jank.ts";
 import * as Ws from "./ws.ts";
@@ -678,6 +679,7 @@ const layerMakeRoutes = Layer.mergeAll(
     ServerHttp.layerCustomProviderDeleteRoute,
     ServerHttp.layerCustomProviderSyncRoute,
     ServerHttp.layerSuperAgentChatRoute,
+    AntigravityConnect.layerAntigravityConnectRoute,
     ServerHttp.layerSessionLedgerGetRoute,
     ServerHttp.layerSessionLedgerAddDecisionRoute,
     ServerHttp.layerSessionLedgerClearRoute,

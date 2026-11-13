@@ -4,7 +4,6 @@ import {
   ProviderDriverKind,
   ProviderInstanceId,
   type ProviderAuthState,
-  type ProviderInstallState,
   type ServerProvider,
 } from "@t3tools/contracts";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
@@ -14,7 +13,7 @@ import { reactHookHarness as hooks } from "../../test/reactHookHarness";
 
 const setup = vi.hoisted(() => ({
   auth: null as ProviderAuthState | null,
-  installation: null as ProviderInstallState | null,
+  installation: null as unknown,
   authState: vi.fn(() => "auth"),
   installState: vi.fn(() => "installation"),
   startAuth: vi.fn(),
@@ -26,6 +25,9 @@ const setup = vi.hoisted(() => ({
   cancelInstall: vi.fn(),
   removeInstall: vi.fn(),
   confirm: vi.fn(),
+  refreshProviders: vi.fn(),
+  fetch: vi.fn(),
+  windowOpen: vi.fn(),
 }));
 
 vi.mock("react", async (importOriginal) => {
@@ -55,6 +57,7 @@ vi.mock("../../state/server", () => ({
     startProviderInstall: setup.startInstall,
     cancelProviderInstall: setup.cancelInstall,
     removeProviderInstallation: setup.removeInstall,
+    refreshProviders: setup.refreshProviders,
   },
 }));
 
@@ -75,7 +78,10 @@ vi.mock("../../localApi", () => ({
   ensureLocalApi: () => ({ dialogs: { confirm: setup.confirm } }),
 }));
 
-import { ProviderAuthenticationSection } from "./ProviderAuthenticationSection";
+vi.stubGlobal("fetch", setup.fetch);
+vi.stubGlobal("window", { open: setup.windowOpen, location: { hostname: "localhost" } });
+
+import { AntigravityWebConnect } from "./AntigravityWebConnect";
 import { ProviderSetupSection } from "./ProviderSetupSection";
 
 const environmentId = EnvironmentId.make("remote-google");
@@ -95,13 +101,16 @@ const provider: ServerProvider = {
   setup: { canAuthenticate: true, canInstall: true },
 };
 
-function authState(patch: Partial<ProviderAuthState> = {}): ProviderAuthState {
+function installState(patch: Record<string, unknown> = {}) {
   return {
-    instanceId,
-    phase: "waiting",
-    flowId: "flow-1",
-    authorizationUrl: "https://accounts.google.com/o/oauth2/v2/auth?state=test-only",
-    expiresAt: "2026-09-02T00:05:00.000Z",
+    driver: ProviderDriverKind.make("antigravity"),
+    operationId: null,
+    phase: "idle",
+    downloadedBytes: 0,
+    totalBytes: null,
+    version: null,
+    installedVersion: null,
+    canRemove: false,
     message: null,
     ...patch,
   };
@@ -138,10 +147,8 @@ function renderSetup(
   function expand(node: unknown): unknown {
     if (Array.isArray(node)) return node.map(expand);
     if (!isValidElement<Record<string, unknown>>(node)) return node;
-    if (node.type === ProviderAuthenticationSection)
-      return ProviderAuthenticationSection(
-        node.props as Parameters<typeof ProviderAuthenticationSection>[0],
-      );
+    if (node.type === AntigravityWebConnect)
+      return AntigravityWebConnect(node.props as Parameters<typeof AntigravityWebConnect>[0]);
     return cloneElement(
       node,
       Object.fromEntries(Object.entries(node.props).map(([key, value]) => [key, expand(value)])),
@@ -183,45 +190,24 @@ function click(view: unknown, label: string) {
   (target.props.onClick as () => void)();
 }
 
-function setCallback(view: unknown, value: string) {
-  const input = visitElements(
-    view,
-    (element) => element.props.id === `provider-callback-${instanceId}`,
-  );
-  if (!input) throw new Error("Missing callback input.");
-  (input.props.onChange as (event: { target: { value: string } }) => void)({ target: { value } });
-}
-
-function submitCallback(view: unknown) {
-  const form = visitElements(view, (element) => element.type === "form");
-  if (!form) throw new Error("Missing callback form.");
-  (form.props.onSubmit as (event: { preventDefault: () => void }) => void)({
-    preventDefault: vi.fn(),
-  });
-}
-
 async function flushPromises() {
   await Promise.resolve();
   await Promise.resolve();
   await Promise.resolve();
 }
 
+const startOk = {
+  url: "https://accounts.google.com/o/oauth2/v2/auth?state=state-1",
+  state: "state-1",
+};
+const statusSucceeded = () => ({ status: "succeeded", message: "Signed in as user@example.com" });
+
 describe("Antigravity setup", () => {
   beforeEach(() => {
     hooks.reset();
     vi.clearAllMocks();
-    setup.auth = authState();
-    setup.installation = {
-      driver: ProviderDriverKind.make("antigravity"),
-      operationId: null,
-      phase: "idle",
-      downloadedBytes: 0,
-      totalBytes: null,
-      version: null,
-      installedVersion: null,
-      canRemove: false,
-      message: null,
-    };
+    setup.auth = null;
+    setup.installation = installState();
     for (const command of [
       setup.startAuth,
       setup.completeAuth,
@@ -230,136 +216,95 @@ describe("Antigravity setup", () => {
       setup.startInstall,
       setup.cancelInstall,
       setup.removeInstall,
+      setup.refreshProviders,
     ]) {
       command.mockReset().mockResolvedValue({ _tag: "Success", value: undefined });
     }
     setup.confirm.mockReset().mockResolvedValue(false);
+    setup.fetch.mockReset().mockRejectedValue(new Error("fetch not stubbed"));
+    setup.windowOpen.mockReset();
   });
 
-  it("waits for verified auth after submitting a callback to the selected environment", async () => {
-    const callbackUrl = "http://127.0.0.1:5555/?state=test-only&code=test-only";
-    setCallback(renderSetup(), callbackUrl);
-    submitCallback(renderSetup());
+  it("signs in through the permanent web connect and refreshes models", async () => {
+    setup.fetch
+      .mockResolvedValueOnce({ ok: true, json: async () => startOk })
+      .mockResolvedValue({ ok: true, json: async () => statusSucceeded() });
+    const view = renderSetup();
+    click(view, "Sign in with Google");
+    await flushPromises();
     await flushPromises();
 
-    expect(setup.completeAuth).toHaveBeenCalledWith({
+    expect(setup.fetch).toHaveBeenCalledWith("/api/antigravity-connect/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ instanceId }),
+    });
+    expect(setup.windowOpen).toHaveBeenCalledWith(
+      startOk.url,
+      "antigravity_connect",
+      "noopener,noreferrer",
+    );
+    expect(setup.refreshProviders).toHaveBeenCalledWith({
       environmentId,
-      input: { instanceId, flowId: "flow-1", callbackUrl },
+      input: { instanceId, refreshModels: true },
     });
-    let view = renderSetup();
-    expect(visitElements(view, (element) => element.props.children === "Signed in.")).toBeNull();
-    expect(
-      visitElements(view, (element) => element.props.id === `provider-callback-${instanceId}`)
-        ?.props.value,
-    ).toBe("");
-
-    setup.auth = authState({ phase: "verifying", authorizationUrl: null });
-    expect(
-      visitElements(renderSetup(), (element) => element.props.children === "Signed in."),
-    ).toBeNull();
-    setup.auth = authState({ phase: "succeeded", authorizationUrl: null });
-    view = renderSetup({
-      provider: { ...provider, status: "ready", auth: { status: "authenticated" } },
-    });
-    expect(
-      visitElements(view, (element) => element.props.children === "Signed in."),
-    ).not.toBeNull();
   });
 
-  it("offers sign-in again when credentials expire after a completed auth flow", () => {
-    setup.auth = authState({
-      phase: "succeeded",
-      authorizationUrl: null,
-      message: "Google sign-in complete.",
-    });
-    renderSetup({
-      provider: { ...provider, status: "ready", auth: { status: "authenticated" } },
-    });
-    const expired = renderSetup();
-    expect(button(expired, "Sign in")).not.toBeNull();
-    expect(visitElements(expired, (element) => element.props.children === "Signed in.")).toBeNull();
-    expect(
-      visitElements(expired, (element) => element.props.children === "Google sign-in complete."),
-    ).toBeNull();
-  });
-
-  it("does not send a callback left over from a replaced sign-in flow", async () => {
-    const interaction = {
-      type: "browser" as const,
-      id: "same-interaction",
-      url: "https://example.com/login",
-      requiresConsent: false,
-      acceptsCallback: true,
+  it("disables the sign-in button while start is pending", async () => {
+    let resolveStart: (value: unknown) => void = () => {
+      throw new Error("Missing resolver.");
     };
-    setup.auth = authState({ interaction });
-    setCallback(renderSetup(), "http://127.0.0.1:5555/?state=old-flow&code=test-only");
-    setup.auth = authState({ flowId: "flow-2", interaction });
-    submitCallback(renderSetup());
-    await flushPromises();
-
-    expect(setup.completeAuth).not.toHaveBeenCalled();
-    expect(setup.authState).toHaveBeenLastCalledWith({ environmentId, input: { instanceId } });
-  });
-
-  it("coalesces repeated sign-in clicks while start is pending", async () => {
-    setup.auth = authState({ phase: "idle", flowId: null, authorizationUrl: null });
-    let completeStart: (value: { _tag: "Success"; value: undefined }) => void = () => {
-      throw new Error("Missing start resolver.");
-    };
-    const pending = new Promise<{ _tag: "Success"; value: undefined }>((resolve) => {
-      completeStart = resolve;
+    const pending = new Promise<unknown>((resolve) => {
+      resolveStart = resolve;
     });
-    setup.startAuth.mockReturnValueOnce(pending);
+    setup.fetch.mockReturnValueOnce(pending);
     const view = renderSetup();
-    click(view, "Sign in");
-    click(view, "Sign in");
+    click(view, "Sign in with Google");
 
-    expect(setup.startAuth).toHaveBeenCalledTimes(1);
-    expect(setup.startAuth).toHaveBeenCalledWith({ environmentId, input: { instanceId } });
-    completeStart({ _tag: "Success", value: undefined });
+    expect(setup.fetch).toHaveBeenCalledTimes(1);
+    expect(button(renderSetup(), "Sign in with Google")?.props.disabled).toBe(true);
+    resolveStart({ ok: true, json: async () => startOk });
     await flushPromises();
   });
 
-  it("shows a repeated runtime status message only once", () => {
-    setup.installation = {
-      ...setup.installation!,
-      operationId: "install-1",
-      phase: "verifying",
-      message: "Checking the downloaded runtime.",
-    };
-
+  it("offers sign-in again after Google reports a failure", async () => {
+    setup.fetch
+      .mockResolvedValueOnce({ ok: true, json: async () => startOk })
+      .mockResolvedValue({
+        ok: true,
+        json: async () => ({ status: "failed", message: "Google sign-in failed: access_denied" }),
+      });
     const view = renderSetup();
-    expect(
-      countElements(
-        view,
-        (element) => element.props.children === "Checking the downloaded runtime.",
-      ),
-    ).toBe(1);
+    click(view, "Sign in with Google");
+    await flushPromises();
+    await flushPromises();
+
+    expect(button(renderSetup(), "Retry sign-in")).not.toBeNull();
   });
 
-  it("removes an owned damaged runtime only after confirmation", async () => {
-    setup.auth = authState({ phase: "idle", flowId: null, authorizationUrl: null });
-    setup.installation = {
-      ...setup.installation!,
-      phase: "failed",
-      canRemove: true,
-      installedVersion: null,
-    };
-    const view = renderSetup();
-    click(view, "Remove downloaded runtime");
-    await flushPromises();
-    expect(setup.removeInstall).not.toHaveBeenCalled();
-
-    setup.confirm.mockResolvedValue(true);
-    click(view, "Remove downloaded runtime");
-    await flushPromises();
-    expect(setup.removeInstall).toHaveBeenCalledWith({ environmentId, input: { instanceId } });
+  it("shows the signed-in account actions and hides the sign-in button", () => {
+    const authenticated = { ...provider, auth: { status: "authenticated" as const } };
+    const view = renderSetup({ provider: authenticated });
+    expect(button(view, "Change account")).not.toBeNull();
+    expect(button(view, "Sign out")).not.toBeNull();
+    expect(button(view, "Sign in with Google")).toBeNull();
   });
+
+  it.each(["unauthenticated", "unknown"] as const)(
+    "does not offer sign-out for an unverified %s account",
+    (status) => {
+      const view = renderSetup({
+        provider: { ...provider, auth: { status, canLogout: true } },
+      });
+      expect(button(view, "Sign in with Google")).not.toBeNull();
+      expect(button(view, "Sign out")).toBeNull();
+      expect(button(view, "Change account")).toBeNull();
+    },
+  );
 
   it.each([true, false])(
     "can sign out a verified account when its instance is enabled=%s",
     async (enabled) => {
-      setup.auth = authState({ phase: "idle", flowId: null, authorizationUrl: null });
       setup.confirm.mockResolvedValue(true);
       const view = renderSetup({
         enabled,
@@ -377,39 +322,45 @@ describe("Antigravity setup", () => {
     },
   );
 
-  it.each(["unauthenticated", "unknown"] as const)(
-    "does not offer sign-out for an unverified %s account",
-    (status) => {
-      setup.auth = authState({ phase: "idle", flowId: null, authorizationUrl: null });
-      const view = renderSetup({
-        provider: { ...provider, auth: { status, canLogout: true } },
-      });
-      expect(button(view, "Sign in")).not.toBeNull();
-      expect(button(view, "Sign out")).toBeNull();
-      expect(button(view, "Change account")).toBeNull();
-    },
-  );
+  it("shows a repeated runtime status message only once", () => {
+    setup.installation = installState({
+      operationId: "install-1",
+      phase: "verifying",
+      message: "Checking the downloaded runtime.",
+    });
 
-  it("offers account actions after verified login when discovery cannot identify auth", () => {
-    setup.auth = authState({ phase: "succeeded", flowId: null, authorizationUrl: null });
-    const view = renderSetup({ provider: { ...provider, auth: { status: "unknown" } } });
-    expect(button(view, "Change account")).not.toBeNull();
-    expect(button(view, "Sign out")).not.toBeNull();
-    expect(button(view, "Sign in")).toBeNull();
+    const view = renderSetup();
+    expect(
+      countElements(
+        view,
+        (element) => element.props.children === "Checking the downloaded runtime.",
+      ),
+    ).toBe(1);
   });
 
-  it("does not let a shared managed install hide an invalid custom binary path", () => {
-    setup.auth = authState({ phase: "idle", flowId: null, authorizationUrl: null });
-    setup.installation = {
-      ...setup.installation!,
-      installedVersion: "test-version",
+  it("removes an owned damaged runtime only after confirmation", async () => {
+    setup.installation = installState({
+      phase: "failed",
       canRemove: true,
-    };
+      installedVersion: null,
+    });
+    const view = renderSetup();
+    click(view, "Remove downloaded runtime");
+    await flushPromises();
+    expect(setup.removeInstall).not.toHaveBeenCalled();
+
+    setup.confirm.mockResolvedValue(true);
+    click(view, "Remove downloaded runtime");
+    await flushPromises();
+    expect(setup.removeInstall).toHaveBeenCalledWith({ environmentId, input: { instanceId } });
+  });
+
+  it("does not enable sign-in before the runtime is installed", () => {
     const view = renderSetup({
       provider: { ...provider, installed: false },
       binaryPath: "/missing/antigravity",
     });
-    expect(button(view, "Sign in")?.props.disabled).toBe(true);
+    expect(button(view, "Sign in with Google")?.props.disabled).toBe(true);
     expect(setup.startAuth).not.toHaveBeenCalled();
   });
 
