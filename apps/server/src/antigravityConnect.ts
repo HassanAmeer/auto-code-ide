@@ -406,6 +406,14 @@ export const layerAntigravityConnectRoute = Layer.mergeAll(
   ),
   HttpRouter.add(
     "GET",
+    "/api/antigravity-connect/tunnel-config",
+    Effect.gen(function* () {
+      const serverConfig = yield* ServerConfig.ServerConfig;
+      return HttpServerResponse.jsonUnsafe({ port: serverConfig.port });
+    }),
+  ),
+  HttpRouter.add(
+    "GET",
     "/api/antigravity-connect/status",
     Effect.gen(function* () {
       const request = yield* HttpServerRequest.HttpServerRequest;

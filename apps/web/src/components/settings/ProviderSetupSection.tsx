@@ -53,23 +53,25 @@ export function ProviderSetupSection(props: ProviderSetupSectionProps) {
       aria-label="Antigravity setup"
       className="@container/setup divide-y divide-border/50 text-xs"
     >
-      <SettingsRow
-        className="@max-lg/setup:[&>div:first-child]:flex @max-lg/setup:[&>div:first-child]:items-stretch @max-lg/setup:[&>div:first-child]:gap-3"
-        title="Environment"
-        description="Device that runs this provider."
-        control={
-          <div className="flex min-w-0 flex-col gap-2 sm:items-end">
-            <span className="text-muted-foreground [overflow-wrap:anywhere]">
-              {props.environmentLabel}
-            </span>
-            {!props.enabled && !props.readOnly ? (
-              <Button size="sm" variant="outline" onClick={props.onEnable}>
-                Enable Antigravity
-              </Button>
-            ) : null}
-          </div>
-        }
-      />
+      {!props.enabled ? (
+        <SettingsRow
+          className="@max-lg/setup:[&>div:first-child]:flex @max-lg/setup:[&>div:first-child]:items-stretch @max-lg/setup:[&>div:first-child]:gap-3"
+          title="Environment"
+          description="Device that runs this provider."
+          control={
+            <div className="flex min-w-0 flex-col gap-2 sm:items-end">
+              <span className="text-muted-foreground [overflow-wrap:anywhere]">
+                {props.environmentLabel}
+              </span>
+              {!props.readOnly ? (
+                <Button size="sm" variant="outline" onClick={props.onEnable}>
+                  Enable Antigravity
+                </Button>
+              ) : null}
+            </div>
+          }
+        />
+      ) : null}
       {props.readOnly ? (
         <SettingsRow title="Setup unavailable" description="Provider setup is read-only." />
       ) : props.provider?.setup === undefined ? (
@@ -187,112 +189,121 @@ function ProviderSetupActions({
     }
   }
 
+  const showRuntimeRow =
+    !installed ||
+    installActive ||
+    usesCustomBinary ||
+    installation?.phase === "failed" ||
+    installation?.phase === "cancelled";
+
   return (
     <div className="divide-y divide-border/50">
-      <SettingsRow
-        title="Runtime"
-        className="@max-lg/setup:[&>div:first-child]:flex @max-lg/setup:[&>div:first-child]:items-stretch @max-lg/setup:[&>div:first-child]:gap-3"
-        description="Install and manage Antigravity."
-        status={
-          <div className="space-y-2">
-            {usesCustomBinary ? (
-              <p className="text-muted-foreground">
-                Uses the custom binary path below. Installation keeps that path.
-              </p>
-            ) : null}
-            {!installed && !provider.setup?.canInstall ? (
-              <p className="text-muted-foreground">
-                Automatic installation unavailable. Set a binary path or use another environment.
-              </p>
-            ) : null}
-          </div>
-        }
-        control={
-          <div className="flex w-full min-w-0 flex-col gap-2 sm:w-56 sm:text-right">
-            <p role="status" className="min-h-4 text-muted-foreground tabular-nums">
-              {installationStatusMessage}
-            </p>
-            <div className="h-1">
-              {installation?.phase === "downloading" &&
-              installation.totalBytes !== null &&
-              installation.totalBytes > 0 ? (
-                <progress
-                  aria-label="Antigravity download"
-                  className="block h-1 w-full accent-foreground"
-                  value={installation.downloadedBytes}
-                  max={installation.totalBytes}
-                />
+      {showRuntimeRow ? (
+        <SettingsRow
+          title="Runtime"
+          className="@max-lg/setup:[&>div:first-child]:flex @max-lg/setup:[&>div:first-child]:items-stretch @max-lg/setup:[&>div:first-child]:gap-3"
+          description="Install and manage Antigravity."
+          status={
+            <div className="space-y-2">
+              {usesCustomBinary ? (
+                <p className="text-muted-foreground">
+                  Uses the custom binary path below. Installation keeps that path.
+                </p>
+              ) : null}
+              {!installed && !provider.setup?.canInstall ? (
+                <p className="text-muted-foreground">
+                  Automatic installation unavailable. Set a binary path or use another environment.
+                </p>
               ) : null}
             </div>
-            {!installActive &&
-            installation?.message &&
-            installation.message !== installationStatusMessage ? (
-              <p className="text-muted-foreground [overflow-wrap:anywhere]">
-                {installation.message}
+          }
+          control={
+            <div className="flex w-full min-w-0 flex-col gap-2 sm:w-56 sm:text-right">
+              <p role="status" className="min-h-4 text-muted-foreground tabular-nums">
+                {installationStatusMessage}
               </p>
-            ) : null}
-            <div className="grid min-h-7 grid-cols-[1.75rem_minmax(0,1fr)] gap-2">
-              <div className="col-start-2 row-start-1 grid">
-                {installActive && installation.operationId ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={actionsDisabled}
-                    onClick={() => {
-                      const operationId = installation.operationId;
-                      if (!operationId) return;
-                      void runCommand("Cancelling installation", () =>
-                        cancelInstall({ environmentId, input: { instanceId, operationId } }),
-                      );
-                    }}
-                  >
-                    Cancel installation
-                  </Button>
-                ) : !installActive && provider.setup?.canInstall ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={actionsDisabled || installation === null || authActive}
-                    onClick={() =>
-                      void runCommand("Starting installation", () => startInstall(target))
-                    }
-                  >
-                    {installation?.installedVersion
-                      ? installation.version &&
-                        installation.version !== installation.installedVersion
-                        ? "Update Antigravity"
-                        : "Reinstall Antigravity"
-                      : installation?.phase === "failed" || installation?.phase === "cancelled"
-                        ? "Retry installation"
-                        : installed
-                          ? "Install managed runtime"
-                          : "Install Antigravity"}
-                  </Button>
+              <div className="h-1">
+                {installation?.phase === "downloading" &&
+                installation.totalBytes !== null &&
+                installation.totalBytes > 0 ? (
+                  <progress
+                    aria-label="Antigravity download"
+                    className="block h-1 w-full accent-foreground"
+                    value={installation.downloadedBytes}
+                    max={installation.totalBytes}
+                  />
                 ) : null}
               </div>
-              {installation?.canRemove && !installActive ? (
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <Button
-                        size="icon-sm"
-                        variant="ghost"
-                        className="col-start-1 row-start-1"
-                        aria-label="Remove downloaded runtime"
-                        disabled={actionsDisabled || authActive}
-                        onClick={() => void removeRuntime()}
-                      />
-                    }
-                  >
-                    <Trash2Icon className="size-3.5" />
-                  </TooltipTrigger>
-                  <TooltipPopup>Remove downloaded runtime</TooltipPopup>
-                </Tooltip>
+              {!installActive &&
+              installation?.message &&
+              installation.message !== installationStatusMessage ? (
+                <p className="text-muted-foreground [overflow-wrap:anywhere]">
+                  {installation.message}
+                </p>
               ) : null}
+              <div className="grid min-h-7 grid-cols-[1.75rem_minmax(0,1fr)] gap-2">
+                <div className="col-start-2 row-start-1 grid">
+                  {installActive && installation.operationId ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={actionsDisabled}
+                      onClick={() => {
+                        const operationId = installation.operationId;
+                        if (!operationId) return;
+                        void runCommand("Cancelling installation", () =>
+                          cancelInstall({ environmentId, input: { instanceId, operationId } }),
+                        );
+                      }}
+                    >
+                      Cancel installation
+                    </Button>
+                  ) : !installActive && provider.setup?.canInstall ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={actionsDisabled || installation === null || authActive}
+                      onClick={() =>
+                        void runCommand("Starting installation", () => startInstall(target))
+                      }
+                    >
+                      {installation?.installedVersion
+                        ? installation.version &&
+                          installation.version !== installation.installedVersion
+                          ? "Update Antigravity"
+                          : "Reinstall Antigravity"
+                        : installation?.phase === "failed" || installation?.phase === "cancelled"
+                          ? "Retry installation"
+                          : installed
+                            ? "Install managed runtime"
+                            : "Install Antigravity"}
+                    </Button>
+                  ) : null}
+                </div>
+                {installation?.canRemove && !installActive ? (
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <Button
+                          size="icon-sm"
+                          variant="ghost"
+                          className="col-start-1 row-start-1"
+                          aria-label="Remove downloaded runtime"
+                          disabled={actionsDisabled || authActive}
+                          onClick={() => void removeRuntime()}
+                        />
+                      }
+                    >
+                      <Trash2Icon className="size-3.5" />
+                    </TooltipTrigger>
+                    <TooltipPopup>Remove downloaded runtime</TooltipPopup>
+                  </Tooltip>
+                ) : null}
+              </div>
             </div>
-          </div>
-        }
-      />
+          }
+        />
+      ) : null}
 
       {authMethod === "oauth-personal" ? (
         <AntigravityWebConnect
