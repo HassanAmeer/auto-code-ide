@@ -103,6 +103,10 @@ export const layerFromProviderInstanceRegistry: Layer.Layer<
                 const targetAdapter =
                   resolvedInstance.driverKind === "opencode" ||
                   resolvedInstance.driverKind === "opencodebypasssetup" ||
+                  // First-party driver with its own adapter (ACP + Google OAuth).
+                  // The engine has no Antigravity provider, so routing its turns
+                  // there produced "Model unavailable: antigravity/<model>" (HTTP 503).
+                  resolvedInstance.driverKind === "antigravity" ||
                   !openCodeInstance
                     ? resolvedInstance.orchestrationAdapter
                     : ({
@@ -221,9 +225,10 @@ export const layerFromProviderInstanceRegistry: Layer.Layer<
               ),
             );
           return {
-            driver: openCodeInstance
-              ? openCodeInstance.orchestrationAdapter.driver
-              : instance.driverKind,
+            driver:
+              instance.driverKind === "antigravity" || !openCodeInstance
+                ? instance.driverKind
+                : openCodeInstance.orchestrationAdapter.driver,
             continuationKey: instance.continuationIdentity.continuationKey,
             enabled: instance.enabled,
             capabilities,

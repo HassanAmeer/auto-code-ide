@@ -76,6 +76,29 @@ describe("applyAntigravityAcpModelSelection", () => {
     }),
   );
 
+  it.effect("aliases the public display id to the served High tier", () =>
+    Effect.gen(function* () {
+      const { runtime, selections } = makeModelRuntime([
+        {
+          ...modelConfig,
+          currentValue: "gemini-3.8-flash-high",
+          options: [
+            { value: "gemini-3.8-flash-high", name: "Gemini 3.8 Flash (High)" },
+            { value: "gemini-3.8-flash-low", name: "Gemini 3.8 Flash (Low)" },
+          ],
+        },
+      ]);
+      const model = yield* applyAntigravityAcpModelSelection({
+        runtime,
+        model: "gemini-3.8-flash",
+        mapError: (cause) => cause,
+      });
+
+      expect(model).toBe("gemini-3.8-flash-high");
+      expect(selections).toEqual(["gemini-3.8-flash-high"]);
+    }),
+  );
+
   it.effect.each([undefined, null, ANTIGRAVITY_DEFAULT_MODEL])(
     "uses the native default for %s without sending an internal model ID",
     (requestedModel) =>

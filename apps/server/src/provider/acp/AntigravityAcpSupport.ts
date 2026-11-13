@@ -109,10 +109,22 @@ function antigravityModelOptions(
 }
 
 /**
+ * Public display ids that are not served by the Antigravity agent. The live
+ * catalog only advertises the tiered ids (-high/-medium/-low), so the bare
+ * display id and the retired tiered endpoint alias to the High tier, the same
+ * mapping Cheaprouter uses for the same backend.
+ */
+const ANTIGRAVITY_MODEL_ALIASES: Record<string, string> = {
+  "gemini-3.8-flash": "gemini-3.8-flash-high",
+  "gemini-3.8-flash-tiered": "gemini-3.8-flash-high",
+};
+
+/**
  * Resolves the model a turn should run on. A saved selection is reapplied
- * as-is. The provider default alias resolves to `defaultModel` when the
- * account offers it, so Bot can pick a newer model than the one Google marks
- * current. Otherwise the agent's current selection stands.
+ * as-is (public display ids are aliased to the served tier first). The
+ * provider default alias resolves to `defaultModel` when the account offers
+ * it, so Bot can pick a newer model than the one Google marks current.
+ * Otherwise the agent's current selection stands.
  */
 function resolveAntigravityModel(input: {
   readonly configOptions: ReadonlyArray<EffectAcpSchema.SessionConfigOption>;
@@ -121,7 +133,10 @@ function resolveAntigravityModel(input: {
 }): string | undefined {
   const modelConfig = input.configOptions.find((option) => option.id === "model");
   const current = modelConfig?.type === "select" ? modelConfig.currentValue : undefined;
-  if (input.model && input.model !== ANTIGRAVITY_DEFAULT_MODEL) return input.model;
+  if (input.model && input.model !== ANTIGRAVITY_DEFAULT_MODEL) {
+    const requested = input.model.trim();
+    return ANTIGRAVITY_MODEL_ALIASES[requested] ?? requested;
+  }
   const options = antigravityModelOptions(input.configOptions);
   return input.defaultModel && options.some((option) => option.value === input.defaultModel)
     ? input.defaultModel
