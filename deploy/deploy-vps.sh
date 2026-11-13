@@ -123,16 +123,52 @@ fi
 # ------------------------------------------------------------------------------
 echo -e "\n${C_BOLD}${C_BLUE}[4/5] Syncing to VPS (${VPS_HOST})...${C_RESET}"
 
-# Test SSH connection
+# Test SSH connection; when this machine IS the VPS itself, SSH to the public
+# host would fail (no self publickey) — fall back to local sync instead of
+# bailing out. The SSH path is unchanged when it works (e.g. from a dev box).
+LOCAL_MODE=false
 if ! ssh -o BatchMode=yes -o ConnectTimeout=5 "${VPS_USER}@${VPS_HOST}" "true" 2>/dev/null; then
-  echo -e "${C_BOLD}${C_RED}❌ Cannot connect to VPS (${VPS_USER}@${VPS_HOST}) via SSH!${C_RESET}"
-  exit 1
+  if hostname -I 2>/dev/null | tr ' ' '\n' | grep -q "^${VPS_HOST}$"; then
+    echo -e "${C_YELLOW}  ⚠️ SSH to ${VPS_HOST} failed, but this IS the VPS — using local sync mode.${C_RESET}"
+    LOCAL_MODE=true
+  else
+    echo -e "${C_BOLD}${C_RED}❌ Cannot connect to VPS (${VPS_USER}@${VPS_HOST}) via SSH!${C_RESET}"
+    exit 1
+  fi
 fi
 
 # Rsync web and server dist for zero-downtime, fast asset delivery
 RSYNC_SSH="ssh -o ConnectTimeout=15 -o ServerAliveInterval=5"
 for TARGET_DIR in "${VPS_DIR}" "/root/bot-autojobs"; do
   echo -e "  ${C_DIM}Syncing to ${TARGET_DIR}...${C_RESET}"
+  # Runtime config (opencode.json on the servers holds the live provider
+  # catalog + keys and is intentionally NOT what origin/main carries). Back it
+  # up across the reset so the deployed instances keep their working setup.
+  OPENCODE_BACKUP=""
+  if [ -f "${TARGET_DIR}/opencode.json" ] && [ -n "$(cd "${TARGET_DIR}" && git status --porcelain -- opencode.json)" ]; then
+    OPENCODE_BACKUP=$(mktemp /tmp/deploy-opencode-json.XXXXXX)
+    cp "${TARGET_DIR}/opencode.json" "$OPENCODE_BACKUP"
+  fi
+
+  if [ "$LOCAL_MODE" = true ]; then
+    if [ -d "apps/web/dist" ]; then
+      rsync -az --exclude="*.map" apps/web/dist/ "${TARGET_DIR}/apps/web/dist/"
+    fi
+
+    if [ -d "apps/server/dist" ]; then
+      rsync -az --exclude="*.map" apps/server/dist/ "${TARGET_DIR}/apps/server/dist/"
+    fi
+
+    if [ -d "bot" ]; then
+      rsync -az bot/ "${TARGET_DIR}/bot/"
+    fi
+
+    ( cd "${TARGET_DIR}" && git fetch origin "${CURRENT_BRANCH}" > /dev/null 2>&1 \
+      && git reset --hard "origin/${CURRENT_BRANCH}" > /dev/null 2>&1 )
+    if [ -n "$OPENCODE_BACKUP" ]; then cp "$OPENCODE_BACKUP" "${TARGET_DIR}/opencode.json"; fi
+    [ -n "$OPENCODE_BACKUP" ] && rm -f "$OPENCODE_BACKUP"
+    continue
+  fi
   if [ -d "apps/web/dist" ]; then
     rsync -az --exclude="*.map" -e "${RSYNC_SSH}" apps/web/dist/ "${VPS_USER}@${VPS_HOST}:${TARGET_DIR}/apps/web/dist/"
   fi
@@ -151,6 +187,10 @@ for TARGET_DIR in "${VPS_DIR}" "/root/bot-autojobs"; do
     git fetch origin "${CURRENT_BRANCH}" > /dev/null 2>&1
     git reset --hard "origin/${CURRENT_BRANCH}" > /dev/null 2>&1
 EOF
+  if [ -n "$OPENCODE_BACKUP" ]; then
+    rsync -az -e "${RSYNC_SSH}" "$OPENCODE_BACKUP" "${VPS_USER}@${VPS_HOST}:${TARGET_DIR}/opencode.json"
+    rm -f "$OPENCODE_BACKUP"
+  fi
 done
 echo -e "  ${C_GREEN}✓ VPS repositories synchronized with commit ${CURRENT_COMMIT}${C_RESET}"
 
@@ -158,6 +198,32 @@ echo -e "  ${C_GREEN}✓ VPS repositories synchronized with commit ${CURRENT_COM
 # 5. RESTART SERVICE & HEALTH CHECK
 # ------------------------------------------------------------------------------
 echo -e "\n${C_BOLD}${C_BLUE}[5/5] Restarting VPS Services (autojobs + bot) & Performing Health Checks...${C_RESET}"
+if [ "$LOCAL_MODE" = true ]; then
+  HEALTH_RESULT=$(bash -s << 'HEALTH_EOF'
+  systemctl restart autojobs.service bot-autojobs.service
+
+  STATUS="unknown"
+  HTTP_CODE="000"
+  BOT_STATUS="unknown"
+  BOT_HTTP_CODE="000"
+
+  sleep 3
+  for i in {1..15}; do
+    STATUS=$(systemctl is-active autojobs.service 2>/dev/null || echo "unknown")
+    HTTP_CODE=$(curl --noproxy '*' -s -m 3 -o /dev/null -w "%{http_code}" http://127.0.0.1:13773/ 2>/dev/null || echo "000")
+    BOT_STATUS=$(systemctl is-active bot-autojobs.service 2>/dev/null || echo "unknown")
+    BOT_HTTP_CODE=$(curl --noproxy '*' -s -m 3 -o /dev/null -w "%{http_code}" http://127.0.0.1:13774/ 2>/dev/null || echo "000")
+    if [ "$STATUS" = "active" ] && [ "$HTTP_CODE" = "200" ] && [ "$BOT_STATUS" = "active" ] && [ "$BOT_HTTP_CODE" = "200" ]; then
+      break
+    fi
+    sleep 1
+  done
+
+  PID=$(pgrep -f "apps/server/dist/bin.mjs" | head -n 1 || echo "none")
+  echo "STATUS=$STATUS|HTTP_CODE=$HTTP_CODE|BOT_STATUS=$BOT_STATUS|BOT_HTTP_CODE=$BOT_HTTP_CODE|PID=$PID"
+HEALTH_EOF
+)
+else
 HEALTH_RESULT=$(ssh "${VPS_USER}@${VPS_HOST}" "bash -s" << EOF
   systemctl restart autojobs.service bot-autojobs.service
 
@@ -182,6 +248,7 @@ HEALTH_RESULT=$(ssh "${VPS_USER}@${VPS_HOST}" "bash -s" << EOF
   echo "STATUS=\$STATUS|HTTP_CODE=\$HTTP_CODE|BOT_STATUS=\$BOT_STATUS|BOT_HTTP_CODE=\$BOT_HTTP_CODE|PID=\$PID"
 EOF
 )
+fi
 
 SERVICE_STATUS=$(echo "$HEALTH_RESULT" | grep -o 'STATUS=[^|]*' | cut -d= -f2)
 HTTP_CODE=$(echo "$HEALTH_RESULT" | grep -o 'HTTP_CODE=[^|]*' | cut -d= -f2)
