@@ -235,14 +235,24 @@ export function AntigravityWebConnect({
               </Button>
             </>
           ) : (
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={readOnly || !readyToSignIn || phase === "starting"}
-              onClick={() => void startSignIn()}
-            >
-              {phase === "failed" ? "Retry sign-in" : "Sign in with Google"}
-            </Button>
+            <div className="flex min-w-0 flex-col items-start gap-1">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={readOnly || !readyToSignIn || phase === "starting"}
+                onClick={() => void startSignIn()}
+              >
+                {phase === "failed" ? "Retry sign-in" : "Sign in with Google"}
+              </Button>
+              <button
+                type="button"
+                disabled={readOnly || !readyToSignIn || phase === "starting"}
+                onClick={() => void startSignIn()}
+                className="text-[11px] leading-none text-emerald-500 underline underline-offset-2 transition-colors hover:text-emerald-400 disabled:cursor-default disabled:opacity-40"
+              >
+                Sign in with Google (direct link)
+              </button>
+            </div>
           )}
         </div>
       }
