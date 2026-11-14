@@ -22,6 +22,9 @@ import { ThreadDetailsSection } from "./ThreadDetailsSection";
 import { ThreadAutomationsPanel } from "./ThreadAutomationsPanel";
 import { ThreadRelationshipsPanel } from "./ThreadRelationshipsControl";
 import { BackgroundServicesWidget } from "../background/BackgroundServicesWidget";
+import { BackgroundSubagentsProvider } from "../background/BackgroundSubagentsProvider";
+import { ThreadSubagentsSection } from "../background/ThreadSubagentsSection";
+import { WatchdogCard } from "../background/WatchdogCard";
 
 export interface ThreadDetailsPanelProps extends Pick<
   ComponentProps<typeof ThreadDetailsCard>,
@@ -99,7 +102,12 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
       onPresentationChange={props.onPresentationChange}
     >
       {(density) => (
-        <>
+        <BackgroundSubagentsProvider
+          environmentId={props.environmentId}
+          threadId={props.threadId}
+          scope="project"
+          projectName={props.activeProjectName}
+        >
           <ThreadDetailsSection
             headingId="thread-details-workspace-heading"
             title="Workspace"
@@ -173,6 +181,41 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
             </ThreadDetailsSection>
           ) : null}
 
+          {density === "compact" ? (
+            <>
+              <ThreadDetailsSection
+                headingId="thread-details-watchdog-heading"
+                title="Watchdog"
+                showHeading={false}
+                separated
+              >
+                <div className="flex flex-col gap-0.5 py-0.5" data-watchdog-section>
+                  <div className="flex min-h-7 items-center gap-1.5 px-2 text-xs font-medium text-foreground/85">
+                    <span aria-hidden="true">🐕</span>
+                    <span>Watchdog</span>
+                  </div>
+                  <WatchdogCard
+                    projectName={props.activeProjectName}
+                    initiallyExpanded={true}
+                    className="[&>div:first-child]:hidden"
+                  />
+                </div>
+              </ThreadDetailsSection>
+
+              <ThreadDetailsSection
+                headingId="thread-details-subagents-heading"
+                title="Subagents"
+                showHeading={false}
+                separated
+              >
+                <ThreadSubagentsSection
+                  environmentId={props.environmentId}
+                  threadId={props.threadId}
+                />
+              </ThreadDetailsSection>
+            </>
+          ) : null}
+
           <ThreadDetailsSection
             headingId="thread-details-background-services-heading"
             title="Background Services"
@@ -183,6 +226,8 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
               environmentId={props.environmentId}
               threadId={props.threadId}
               compact={density !== "full"}
+              showWatchdog={density !== "compact"}
+              showSubagents={density !== "compact"}
               showOpenSheetButton={true}
               scope="project"
               projectRoot={props.gitCwd}
@@ -200,7 +245,7 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
               threadId={props.threadId}
             />
           ) : null}
-        </>
+        </BackgroundSubagentsProvider>
       )}
     </ThreadDetailsCard>
   );

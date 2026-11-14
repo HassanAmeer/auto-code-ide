@@ -83,9 +83,77 @@ import {
   shouldShowBranchMismatchBanner,
   shouldShowPlanFollowUpPrompt,
   shouldWriteThreadErrorToCurrentServerThread,
+  shouldRestoreComposerDraftAfterSendFailure,
+  deriveComposerEnvironmentState,
   waitForRevertedMessage,
   prepareRevertedMessageAttachments,
 } from "./ChatView.logic";
+
+describe("composer draft recovery after send failure", () => {
+  it("does not restore a sent draft after an ambiguous transport failure", () => {
+    expect(
+      shouldRestoreComposerDraftAfterSendFailure({
+        failureMessage: "RpcClientError: socket closed",
+      }),
+    ).toBe(false);
+  });
+
+  it("restores a sent draft after a definite server rejection", () => {
+    expect(
+      shouldRestoreComposerDraftAfterSendFailure({
+        failureMessage: "Thread not found",
+      }),
+    ).toBe(true);
+  });
+});
+
+describe("composer environment connection state", () => {
+  it("blocks sending while the environment is reconnecting", () => {
+    expect(
+      deriveComposerEnvironmentState({
+        phase: "reconnecting",
+        error: "socket closed",
+        traceId: null,
+      }),
+    ).toEqual({
+      isConnecting: true,
+      isUnavailable: true,
+    });
+  });
+
+  it("allows sending only when the environment is connected", () => {
+    expect(
+      deriveComposerEnvironmentState({
+        phase: "connected",
+        error: null,
+        traceId: null,
+      }),
+    ).toEqual({
+      isConnecting: false,
+      isUnavailable: false,
+    });
+  });
+
+  it("marks offline environments unavailable without presenting them as connecting", () => {
+    expect(
+      deriveComposerEnvironmentState({
+        phase: "offline",
+        error: null,
+        traceId: null,
+      }),
+    ).toEqual({
+      isConnecting: false,
+      isUnavailable: true,
+    });
+  });
+
+  it("marks a missing active environment unavailable", () => {
+    expect(deriveComposerEnvironmentState(null)).toEqual({
+      isConnecting: false,
+      isUnavailable: true,
+    });
+  });
+});
 
 const environmentId = EnvironmentId.make("environment-local");
 const projectId = ProjectId.make("project-1");

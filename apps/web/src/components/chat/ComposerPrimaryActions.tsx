@@ -359,7 +359,13 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
       )}
       {...pointerFocusProps}
       onClick={handleSendClick}
-      disabled={isSendBusy || (!hasSendableContent && !showResume)}
+      disabled={
+        isSendBusy ||
+        isSendDisabled ||
+        isConnecting ||
+        isEnvironmentUnavailable ||
+        (!hasSendableContent && !showResume)
+      }
       aria-label={submitStatus ?? submitLabel}
     >
       {stageBackdropVariant ? (
@@ -406,7 +412,13 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
       )}
       {...pointerFocusProps}
       onClick={handleSendClick}
-      disabled={isSendBusy || (!hasSendableContent && !showResume)}
+      disabled={
+        isSendBusy ||
+        isSendDisabled ||
+        isConnecting ||
+        isEnvironmentUnavailable ||
+        (!hasSendableContent && !showResume)
+      }
       aria-label={submitStatus ?? submitLabel}
     >
       {isConnecting || isSendBusy ? (

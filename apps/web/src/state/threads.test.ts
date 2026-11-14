@@ -12,9 +12,10 @@ import {
 import { makeThreadProjectionFixture } from "../test-fixtures";
 import * as Option from "effect/Option";
 import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 
-import { createRunningThreadKeepAliveAtom } from "./threads";
+import { appAtomRegistry } from "../rpc/atomRegistry";
+import { createRunningThreadKeepAliveAtom, refreshThreadProjection } from "./threads";
 
 const LOCAL = EnvironmentId.make("local");
 const REMOTE = EnvironmentId.make("remote");
@@ -112,6 +113,20 @@ function makeHarness() {
     },
   };
 }
+
+describe("refreshThreadProjection", () => {
+  it("refreshes only the requested thread state atom", () => {
+    const refresh = vi.spyOn(appAtomRegistry, "refresh");
+
+    refreshThreadProjection({ environmentId: LOCAL, threadId: ThreadId.make("active") });
+
+    expect(refresh).toHaveBeenCalledTimes(1);
+    const refreshed = refresh.mock.calls[0]?.[0] as unknown as { label?: ReadonlyArray<string> };
+    expect(refreshed?.label?.[0]).toContain("local");
+    expect(refreshed?.label?.[0]).toContain("active");
+    refresh.mockRestore();
+  });
+});
 
 describe("createRunningThreadKeepAliveAtom", () => {
   it("keeps running threads open across shell updates and thread view visits", () => {

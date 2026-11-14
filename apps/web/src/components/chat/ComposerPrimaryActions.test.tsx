@@ -46,7 +46,13 @@ function renderPendingActions(isRunning: boolean) {
   );
 }
 
-function renderSendButton(sendDisabledReason: string | null = null) {
+function renderSendButton(
+  sendDisabledReason: string | null = null,
+  overrides: {
+    readonly isConnecting?: boolean;
+    readonly isEnvironmentUnavailable?: boolean;
+  } = {},
+) {
   return renderToStaticMarkup(
     createElement(ComposerPrimaryActions, {
       compact: true,
@@ -58,8 +64,8 @@ function renderSendButton(sendDisabledReason: string | null = null) {
       promptHasText: true,
       isSendBusy: false,
       sendDisabledReason,
-      isConnecting: false,
-      isEnvironmentUnavailable: false,
+      isConnecting: overrides.isConnecting ?? false,
+      isEnvironmentUnavailable: overrides.isEnvironmentUnavailable ?? false,
       isPreparingWorktree: false,
       hasSendableContent: true,
       onPreviousPendingQuestion: () => {},
@@ -80,6 +86,27 @@ describe("ComposerPrimaryActions", () => {
 
     expect(markup).toContain("disabled");
     expect(markup).toContain('aria-label="Sending feedback"');
+  });
+
+  it("disables sending while the environment is reconnecting", () => {
+    const markup = renderSendButton(null, { isConnecting: true });
+
+    expect(markup).toMatch(/<button[^>]*disabled=""[^>]*aria-label="Connecting"/);
+    expect(markup).toContain('aria-label="Connecting"');
+  });
+
+  it("disables sending while the environment is offline", () => {
+    const markup = renderSendButton(null, { isEnvironmentUnavailable: true });
+
+    expect(markup).toMatch(/<button[^>]*disabled=""[^>]*aria-label="Environment disconnected"/);
+    expect(markup).toContain('aria-label="Environment disconnected"');
+  });
+
+  it("keeps sending enabled for a connected environment", () => {
+    const markup = renderSendButton();
+
+    expect(markup).not.toContain('aria-label="Submit message" disabled');
+    expect(markup).toContain('aria-label="Submit message"');
   });
 
   it("offers Stop generation while a running turn is waiting for user input", () => {

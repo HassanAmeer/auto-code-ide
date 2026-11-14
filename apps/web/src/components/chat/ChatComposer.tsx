@@ -1747,16 +1747,16 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     isServerThread: _isServerThread,
     isLocalDraftThread: _isLocalDraftThread,
     forceExpandedOnMobile,
-    projectSelectionRequired: _projectSelectionRequired,
+    projectSelectionRequired,
     phase,
     canInterrupt,
-    isConnecting: _isConnecting,
+    isConnecting,
     isSendBusy,
     canResume,
     isRevertingCheckpoint = false,
     sendDisabledReason: externalSendDisabledReason,
     isPreparingWorktree,
-    environmentUnavailable: _environmentUnavailable,
+    environmentUnavailable,
     activePendingApproval,
     pendingApprovals,
     pendingUserInputs,
@@ -1828,9 +1828,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     editingQueuedAttachments,
     onRemoveEditingQueuedAttachment,
   } = props;
-  const isConnecting = false;
-  const environmentUnavailable = null;
-  const projectSelectionRequired = false;
   const isLiteralPendingAnswer = activePendingProgress?.activeQuestion?.initialAnswer !== undefined;
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const composerDraftTargetKey = composerTargetKey(composerDraftTarget);

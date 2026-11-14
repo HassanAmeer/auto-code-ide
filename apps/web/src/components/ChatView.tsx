@@ -318,6 +318,7 @@ import {
   Terminal as TerminalStudioIcon,
   X as CloseIcon,
   RotateCcwIcon,
+  RefreshCwIcon,
   TargetIcon,
   WifiOffIcon,
 } from "lucide-react";
@@ -416,6 +417,12 @@ import {
   DraftId,
 } from "../composerDraftStore";
 import {
+  getPendingComposerSubmission,
+  usePendingComposerSubmissionStore,
+  type PendingComposerSubmission,
+} from "../composerPendingSubmissionStore";
+import { dispatchPendingComposerSubmission } from "../composerPendingSubmission";
+import {
   formatTerminalContextLabel,
   type TerminalContextDraft,
   type TerminalContextSelection,
@@ -448,7 +455,7 @@ import {
   serverEnvironment,
 } from "../state/server";
 import { terminalEnvironment } from "../state/terminal";
-import { threadEnvironment } from "../state/threads";
+import { refreshThreadProjection, threadEnvironment } from "../state/threads";
 import { workspacePreparationRetryRunIds } from "@t3tools/client-runtime/state/turn-item-presentation";
 import { resolveProviderSkillsForCwd } from "@t3tools/client-runtime/providerSkills";
 import { vcsEnvironment } from "../state/vcs";
@@ -600,6 +607,8 @@ import {
   shouldOpenProactiveTurnDiff,
   shouldReleaseTimelineAnchorForToolActivity,
   shouldRenderPreviewMiniPlayer,
+  shouldRestoreComposerDraftAfterSendFailure,
+  deriveComposerEnvironmentState,
   getStartedThreadModelChangeBlockReason,
   LAST_INVOKED_SCRIPT_BY_PROJECT_KEY,
   LastInvokedScriptByProjectSchema,
@@ -1979,7 +1988,6 @@ export default function ChatView(props: ChatViewProps) {
   const [localServerErrorsByThreadKey, setLocalServerErrorsByThreadKey] = useState<
     Record<string, LocalThreadErrorEntry>
   >({});
-  const [isConnecting, _setIsConnecting] = useState(false);
   const isRevertingCheckpoint = useComposerDraftStore((store) =>
     store.rewindingThreadKeys.has(routeThreadKey),
   );
@@ -2330,6 +2338,9 @@ export default function ChatView(props: ChatViewProps) {
   }, [activeThreadKnownSessions]);
   const activeThreadRef = useActiveThreadRef(activeThread);
   const activeThreadKey = activeThreadRef ? scopedThreadKey(activeThreadRef) : null;
+  const activePendingComposerSubmission = usePendingComposerSubmissionStore((state) =>
+    activeThreadKey ? (state.submissionsByThreadKey[activeThreadKey] ?? null) : null,
+  );
   const activeEnvironmentServerBrowser = useEnvironmentSupportsServerBrowser(
     activeThreadRef?.environmentId ?? null,
   );
@@ -2913,9 +2924,17 @@ export default function ChatView(props: ChatViewProps) {
   }, [activeProjectRef, activeThreadRef]);
   const activeEnvironment =
     activeThread == null ? null : (environmentById.get(activeThread.environmentId) ?? null);
-  const activeEnvironmentConnectionPhase = "connected";
-  const activeEnvironmentUnavailable = false;
-  const activeReconnectingEnvironmentId = null;
+  const activeEnvironmentConnectionPhase = activeEnvironment?.connection.phase ?? "available";
+  const composerEnvironmentState = deriveComposerEnvironmentState(
+    activeEnvironment?.connection ?? null,
+  );
+  const isConnecting = composerEnvironmentState.isConnecting;
+  const activeEnvironmentUnavailable = composerEnvironmentState.isUnavailable;
+  const activeReconnectingEnvironmentId =
+    activeEnvironmentConnectionPhase === "connecting" ||
+    activeEnvironmentConnectionPhase === "reconnecting"
+      ? (activeEnvironment?.environmentId ?? null)
+      : null;
   const [reconnectWarningGraceElapsedEnvironmentId, setReconnectWarningGraceElapsedEnvironmentId] =
     useState<EnvironmentId | null>(null);
   const reconnectWarningGraceElapsed = hasEnvironmentReconnectWarningGraceElapsed(
@@ -2929,10 +2948,27 @@ export default function ChatView(props: ChatViewProps) {
       setReconnectWarningGraceElapsedEnvironmentId(activeReconnectingEnvironmentId),
     );
   }, [activeReconnectingEnvironmentId]);
-  const activeEnvironmentUnavailableLabel = activeEnvironment?.label ?? null;
+  const activeEnvironmentUnavailableLabel =
+    activeEnvironment?.label ?? activeThread?.environmentId ?? null;
   const activeEnvironmentUnavailableState = useMemo<EnvironmentUnavailableState | null>(
-    () => null,
-    [],
+    () =>
+      activeEnvironmentUnavailable && activeThread
+        ? {
+            environmentId: activeThread.environmentId,
+            label: activeEnvironmentUnavailableLabel ?? activeThread.environmentId,
+            connection: activeEnvironment?.connection ?? {
+              phase: "available",
+              error: null,
+              traceId: null,
+            },
+          }
+        : null,
+    [
+      activeEnvironment,
+      activeEnvironmentUnavailable,
+      activeEnvironmentUnavailableLabel,
+      activeThread,
+    ],
   );
   const handleReconnectActiveEnvironment = useCallback(
     async (environmentId: EnvironmentId) => {
@@ -7936,6 +7972,45 @@ export default function ChatView(props: ChatViewProps) {
           },
         })
       : null;
+  const retryPendingComposerSubmission = useCallback(async () => {
+    const submission = activePendingComposerSubmission;
+    if (!submission || sendInFlightRef.current) return;
+    sendInFlightRef.current = true;
+    try {
+      const result = await dispatchPendingComposerSubmission({
+        submission,
+        dispatch: (payload) =>
+          startThreadTurn({ environmentId: submission.environmentId, input: payload }),
+        insertOptimisticMessage: () => undefined,
+      });
+      if (result === "success") {
+        refreshThreadProjection(scopeThreadRef(submission.environmentId, submission.threadId));
+      } else if (result === "rejected") {
+        setThreadError(
+          submission.threadId,
+          "The pending message was rejected. Restore it from the composer and try again.",
+        );
+      }
+    } finally {
+      sendInFlightRef.current = false;
+    }
+  }, [activePendingComposerSubmission, setThreadError, startThreadTurn]);
+  const pendingComposerBannerItem = useMemo<ComposerBannerStackItem | null>(() => {
+    if (!activePendingComposerSubmission) return null;
+    return {
+      id: `pending-composer-submission:${activePendingComposerSubmission.commandId}`,
+      variant: "warning",
+      icon: <RefreshCwIcon />,
+      title: "Message delivery is uncertain",
+      description:
+        "The server may already have received this message. Retry safely with the same request instead of sending a duplicate.",
+      actions: (
+        <Button size="xs" variant="ghost" onClick={() => void retryPendingComposerSubmission()}>
+          Retry safely
+        </Button>
+      ),
+    };
+  }, [activePendingComposerSubmission, retryPendingComposerSubmission]);
   const composerBannerItems = useMemo<ComposerBannerStackItem[]>(() => {
     const limitRecoveryItems = limitRecoveryBanner === null ? [] : [limitRecoveryBanner];
     const backgroundWorkItems = [goalBannerItem, backgroundWorkBannerItem].filter(
@@ -7950,6 +8025,7 @@ export default function ChatView(props: ChatViewProps) {
         ...limitRecoveryItems,
         ...usageLimitsItems,
         ...projectCloneItems,
+        ...(pendingComposerBannerItem ? [pendingComposerBannerItem] : []),
         ...systemComposerBannerItems,
         ...backgroundWorkItems,
       ];
@@ -8013,6 +8089,7 @@ export default function ChatView(props: ChatViewProps) {
     goalBannerItem,
     localCheckoutBranchMismatch,
     projectCloneBannerItem,
+    pendingComposerBannerItem,
     showBranchMismatchBanner,
     systemComposerBannerItems,
     usageLimitsBanner,
@@ -9745,6 +9822,7 @@ export default function ChatView(props: ChatViewProps) {
       composerAttachmentsSnapshot.map((attachment) => attachment.id),
     );
     const messageIdForSend = newMessageId();
+    const commandIdForSend = CommandId.make(randomUUID());
     const messageCreatedAt = new Date().toISOString();
     // A stale Claude session compacts before this message so the turn does not re-read the
     // old history. The message queues behind the /compact run, since steering into it is
@@ -10387,50 +10465,62 @@ export default function ChatView(props: ChatViewProps) {
       if (isLocalDraftThread) {
         markPromotedDraftThreadByRef(scopeThreadRef(environmentId, threadIdForSend));
       }
+      const turnStartInput = {
+        commandId: commandIdForSend,
+        threadId: threadIdForSend,
+        message: {
+          messageId: messageIdForSend,
+          role: "user" as const,
+          text: outgoingMessageText,
+          attachments: turnAttachmentsResult.value,
+          ...(() => {
+            const context = buildOutgoingMessageContext(
+              turnAttachmentsResult.value.map((attachment, index) =>
+                "id" in attachment && attachment.id !== undefined
+                  ? attachment.id
+                  : composerAttachmentsSnapshot[index]!.id,
+              ),
+            );
+            if (context === undefined) return {};
+            // Read the capability at dispatch time: the upload and persistence
+            // awaits above can span a server reconnect that changes it. Servers
+            // from before inline context drop the records and forward the links
+            // as literal text, so their turns carry the payload the legacy way.
+            const supportsInlineMessageContext =
+              appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment
+                .capabilities.inlineMessageContext === true;
+            if (!supportsInlineMessageContext) {
+              return {
+                text: serializeLegacyContextMessage({
+                  text: outgoingMessageText,
+                  records: context.records,
+                }),
+              };
+            }
+            return { context };
+          })(),
+        },
+        modelSelection: ctxSelectedModelSelection,
+        titleSeed: title,
+        runtimeMode,
+        interactionMode: sendInteractionMode,
+        dispatchMode: turnDispatchMode,
+        ...(bootstrap ? { bootstrap } : {}),
+        createdAt: messageCreatedAt,
+      };
+      const pendingSubmission: PendingComposerSubmission = {
+        environmentId,
+        threadId: threadIdForSend,
+        commandId: commandIdForSend,
+        messageId: messageIdForSend,
+        phase: "dispatching",
+        createdAt: messageCreatedAt,
+        payload: turnStartInput,
+      };
+      usePendingComposerSubmissionStore.getState().setPendingSubmission(pendingSubmission);
       const startPromise = startThreadTurn({
         environmentId,
-        input: {
-          threadId: threadIdForSend,
-          message: {
-            messageId: messageIdForSend,
-            role: "user",
-            text: outgoingMessageText,
-            attachments: turnAttachmentsResult.value,
-            ...(() => {
-              const context = buildOutgoingMessageContext(
-                turnAttachmentsResult.value.map((attachment, index) =>
-                  "id" in attachment && attachment.id !== undefined
-                    ? attachment.id
-                    : composerAttachmentsSnapshot[index]!.id,
-                ),
-              );
-              if (context === undefined) return {};
-              // Read the capability at dispatch time: the upload and persistence
-              // awaits above can span a server reconnect that changes it. Servers
-              // from before inline context drop the records and forward the links
-              // as literal text, so their turns carry the payload the legacy way.
-              const supportsInlineMessageContext =
-                appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment
-                  .capabilities.inlineMessageContext === true;
-              if (!supportsInlineMessageContext) {
-                return {
-                  text: serializeLegacyContextMessage({
-                    text: outgoingMessageText,
-                    records: context.records,
-                  }),
-                };
-              }
-              return { context };
-            })(),
-          },
-          modelSelection: ctxSelectedModelSelection,
-          titleSeed: title,
-          runtimeMode,
-          interactionMode: sendInteractionMode,
-          dispatchMode: turnDispatchMode,
-          ...(bootstrap ? { bootstrap } : {}),
-          createdAt: messageCreatedAt,
-        },
+        input: turnStartInput,
       });
       if (backgroundThreadRef) {
         markPromotedDraftThreadByRef(backgroundThreadRef);
@@ -10462,7 +10552,21 @@ export default function ChatView(props: ChatViewProps) {
       const startResult = await startPromise;
       if (startResult._tag === "Failure") {
         failure = startResult;
+        const failureError = squashAtomCommandFailure(startResult);
+        const failureMessage = failureError instanceof Error ? failureError.message : null;
+        if (!shouldRestoreComposerDraftAfterSendFailure({ failureMessage })) {
+          usePendingComposerSubmissionStore
+            .getState()
+            .markPendingSubmissionAmbiguous(scopeThreadRef(environmentId, threadIdForSend));
+        } else {
+          usePendingComposerSubmissionStore
+            .getState()
+            .removePendingSubmission(scopeThreadRef(environmentId, threadIdForSend));
+        }
       } else {
+        usePendingComposerSubmissionStore
+          .getState()
+          .removePendingSubmission(scopeThreadRef(environmentId, threadIdForSend));
         turnStartSucceeded = true;
         setKeepFullHistory(routeThreadKey, false);
         // The turn is under way and will spend quota, so that thread's limits
@@ -10473,6 +10577,7 @@ export default function ChatView(props: ChatViewProps) {
           releaseDraftAttachments(composerAttachmentsSnapshot);
         }
         acknowledgeActiveThreadWoke();
+        refreshThreadProjection(scopeThreadRef(environmentId, threadIdForSend));
         if (backgroundThreadRef) {
           if (backgroundDraftOpened || currentRouteThreadKeyRef.current !== routeThreadKey) {
             finalizePromotedDraftThreadByRef(backgroundThreadRef);
@@ -10508,6 +10613,11 @@ export default function ChatView(props: ChatViewProps) {
     }
 
     if (failure !== null) {
+      const failureError = squashAtomCommandFailure(failure);
+      const failureMessage = failureError instanceof Error ? failureError.message : null;
+      const shouldRestoreComposerDraft = shouldRestoreComposerDraftAfterSendFailure({
+        failureMessage,
+      });
       if (submissionIntent === "background" && draftId && draftThread) {
         restoreFailedBackgroundDraftThread(
           draftId,
@@ -10519,7 +10629,8 @@ export default function ChatView(props: ChatViewProps) {
         clearBackgroundDraftSubmissionByRef(scopeThreadRef(environmentId, threadIdForSend));
       }
       if (
-        backgroundDraftOpened
+        shouldRestoreComposerDraft &&
+        (backgroundDraftOpened
           ? !composerDraftHasUserContent(
               useComposerDraftStore.getState().getComposerDraft(composerDraftTarget),
             )
@@ -10532,7 +10643,7 @@ export default function ChatView(props: ChatViewProps) {
             (useComposerDraftStore.getState().getComposerDraft(composerDraftTarget)?.reviewComments
               .length ?? 0) === 0 &&
             (useComposerDraftStore.getState().getComposerDraft(composerDraftTarget)?.threadContexts
-              .length ?? 0) === 0
+              .length ?? 0) === 0)
       ) {
         setOptimisticUserMessages((existing) => {
           const removed = existing.filter((message) => message.id === messageIdForSend);
@@ -12551,7 +12662,9 @@ export default function ChatView(props: ChatViewProps) {
                                 forceExpandedOnMobile={
                                   forceExpandedMobileComposer && isDraftHeroState
                                 }
-                                projectSelectionRequired={false}
+                                projectSelectionRequired={
+                                  isLocalDraftThread && activeProject === null
+                                }
                                 phase={phase}
                                 canInterrupt={canInterruptRunningThread}
                                 isConnecting={isConnecting}

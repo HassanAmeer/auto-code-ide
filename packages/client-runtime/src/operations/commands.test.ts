@@ -402,6 +402,42 @@ describe("V2 environment commands", () => {
     }).pipe(Effect.provide(layerTestCrypto)),
   );
 
+  it.effect("preserves a caller-supplied command identity across duplicate dispatches", () =>
+    Effect.gen(function* () {
+      const commands: OrchestrationV2Command[] = [];
+      const supervisor = yield* makeSupervisor({ commands, projects: [] });
+      const commandId = CommandId.make("stable-thread-turn-command");
+      const input = {
+        commandId,
+        threadId: v2ThreadId,
+        message: {
+          messageId: MessageId.make("stable-thread-turn-message"),
+          role: "user" as const,
+          text: "retry this safely",
+          attachments: [],
+        },
+        runtimeMode: "full-access" as const,
+        interactionMode: "default" as const,
+        dispatchMode: "start" as const,
+      };
+
+      yield* startThreadTurn(input).pipe(
+        Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
+      );
+      yield* startThreadTurn(input).pipe(
+        Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
+      );
+
+      expect(commands).toHaveLength(2);
+      expect(commands.map((command) => command.commandId)).toEqual([commandId, commandId]);
+      expect(
+        commands.map((command) =>
+          command.type === "message.dispatch" ? command.messageId : undefined,
+        ),
+      ).toEqual([input.message.messageId, input.message.messageId]);
+    }).pipe(Effect.provide(layerTestCrypto)),
+  );
+
   it.effect("uses server-resolved delivery intent without fetching the full projection", () =>
     Effect.gen(function* () {
       const commands: OrchestrationV2Command[] = [];
