@@ -731,8 +731,7 @@ const BackgroundServicesWidgetContent = memo(function BackgroundServicesWidgetCo
           </div>
 
           {subagentsExpanded && (
-            <div className="relative ml-3 flex flex-col gap-0.5 pt-0.5 pl-3 border-l border-cyan-500/25">
-              <span className="pointer-events-none absolute -left-[3.5px] top-2 size-1.5 rounded-full bg-cyan-500/40" />
+            <div className="flex flex-col gap-0.5 pt-0.5 pl-1">
               {workersError ? (
                 <div
                   role="status"
@@ -746,7 +745,7 @@ const BackgroundServicesWidgetContent = memo(function BackgroundServicesWidgetCo
                   No active subagents
                 </div>
               ) : (
-                combinedSubagents.map((agent, agentIdx) => {
+                combinedSubagents.map((agent) => {
                   const status = agent.status ?? "running";
                   const isRunning = status === "running";
                   const isCompleted = status === "completed";
@@ -775,13 +774,11 @@ const BackgroundServicesWidgetContent = memo(function BackgroundServicesWidgetCo
                           }
                         : {})}
                       className={cn(
-                        "relative flex h-7 items-center justify-between gap-2 px-2 rounded-md hover:bg-black/[0.035] dark:hover:bg-white/[0.08] transition-colors group",
+                        "flex h-7 items-center justify-between gap-2 px-2 rounded-md hover:bg-black/[0.035] dark:hover:bg-white/[0.08] transition-colors group",
                         canOpen ? "cursor-pointer" : "cursor-default",
-                        !isRunning ? "opacity-70" : undefined,
+                        !isRunning ? "opacity-60 text-muted-foreground" : undefined,
                       )}
                     >
-                      <span className="pointer-events-none absolute -left-[15px] top-1/2 h-px w-2 -translate-y-1/2 bg-cyan-500/30" />
-                      <span className="pointer-events-none absolute -left-[18px] top-1/2 size-1 -translate-y-1/2 rounded-full bg-cyan-500/35" />
                       <div className="flex items-center gap-2 min-w-0 flex-1">
                         {isCompleted ? (
                           <CheckCircle2 className="size-3.5 text-emerald-400 shrink-0" />

@@ -26,20 +26,11 @@ vi.mock("../ProjectScriptsControl", () => ({
 vi.mock("./ThreadAutomationsPanel", () => ({
   ThreadAutomationsPanel: () => <div data-thread-automations-mock />,
 }));
-vi.mock("./ThreadRelationshipsControl", () => ({
-  ThreadRelationshipsPanel: () => <div data-thread-relationships-mock />,
-}));
 vi.mock("../background/BackgroundServicesWidget", () => ({
   BackgroundServicesWidget: (props: unknown) => {
     testState.backgroundServicesControl(props);
     return <div data-background-services-mock />;
   },
-}));
-vi.mock("../background/ThreadSubagentsSection", () => ({
-  ThreadSubagentsSection: () => <div data-thread-subagents-mock>🤖 Subagents</div>,
-}));
-vi.mock("../background/WatchdogCard", () => ({
-  WatchdogCard: () => <div data-watchdog-card-mock>🐕 Watchdog</div>,
 }));
 vi.mock("./ThreadDetailsSection", () => ({
   ThreadDetailsSection: ({
@@ -74,7 +65,7 @@ describe("ThreadDetailsPanel", () => {
     testState.density = "full";
   });
 
-  it("keeps lower detail sections rendered when the card switches to essential density", () => {
+  it("keeps Background Services rendered and never collapses when switching density", () => {
     testState.density = "essential";
     const props: ThreadDetailsPanelProps = {
       anchor: { current: null },
@@ -107,13 +98,18 @@ describe("ThreadDetailsPanel", () => {
     const markup = renderToStaticMarkup(<ThreadDetailsPanel {...props} />);
 
     expect(markup).toContain("data-background-services-mock");
-    expect(markup).toContain("data-thread-automations-mock");
-    expect(markup).toContain("data-thread-relationships-mock");
     expect(markup).toContain('data-section-title="Version Control" data-separated="true"');
     expect(markup).toContain('data-section-title="Background Services" data-separated="true"');
+    expect(markup).not.toContain("data-thread-automations-mock");
+    expect(testState.backgroundServicesControl).toHaveBeenCalledWith(
+      expect.objectContaining({
+        showWatchdog: true,
+        showSubagents: true,
+      }),
+    );
   });
 
-  it("keeps dedicated compact watchdog and subagents sections mounted", () => {
+  it("keeps background services widget mounted in compact mode with watchdog and subagents enabled", () => {
     testState.density = "compact";
     const props: ThreadDetailsPanelProps = {
       anchor: { current: null },
@@ -145,15 +141,12 @@ describe("ThreadDetailsPanel", () => {
 
     const markup = renderToStaticMarkup(<ThreadDetailsPanel {...props} />);
 
-    expect(markup).toContain('data-section-title="Watchdog" data-separated="true"');
-    expect(markup).toContain('data-section-title="Subagents" data-separated="true"');
-    expect(markup).toContain("🐕");
-    expect(markup).toContain("🤖");
+    expect(markup).toContain("data-background-services-mock");
     expect(testState.backgroundServicesControl).toHaveBeenCalledWith(
       expect.objectContaining({
         compact: true,
-        showWatchdog: false,
-        showSubagents: false,
+        showWatchdog: true,
+        showSubagents: true,
       }),
     );
   });
@@ -169,21 +162,20 @@ describe("ThreadDetailsPanel", () => {
       },
     ] satisfies ReadonlyArray<T3ProjectFileScript>;
     testState.useT3ProjectFileScripts.mockReturnValue(fileScripts);
-
     const props: ThreadDetailsPanelProps = {
       anchor: { current: null },
       handle: PopoverCreateHandle(),
       onPresentationChange: vi.fn(),
       environmentId,
       threadId: "thread:thread-details" as ThreadId,
-      activeProjectName: undefined,
+      activeProjectName: "thread-details",
       activeProjectScripts: [],
       preferredScriptId: null,
       keybindings: [],
       availableEditors: [],
       showOpenInPicker: false,
       gitCwd,
-      isGitRepo: false,
+      isGitRepo: true,
       envLocked: false,
       availableEnvironments: [],
       onEnvironmentChange: vi.fn(),
@@ -200,11 +192,8 @@ describe("ThreadDetailsPanel", () => {
 
     renderToStaticMarkup(<ThreadDetailsPanel {...props} />);
 
-    expect(testState.useT3ProjectFileScripts).toHaveBeenCalledWith(environmentId, gitCwd);
     expect(testState.projectScriptsControl).toHaveBeenCalledWith(
       expect.objectContaining({
-        displayMode: "panel",
-        scripts: [],
         fileScripts,
       }),
     );

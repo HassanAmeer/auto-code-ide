@@ -5,6 +5,7 @@ import { cn } from "../../lib/utils";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { toastManager } from "../ui/toast";
 import { SleekSpinnerRing } from "./sleekSpinner";
+import { CancelledCircleIcon } from "./BackgroundServicesWidget";
 
 export type WatchdogStatus =
   | "watching"
@@ -300,7 +301,7 @@ export const WatchdogCard = memo(function WatchdogCard({
       </div>
 
       {expanded ? (
-        <div className="flex flex-col gap-0.5 pt-0.5 pl-1">
+        <div className="flex flex-col gap-1 pt-0.5 pl-1">
           {error ? (
             <div
               role="status"
@@ -323,11 +324,13 @@ export const WatchdogCard = memo(function WatchdogCard({
                 return (
                   <div
                     key={item.id}
-                    className="flex flex-col gap-1 px-2 py-1 rounded-md hover:bg-black/[0.025] dark:hover:bg-white/[0.05] transition-colors"
+                    className="flex flex-col gap-1 px-2.5 py-2 rounded-xl bg-card/60 border border-border/50 hover:border-border transition-colors"
                   >
                     <div className="flex items-center gap-2 min-w-0">
                       {statusIcon(item.status)}
-                      <span className="text-xs text-foreground/85 truncate">{item.taskTitle}</span>
+                      <span className="text-xs text-foreground/85 truncate font-medium">
+                        {item.taskTitle}
+                      </span>
                       {isActive ? (
                         <button
                           type="button"
@@ -346,7 +349,7 @@ export const WatchdogCard = memo(function WatchdogCard({
                     </div>
 
                     {/* Live supervision action — what the watchdog is doing to its sub-agents right now. */}
-                    <div className="flex items-center gap-1.5 pl-5.5 min-w-0">
+                    <div className="flex items-center gap-1.5 pl-6 min-w-0">
                       <span
                         className={cn(
                           "shrink-0 rounded px-1.5 py-0.5 text-[9px] font-mono uppercase leading-none",
@@ -356,33 +359,30 @@ export const WatchdogCard = memo(function WatchdogCard({
                         {item.status}
                       </span>
                       <span
-                        className="text-[10px] text-foreground/80 truncate"
+                        className="text-[10px] text-foreground/80 truncate font-mono"
                         title={item.lastAction}
                       >
-                        {phaseLabel(item.status)}
+                        {item.lastAction || phaseLabel(item.status)}
                       </span>
                     </div>
-                    <div className="text-[10px] text-muted-foreground/85 font-mono truncate pl-5.5">
-                      {item.lastAction}
-                    </div>
-                    <div className="text-[9.5px] text-muted-foreground/70 font-mono pl-5.5">
+                    <div className="text-[9.5px] text-muted-foreground/70 font-mono pl-6">
                       {done}/{item.workers.length} sub-agents done
-                      {running > 0 ? ` · ${running} abhi parallel chal rahe hain` : ""}
+                      {running > 0 ? ` · ${running} running in parallel` : ""}
                     </div>
 
                     {item.workers.map((worker) => (
-                      <div key={worker.id} className="flex flex-col gap-0.5 pl-5.5">
+                      <div key={worker.id} className="flex flex-col gap-0.5 pl-6">
                         <div className="flex items-center gap-1.5 min-w-0">
                           {worker.status === "completed" ? (
                             <CheckCircle2 className="size-3 text-emerald-400 shrink-0" />
                           ) : worker.status === "failed" ? (
                             <AlertCircle className="size-3 text-rose-400 shrink-0" />
                           ) : worker.status === "cancelled" ? (
-                            <SquareIcon className="size-3 text-muted-foreground shrink-0" />
+                            <CancelledCircleIcon className="size-3 text-muted-foreground shrink-0" />
                           ) : (
                             <SleekSpinnerRing className="size-3 text-cyan-400 shrink-0 animate-spin" />
                           )}
-                          <span className="text-[10px] text-foreground/75 truncate">
+                          <span className="text-[11.5px] text-foreground/85 truncate">
                             {worker.role}
                           </span>
                           <span className="text-[10px] text-muted-foreground/70 font-mono shrink-0">
@@ -409,12 +409,12 @@ export const WatchdogCard = memo(function WatchdogCard({
                           </span>
                         </div>
                         {worker.logs && worker.logs.length > 0 ? (
-                          <div className="truncate pl-4.5 text-[9.5px] font-mono text-cyan-400/75">
+                          <div className="truncate pl-5 text-[9.5px] font-mono text-cyan-400/75">
                             {worker.logs[worker.logs.length - 1]}
                           </div>
                         ) : null}
                         {worker.reviewNotes.length > 0 ? (
-                          <div className="flex items-center gap-1 pl-4.5">
+                          <div className="flex items-center gap-1 pl-5">
                             <Tooltip>
                               <TooltipTrigger
                                 render={
@@ -440,12 +440,12 @@ export const WatchdogCard = memo(function WatchdogCard({
                     ))}
 
                     {item.verdict ? (
-                      <div className="text-[10px] text-muted-foreground/80 pl-5.5">
-                        {item.verdict}
+                      <div className="text-[10px] text-muted-foreground/80 pl-6 font-mono">
+                        Watchdog verdict: {item.verdict}
                       </div>
                     ) : null}
                     {item.issues.length > 0 ? (
-                      <div className="flex flex-col gap-0.5 pl-5.5">
+                      <div className="flex flex-col gap-0.5 pl-6">
                         {item.issues.slice(0, 3).map((issue, index) => (
                           <div key={`issue-${index}`} className="flex items-start gap-1.5">
                             <AlertCircle className="size-3 text-amber-400 shrink-0 mt-px" />
@@ -457,12 +457,12 @@ export const WatchdogCard = memo(function WatchdogCard({
                       </div>
                     ) : null}
                     {item.status === "completed" ? (
-                      <div className="text-[10px] text-emerald-400/90 font-mono pl-5.5">
+                      <div className="text-[10px] text-emerald-400/90 font-mono pl-6">
                         → Super Agent ko final result de diya
                       </div>
                     ) : null}
                     {item.checklist && item.checklist.length > 0 ? (
-                      <div className="flex flex-col gap-0.5 pl-5.5">
+                      <div className="flex flex-col gap-0.5 pl-6">
                         {item.checklist.map((c) => (
                           <div key={c.id} className="flex items-start gap-1.5">
                             {c.status === "passed" ? (
@@ -478,8 +478,8 @@ export const WatchdogCard = memo(function WatchdogCard({
                       </div>
                     ) : null}
                     {item.recoveries && item.recoveries > 0 ? (
-                      <div className="pl-5.5">
-                        <span className="rounded bg-violet-500/15 px-1 py-0.5 text-[9px] font-mono text-violet-400">
+                      <div className="pl-6">
+                        <span className="rounded bg-violet-500/15 px-1.5 py-0.5 text-[9.5px] font-mono text-violet-400">
                           🛠 {item.recoveries} self-heal{item.recoveries === 1 ? "" : "s"}
                         </span>
                       </div>
