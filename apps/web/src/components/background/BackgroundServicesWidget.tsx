@@ -901,7 +901,7 @@ const BackgroundServicesWidgetContent = memo(function BackgroundServicesWidgetCo
                         <span
                           className={cn(
                             "text-xs truncate",
-                            isRunning ? "text-foreground font-medium" : "text-muted-foreground",
+                            isRunning ? "text-foreground font-semibold" : "text-muted-foreground",
                           )}
                         >
                           {agent.title}
@@ -923,7 +923,16 @@ const BackgroundServicesWidgetContent = memo(function BackgroundServicesWidgetCo
                             Stop
                           </button>
                         ) : (
-                          <>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {isCompleted ? (
+                              <span className="rounded px-1.5 py-0.5 text-[9px] font-mono uppercase leading-none bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
+                                Passed
+                              </span>
+                            ) : isCancelled ? (
+                              <span className="rounded px-1.5 py-0.5 text-[9px] font-mono uppercase leading-none bg-muted/60 text-muted-foreground border border-border/40">
+                                Stopped
+                              </span>
+                            ) : null}
                             {isFailed ? (
                               <span className="flex items-center gap-1 shrink-0">
                                 <Tooltip>
@@ -966,8 +975,8 @@ const BackgroundServicesWidgetContent = memo(function BackgroundServicesWidgetCo
                                     </span>
                                   </TooltipPopup>
                                 </Tooltip>
-                                <span className="rounded-full bg-rose-500/10 px-1.5 py-0.5 text-[10px] font-mono text-rose-400 uppercase leading-none">
-                                  failed
+                                <span className="rounded px-1.5 py-0.5 text-[9px] font-mono uppercase leading-none bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                                  Failed
                                 </span>
                               </span>
                             ) : null}
@@ -980,7 +989,7 @@ const BackgroundServicesWidgetContent = memo(function BackgroundServicesWidgetCo
                             >
                               <X className="size-3" />
                             </button>
-                          </>
+                          </div>
                         )}
                       </div>
                     </div>

@@ -95,17 +95,17 @@ function phaseLabel(status: WatchdogStatus): string {
 function phaseTone(status: WatchdogStatus): string {
   switch (status) {
     case "reviewing":
-      return "bg-violet-500/15 text-violet-400";
+      return "bg-cyan-500/15 text-cyan-400 border border-cyan-500/30";
     case "building":
-      return "bg-amber-500/15 text-amber-400";
+      return "bg-purple-500/15 text-purple-400 border border-purple-500/30";
     case "testing":
-      return "bg-sky-500/15 text-sky-400";
+      return "bg-sky-500/15 text-sky-400 border border-sky-500/30";
     case "completed":
-      return "bg-emerald-500/15 text-emerald-400";
+      return "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30";
     case "failed":
-      return "bg-rose-500/15 text-rose-400";
+      return "bg-rose-500/15 text-rose-400 border border-rose-500/30";
     default:
-      return "bg-cyan-500/15 text-cyan-400";
+      return "bg-cyan-500/15 text-cyan-400 border border-cyan-500/30";
   }
 }
 
@@ -116,9 +116,9 @@ function statusIcon(status: WatchdogStatus) {
     case "failed":
       return <AlertCircle className="size-3.5 text-rose-400 shrink-0" />;
     case "reviewing":
-      return <SleekSpinnerRing className="size-3.5 text-violet-400 shrink-0 animate-spin" />;
+      return <SleekSpinnerRing className="size-3.5 text-cyan-400 shrink-0 animate-spin" />;
     case "building":
-      return <SleekSpinnerRing className="size-3.5 text-amber-400 shrink-0 animate-spin" />;
+      return <SleekSpinnerRing className="size-3.5 text-purple-400 shrink-0 animate-spin" />;
     case "testing":
       return <SleekSpinnerRing className="size-3.5 text-sky-400 shrink-0 animate-spin" />;
     default:
@@ -391,22 +391,27 @@ export const WatchdogCard = memo(function WatchdogCard({
                             void handleStop(item.id);
                           }}
                           disabled={stoppingId === item.id}
-                          className="ml-auto p-1 rounded text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer disabled:opacity-40"
+                          className="ml-auto px-1.5 py-0.5 rounded text-[10px] font-medium text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 transition-colors cursor-pointer disabled:opacity-40"
                           title="Stop Watchdog"
                           aria-label={`Stop watchdog for ${item.taskTitle}`}
                         >
-                          <SquareIcon className="size-3 fill-current" />
+                          Stop
                         </button>
                       ) : (
-                        <button
-                          type="button"
-                          onClick={(e) => handleDismiss(item.id, e)}
-                          className="ml-auto opacity-0 group-hover:opacity-100 p-1 rounded text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 transition-all cursor-pointer"
-                          title="Delete watchdog record"
-                          aria-label={`Delete record for ${item.taskTitle}`}
-                        >
-                          <X className="size-3" />
-                        </button>
+                        <div className="ml-auto flex items-center gap-1.5">
+                          <span className="rounded px-1.5 py-0.5 text-[9px] font-mono uppercase leading-none bg-muted/60 text-muted-foreground border border-border/40">
+                            Audited
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => handleDismiss(item.id, e)}
+                            className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 transition-all cursor-pointer"
+                            title="Delete watchdog record"
+                            aria-label={`Delete record for ${item.taskTitle}`}
+                          >
+                            <X className="size-3" />
+                          </button>
+                        </div>
                       )}
                     </div>
 
