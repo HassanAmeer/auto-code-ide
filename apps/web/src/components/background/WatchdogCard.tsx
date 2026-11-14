@@ -366,11 +366,21 @@ export const WatchdogCard = memo(function WatchdogCard({
                 return (
                   <div
                     key={item.id}
-                    className="flex flex-col gap-1 px-2.5 py-2 rounded-xl bg-card/60 border border-border/50 hover:border-border transition-colors"
+                    className={cn(
+                      "flex flex-col gap-1 px-2 py-1.5 rounded-lg transition-colors group",
+                      isActive
+                        ? "bg-cyan-500/[0.04] border border-cyan-500/25"
+                        : "hover:bg-black/[0.035] dark:hover:bg-white/[0.08]",
+                    )}
                   >
                     <div className="flex items-center gap-2 min-w-0">
                       {statusIcon(item.status)}
-                      <span className="text-xs text-foreground/85 truncate font-medium">
+                      <span
+                        className={cn(
+                          "text-xs truncate font-medium",
+                          isActive ? "text-foreground font-semibold" : "text-muted-foreground",
+                        )}
+                      >
                         {item.taskTitle}
                       </span>
                       {isActive ? (
