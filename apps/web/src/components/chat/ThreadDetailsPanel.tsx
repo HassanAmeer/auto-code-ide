@@ -119,7 +119,7 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
                 />
               ) : null}
 
-              {density !== "essential" && props.showOpenInPicker ? (
+              {props.showOpenInPicker ? (
                 <OpenInPicker
                   keybindings={props.keybindings}
                   environmentId={props.environmentId}
@@ -150,7 +150,7 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
               headingId="thread-details-version-control-heading"
               title="Version Control"
               showHeading={false}
-              separated={density === "full"}
+              separated
             >
               <div className="flex flex-col gap-0.5">
                 {props.isGitRepo ? (
@@ -173,30 +173,28 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
             </ThreadDetailsSection>
           ) : null}
 
-          {density !== "essential" ? (
-            <ThreadDetailsSection
-              headingId="thread-details-background-services-heading"
-              title="Background Services"
-              showHeading={false}
-              separated={density === "full"}
-            >
-              <BackgroundServicesWidget
-                environmentId={props.environmentId}
-                threadId={props.threadId}
-                compact={density !== "full"}
-                showOpenSheetButton={true}
-                scope="project"
-                projectRoot={props.gitCwd}
-                projectName={props.activeProjectName}
-              />
-            </ThreadDetailsSection>
-          ) : null}
+          <ThreadDetailsSection
+            headingId="thread-details-background-services-heading"
+            title="Background Services"
+            showHeading={false}
+            separated
+          >
+            <BackgroundServicesWidget
+              environmentId={props.environmentId}
+              threadId={props.threadId}
+              compact={density !== "full"}
+              showOpenSheetButton={true}
+              scope="project"
+              projectRoot={props.gitCwd}
+              projectName={props.activeProjectName}
+            />
+          </ThreadDetailsSection>
 
-          {density === "full" && !props.draftId ? (
+          {!props.draftId ? (
             <ThreadAutomationsPanel environmentId={props.environmentId} threadId={props.threadId} />
           ) : null}
 
-          {density === "full" && !props.draftId ? (
+          {!props.draftId ? (
             <ThreadRelationshipsPanel
               environmentId={props.environmentId}
               threadId={props.threadId}
