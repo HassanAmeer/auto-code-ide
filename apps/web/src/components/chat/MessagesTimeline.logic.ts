@@ -1911,8 +1911,16 @@ export function deriveMessagesTimelineRows(input: {
   if (input.isWorking && !hasWorkingRow && activeTurnHeaderIndex === timelineEntries.length) {
     appendWorkingRow();
   }
+  const terminalAssistantHasCompleted =
+    timelineEntries.length > 0 &&
+    timelineEntries.at(-1)?.kind === "message" &&
+    timelineEntries.at(-1)?.message.role === "assistant" &&
+    !timelineEntries.at(-1)?.message.streaming &&
+    (input.latestRun?.status === "completed" || (unsettledRunId === null && !runlessWorkActive));
+
   if (
     input.isWorking &&
+    !terminalAssistantHasCompleted &&
     !setupOwnsWorkingSlot &&
     !hasActiveCompaction &&
     (!hasActivityRow || latestToolFailed)

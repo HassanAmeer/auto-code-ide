@@ -2524,6 +2524,39 @@ describe("deriveMessagesTimelineRows", () => {
     expect(rows.at(-1)?.kind).toBe("thinking");
   });
 
+  it("does not append thinking row when assistant response is completed even if isWorking is temporarily true", () => {
+    const rows = deriveMessagesTimelineRows({
+      timelineEntries: [
+        {
+          id: "assistant-message-entry",
+          kind: "message",
+          createdAt: "2026-01-01T00:00:05Z",
+          message: {
+            id: "assistant-msg" as never,
+            role: "assistant",
+            text: "All done!",
+            runId: "turn-1" as never,
+            createdAt: "2026-01-01T00:00:05Z",
+            updatedAt: "2026-01-01T00:00:05Z",
+            streaming: false,
+          },
+        },
+      ],
+      latestRun: {
+        runId: "turn-1" as never,
+        status: "completed",
+        startedAt: "2026-01-01T00:00:00Z",
+        completedAt: "2026-01-01T00:00:06Z",
+      },
+      isWorking: true,
+      activeTurnStartedAt: "2026-01-01T00:00:00Z",
+      turnDiffSummaries: [],
+      supportsConversationRollback: false,
+    });
+
+    expect(rows.some((row) => row.kind === "thinking")).toBe(false);
+  });
+
   it("renders a single completed tool call directly", () => {
     const rows = deriveMessagesTimelineRows({
       timelineEntries: [
