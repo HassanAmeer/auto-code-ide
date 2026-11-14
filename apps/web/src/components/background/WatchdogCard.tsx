@@ -1,5 +1,13 @@
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import { AlertCircle, CheckCircle2, ChevronDownIcon, InfoIcon, SquareIcon } from "lucide-react";
+import {
+  AlertCircle,
+  CheckCircle2,
+  ChevronDownIcon,
+  InfoIcon,
+  SquareIcon,
+  Trash2,
+  X,
+} from "lucide-react";
 
 import { cn } from "../../lib/utils";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -259,9 +267,30 @@ export const WatchdogCard = memo(function WatchdogCard({
     [load],
   );
 
-  const activeCount = useMemo(
-    () => items.filter((w) => w.status !== "completed" && w.status !== "failed").length,
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => new Set());
+  const handleDismiss = useCallback((id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDismissedIds((prev) => new Set([...prev, id]));
+  }, []);
+  const handleClearCompleted = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      const completedIds = items
+        .filter((w) => w.status === "completed" || w.status === "failed")
+        .map((w) => w.id);
+      setDismissedIds((prev) => new Set([...prev, ...completedIds]));
+    },
     [items],
+  );
+
+  const visibleItems = useMemo(
+    () => items.filter((w) => !dismissedIds.has(w.id)),
+    [items, dismissedIds],
+  );
+
+  const activeCount = useMemo(
+    () => visibleItems.filter((w) => w.status !== "completed" && w.status !== "failed").length,
+    [visibleItems],
   );
 
   return (
@@ -284,7 +313,7 @@ export const WatchdogCard = memo(function WatchdogCard({
             Watchdog
           </span>
           <span className="rounded-full bg-muted/60 px-1.5 py-0.5 text-[11px] font-mono text-muted-foreground leading-none">
-            {items.length}
+            {visibleItems.length}
           </span>
           {activeCount > 0 ? (
             <span className="rounded-full bg-cyan-500/15 px-1.5 py-0.5 text-[11px] font-mono text-cyan-400 leading-none">
@@ -292,12 +321,25 @@ export const WatchdogCard = memo(function WatchdogCard({
             </span>
           ) : null}
         </div>
-        <ChevronDownIcon
-          className={cn(
-            "size-3.5 text-muted-foreground transition-transform duration-200",
-            !expanded && "-rotate-90",
-          )}
-        />
+        <div className="flex items-center gap-1.5">
+          {visibleItems.some((w) => w.status === "completed" || w.status === "failed") ? (
+            <button
+              type="button"
+              onClick={handleClearCompleted}
+              className="p-1 rounded text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+              title="Clear completed watchdog audits"
+              aria-label="Clear completed watchdog audits"
+            >
+              <Trash2 className="size-3" />
+            </button>
+          ) : null}
+          <ChevronDownIcon
+            className={cn(
+              "size-3.5 text-muted-foreground transition-transform duration-200",
+              !expanded && "-rotate-90",
+            )}
+          />
+        </div>
       </div>
 
       {expanded ? (
@@ -310,14 +352,14 @@ export const WatchdogCard = memo(function WatchdogCard({
               <AlertCircle className="size-3 shrink-0" /> {error}
             </div>
           ) : null}
-          {items.length === 0 ? (
+          {visibleItems.length === 0 ? (
             <div className="py-1 px-2 text-[11px] text-muted-foreground font-mono">
               No active watchdog
             </div>
           ) : null}
-          {items.length === 0
+          {visibleItems.length === 0
             ? null
-            : items.map((item) => {
+            : visibleItems.map((item) => {
                 const isActive = item.status !== "completed" && item.status !== "failed";
                 const done = item.workers.filter((w) => w.status === "completed").length;
                 const running = item.workers.filter((w) => w.status === "running").length;
@@ -345,7 +387,17 @@ export const WatchdogCard = memo(function WatchdogCard({
                         >
                           <SquareIcon className="size-3 fill-current" />
                         </button>
-                      ) : null}
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={(e) => handleDismiss(item.id, e)}
+                          className="ml-auto opacity-0 group-hover:opacity-100 p-1 rounded text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 transition-all cursor-pointer"
+                          title="Delete watchdog record"
+                          aria-label={`Delete record for ${item.taskTitle}`}
+                        >
+                          <X className="size-3" />
+                        </button>
+                      )}
                     </div>
 
                     {/* Live supervision action — what the watchdog is doing to its sub-agents right now. */}

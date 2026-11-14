@@ -7,6 +7,9 @@ import {
   SquareIcon,
   CheckCircle2,
   AlertCircle,
+  Clock,
+  Trash2,
+  X,
 } from "lucide-react";
 import {
   AuthTerminalOperateScope,
@@ -317,9 +320,22 @@ const BackgroundServicesWidgetContent = memo(function BackgroundServicesWidgetCo
 
   // Subagents and Goals are expanded by default as in the screenshot
   // Collapsed by default — the sidebar stays quiet until something is running.
-  const [subagentsExpanded, setSubagentsExpanded] = useState(false);
+  const [subagentsExpanded, setSubagentsExpanded] = useState(true);
   const [tasksExpanded, setTasksExpanded] = useState(initialExpanded);
-  const [goalsExpanded, setGoalsExpanded] = useState(false);
+  const [goalsExpanded, setGoalsExpanded] = useState(true);
+
+  const [dismissedGoalIds, setDismissedGoalIds] = useState<Set<string>>(() => new Set());
+  const [dismissedSubagentIds, setDismissedSubagentIds] = useState<Set<string>>(() => new Set());
+
+  const handleDismissGoal = useCallback((id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDismissedGoalIds((prev) => new Set([...prev, id]));
+  }, []);
+
+  const handleDismissSubagent = useCallback((id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDismissedSubagentIds((prev) => new Set([...prev, id]));
+  }, []);
 
   const [stoppingTerminalId, setStoppingTerminalId] = useState<string | null>(null);
   const [storedGoals, setStoredGoals] = useState<GoalItem[]>(() => readStoredGoals());
@@ -372,6 +388,30 @@ const BackgroundServicesWidgetContent = memo(function BackgroundServicesWidgetCo
 
     return Array.from(map.values());
   }, [propGoals, projectionGoals, storedGoals]);
+
+  const handleClearGoals = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      const completedOrFailedIds = combinedGoals
+        .filter((g) => g.status === "completed" || g.status === "done" || g.status === "failed")
+        .map((g) => g.id);
+      setDismissedGoalIds((prev) => new Set([...prev, ...completedOrFailedIds]));
+    },
+    [combinedGoals],
+  );
+
+  const handleClearSubagents = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      const doneOrFailedIds = combinedSubagents
+        .filter(
+          (a) => a.status === "completed" || a.status === "failed" || a.status === "cancelled",
+        )
+        .map((a) => a.id);
+      setDismissedSubagentIds((prev) => new Set([...prev, ...doneOrFailedIds]));
+    },
+    [combinedSubagents],
+  );
 
   // 2. Scheduled Tasks / Timers query
   const tasksQuery = useEnvironmentQuery(
@@ -510,8 +550,17 @@ const BackgroundServicesWidgetContent = memo(function BackgroundServicesWidgetCo
     [visibleBackgroundTasks],
   );
 
-  const subagentsCount = combinedSubagents.length;
-  const goalsCount = combinedGoals.length;
+  const visibleGoals = useMemo(
+    () => combinedGoals.filter((g) => !dismissedGoalIds.has(g.id)),
+    [combinedGoals, dismissedGoalIds],
+  );
+  const visibleSubagents = useMemo(
+    () => combinedSubagents.filter((a) => !dismissedSubagentIds.has(a.id)),
+    [combinedSubagents, dismissedSubagentIds],
+  );
+
+  const subagentsCount = visibleSubagents.length;
+  const goalsCount = visibleGoals.length;
 
   return (
     <div className={cn("flex flex-col gap-1 py-0.5 px-0.5 select-none", className)}>
@@ -643,51 +692,96 @@ const BackgroundServicesWidgetContent = memo(function BackgroundServicesWidgetCo
               {goalsCount}
             </span>
           </div>
-          <ChevronDownIcon
-            className={cn(
-              "size-3.5 text-muted-foreground transition-transform duration-200",
-              !goalsExpanded && "-rotate-90",
-            )}
-          />
+          <div className="flex items-center gap-1.5">
+            {visibleGoals.some(
+              (g) => g.status === "completed" || g.status === "done" || g.status === "failed",
+            ) ? (
+              <button
+                type="button"
+                onClick={handleClearGoals}
+                className="p-1 rounded text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                title="Clear finished goals"
+                aria-label="Clear finished goals"
+              >
+                <Trash2 className="size-3" />
+              </button>
+            ) : null}
+            <ChevronDownIcon
+              className={cn(
+                "size-3.5 text-muted-foreground transition-transform duration-200",
+                !goalsExpanded && "-rotate-90",
+              )}
+            />
+          </div>
         </div>
 
         {goalsExpanded && (
           <div className="flex flex-col gap-0.5 pt-0.5 pl-1">
-            {combinedGoals.length === 0 ? (
+            {visibleGoals.length === 0 ? (
               <div className="py-1 px-2 text-[11px] text-muted-foreground font-mono">
                 No active goals
               </div>
             ) : (
-              combinedGoals.map((goal) => {
+              visibleGoals.map((goal, idx) => {
                 const goalStatus = goal.status ?? "running";
                 const isGoalCompleted = goalStatus === "completed" || goalStatus === "done";
                 const isGoalFailed = goalStatus === "failed" || goalStatus === "error";
                 const isGoalCancelled = goalStatus === "cancelled";
+                const isGoalPending = goalStatus === "pending";
                 return (
                   <div
                     key={goal.id}
-                    className="flex h-7 items-center justify-between gap-2 px-2 rounded-md hover:bg-black/[0.035] dark:hover:bg-white/[0.08] transition-colors group cursor-default"
+                    className={cn(
+                      "flex h-7 items-center justify-between gap-2 px-2 rounded-md hover:bg-black/[0.035] dark:hover:bg-white/[0.08] transition-colors group cursor-default",
+                      isGoalCompleted ? "opacity-60 text-muted-foreground line-through" : undefined,
+                      !isGoalCompleted && !isGoalFailed ? "text-foreground font-medium" : undefined,
+                    )}
                     title={goal.text}
                   >
                     <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <span className="text-[11px] font-mono text-muted-foreground shrink-0">
+                        {idx + 1}.
+                      </span>
                       {isGoalCompleted ? (
                         <CheckCircle2 className="size-3.5 text-emerald-400 shrink-0" />
                       ) : isGoalFailed ? (
                         <AlertCircle className="size-3.5 text-rose-400 shrink-0" />
                       ) : isGoalCancelled ? (
                         <CancelledCircleIcon className="size-3.5 text-muted-foreground shrink-0" />
+                      ) : isGoalPending ? (
+                        <Clock className="size-3.5 text-muted-foreground shrink-0" />
                       ) : (
                         <SleekSpinnerRing className="size-3.5 text-cyan-400 shrink-0 animate-spin" />
                       )}
-                      <span className="text-xs text-foreground/85 group-hover:text-foreground font-normal truncate">
+                      <span
+                        className={cn(
+                          "text-xs truncate",
+                          isGoalCompleted
+                            ? "text-muted-foreground line-through"
+                            : "text-foreground font-medium",
+                        )}
+                      >
                         {goal.text}
                       </span>
                     </div>
-                    {isGoalFailed ? (
-                      <span className="rounded-full bg-rose-500/10 px-1.5 py-0.5 text-[10px] font-mono text-rose-400 uppercase shrink-0 leading-none">
-                        failed
-                      </span>
-                    ) : null}
+                    <div className="flex items-center gap-1 shrink-0">
+                      {isGoalFailed ? (
+                        <span className="rounded-full bg-rose-500/10 px-1.5 py-0.5 text-[10px] font-mono text-rose-400 uppercase leading-none">
+                          failed
+                        </span>
+                      ) : null}
+                      {isGoalCompleted || isGoalFailed ? (
+                        <button
+                          type="button"
+                          onClick={(e) => handleDismissGoal(goal.id, e)}
+                          className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 transition-all cursor-pointer"
+                          title="Delete goal record"
+                          aria-label={`Delete ${goal.text}`}
+                        >
+                          <X className="size-3" />
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
                 );
               })
@@ -722,12 +816,28 @@ const BackgroundServicesWidgetContent = memo(function BackgroundServicesWidgetCo
                 {subagentsCount}
               </span>
             </div>
-            <ChevronDownIcon
-              className={cn(
-                "size-3.5 text-muted-foreground transition-transform duration-200",
-                !subagentsExpanded && "-rotate-90",
-              )}
-            />
+            <div className="flex items-center gap-1.5">
+              {visibleSubagents.some(
+                (a) =>
+                  a.status === "completed" || a.status === "failed" || a.status === "cancelled",
+              ) ? (
+                <button
+                  type="button"
+                  onClick={handleClearSubagents}
+                  className="p-1 rounded text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                  title="Clear finished subagents"
+                  aria-label="Clear finished subagents"
+                >
+                  <Trash2 className="size-3" />
+                </button>
+              ) : null}
+              <ChevronDownIcon
+                className={cn(
+                  "size-3.5 text-muted-foreground transition-transform duration-200",
+                  !subagentsExpanded && "-rotate-90",
+                )}
+              />
+            </div>
           </div>
 
           {subagentsExpanded && (
@@ -740,20 +850,17 @@ const BackgroundServicesWidgetContent = memo(function BackgroundServicesWidgetCo
                   <AlertCircle className="size-3 shrink-0" /> {workersError}
                 </div>
               ) : null}
-              {combinedSubagents.length === 0 ? (
+              {visibleSubagents.length === 0 ? (
                 <div className="py-1 px-2 text-[11px] text-muted-foreground font-mono">
                   No active subagents
                 </div>
               ) : (
-                combinedSubagents.map((agent) => {
+                visibleSubagents.map((agent) => {
                   const status = agent.status ?? "running";
                   const isRunning = status === "running";
                   const isCompleted = status === "completed";
                   const isFailed = status === "failed" || status === "error";
                   const isCancelled = status === "cancelled";
-                  // Only delegated sub-agents with a real child thread can open a
-                  // chat screen. Dsh telemetry workers have no thread, so their
-                  // rows stay inert. Finished/old rows simply grey out in place.
                   const canOpen = Boolean(agent.childThreadId);
                   return (
                     <div
@@ -776,7 +883,9 @@ const BackgroundServicesWidgetContent = memo(function BackgroundServicesWidgetCo
                       className={cn(
                         "flex h-7 items-center justify-between gap-2 px-2 rounded-md hover:bg-black/[0.035] dark:hover:bg-white/[0.08] transition-colors group",
                         canOpen ? "cursor-pointer" : "cursor-default",
-                        !isRunning ? "opacity-60 text-muted-foreground" : undefined,
+                        !isRunning
+                          ? "opacity-60 text-muted-foreground"
+                          : "text-foreground font-medium",
                       )}
                     >
                       <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -789,69 +898,91 @@ const BackgroundServicesWidgetContent = memo(function BackgroundServicesWidgetCo
                         ) : (
                           <SleekSpinnerRing className="size-3.5 text-cyan-400 shrink-0 animate-spin" />
                         )}
-                        <span className="text-xs text-foreground/85 group-hover:text-foreground font-normal truncate">
+                        <span
+                          className={cn(
+                            "text-xs truncate",
+                            isRunning ? "text-foreground font-medium" : "text-muted-foreground",
+                          )}
+                        >
                           {agent.title}
                         </span>
                       </div>
-                      {isRunning ? (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            void handleStopSubagent(agent);
-                          }}
-                          disabled={busyTaskId === agent.id}
-                          className="p-1 rounded text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-default"
-                          title="Stop Subagent"
-                          aria-label={`Stop ${agent.title}`}
-                        >
-                          <SquareIcon className="size-3 fill-current" />
-                        </button>
-                      ) : isFailed ? (
-                        <span className="flex items-center gap-1 shrink-0">
-                          <Tooltip>
-                            <TooltipTrigger
-                              render={
-                                <button
-                                  type="button"
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="rounded p-0.5 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-colors cursor-pointer"
-                                  aria-label={`Why ${agent.title} failed`}
-                                >
-                                  <InfoIcon className="size-3.5" />
-                                </button>
-                              }
-                            />
-                            <TooltipPopup side="left" className="max-w-80 text-left">
-                              <span className="flex flex-col gap-1 text-[11px] leading-snug">
-                                <span className="font-semibold text-rose-300">
-                                  Why this subagent failed
-                                </span>
-                                {agent.goal ? (
-                                  <span className="text-muted-foreground">Goal: {agent.goal}</span>
-                                ) : null}
-                                {agent.role ? (
-                                  <span className="text-muted-foreground/70">
-                                    Role: {agent.role}
-                                  </span>
-                                ) : null}
-                                {agent.model ? (
-                                  <span className="font-mono text-muted-foreground/70">
-                                    Model: {agent.model}
-                                  </span>
-                                ) : null}
-                                <span className="text-foreground/85">
-                                  {agent.error ??
-                                    "No failure reason was recorded by the worker. Most often: the model hit a rate-limit (HTTP 429) or produced zero usable files."}
+                      <div className="flex items-center gap-1 shrink-0">
+                        {isRunning ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void handleStopSubagent(agent);
+                            }}
+                            disabled={busyTaskId === agent.id}
+                            className="px-1.5 py-0.5 rounded text-[10px] font-medium text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 transition-colors cursor-pointer disabled:opacity-40"
+                            title="Stop Subagent"
+                            aria-label={`Stop ${agent.title}`}
+                          >
+                            Stop
+                          </button>
+                        ) : (
+                          <>
+                            {isFailed ? (
+                              <span className="flex items-center gap-1 shrink-0">
+                                <Tooltip>
+                                  <TooltipTrigger
+                                    render={
+                                      <button
+                                        type="button"
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="rounded p-0.5 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                                        aria-label={`Why ${agent.title} failed`}
+                                      >
+                                        <InfoIcon className="size-3.5" />
+                                      </button>
+                                    }
+                                  />
+                                  <TooltipPopup side="left" className="max-w-80 text-left">
+                                    <span className="flex flex-col gap-1 text-[11px] leading-snug">
+                                      <span className="font-semibold text-rose-300">
+                                        Why this subagent failed
+                                      </span>
+                                      {agent.goal ? (
+                                        <span className="text-muted-foreground">
+                                          Goal: {agent.goal}
+                                        </span>
+                                      ) : null}
+                                      {agent.role ? (
+                                        <span className="text-muted-foreground/70">
+                                          Role: {agent.role}
+                                        </span>
+                                      ) : null}
+                                      {agent.model ? (
+                                        <span className="font-mono text-muted-foreground/70">
+                                          Model: {agent.model}
+                                        </span>
+                                      ) : null}
+                                      <span className="text-foreground/85">
+                                        {agent.error ??
+                                          "No failure reason was recorded by the worker. Most often: the model hit a rate-limit (HTTP 429) or produced zero usable files."}
+                                      </span>
+                                    </span>
+                                  </TooltipPopup>
+                                </Tooltip>
+                                <span className="rounded-full bg-rose-500/10 px-1.5 py-0.5 text-[10px] font-mono text-rose-400 uppercase leading-none">
+                                  failed
                                 </span>
                               </span>
-                            </TooltipPopup>
-                          </Tooltip>
-                          <span className="rounded-full bg-rose-500/10 px-1.5 py-0.5 text-[10px] font-mono text-rose-400 uppercase leading-none">
-                            failed
-                          </span>
-                        </span>
-                      ) : null}
+                            ) : null}
+                            <button
+                              type="button"
+                              onClick={(e) => handleDismissSubagent(agent.id, e)}
+                              className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 transition-all cursor-pointer"
+                              title="Delete subagent record"
+                              aria-label={`Delete ${agent.title}`}
+                            >
+                              <X className="size-3" />
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
                   );
                 })
