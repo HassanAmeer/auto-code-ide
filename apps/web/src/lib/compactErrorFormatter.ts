@@ -94,67 +94,84 @@ export function parseErrorDetails(
   explicitModel?: string | null,
 ): FormattedCompactError {
   let text = (rawError || "").trim();
+  let parsedJson: any = null;
 
   // Try parsing JSON error structures first to unwrap clean messages
   try {
     if (text.startsWith("{") && text.endsWith("}")) {
-      const parsed = JSON.parse(text);
-      if (typeof parsed?.message === "string") {
-        text = parsed.message.trim();
-      } else if (typeof parsed?.error?.message === "string") {
-        text = parsed.error.message.trim();
-      } else if (typeof parsed?.error === "string") {
-        text = parsed.error.trim();
+      parsedJson = JSON.parse(text);
+      if (typeof parsedJson?.message === "string") {
+        text = parsedJson.message.trim();
+      } else if (typeof parsedJson?.error?.message === "string") {
+        text = parsedJson.error.message.trim();
+      } else if (typeof parsedJson?.error === "string") {
+        text = parsedJson.error.trim();
       }
     }
   } catch {}
 
   // 1. Detect status code
   let statusCode: string | null = null;
-  const statusMatch = text.match(/\b(400|401|402|403|404|408|409|413|422|429|500|502|503|504)\b/);
-  if (statusMatch && statusMatch[1]) {
-    statusCode = statusMatch[1];
-  } else if (
-    /user not found|unauthorized|invalid (?:api\s*)?key|bad credentials|authentication failed/i.test(
-      text,
-    )
-  ) {
-    statusCode = "401";
-  } else if (/out of (?:antseed\s*)?credits|insufficient funds|payment required/i.test(text)) {
-    statusCode = "402";
-  } else if (/access forbidden|permission denied|forbidden/i.test(text)) {
-    statusCode = "403";
-  } else if (/model not found|resource not found|no such model/i.test(text)) {
-    statusCode = "404";
-  } else if (/timeout|timed out|stalled|took too long/i.test(text)) {
-    // If it is a shell command/terminal/process execution timeout, keep status as Timeout instead of HTTP 408
-    if (/command|execut|terminal|script|bash|apt-get|mariadb|process/i.test(text)) {
-      statusCode = "Timeout";
-    } else {
-      statusCode = "408";
+  if (parsedJson?.error?.code && /^\d{3}$/.test(String(parsedJson.error.code))) {
+    statusCode = String(parsedJson.error.code);
+  } else if (parsedJson?.code && /^\d{3}$/.test(String(parsedJson.code))) {
+    statusCode = String(parsedJson.code);
+  } else if (parsedJson?.status && /^\d{3}$/.test(String(parsedJson.status))) {
+    statusCode = String(parsedJson.status);
+  }
+
+  if (!statusCode) {
+    const statusMatch = text.match(/\b(400|401|402|403|404|408|409|413|422|429|500|502|503|504)\b/);
+    if (statusMatch && statusMatch[1]) {
+      statusCode = statusMatch[1];
+    } else if (
+      /user not found|unauthorized|invalid (?:api\s*)?key|bad credentials|authentication failed/i.test(
+        text,
+      )
+    ) {
+      statusCode = "401";
+    } else if (/out of (?:antseed\s*)?credits|insufficient funds|payment required/i.test(text)) {
+      statusCode = "402";
+    } else if (/access forbidden|permission denied|forbidden/i.test(text)) {
+      statusCode = "403";
+    } else if (/model not found|resource not found|no such model/i.test(text)) {
+      statusCode = "404";
+    } else if (/timeout|timed out|stalled|took too long/i.test(text)) {
+      if (/command|execut|terminal|script|bash|apt-get|mariadb|process/i.test(text)) {
+        statusCode = "Timeout";
+      } else {
+        statusCode = "408";
+      }
+    } else if (/cooling down/i.test(text)) {
+      statusCode = "429";
+    } else if (/rate limit|too many requests|quota (?:exhausted|exceeded)/i.test(text)) {
+      statusCode = "429";
+    } else if (
+      /circuit breaker|upstream unavailable|temporarily unavailable|overloaded|resource pressure/i.test(
+        text,
+      )
+    ) {
+      statusCode = "503";
+    } else if (/bad gateway/i.test(text)) {
+      statusCode = "502";
+    } else if (/gateway timeout/i.test(text)) {
+      statusCode = "504";
+    } else if (
+      /protocol error|internal server error|unexpected server error|failed to start run/i.test(text)
+    ) {
+      statusCode = "500";
     }
-  } else if (/cooling down/i.test(text)) {
-    statusCode = "429";
-  } else if (/rate limit|too many requests|quota (?:exhausted|exceeded)/i.test(text)) {
-    statusCode = "429";
-  } else if (
-    /circuit breaker|upstream unavailable|temporarily unavailable|overloaded|resource pressure/i.test(
-      text,
-    )
-  ) {
-    statusCode = "503";
-  } else if (/bad gateway/i.test(text)) {
-    statusCode = "502";
-  } else if (/gateway timeout/i.test(text)) {
-    statusCode = "504";
-  } else if (
-    /protocol error|internal server error|unexpected server error|failed to start run/i.test(text)
-  ) {
-    statusCode = "500";
   }
 
   // 2. Detect / truncate model name
   let detectedModel = explicitModel || null;
+  if (!detectedModel) {
+    if (typeof parsedJson?.model === "string") {
+      detectedModel = parsedJson.model;
+    } else if (typeof parsedJson?.error?.model === "string") {
+      detectedModel = parsedJson.error.model;
+    }
+  }
   if (!detectedModel) {
     const quotedMatch = text.match(/(?:model|on model)\s+['"`]([^'"`]+)['"`]/i);
     if (quotedMatch && quotedMatch[1]) {
@@ -208,10 +225,10 @@ export function parseErrorDetails(
     recommendation =
       "Command execution took longer than the allocated timeout limit. Retry with an increased timeout or run in the background.";
   } else if (statusCode === "408" || /timeout|timed out|stalled/i.test(text)) {
-    errorCategory = "Model Request Timeout";
+    errorCategory = "Request Timeout";
     shortReason = "Timeout";
     recommendation =
-      "Upstream server ne time par response shuru nahi kiya (server busy ya queue mein atka hua hai). OpenCode Bypass settings se IP rotate karein ya koi doosra model try karein.";
+      "Request timed out waiting for server response. Check endpoint connectivity or retry.";
   } else if (/cooling down/i.test(text)) {
     errorCategory = "Rate Limit (Cooldown)";
     shortReason = "Cooling down";
@@ -221,10 +238,10 @@ export function parseErrorDetails(
     statusCode === "429" ||
     /429|rate limit|too many requests|limit full|quota/i.test(text)
   ) {
-    errorCategory = "Rate Limit Exceeded (Limit Full)";
-    shortReason = "Limit full";
+    errorCategory = "Rate Limit Exceeded";
+    shortReason = "Rate limited";
     recommendation =
-      "Model ki free quota ya rate limit full ho chuki hai. Settings mein ja kar OpenCode Bypass 'Rotate IP / Session' karein ya koi doosra free model chunein.";
+      "Rate limit or quota exceeded. Please wait before retrying or switch to another model.";
   } else if (
     statusCode === "503" ||
     /503|overloaded|circuit breaker|unavailable|resource pressure/i.test(text)

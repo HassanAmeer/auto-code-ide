@@ -185,7 +185,7 @@ import { ProposedPlanCard } from "./ProposedPlanCard";
 import { HtmlRenderFrame } from "./HtmlRenderFrame";
 import { McpAppFrame } from "./McpAppFrame";
 import { ChangedFilesCard } from "./ChangedFilesTree";
-import { parseErrorDetails } from "~/lib/compactErrorFormatter";
+import { parseErrorDetails, truncateModelName } from "~/lib/compactErrorFormatter";
 import { useComposerDraftStore } from "~/composerDraftStore";
 import { useFileContextMenuHandler } from "../../fileContextMenu";
 import { useProject, useThreadShell } from "../../state/entities";
@@ -3349,92 +3349,180 @@ function CupertinoTimelineErrorCard({
     }
   };
 
-  const errorInfo = parseErrorDetails(rawError, explicitModel);
-
-  const numericCode =
-    explicitStatusCode && /^\d{3}$/.test(explicitStatusCode)
-      ? explicitStatusCode
-      : errorInfo.statusCode && /^\d{3}$/.test(errorInfo.statusCode)
-        ? errorInfo.statusCode
-        : null;
-
-  const displayStatusCode = numericCode
-    ? `HTTP ${numericCode}`
-    : errorInfo.statusCode
-      ? errorInfo.statusCode.startsWith("HTTP") || errorInfo.statusCode === "Timeout"
-        ? errorInfo.statusCode
-        : `HTTP ${errorInfo.statusCode}`
-      : isWarning
-        ? "Warning"
-        : "Failed";
-
-  const resolvedCategory = isWarning
-    ? "Usage Limit Reached"
-    : errorInfo.errorCategory ||
-      (errorType && !/^(turn_start_failure|turn failed|error)$/i.test(errorType)
-        ? errorType
-        : "Provider Error");
-
-  const subtitle =
-    errorInfo.singleLineDetail ||
-    errorInfo.shortReason ||
-    "An error occurred during response generation";
-
-  const [viewMode, setViewMode] = useState<"details" | "json">("details");
-
-  const parsedJson = useMemo(() => {
+  // Parse exact error / response without artificial synthesis or hardcoded categories
+  const {
+    exactJson,
+    rawResponseText,
+    displayStatusCode,
+    exactStatusCode,
+    exactErrorTitle,
+    exactMessage,
+    displayModel,
+    fullModelName,
+  } = useMemo(() => {
     const trimmed = (rawError || "").trim();
+    let parsed: any = null;
+    let isJson = false;
+
     try {
       if (
         (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
         (trimmed.startsWith("[") && trimmed.endsWith("]"))
       ) {
-        return JSON.parse(trimmed);
-      }
-      const firstBrace = trimmed.indexOf("{");
-      const lastBrace = trimmed.lastIndexOf("}");
-      if (firstBrace !== -1 && lastBrace > firstBrace) {
-        const potentialJson = trimmed.slice(firstBrace, lastBrace + 1);
-        return JSON.parse(potentialJson);
+        parsed = JSON.parse(trimmed);
+        isJson = true;
+      } else {
+        const firstBrace = trimmed.indexOf("{");
+        const lastBrace = trimmed.lastIndexOf("}");
+        if (firstBrace !== -1 && lastBrace > firstBrace) {
+          const potentialJson = trimmed.slice(firstBrace, lastBrace + 1);
+          parsed = JSON.parse(potentialJson);
+          isJson = true;
+        }
       }
     } catch {
       // not JSON
     }
 
-    return {
-      error: resolvedCategory,
-      statusCode: numericCode ? Number(numericCode) || numericCode : errorInfo.statusCode,
-      model: errorInfo.fullModel || explicitModel || undefined,
-      message: errorInfo.singleLineDetail || rawError,
-      detail: rawError,
-    };
-  }, [rawError, resolvedCategory, numericCode, errorInfo, explicitModel]);
-
-  const jsonString = useMemo(() => {
-    try {
-      return JSON.stringify(parsedJson, null, 2);
-    } catch {
-      return rawError;
+    // 1. Status Code: explicitStatusCode -> parsed.error?.code -> parsed.code -> parsed.status -> regex match
+    let code: string | null = explicitStatusCode?.trim() || null;
+    if (!code && parsed) {
+      if (parsed.error?.code !== undefined && parsed.error.code !== null) {
+        code = String(parsed.error.code);
+      } else if (parsed.code !== undefined && parsed.code !== null) {
+        code = String(parsed.code);
+      } else if (parsed.status && /^\d{3}$/.test(String(parsed.status))) {
+        code = String(parsed.status);
+      }
     }
-  }, [parsedJson, rawError]);
+    if (!code) {
+      const match = trimmed.match(/\b(400|401|402|403|404|408|409|413|422|429|500|502|503|504)\b/);
+      if (match && match[1]) {
+        code = match[1];
+      }
+    }
+
+    let formattedStatus = "";
+    if (code) {
+      formattedStatus = /^\d{3}$/.test(code) ? `HTTP ${code}` : code;
+    } else if (isWarning) {
+      formattedStatus = "Warning";
+    } else {
+      formattedStatus = "Error";
+    }
+
+    // 2. Exact Title / Error Category
+    let title = "";
+    if (parsed?.error?.status && typeof parsed.error.status === "string") {
+      title = parsed.error.status;
+    } else if (
+      parsed?.status &&
+      typeof parsed.status === "string" &&
+      !/^\d+$/.test(parsed.status)
+    ) {
+      title = parsed.status;
+    } else if (parsed?.error?.type && typeof parsed.error.type === "string") {
+      title = parsed.error.type;
+    } else if (parsed?.type && typeof parsed.type === "string") {
+      title = parsed.type;
+    } else if (parsed?.error && typeof parsed.error === "string") {
+      title = parsed.error;
+    } else if (
+      errorType &&
+      !/^(turn_start_failure|turn failed|error|provider error)$/i.test(errorType)
+    ) {
+      title = errorType;
+    } else if (code && /^\d{3}$/.test(code)) {
+      const HTTP_STATUS_NAMES: Record<string, string> = {
+        "400": "Bad Request",
+        "401": "Unauthorized",
+        "402": "Payment Required",
+        "403": "Forbidden",
+        "404": "Not Found",
+        "408": "Request Timeout",
+        "409": "Conflict",
+        "413": "Payload Too Large",
+        "422": "Unprocessable Entity",
+        "429": "Too Many Requests",
+        "500": "Internal Server Error",
+        "502": "Bad Gateway",
+        "503": "Service Unavailable",
+        "504": "Gateway Timeout",
+      };
+      title = HTTP_STATUS_NAMES[code] || (isWarning ? "Usage Limit Reached" : "Error");
+    } else {
+      title = isWarning ? "Usage Limit Reached" : errorType || "Error";
+    }
+
+    // 3. Exact Message / Subtitle
+    let message = "";
+    if (parsed?.error?.message && typeof parsed.error.message === "string") {
+      message = parsed.error.message.trim();
+    } else if (parsed?.message && typeof parsed.message === "string") {
+      message = parsed.message.trim();
+    } else if (parsed?.detail && typeof parsed.detail === "string") {
+      message = parsed.detail.trim();
+    } else if (parsed?.error && typeof parsed.error === "string") {
+      message = parsed.error.trim();
+    } else {
+      const firstLine = trimmed
+        .split("\n")
+        .map((s) => s.trim())
+        .find((s) => s.length > 0 && !s.startsWith("```"));
+      message =
+        firstLine || trimmed || (isWarning ? "Usage limit reached" : "Error occurred during turn");
+    }
+
+    // 4. Model detection
+    let model = explicitModel || null;
+    if (!model && parsed) {
+      if (typeof parsed.model === "string") model = parsed.model;
+      else if (typeof parsed.error?.model === "string") model = parsed.error.model;
+    }
+    if (!model) {
+      const quotedMatch = trimmed.match(/(?:model|on model)\s+['"`]([^'"`]+)['"`]/i);
+      if (quotedMatch && quotedMatch[1]) {
+        model = quotedMatch[1].trim();
+      }
+    }
+
+    return {
+      exactJson: isJson ? parsed : null,
+      rawResponseText: trimmed,
+      displayStatusCode: formattedStatus,
+      exactStatusCode: code,
+      exactErrorTitle: title,
+      exactMessage: message,
+      displayModel: truncateModelName(model),
+      fullModelName: model,
+    };
+  }, [rawError, explicitStatusCode, errorType, explicitModel, isWarning]);
+
+  const [viewMode, setViewMode] = useState<"response" | "raw">("response");
+
+  const formattedResponseString = useMemo(() => {
+    if (exactJson) {
+      try {
+        return JSON.stringify(exactJson, null, 2);
+      } catch {
+        return rawResponseText;
+      }
+    }
+    return rawResponseText;
+  }, [exactJson, rawResponseText]);
 
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation();
-    navigator.clipboard?.writeText(
-      viewMode === "json" ? jsonString : errorInfo.fullDetails || rawError,
-    );
+    navigator.clipboard?.writeText(viewMode === "response" ? formattedResponseString : rawError);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
   // Suppress 408 / Timeout error cards while the AI is actively generating / streaming.
-  // Displaying "HTTP 408 : Request Timeout" at the bottom while response tokens are actively
-  // arriving in real time is jarring, confusing, and contradictory to the user.
   if (
     (isWorking || activity?.activeTurnInProgress) &&
-    (numericCode === "408" ||
+    (exactStatusCode === "408" ||
       isInterrupted ||
-      errorInfo.statusCode === "408" ||
       /timeout|timed out|stalled|interrupted/i.test(rawError))
   ) {
     return null;
@@ -3481,14 +3569,14 @@ function CupertinoTimelineErrorCard({
             :
           </span>
           <span className="shrink-0 font-semibold text-xs text-zinc-100 dark:text-zinc-200 truncate">
-            {resolvedCategory}
+            {exactErrorTitle}
           </span>
-          {errorInfo.shortModel ? (
+          {displayModel ? (
             <span
               className="shrink-0 font-mono text-[10px] px-1 py-0.2 rounded bg-muted/40 border border-border/30 text-muted-foreground/75 truncate max-w-[130px]"
-              title={errorInfo.fullModel || errorInfo.shortModel}
+              title={fullModelName || displayModel}
             >
-              {errorInfo.shortModel}
+              {displayModel}
             </span>
           ) : null}
         </div>
@@ -3538,16 +3626,16 @@ function CupertinoTimelineErrorCard({
         </div>
       </div>
 
-      {/* Subtitle: 1 Line Details */}
+      {/* Subtitle: Exact Message from response */}
       <div
         className="px-2.5 pb-1 pt-0 -mt-0.5 min-w-0 cursor-pointer"
         onClick={() => setExpanded((v) => !v)}
       >
         <p
           className="text-[11px] text-muted-foreground/75 truncate font-normal ps-5 select-text"
-          title={subtitle}
+          title={exactMessage}
         >
-          {subtitle}
+          {exactMessage}
         </p>
       </div>
 
@@ -3612,7 +3700,7 @@ function CupertinoTimelineErrorCard({
       {/* Uncollapsed / Expanded details section */}
       {expanded ? (
         <div className="border-t border-rose-500/10 bg-muted/15 px-3 py-2.5 ps-7.5 animate-in fade-in duration-150 select-text space-y-2">
-          {/* Header Row: Status Code, Model Name, Category & JSON / Details Toggle Button */}
+          {/* Header Row: Status Code, Model Name, Category & Response / Raw Error Toggle Button */}
           <div className="flex flex-wrap items-center justify-between gap-2 pb-1.5 border-b border-border/25">
             <div className="flex flex-wrap items-center gap-1.5 min-w-0">
               {displayStatusCode ? (
@@ -3621,72 +3709,71 @@ function CupertinoTimelineErrorCard({
                 </span>
               ) : null}
 
-              {errorInfo.fullModel || explicitModel ? (
+              {fullModelName ? (
                 <span
                   className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-muted/40 border border-border/30 text-muted-foreground truncate max-w-[220px]"
-                  title={errorInfo.fullModel || explicitModel || undefined}
+                  title={fullModelName}
                 >
-                  Model:{" "}
-                  <span className="text-foreground font-medium">
-                    {errorInfo.fullModel || explicitModel}
-                  </span>
+                  Model: <span className="text-foreground font-medium">{fullModelName}</span>
                 </span>
               ) : null}
 
               <span className="text-[10px] text-muted-foreground/80 font-mono truncate max-w-[180px]">
-                {resolvedCategory}
+                {exactErrorTitle}
               </span>
             </div>
 
-            {/* Toggle button between Details and JSON */}
+            {/* Toggle button between Exact Response and Raw Error */}
             <div className="flex items-center rounded border border-border/50 bg-background/60 p-0.5 text-[10px] font-mono">
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setViewMode("details");
+                  setViewMode("response");
                 }}
                 className={cn(
-                  "px-2 py-0.5 rounded transition-colors cursor-pointer",
-                  viewMode === "details"
+                  "px-2 py-0.5 rounded transition-colors cursor-pointer flex items-center gap-1",
+                  viewMode === "response"
                     ? "bg-muted text-foreground font-semibold shadow-xs"
                     : "text-muted-foreground hover:text-foreground",
                 )}
+                title="Show exact response payload"
               >
-                Details
+                <span className="text-[9px] opacity-80">{`{ }`}</span>
+                <span>Response</span>
               </button>
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setViewMode("json");
+                  setViewMode("raw");
                 }}
                 className={cn(
-                  "px-2 py-0.5 rounded transition-colors cursor-pointer flex items-center gap-1",
-                  viewMode === "json"
+                  "px-2 py-0.5 rounded transition-colors cursor-pointer",
+                  viewMode === "raw"
                     ? "bg-muted text-foreground font-semibold shadow-xs"
                     : "text-muted-foreground hover:text-foreground",
                 )}
+                title="Show raw error text"
               >
-                <span className="text-[9px] opacity-80">{`{ }`}</span>
-                <span>JSON</span>
+                Raw Error
               </button>
             </div>
           </div>
 
-          {/* Body: Details (Exact Error Text) or JSON (Formatted Payload) */}
-          {viewMode === "json" ? (
+          {/* Body: Response (Exact Formatted Response) or Raw Error */}
+          {viewMode === "response" ? (
             <div className="relative group/err-json">
               <pre className="text-[11px] leading-relaxed text-sky-300 dark:text-sky-200 font-mono bg-zinc-950/80 p-2.5 rounded border border-border/35 whitespace-pre-wrap break-all max-h-56 overflow-y-auto">
-                <code>{jsonString}</code>
+                <code>{formattedResponseString}</code>
               </pre>
               <button
                 type="button"
                 onClick={handleCopy}
                 className="absolute top-1.5 right-1.5 opacity-0 group-hover/err-json:opacity-100 transition-opacity px-1.5 py-0.5 rounded bg-background/90 border border-border/50 text-[10px] text-muted-foreground hover:text-foreground cursor-pointer shadow-xs flex items-center gap-1"
-                title="Copy JSON response"
+                title="Copy exact response"
               >
-                {copied ? "Copied" : "Copy JSON"}
+                {copied ? "Copied" : "Copy Response"}
               </button>
             </div>
           ) : (
@@ -3698,9 +3785,9 @@ function CupertinoTimelineErrorCard({
                 type="button"
                 onClick={handleCopy}
                 className="absolute top-1 right-1 opacity-0 group-hover/err-details:opacity-100 transition-opacity px-1.5 py-0.5 rounded bg-background/90 border border-border/50 text-[10px] text-muted-foreground hover:text-foreground cursor-pointer shadow-xs"
-                title="Copy error details"
+                title="Copy raw error"
               >
-                {copied ? "Copied" : "Copy"}
+                {copied ? "Copied" : "Copy Error"}
               </button>
             </div>
           )}
@@ -3773,11 +3860,13 @@ function CupertinoErrorRow({
   return (
     <CupertinoTimelineErrorCard
       rawError={presentation.detail || item.failure.message}
-      errorType={presentation.label}
-      explicitModel={runModel}
-      statusCode={
-        item.failure.code && /^\d{3}$/.test(item.failure.code) ? item.failure.code : undefined
+      errorType={
+        item.failure.class && item.failure.class !== "unknown"
+          ? item.failure.class
+          : presentation.label
       }
+      explicitModel={runModel}
+      statusCode={item.failure.code ?? undefined}
       isWarning={presentation.tone === "warning"}
       visibility={visibility}
       sourceThreadId={sourceThreadId}
@@ -6112,7 +6201,13 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
     return (
       <CupertinoTimelineErrorCard
         rawError={failureItem.failure.message}
-        errorType={label}
+        errorType={failureItem.failure.class !== "unknown" ? failureItem.failure.class : label}
+        statusCode={failureItem.failure.code ?? undefined}
+        explicitModel={
+          failureItem.runId
+            ? ctx.runs?.find((r) => r.id === failureItem.runId)?.modelSelection?.model
+            : undefined
+        }
         isWarning={warning}
         timestamp={
           <TimelineRowTimestamp
