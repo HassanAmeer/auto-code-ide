@@ -325,7 +325,9 @@ export const WatchdogCard = memo(function WatchdogCard({
   );
 
   const activeCount = useMemo(
-    () => visibleItems.filter((w) => w.status !== "completed" && w.status !== "failed").length,
+    // `cancelled` is terminal too — otherwise a stopped watchdog keeps the
+    // header claiming "1 active" and the fast polling never settles.
+    () => visibleItems.filter((w) => !isTerminalStatus(w.status)).length,
     [visibleItems],
   );
 

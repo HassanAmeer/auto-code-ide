@@ -833,9 +833,7 @@ export async function startWatchdogSupervision(
           if (fallback && fallback !== model) {
             state.recoveries += 1;
             touch(`Sub-agent ${st.order} failed — retrying with ${fallback}`);
-            const row = state.workers.find((w) => w.id === workerId);
-            row?.reviewNotes.push(`retried with fallback model ${fallback}`);
-            res = await executeOpenCodeTask({
+            const retried = await executeOpenCodeTask({
               worktreePath: allocation.worktreePath,
               projectName,
               projectRoot,
@@ -845,6 +843,13 @@ export async function startWatchdogSupervision(
               onLog: workerLog,
               abortCheck: () => isWorkerAborted(workerId),
             });
+            res = retried;
+            // Only annotate the row when the fallback did not save the worker:
+            // an amber "retried" note under a green row reads like a failure.
+            if (!retried.ok && !isWorkerAborted(workerId)) {
+              const row = state.workers.find((w) => w.id === workerId);
+              row?.reviewNotes.push(`retried with fallback model ${fallback}`);
+            }
           }
         }
 
