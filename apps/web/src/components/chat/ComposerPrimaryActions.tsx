@@ -1,5 +1,6 @@
 import {
   memo,
+  useEffect,
   useState,
   type MouseEventHandler,
   type PointerEventHandler,
@@ -151,6 +152,19 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
   const [isWebSearchActive, setIsWebSearchActive] = useState<boolean>(() =>
     isComposerWebSearchEnabled(),
   );
+  // Stop is fire-and-forget: the interrupt round trip can take a while, so the
+  // button shows a spinner from the moment it is clicked. Reset as soon as the
+  // run is no longer interruptible (settled) or a new run starts, and never
+  // leave the spinner spinning forever if the interrupt silently fails.
+  const [stopRequested, setStopRequested] = useState(false);
+  useEffect(() => {
+    if (!canInterrupt) setStopRequested(false);
+  }, [canInterrupt]);
+  useEffect(() => {
+    if (!stopRequested) return;
+    const timer = window.setTimeout(() => setStopRequested(false), 15000);
+    return () => window.clearTimeout(timer);
+  }, [stopRequested]);
 
   const isQueuing =
     !isEditingQueuedMessage &&
@@ -174,21 +188,39 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
             className={cn(
               "flex cursor-pointer items-center justify-center rounded-full border border-rose-400/40 bg-transparent text-rose-400 opacity-60 transition-all duration-150 hover:opacity-100 hover:border-rose-400/70 hover:bg-rose-500/10 hover:scale-105 active:opacity-80 [&_svg]:pointer-events-none",
               insidePendingAction ? "size-8 sm:size-7" : "size-8",
+              stopRequested && "cursor-default opacity-100 hover:scale-100",
             )}
             {...pointerFocusProps}
-            disabled={!canOperateThread}
+            disabled={!canOperateThread || stopRequested}
             onClick={() => {
-              if (canOperateThread) onInterrupt();
+              if (!canOperateThread || stopRequested) return;
+              // Instant feedback: the run can take a moment to actually settle,
+              // so swap the square for a spinner the frame the user taps Stop.
+              setStopRequested(true);
+              onInterrupt();
             }}
-            aria-label="Stop generation"
+            aria-label={stopRequested ? "Stopping generation" : "Stop generation"}
+            aria-busy={stopRequested || undefined}
           />
         }
       >
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-          <rect x="2" y="2" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.6" />
-        </svg>
+        {stopRequested ? (
+          <Spinner size="xs" aria-hidden="true" className="size-3.5" />
+        ) : (
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+            <rect
+              x="2"
+              y="2"
+              width="8"
+              height="8"
+              rx="1.5"
+              stroke="currentColor"
+              strokeWidth="1.6"
+            />
+          </svg>
+        )}
       </TooltipTrigger>
-      <TooltipPopup>Interrupt</TooltipPopup>
+      <TooltipPopup>{stopRequested ? "Stopping…" : "Interrupt"}</TooltipPopup>
     </Tooltip>
   );
 
