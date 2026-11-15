@@ -471,7 +471,7 @@ function projectedWorkEntry(row: OrchestrationV2ProjectedTurnItem): WorkLogEntry
     case "reasoning":
       return {
         ...common,
-        label: title ?? "Thinking",
+        label: title ?? (item.status === "completed" ? "Thought" : "Thinking"),
         ...(item.text ? { detail: item.text } : {}),
       };
     case "command_execution":

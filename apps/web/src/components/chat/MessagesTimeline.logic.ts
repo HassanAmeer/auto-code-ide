@@ -1377,6 +1377,17 @@ export function deriveMessagesTimelineRows(input: {
     timelineEntries.flatMap((entry) => (entry.kind === "message" ? [entry.message] : [])),
   );
   const terminalAssistantMessageIds = deriveTerminalAssistantMessageIds(timelineEntries);
+  const lastUserMessageIndex = timelineEntries.findLastIndex(
+    (entry) => entry.kind === "message" && entry.message.role === "user",
+  );
+  const lastAssistantMessageIndex = timelineEntries.findLastIndex(
+    (entry) => entry.kind === "message" && entry.message.role === "assistant",
+  );
+  const lastAssistantMessage =
+    lastAssistantMessageIndex >= 0
+      ? (timelineEntries[lastAssistantMessageIndex] as Extract<TimelineEntry, { kind: "message" }>)
+          .message
+      : null;
   const unsettledRunId = deriveUnsettledRunId(input.latestRun ?? null, input.runningRunId ?? null);
   const failedRunIds = failedTimelineRunIds(timelineEntries, input.latestRun ?? null);
   const liveSubagentEntryIds = liveSubagentCardEntryIds(timelineEntries);
@@ -1468,6 +1479,11 @@ export function deriveMessagesTimelineRows(input: {
   const latestRunningToolEntry = visibleActiveToolEntries.findLast((entry) =>
     workEntryIsActiveTurnActivity(entry.entry),
   );
+  const terminalAssistantHasCompleted =
+    lastAssistantMessage !== null &&
+    lastAssistantMessageIndex > lastUserMessageIndex &&
+    !lastAssistantMessage.streaming &&
+    latestRunningToolEntry === undefined;
   const latestToolKeepsActivityLive =
     latestRunningToolEntry !== undefined ||
     (latestVisibleToolEntry !== undefined &&
@@ -1908,14 +1924,14 @@ export function deriveMessagesTimelineRows(input: {
   // A setup that owns the working slot sits under it and shows no activity
   // row of its own; every other state gets the usual tail.
   const hasWorkingRow = nextRows.some((row) => row.kind === "working");
-  if (input.isWorking && !hasWorkingRow && activeTurnHeaderIndex === timelineEntries.length) {
+  if (
+    input.isWorking &&
+    !terminalAssistantHasCompleted &&
+    !hasWorkingRow &&
+    activeTurnHeaderIndex === timelineEntries.length
+  ) {
     appendWorkingRow();
   }
-  const terminalAssistantHasCompleted =
-    timelineEntries.length > 0 &&
-    timelineEntries.at(-1)?.kind === "message" &&
-    timelineEntries.at(-1)?.message.role === "assistant" &&
-    !timelineEntries.at(-1)?.message.streaming;
 
   if (
     input.isWorking &&

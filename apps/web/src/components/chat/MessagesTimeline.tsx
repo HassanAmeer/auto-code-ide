@@ -4759,7 +4759,7 @@ function LiveWorkEntryTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "
       <LiveActivityRow
         label={
           thoughtIsStatus ? (
-            row.active ? (
+            row.active && row.entry.toolLifecycleStatus === "inProgress" ? (
               "Thinking"
             ) : (
               "Thought"
@@ -4775,7 +4775,12 @@ function LiveWorkEntryTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "
             <ReactMarkdown
               remarkPlugins={[
                 remarkGfm,
-                [remarkThoughtPreview, row.active ? "Thinking" : "Thought"],
+                [
+                  remarkThoughtPreview,
+                  row.active && row.entry.toolLifecycleStatus === "inProgress"
+                    ? "Thinking"
+                    : "Thought",
+                ],
               ]}
             >
               {row.entry.detail ?? label}

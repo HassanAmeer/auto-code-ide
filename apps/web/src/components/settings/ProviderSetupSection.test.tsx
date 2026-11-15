@@ -268,12 +268,10 @@ describe("Antigravity setup", () => {
   });
 
   it("offers sign-in again after Google reports a failure", async () => {
-    setup.fetch
-      .mockResolvedValueOnce({ ok: true, json: async () => startOk })
-      .mockResolvedValue({
-        ok: true,
-        json: async () => ({ status: "failed", message: "Google sign-in failed: access_denied" }),
-      });
+    setup.fetch.mockResolvedValueOnce({ ok: true, json: async () => startOk }).mockResolvedValue({
+      ok: true,
+      json: async () => ({ status: "failed", message: "Google sign-in failed: access_denied" }),
+    });
     const view = renderSetup();
     click(view, "Sign in with Google");
     await flushPromises();
