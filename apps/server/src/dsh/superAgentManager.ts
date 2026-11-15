@@ -14,13 +14,19 @@
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 import type { SubtaskPlanItem, TaskStage } from "./types.ts";
-import { decomposeTask, type SubtaskPlanItem as SubtaskItem } from "./taskDecomposer.ts";
+import { decomposeTask } from "./taskDecomposer.ts";
 import {
   createWorkerWorktree,
   mergeWorkerWorktree,
   cleanupWorkerWorktree,
 } from "./worktreeRunner.ts";
 import { executeOpenCodeTask } from "./opencodeBridge.ts";
+import { isWorkerAborted, clearWorkerAbort } from "./abortRegistry.ts";
+import {
+  deriveSpecialistRole,
+  registerWorkerTelemetry,
+  updateWorkerTelemetryStatus,
+} from "./workerRegistry.ts";
 import { reviewerSubAgent, type ReviewerSubAgentInput } from "./reviewerSubAgent.ts";
 
 export interface SuperAgentManagerInput {
@@ -102,6 +108,22 @@ export class SuperAgentManager {
     logStep("workers", `Dispatching ${workerAllocations.length} worker(s) in parallel...`);
     const parallelResults = await Promise.allSettled(
       workerAllocations.map(async ({ st, allocation }) => {
+        // The abort registry is keyed by telemetry ids: `stopWorkerTelemetry`
+        // and `stopAllRunningTelemetry` only mark a worker aborted if it has a
+        // row in the registry. Without registering here, the `abortCheck` below
+        // could never become true and Stop would be a no-op for this path.
+        const workerId = `${taskId}-w${st.order}`;
+        registerWorkerTelemetry({
+          id: workerId,
+          role: deriveSpecialistRole(st.title, st.category, st.order),
+          status: "running",
+          model,
+          cwd: allocation.worktreePath,
+          goal: st.title,
+          projectName,
+          projectId,
+          startedAt: Date.now(),
+        });
         logStep(`worker-${st.order}`, `Worker started: "${st.title}"`);
 
         const subtaskRes = await executeOpenCodeTask({
@@ -111,9 +133,27 @@ export class SuperAgentManager {
           prompt: st.description,
           model,
           onLog: (m) => logStep(`worker-${st.order}`, m),
+          // This path is not wired to the watchdog today, but without an abort
+          // check a Stop (per-worker or stop-all) could never reach it — the
+          // model would keep streaming and its output would still be merged.
+          // Forward the same registry the watchdog and the Stop buttons use.
+          abortCheck: () => isWorkerAborted(workerId),
         });
 
-        return { st, allocation, subtaskRes };
+        if (isWorkerAborted(workerId)) {
+          clearWorkerAbort(workerId);
+          updateWorkerTelemetryStatus(workerId, "cancelled", { completedAt: Date.now() });
+          logStep(`worker-${st.order}`, "Stopped by user — output discarded, nothing merged.");
+          return { st, allocation, subtaskRes, cancelled: true as const };
+        }
+        updateWorkerTelemetryStatus(workerId, subtaskRes.ok ? "completed" : "failed", {
+          completedAt: Date.now(),
+          filesModified: subtaskRes.filesModified,
+          ...(subtaskRes.ok ? {} : { error: subtaskRes.error }),
+        });
+        clearWorkerAbort(workerId);
+
+        return { st, allocation, subtaskRes, cancelled: false as const };
       }),
     );
 
@@ -127,7 +167,17 @@ export class SuperAgentManager {
         logStep("merge", `Worker crashed: ${settled.reason}`);
         continue;
       }
-      const { st, allocation, subtaskRes } = settled.value;
+      const { st, allocation, subtaskRes, cancelled } = settled.value;
+
+      // A stopped worker's output must never be merged: the user cancelled it,
+      // and the shared abort registry already discarded what the model wrote.
+      if (cancelled) {
+        logStep("merge", `Worker ${st.order} was stopped — skipping merge.`);
+        if (allocation.isIsolated) {
+          cleanupWorkerWorktree(projectRoot, allocation.worktreePath, allocation.branchName);
+        }
+        continue;
+      }
 
       if (!subtaskRes.ok || subtaskRes.filesModified.length === 0) {
         logStep(

@@ -101,24 +101,56 @@ export interface ResearchMediaLinkResult {
 
 /**
  * Voice Agent Tool: research_media_link
- * Extracts transcripts from YouTube videos or text from web articles without API keys.
+ * Extracts page text from a link. The previous YouTube-transcript backend
+ * (apps/server/src/youtubeTranscript.ts) was removed, so this now fails with a
+ * clear, actionable message instead of throwing a module-not-found error.
  */
 export async function researchMediaLink(
   args: ResearchMediaLinkArgs,
 ): Promise<ResearchMediaLinkResult> {
-  const { url, query } = args;
-  try {
-    const { researchMediaLink: executeResearch } = await import(
-      "../../apps/server/src/youtubeTranscript.ts" as string
-    );
-    const res = await executeResearch(url, query);
+  const { url } = args;
+  if (!url || !/^https?:\/\//i.test(url.trim())) {
+    return { ok: false, transcript: "", error: "A valid http(s) URL is required." };
+  }
+
+  const isYouTube = /(?:youtube\.com|youtu\.be)/i.test(url);
+  if (isYouTube) {
     return {
-      ok: res.ok,
-      title: res.title,
-      transcript: res.transcript,
-      isYouTube: res.isYouTube,
-      error: res.error,
+      ok: false,
+      transcript: "",
+      isYouTube: true,
+      error:
+        "YouTube transcript extraction is not available in this build (the transcript backend was removed). Ask the user to paste the video description or key points.",
     };
+  }
+
+  try {
+    const res = await fetch(url, {
+      headers: { "User-Agent": "AutoCode-Bot/1.0" },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) {
+      return { ok: false, transcript: "", error: `Fetch failed (HTTP ${res.status})` };
+    }
+    const html = await res.text();
+    const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+    const text = html
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    const cleanTitle = titleMatch?.[1]?.trim();
+    const result: ResearchMediaLinkResult = {
+      ok: text.length > 0,
+      transcript: text.slice(0, 20000),
+      isYouTube: false,
+    };
+    if (cleanTitle) result.title = cleanTitle;
+    if (text.length === 0) result.error = "No readable text found on the page.";
+    return result;
   } catch (err: any) {
     return {
       ok: false,

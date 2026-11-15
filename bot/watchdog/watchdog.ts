@@ -1,4 +1,5 @@
 import { executeBash, inspectPreviewEndpoint } from "../cline/tools.ts";
+import { autoHealProject } from "../cline/auto-healer.ts";
 
 export interface WatchdogStatus {
   isActive: boolean;
@@ -76,6 +77,34 @@ export function startWatchdog(
         activeWatchdog.status.errorsDetected.push(`Preview unreachable: ${preview.error}`);
       }
     } catch {}
+
+    // 3. Autonomous heal: the bot promises "main khud solve kar loonga" when
+    //    absence supervision starts. Without this step the watchdog only
+    //    recorded errors and never repaired anything, so that promise was false.
+    try {
+      if (activeWatchdog.status.errorsDetected.length > 0) {
+        const lastError =
+          activeWatchdog.status.errorsDetected[activeWatchdog.status.errorsDetected.length - 1] ??
+          "";
+        const heal = await autoHealProject(projectRoot, lastError);
+        if (heal.healed) {
+          activeWatchdog.status.autoFixesApplied.push(
+            `${new Date().toISOString()} — ${heal.actionTaken}`,
+          );
+          if (activeWatchdog.status.autoFixesApplied.length > 50) {
+            activeWatchdog.status.autoFixesApplied =
+              activeWatchdog.status.autoFixesApplied.slice(-50);
+          }
+          onAlert?.(`🛠️ Watchdog auto-fixed ${projectName}: ${heal.actionTaken}`);
+          // A successful heal clears the pending error trail.
+          activeWatchdog.status.errorsDetected = [];
+        }
+      }
+    } catch (healErr: any) {
+      activeWatchdog.status.errorsDetected.push(
+        `Auto-heal failed: ${healErr?.message || String(healErr)}`,
+      );
+    }
   }, intervalSeconds * 1000);
 
   return activeWatchdog.status;

@@ -107,10 +107,13 @@ function now(): number {
 /**
  * Finished watchdogs are kept for the UI history, but they must not accumulate
  * forever: the process is long-lived and every task adds a full state object
- * (workers, logs, issues). Anything terminal and older than the TTL is dropped
- * at snapshot time — the same cheap prune the telemetry registry uses.
+ * (workers, logs, issues). Anything terminal and older than the TTL is dropped.
+ *
+ * The TTL is 6 hours because the card is the only place a finished audit is
+ * visible: at 30 minutes a user who stepped away lost the verdict before they
+ * could read (or dismiss) it. Set SUPER_AGENT_WATCHDOG_TTL_MS to override.
  */
-const WATCHDOG_TTL_MS = Number(process.env.SUPER_AGENT_WATCHDOG_TTL_MS || 30 * 60 * 1000);
+const WATCHDOG_TTL_MS = Number(process.env.SUPER_AGENT_WATCHDOG_TTL_MS || 6 * 60 * 60 * 1000);
 function pruneWatchdogs(): void {
   const cutoff = now() - WATCHDOG_TTL_MS;
   for (const [id, state] of watchdogs) {
@@ -118,6 +121,20 @@ function pruneWatchdogs(): void {
       watchdogs.delete(id);
     }
   }
+}
+
+/**
+ * Prune on a timer, not on read.
+ *
+ * `getWatchdogSnapshot` is a GET that the card polls every 2s for every open
+ * client. Mutating the map inside a read meant a snapshot could delete the very
+ * record it was asked for (and two concurrent reads could race the Map during
+ * iteration). Pruning now happens on a slow unref'd interval; reads stay pure.
+ */
+if (typeof setInterval === "function") {
+  const pruneTimer = setInterval(pruneWatchdogs, 5 * 60 * 1000);
+  // Never hold the process (or a test runner) open just to prune.
+  (pruneTimer as { unref?: () => void }).unref?.();
 }
 
 /**
@@ -131,7 +148,7 @@ export function getWatchdogSnapshot(filter?: {
   active: number;
   timestamp: number;
 } {
-  pruneWatchdogs();
+  // Reads stay pure: pruning runs on its own timer (see pruneWatchdogs).
   let list = Array.from(watchdogs.values());
   if (filter?.projectName && filter.projectName !== "all" && filter.projectName !== "Workspace") {
     const needle = filter.projectName.toLowerCase();
@@ -326,26 +343,121 @@ interface CommandRunResult {
   timedOut: boolean;
 }
 
-function runCommand(command: string, cwd: string, timeoutMs: number): CommandRunResult {
-  try {
-    const stdout = NodeChildProcess.execSync(command, {
+/**
+ * Async command runner for build/test.
+ *
+ * The old implementation was `execSync`, which blocked Node's event loop for
+ * the whole build (up to BUILD_TIMEOUT_MS = 5 minutes). While it ran, the
+ * server could not answer the watchdog snapshot poll or the Stop request — the
+ * user pressed Stop and nothing happened until the build finished. This version
+ * spawns a child and yields, and it kills the child as soon as the watchdog is
+ * stopped, so Stop works during build and test as well.
+ */
+async function runCommandAsync(
+  command: string,
+  cwd: string,
+  timeoutMs: number,
+  abortCheck?: (() => boolean) | undefined,
+): Promise<CommandRunResult> {
+  return await new Promise<CommandRunResult>((resolve) => {
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    let timedOut = false;
+    // Declared before any handler can call `finish` so a synchronous `error`
+    // event cannot hit a temporal-dead-zone read.
+    let abortPoll: NodeJS.Timeout | undefined;
+    let timeoutTimer: NodeJS.Timeout | undefined;
+    let hardKillTimer: NodeJS.Timeout | undefined;
+
+    const child = NodeChildProcess.spawn(command, {
       cwd,
-      encoding: "utf8",
-      timeout: timeoutMs,
-      stdio: "pipe",
-      maxBuffer: 8 * 1024 * 1024,
+      shell: true,
+      // `detached` makes the shell its own process-group leader. Without it,
+      // `kill(-pid)` targets the server's group instead, so the real build
+      // (a grandchild of the shell) survived every Stop and kept burning CPU.
+      detached: true,
+      stdio: ["ignore", "pipe", "pipe"],
     });
-    return { ok: true, output: String(stdout ?? "").slice(0, 2000), timedOut: false };
-  } catch (err: any) {
-    const killed = err?.killed === true || err?.signal === "SIGTERM";
-    const stderr = err?.stderr ? String(err.stderr) : "";
-    const stdout = err?.stdout ? String(err.stdout) : "";
-    return {
-      ok: false,
-      output: `${stderr || stdout || err?.message || "command failed"}`.slice(0, 2000),
-      timedOut: killed,
+
+    const finish = (result: CommandRunResult) => {
+      if (settled) return;
+      settled = true;
+      if (abortPoll) clearInterval(abortPoll);
+      if (timeoutTimer) clearTimeout(timeoutTimer);
+      if (hardKillTimer) clearTimeout(hardKillTimer);
+      resolve(result);
     };
-  }
+
+    const kill = (reason: "timeout" | "stopped") => {
+      if (reason === "timeout") timedOut = true;
+      if (child.pid === undefined) return;
+      try {
+        process.kill(-child.pid, "SIGTERM");
+      } catch {
+        try {
+          child.kill("SIGTERM");
+        } catch {}
+      }
+      // A build that ignores SIGTERM (or a wedged child) must not leave the
+      // watchdog awaiting forever: SIGKILL the group shortly after.
+      if (hardKillTimer === undefined) {
+        hardKillTimer = setTimeout(
+          () => {
+            if (child.pid !== undefined) {
+              try {
+                process.kill(-child.pid, "SIGKILL");
+              } catch {}
+            }
+            finish({
+              ok: false,
+              output:
+                (reason === "timeout" ? "command timed out: " : "stopped by user: ") +
+                (stderr || stdout).slice(0, 1800),
+              timedOut,
+            });
+          },
+          reason === "stopped" ? 3000 : 5000,
+        );
+        (hardKillTimer as { unref?: () => void }).unref?.();
+      }
+    };
+
+    abortPoll = setInterval(() => {
+      // Do NOT resolve here: `close` (or the SIGKILL fallback) resolves once the
+      // process group is really gone, so a stopped build cannot keep writing
+      // into the project while the watchdog has already moved on.
+      if (abortCheck?.()) kill("stopped");
+    }, 250);
+    (abortPoll as { unref?: () => void }).unref?.();
+
+    timeoutTimer = setTimeout(() => {
+      kill("timeout");
+    }, timeoutMs);
+    (timeoutTimer as { unref?: () => void }).unref?.();
+
+    child.stdout?.on("data", (chunk) => {
+      if (stdout.length < 8 * 1024 * 1024) stdout += String(chunk);
+    });
+    child.stderr?.on("data", (chunk) => {
+      if (stderr.length < 8 * 1024 * 1024) stderr += String(chunk);
+    });
+
+    child.on("error", (err) => {
+      finish({ ok: false, output: String(err?.message ?? err).slice(0, 2000), timedOut: false });
+    });
+
+    child.on("close", (code, signal) => {
+      finish({
+        ok: code === 0,
+        output: (code === 0 ? stdout : stderr || stdout || `exited with ${code ?? signal}`).slice(
+          0,
+          2000,
+        ),
+        timedOut,
+      });
+    });
+  });
 }
 
 /**
@@ -649,8 +761,15 @@ export async function startWatchdogSupervision(
     // Cooperative cancellation. `stopWatchdog` flips the card to `cancelled`
     // and aborts the workers; every phase boundary calls this so a stopped run
     // stops immediately instead of finishing its review/build/test cycle.
+    //
+    // `isStopped` is the single predicate every call site uses. Before this,
+    // each site spelled out `state.stopped === true || state.status ===
+    // "cancelled"` by hand; one of the two halves could be set without the
+    // other (stopWatchdog sets both, but the crash path sets only one), so the
+    // answers could disagree mid-run.
+    const isStopped = (): boolean => state.stopped === true || state.status === "cancelled";
     const stopIfRequested = (): WatchdogDispatchResult | undefined => {
-      if (!state.stopped && state.status !== "cancelled") return undefined;
+      if (!isStopped()) return undefined;
       state.stopped = true;
       state.status = "cancelled";
       state.completedAt ??= now();
@@ -668,7 +787,7 @@ export async function startWatchdogSupervision(
     // Phase transitions must never resurrect a stopped watchdog: a stop that
     // lands mid-build would otherwise put the card back on "building".
     const setPhase = (status: WatchdogStatus) => {
-      if (state.stopped || state.status === "cancelled") return;
+      if (isStopped()) return;
       state.status = status;
     };
 
@@ -747,8 +866,12 @@ export async function startWatchdogSupervision(
     // arrives before any worker row could be aborted. Mark every planned
     // worker aborted here so the dispatch loop below bails out per worker, and
     // return before a single model call is made.
-    if (state.stopped || state.status === "cancelled") {
+    if (isStopped()) {
       for (const { st } of allocations) markWorkerAborted(`${watchdogId}-w${st.order}`);
+      // The allocations above are already parked in the pool, so a stop that
+      // arrives here must hand them back or the pool leaks one worktree (and
+      // one git branch) per cancelled task.
+      for (const { allocation } of allocations) releaseWorktree(projectRoot, allocation);
       const stoppedBeforeDispatch = stopIfRequested();
       if (stoppedBeforeDispatch) return stoppedBeforeDispatch;
     }
@@ -874,7 +997,14 @@ export async function startWatchdogSupervision(
     // A stop request may have landed while the workers were running: never
     // review, merge, build, test, or report a verdict for a stopped watchdog.
     const stoppedResult = stopIfRequested();
-    if (stoppedResult) return stoppedResult;
+    if (stoppedResult) {
+      // Every worker allocation is still parked: hand them all back before
+      // bailing out so a stopped run does not drain the worktree pool.
+      for (const outcome of settled) {
+        if (outcome.status === "fulfilled") releaseWorktree(projectRoot, outcome.value.allocation);
+      }
+      return stoppedResult;
+    }
     setPhase("reviewing");
     touch("Reviewing all sub-agent outputs in parallel");
 
@@ -1015,7 +1145,7 @@ export async function startWatchdogSupervision(
       touch(`Build required — running ${pm} build once for the merged workspace`);
       const buildCmd =
         pm === "pnpm" ? "pnpm run build" : pm === "yarn" ? "yarn build" : "npm run build";
-      const build = runCommand(buildCmd, projectRoot, BUILD_TIMEOUT_MS);
+      const build = await runCommandAsync(buildCmd, projectRoot, BUILD_TIMEOUT_MS, isStopped);
       for (const row of state.workers) {
         if (row.status === "completed") {
           row.buildRan = true;
@@ -1023,6 +1153,9 @@ export async function startWatchdogSupervision(
         }
       }
       if (!build.ok) {
+        // A stop that landed during the build must not dispatch a repair.
+        const stoppedDuringBuild = stopIfRequested();
+        if (stoppedDuringBuild) return stoppedDuringBuild;
         // Watchdog self-heal: one repair sub-agent with the real build error.
         state.recoveries += 1;
         touch("Build failed — dispatching repair sub-agent");
@@ -1034,10 +1167,10 @@ export async function startWatchdogSupervision(
           kind: "build",
           model,
           onLog: (m) => log?.(`[Watchdog/repair] ${m}`),
-          abortCheck: () => state.stopped === true || state.status === "cancelled",
+          abortCheck: isStopped,
         });
         if (repair.ok) {
-          const rebuild = runCommand(buildCmd, projectRoot, BUILD_TIMEOUT_MS);
+          const rebuild = await runCommandAsync(buildCmd, projectRoot, BUILD_TIMEOUT_MS, isStopped);
           for (const row of state.workers) {
             if (row.status === "completed") row.buildPassed = rebuild.ok;
           }
@@ -1058,7 +1191,7 @@ export async function startWatchdogSupervision(
       setPhase("testing");
       touch(`Running ${pm} test suite once`);
       const testCmd = pm === "pnpm" ? "pnpm run test" : pm === "yarn" ? "yarn test" : "npm test";
-      const test = runCommand(testCmd, projectRoot, BUILD_TIMEOUT_MS);
+      const test = await runCommandAsync(testCmd, projectRoot, BUILD_TIMEOUT_MS, isStopped);
       for (const row of state.workers) {
         if (row.status === "completed") {
           row.testRan = true;
@@ -1066,6 +1199,9 @@ export async function startWatchdogSupervision(
         }
       }
       if (!test.ok) {
+        // A stop that landed during the test run must not dispatch a repair.
+        const stoppedDuringTest = stopIfRequested();
+        if (stoppedDuringTest) return stoppedDuringTest;
         state.recoveries += 1;
         touch("Tests failed — dispatching repair sub-agent");
         const repair = await dispatchRepairSubAgent({
@@ -1076,10 +1212,10 @@ export async function startWatchdogSupervision(
           kind: "test",
           model,
           onLog: (m) => log?.(`[Watchdog/repair] ${m}`),
-          abortCheck: () => state.stopped === true || state.status === "cancelled",
+          abortCheck: isStopped,
         });
         if (repair.ok) {
-          const retest = runCommand(testCmd, projectRoot, BUILD_TIMEOUT_MS);
+          const retest = await runCommandAsync(testCmd, projectRoot, BUILD_TIMEOUT_MS, isStopped);
           for (const row of state.workers) {
             if (row.status === "completed") row.testPassed = retest.ok;
           }
@@ -1114,7 +1250,7 @@ export async function startWatchdogSupervision(
         diff: mergedDiff,
         model,
         onLog: (m) => log?.(`[Watchdog/verify] ${m}`),
-        abortCheck: () => state.stopped === true || state.status === "cancelled",
+        abortCheck: isStopped,
       });
 
       if (verification.passed) {
@@ -1221,5 +1357,12 @@ export async function startWatchdogSupervision(
       workersTotal: state.workers.length,
       issues: state.issues,
     };
+  } finally {
+    // Abort flags are per-run, not per-id-forever. A stopped watchdog marks its
+    // workers aborted, but an aborted worker may bail out at a boundary that
+    // never reaches a `clearWorkerAbort` call (pre-dispatch, crash, early
+    // return). Those ids then stayed in the registry Set for the lifetime of
+    // the process. Clear every id this run owned as it finishes.
+    for (const worker of state.workers) clearWorkerAbort(worker.id);
   }
 }

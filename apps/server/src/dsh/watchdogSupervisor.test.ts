@@ -2,7 +2,73 @@
 import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+
+/**
+ * The cancel path is the one thing that must never be guessed at: a stopped
+ * watchdog has to abort its workers, skip review/merge/build/test entirely,
+ * hand every worktree back to the pool, and leave nothing behind in the abort
+ * registry. None of that can be observed without stubbing the two side-effect
+ * boundaries, so this file stubs the model bridge and the worktree pool.
+ */
+const harness = vi.hoisted(() => {
+  const acquired: Array<{ worktreePath: string; branchName: string; isIsolated: boolean }> = [];
+  const released: string[] = [];
+  const modelCalls: string[] = [];
+  return { acquired, released, modelCalls };
+});
+
+vi.mock("./opencodeBridge.ts", () => ({
+  executeOpenCodeTask: async (opts: {
+    taskTitle: string;
+    abortCheck?: (() => boolean) | undefined;
+  }) => {
+    harness.modelCalls.push(opts.taskTitle);
+    // Block like a real model call does, but bail out the moment the watchdog
+    // aborts this worker — exactly the cooperative contract the bridge has.
+    for (let i = 0; i < 400; i++) {
+      if (opts.abortCheck?.()) {
+        return {
+          ok: false,
+          filesModified: [],
+          outputSummary: "Task aborted by user — execution stopped before completion.",
+          error: "Aborted by user",
+        };
+      }
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    return { ok: true, filesModified: ["src/x.ts"], outputSummary: "done" };
+  },
+}));
+
+vi.mock("./worktreeRunner.ts", () => ({
+  createWorkerWorktree: (_projectRoot: string, taskId: string) => ({
+    worktreePath: `/tmp/watchdog-wt/${taskId}`,
+    branchName: `worker/task-${taskId}`,
+    isIsolated: true,
+  }),
+  mergeWorkerWorktree: () => ({ ok: true }),
+  cleanupWorkerWorktree: () => {},
+  getWorktreeDiff: () => "",
+}));
+
+vi.mock("./worktreePool.ts", () => ({
+  prewarmWorktrees: () => {},
+  acquireWorktree: (_projectRoot: string, taskId: string) => {
+    const worktree = {
+      worktreePath: `/tmp/watchdog-wt/${taskId}`,
+      branchName: `worker/task-${taskId}`,
+      isIsolated: true,
+    };
+    harness.acquired.push(worktree);
+    return worktree;
+  },
+  releaseWorktree: (_projectRoot: string, worktree: { worktreePath: string }) => {
+    harness.released.push(worktree.worktreePath);
+  },
+  getPoolStats: () => ({ idle: 0, size: 4 }),
+  clearWorktreePool: () => {},
+}));
 
 import {
   auditRequirementChecklist,
@@ -11,6 +77,7 @@ import {
   reviewWorkerOutput,
   listChangedFiles,
   getWatchdogSnapshot,
+  startWatchdogSupervision,
   stopWatchdog,
   stopAllWatchdogs,
   isWatchdogStatusTerminal,
@@ -18,6 +85,7 @@ import {
   resolveWorkerLaneModels,
   WATCHDOG_FALLBACK_MODELS,
 } from "./watchdogSupervisor.ts";
+import { isWorkerAborted } from "./abortRegistry.ts";
 
 function makeProject(files: Record<string, string>): string {
   const dir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "watchdog-test-"));
@@ -196,5 +264,113 @@ describe("watchdog snapshot", () => {
     expect(isWatchdogStatusTerminal("reviewing")).toBe(false);
     expect(isWatchdogStatusTerminal("building")).toBe(false);
     expect(isWatchdogStatusTerminal("testing")).toBe(false);
+  });
+});
+
+describe("watchdog cancel path", () => {
+  beforeEach(() => {
+    harness.acquired.length = 0;
+    harness.released.length = 0;
+    harness.modelCalls.length = 0;
+  });
+
+  /**
+   * A stop that lands mid-run must end the run cooperatively: workers abort,
+   * nothing is reviewed/merged/built/tested, and the pool gets its worktrees
+   * back. Before the pool release was added, every cancelled task leaked one
+   * worktree (and one git branch) for the lifetime of the process.
+   */
+  it("aborts workers, skips merge, and releases every worktree when stopped", async () => {
+    const projectRoot = makeProject({
+      "package.json": JSON.stringify({ name: "demo", scripts: { test: "echo test" } }),
+    });
+
+    const run = startWatchdogSupervision({
+      projectId: "p1",
+      projectName: "demo",
+      projectRoot,
+      taskTitle: "Add booking form",
+      // Two explicit bullets → two workers, so the pool has more than one
+      // allocation to hand back.
+      prompt: ["- build the booking form", "- add the API route"].join("\n"),
+      model: "test-model",
+    });
+
+    // Let the supervisor reach the dispatch loop, then stop it like the UI does.
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    const snapshot = getWatchdogSnapshot({ projectId: "p1" });
+    const live = snapshot.watchdogs.find((w) => w.status !== "cancelled");
+    expect(live).toBeDefined();
+    expect(stopWatchdog(live!.id)).toBe(true);
+
+    const result = await run;
+
+    expect(result.status).toBe("cancelled");
+    expect(result.ok).toBe(false);
+    expect(result.verdict).toContain("stopped by user");
+    // Every worker row is cancelled, none completed.
+    expect(result.workersCompleted).toBe(0);
+    expect(result.workersTotal).toBeGreaterThan(0);
+    // Nothing was merged, so no build/test issue was reported for it.
+    expect(result.issues.some((i) => i.includes("Merge failed"))).toBe(false);
+    // Every allocation came back to the pool.
+    expect(harness.acquired.length).toBeGreaterThan(0);
+    expect(harness.released.length).toBe(harness.acquired.length);
+  });
+
+  it("clears every abort flag of its workers when the run ends", async () => {
+    const projectRoot = makeProject({
+      "package.json": JSON.stringify({ name: "demo", scripts: { test: "echo test" } }),
+    });
+
+    const run = startWatchdogSupervision({
+      projectId: "p2",
+      projectName: "demo",
+      projectRoot,
+      taskTitle: "Add search",
+      prompt: ["- add the search box", "- wire the results list"].join("\n"),
+      model: "test-model",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const snapshot = getWatchdogSnapshot({ projectId: "p2" });
+    const live = snapshot.watchdogs.find((w) => w.status !== "cancelled");
+    expect(live).toBeDefined();
+    const workerIds = live!.workers.map((w) => w.id);
+    expect(workerIds.length).toBeGreaterThan(0);
+    stopWatchdog(live!.id);
+
+    const result = await run;
+    expect(result.status).toBe("cancelled");
+    // A leaked flag would make the NEXT run with the same id abort instantly.
+    for (const id of workerIds) {
+      expect(isWorkerAborted(id)).toBe(false);
+    }
+  });
+
+  it("does not resurrect a stopped watchdog's phase", async () => {
+    const projectRoot = makeProject({
+      "package.json": JSON.stringify({ name: "demo", scripts: { test: "echo test" } }),
+    });
+
+    const run = startWatchdogSupervision({
+      projectId: "p3",
+      projectName: "demo",
+      projectRoot,
+      taskTitle: "Add filters",
+      prompt: ["- add the filter bar", "- persist the selection"].join("\n"),
+      model: "test-model",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const live = getWatchdogSnapshot({ projectId: "p3" }).watchdogs.find(
+      (w) => w.status !== "cancelled",
+    );
+    expect(live).toBeDefined();
+    stopWatchdog(live!.id);
+
+    const result = await run;
+    // The final status must be the cancelled stop, never a later phase.
+    expect(result.status).toBe("cancelled");
+    const after = getWatchdogSnapshot({ projectId: "p3" }).watchdogs.find((w) => w.id === live!.id);
+    expect(after?.status).toBe("cancelled");
   });
 });

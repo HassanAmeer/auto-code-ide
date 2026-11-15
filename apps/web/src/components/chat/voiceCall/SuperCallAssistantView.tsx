@@ -918,6 +918,39 @@ export function SuperCallAssistantView() {
 
   const [sendingWhatsAppPreviewId, setSendingWhatsAppPreviewId] = useState<string | null>(null);
   const [sentWhatsAppPreviewId, setSentWhatsAppPreviewId] = useState<string | null>(null);
+  const [previewRecipientJid, setPreviewRecipientJid] = useState<string>("");
+
+  // Resolve a real preview recipient instead of the old hardcoded "0349".
+  useEffect(() => {
+    let cancelled = false;
+    if (primaryClientPhone.trim()) {
+      setPreviewRecipientJid(primaryClientPhone.trim());
+      return () => {
+        cancelled = true;
+      };
+    }
+    void fetch("/api/whatsapp/settings")
+      .then((r) => r.json())
+      .then((data: any) => {
+        if (cancelled) return;
+        const s = data?.settings ?? data ?? {};
+        const active = Array.isArray(s.priorityTargets)
+          ? (s.priorityTargets.find((pt: any) => pt.jid === s.activePriorityJid) ??
+            s.priorityTargets[0])
+          : undefined;
+        setPreviewRecipientJid(String(active?.phone || active?.jid || ""));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [primaryClientPhone]);
+
+  const previewRecipientLabel = useMemo(() => {
+    if (!previewRecipientJid) return "WhatsApp";
+    const digits = previewRecipientJid.replace(/@.*$/, "").replace(/\D/g, "");
+    return digits || previewRecipientJid;
+  }, [previewRecipientJid]);
 
   const handleSendPreviewToWhatsApp = useCallback(
     async (taskTitle: string, previewUrl: string, msgId: string) => {
@@ -930,7 +963,7 @@ export function SuperCallAssistantView() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            to: "0349",
+            to: previewRecipientJid,
             text: `Assalam-o-Alaikum! Project update: "${taskTitle}" mukammal ho chuka hai aur 100% test pass hai.\n\nLive Preview: ${fullUrl}`,
           }),
         });
@@ -938,6 +971,8 @@ export function SuperCallAssistantView() {
         if (data?.ok) {
           setSentWhatsAppPreviewId(msgId);
           setTimeout(() => setSentWhatsAppPreviewId(null), 4000);
+        } else {
+          console.warn("WhatsApp preview send failed:", data?.error || "unknown error");
         }
       } catch (err) {
         console.warn("Failed to send WhatsApp preview:", err);
@@ -945,7 +980,7 @@ export function SuperCallAssistantView() {
         setSendingWhatsAppPreviewId(null);
       }
     },
-    [],
+    [previewRecipientJid],
   );
 
   // OpenDots Inspired: Spaces & Living Document Canvas State
@@ -1364,10 +1399,7 @@ export function SuperCallAssistantView() {
           : res.actionTaken === "wishlist_listed" || res.actionTaken === "wishlist_item_added"
             ? await (async () => {
                 try {
-                  const projectName =
-                    activeProjId ||
-                    activeSession?.messages.find((m) => m.role === "user")?.text ||
-                    "Workspace";
+                  const projectName = activeProjectName || "Workspace";
                   const r = await fetch(
                     `/api/bot/wishlist?project=${encodeURIComponent(projectName)}`,
                   );
@@ -1410,7 +1442,7 @@ export function SuperCallAssistantView() {
                 ? parsed.summaryItems
                 : ["Draft specification prepared"],
               content: parsed.content || "",
-              projectName: activeProjId || "Workspace",
+              projectName: activeProjectName || "Workspace",
               replyChips: Array.isArray(parsed.replyChips)
                 ? parsed.replyChips
                 : ["✓ Approve & Save to Space", "✎ View Canvas", "Add Payment Gateway"],
@@ -2836,18 +2868,23 @@ export function SuperCallAssistantView() {
                                   msg.id,
                                 )
                               }
-                              disabled={sendingWhatsAppPreviewId === msg.id}
+                              disabled={sendingWhatsAppPreviewId === msg.id || !previewRecipientJid}
+                              title={
+                                previewRecipientJid
+                                  ? `Send live preview to ${previewRecipientLabel}`
+                                  : "Set a Primary Client Phone or a Priority Target in settings first"
+                              }
                               className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-xs font-medium hover:bg-emerald-500/25 transition-all shadow-sm active:scale-95 disabled:opacity-50"
                             >
                               {sentWhatsAppPreviewId === msg.id ? (
                                 <>
                                   <Check className="size-3 text-emerald-400" />
-                                  <span>Sent to 0349!</span>
+                                  <span>Sent to {previewRecipientLabel}!</span>
                                 </>
                               ) : sendingWhatsAppPreviewId === msg.id ? (
                                 <span>Sending...</span>
                               ) : (
-                                <span>📱 Send to 0349</span>
+                                <span>📱 Send to {previewRecipientLabel}</span>
                               )}
                             </button>
                           </div>

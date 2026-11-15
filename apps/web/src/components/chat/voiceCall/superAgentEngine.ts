@@ -171,6 +171,8 @@ export async function querySuperAgentLLM(
     systemPrompt: string;
     history?: Array<{ role: "user" | "assistant"; text: string }> | undefined;
     signal?: AbortSignal | undefined;
+    language?: "urdu" | "english" | undefined;
+    projectName?: string | undefined;
   },
 ): Promise<{
   ok: boolean;
@@ -181,7 +183,16 @@ export async function querySuperAgentLLM(
   toolsCalled?: ToolCallRecord[];
   timelineEvents?: TurnTimelineEvent[];
 }> {
-  const { model, instanceId, providerConfig, systemPrompt, history = [], signal } = options;
+  const {
+    model,
+    instanceId,
+    providerConfig,
+    systemPrompt,
+    history = [],
+    signal,
+    language,
+    projectName,
+  } = options;
 
   if (signal?.aborted) {
     return { ok: false, error: "Aborted", code: "ABORTED" };
@@ -215,6 +226,8 @@ export async function querySuperAgentLLM(
         baseUrl: providerConfig?.baseUrl,
         apiKey: providerConfig?.apiKey,
         headers: providerConfig?.headers,
+        language,
+        projectName,
       }),
       signal: combineSignals(65000, signal),
     });
@@ -589,12 +602,24 @@ export async function executeSuperAgentInstruction(
 
   const isLedgerReq = isLedgerRecallQuery(userText);
 
+  const mediaLinkUrlMatch = userText.match(/https?:\/\/[^\s"'<>)]+/i);
+  const isMediaLinkReq =
+    Boolean(mediaLinkUrlMatch) &&
+    /\b(research|analyse|analyze|summar(y|ise|ize)|dekho|dekh|parho|padho|check|batao|samjho|video|article|link|blog)\b/i.test(
+      userText,
+    );
+
   let filler = "";
   if (isLedgerReq) {
     filler =
       lang === "urdu"
         ? "Ji boss, main session ledger aur hamare pehle ke ahem faislay check kar raha hoon..."
         : "Checking our session decision ledger right away...";
+  } else if (isMediaLinkReq) {
+    filler =
+      lang === "urdu"
+        ? "Ji bilkul, main is link ka content parh kar transcript aur key points nikal raha hoon..."
+        : "Reading the linked page now and pulling out the transcript and key points...";
   } else if (isGitFeaturesReq) {
     filler =
       lang === "urdu"
@@ -1033,15 +1058,19 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
     });
 
     try {
-      // 1. Fetch settings to inspect priority targets
+      // 1. Fetch settings to inspect priority targets.
+      //    The route responds with { ok, settings: {...} } — reading priority
+      //    fields off the root object silently returned empty arrays and made
+      //    the bot fall back to a wrong/first chat. Unwrap the payload.
       const settingsRes = await fetch(resolveApiUrl("/api/whatsapp/settings"), {
         signal: combineSignals(10000, signal),
       });
-      const settingsData = (await settingsRes.json().catch(() => null)) as any;
-      const priorityTargets: any[] = Array.isArray(settingsData?.priorityTargets)
-        ? settingsData.priorityTargets
+      const settingsPayload = (await settingsRes.json().catch(() => null)) as any;
+      const whatsappSettings = settingsPayload?.settings ?? settingsPayload ?? {};
+      const priorityTargets: any[] = Array.isArray(whatsappSettings?.priorityTargets)
+        ? whatsappSettings.priorityTargets
         : [];
-      const activePriorityJid: string = settingsData?.activePriorityJid || "";
+      const activePriorityJid: string = whatsappSettings?.activePriorityJid || "";
 
       // 2. Fetch chats to match candidate JID
       const chatsRes = await fetch(resolveApiUrl("/api/whatsapp/chats"), {
@@ -1053,42 +1082,69 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
       let targetJid = "";
       let targetDisplayName = "";
 
-      if (searchDigits) {
-        const foundInPriority = priorityTargets.find(
-          (pt: any) =>
-            (pt.jid && pt.jid.includes(searchDigits)) ||
-            (pt.phoneNumber && pt.phoneNumber.includes(searchDigits)),
+      const phoneOf = (entry: any): string =>
+        String(entry?.phone || entry?.phoneNumber || entry?.jid || entry?.id || "").replace(
+          /\D/g,
+          "",
         );
-        if (foundInPriority) {
+
+      if (searchDigits) {
+        const cleanDigits = searchDigits.replace(/\D/g, "").replace(/^0/, "");
+        // Ambiguous short fragments (e.g. "0349") can match many contacts.
+        // Only auto-pick when the match is unique; otherwise ask the user.
+        const priorityMatches = priorityTargets.filter((pt: any) =>
+          phoneOf(pt).includes(cleanDigits),
+        );
+        const chatMatches = chatsList.filter(
+          (c: any) =>
+            phoneOf(c).includes(cleanDigits) ||
+            (c.name && c.name.toLowerCase().includes(searchDigits.toLowerCase())),
+        );
+
+        if (priorityMatches.length === 1) {
+          const foundInPriority = priorityMatches[0];
           targetJid = foundInPriority.jid;
-          targetDisplayName = foundInPriority.name || foundInPriority.phoneNumber || targetJid;
-        } else {
-          const matched = chatsList.find(
-            (c: any) =>
-              (c.id && c.id.includes(searchDigits)) ||
-              (c.name && c.name.toLowerCase().includes(searchDigits.toLowerCase())),
-          );
-          if (matched) {
-            targetJid = matched.id;
-            targetDisplayName = matched.name || matched.phoneNumber || targetJid;
-          } else {
-            targetJid = searchDigits.length > 5 ? `${searchDigits}@c.us` : "92349@c.us";
-            targetDisplayName = searchDigits;
-          }
+          targetDisplayName = foundInPriority.name || foundInPriority.phone || targetJid;
+        } else if (chatMatches.length === 1) {
+          const matched = chatMatches[0];
+          targetJid = matched.id;
+          targetDisplayName = matched.name || matched.phone || targetJid;
+        } else if (chatMatches.length > 1 || priorityMatches.length > 1) {
+          // Multiple candidates — do not guess, report the ambiguity back.
+          const candidates = [
+            ...priorityMatches.map((p: any) => `${p.name || p.phone} (${p.jid})`),
+            ...chatMatches.map((c: any) => `${c.name} (${c.id})`),
+          ]
+            .slice(0, 5)
+            .join(", ");
+          recordTool({
+            name: "whatsapp_send_message",
+            summary: `Recipient "${searchDigits}" ambiguous — need a fuller number`,
+            status: "error",
+          });
+          runtimeFacts += `\n[WHATSAPP SEND ABORTED — AMBIGUOUS RECIPIENT]:\n• The fragment "${searchDigits}" matches ${priorityMatches.length + chatMatches.length} contacts: ${candidates}\n• Do NOT claim the message was sent. Ask the user for the full phone number.\n`;
+        } else if (cleanDigits.length >= 10) {
+          // Full international number — safe to send directly.
+          targetJid = `${cleanDigits}@c.us`;
+          targetDisplayName = searchDigits;
         }
       } else if (isPriorityMention || activePriorityJid || priorityTargets.length > 0) {
         const priorityObj =
           priorityTargets.find((pt: any) => pt.jid === activePriorityJid) || priorityTargets[0];
         if (priorityObj) {
           targetJid = priorityObj.jid;
-          targetDisplayName = priorityObj.name || priorityObj.phoneNumber || "⭐ Priority Client";
+          targetDisplayName = priorityObj.name || priorityObj.phone || "⭐ Priority Client";
         }
       }
 
-      // If still unresolved, default to active chat or first chat
-      if (!targetJid && chatsList.length > 0) {
-        targetJid = chatsList[0].id;
-        targetDisplayName = chatsList[0].name || targetJid;
+      // If still unresolved, default to the active priority target only.
+      // Never silently send to chatsList[0] — that can message a random contact.
+      if (!targetJid && !searchDigits && chatsList.length > 0) {
+        const firstPriority = priorityTargets[0];
+        if (firstPriority) {
+          targetJid = firstPriority.jid;
+          targetDisplayName = firstPriority.name || firstPriority.phone || "⭐ Priority Client";
+        }
       }
 
       // Extract message text to send from user speech/prompt
@@ -1124,18 +1180,22 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
           signal: combineSignals(15000, signal),
         });
         const sendData = (await sendRes.json().catch(() => null)) as any;
+        const didSend = Boolean(sendData && sendData.ok);
 
         recordTool({
           name: "whatsapp_send_message",
-          summary:
-            sendData && sendData.ok
-              ? `Message sent to ${targetDisplayName}: "${messageToSend}"`
-              : `Attempted sending to ${targetDisplayName}`,
-          status: "completed",
+          summary: didSend
+            ? `Message sent to ${targetDisplayName}: "${messageToSend}"`
+            : `Failed to send to ${targetDisplayName}: ${sendData?.error || "unknown error"}`,
+          status: didSend ? "completed" : "error",
           output: JSON.stringify(sendData),
         });
 
-        runtimeFacts += `\n[WHATSAPP MESSAGE SENT SUCCESSFULLY VIA API]:\n• Recipient: ${targetDisplayName} (${targetJid})\n• Message Delivered: "${messageToSend}"\n• Status: Sent & Delivered\nIMPORTANT: Confirm directly to the user in friendly Roman Urdu that you have sent this message to ${targetDisplayName}.\n`;
+        runtimeFacts += didSend
+          ? `\n[WHATSAPP MESSAGE SENT SUCCESSFULLY VIA API]:\n• Recipient: ${targetDisplayName} (${targetJid})\n• Message Delivered: "${messageToSend}"\n• Status: Sent & Delivered\nIMPORTANT: Confirm directly to the user in friendly Roman Urdu that you have sent this message to ${targetDisplayName}.\n`
+          : `\n[WHATSAPP SEND FAILED]:\n• Recipient: ${targetDisplayName} (${targetJid})\n• Error: ${sendData?.error || "unknown error"}\nIMPORTANT: Tell the user honestly in Roman Urdu that the message could NOT be sent and quote the error. Do NOT claim it was delivered.\n`;
+      } else {
+        runtimeFacts += `\n[WHATSAPP SEND NOT EXECUTED]: No unambiguous recipient was resolved from the request.\nIMPORTANT: Ask the user for the full recipient number or to select a Priority Client. Do NOT claim a message was sent.\n`;
       }
     } catch (sendErr: any) {
       recordTool({
@@ -1170,30 +1230,66 @@ INSTRUCTION: The user specifically referenced this chat's memory record ("${matc
     });
 
     try {
-      const editRes = await fetch(resolveApiUrl("/api/whatsapp/edit"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          newText: candidateText || "?",
-        }),
-        signal: combineSignals(15000, signal),
-      });
-      const editData = (await editRes.json().catch(() => null)) as any;
-      recordTool({
-        name: "whatsapp_edit_message",
-        summary:
-          editData && editData.ok
+      // The /api/whatsapp/edit route requires chatId + messageId + newText.
+      // Resolve the most recent outbound message from the logs so editing the
+      // "last sent message" actually targets a real message instead of always
+      // failing validation.
+      let editChatId = "";
+      let editMessageId = "";
+      try {
+        const logsRes = await fetch(resolveApiUrl("/api/whatsapp/logs?type=outbound&limit=10"), {
+          signal: combineSignals(10000, signal),
+        });
+        const logsData = (await logsRes.json().catch(() => null)) as any;
+        const logsList: any[] = Array.isArray(logsData?.logs) ? logsData.logs : [];
+        const lastOut = logsList.find((l) => l?.messageId && l?.to);
+        if (lastOut) {
+          editChatId = lastOut.to;
+          editMessageId = lastOut.messageId;
+        }
+      } catch {
+        // fall through to the honest error below
+      }
+
+      if (!editChatId || !editMessageId) {
+        recordTool({
+          name: "whatsapp_edit_message",
+          summary: "No recently sent WhatsApp message found to edit",
+          status: "error",
+        });
+        runtimeFacts += `\n[WHATSAPP EDIT NOT EXECUTED]: No recently sent message was found in the outbound logs. Tell the user honestly in Roman Urdu that there is no recent message to edit (WhatsApp only allows editing within 15 minutes of sending).\n`;
+      } else {
+        const editRes = await fetch(resolveApiUrl("/api/whatsapp/edit"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chatId: editChatId,
+            messageId: editMessageId,
+            newText: candidateText || "?",
+          }),
+          signal: combineSignals(15000, signal),
+        });
+        const editData = (await editRes.json().catch(() => null)) as any;
+        const didEdit = Boolean(editData && editData.ok);
+        recordTool({
+          name: "whatsapp_edit_message",
+          summary: didEdit
             ? `Message successfully edited to "${candidateText || "?"}"`
-            : `Message edit completed ("${candidateText || "?"}")`,
-        status: "completed",
-      });
-      runtimeFacts += `\n[WHATSAPP MESSAGE EDITED SUCCESSFULLY VIA API]: The previously sent message was successfully edited to "${candidateText || "?"}". Inform the user politely in Roman Urdu that you have edited the message.\n`;
+            : `Message edit failed: ${editData?.error || "unknown error"}`,
+          status: didEdit ? "completed" : "error",
+          output: JSON.stringify(editData),
+        });
+        runtimeFacts += didEdit
+          ? `\n[WHATSAPP MESSAGE EDITED SUCCESSFULLY VIA API]: The previously sent message was successfully edited to "${candidateText || "?"}". Inform the user politely in Roman Urdu that you have edited the message.\n`
+          : `\n[WHATSAPP EDIT FAILED]: ${editData?.error || "unknown error"}. Tell the user honestly that the edit failed.\n`;
+      }
     } catch {
       recordTool({
         name: "whatsapp_edit_message",
         summary: `Message edit attempted ("${candidateText || "?"}")`,
-        status: "completed",
+        status: "error",
       });
+      runtimeFacts += `\n[WHATSAPP EDIT NOT EXECUTED]: The edit request could not be completed. Do not claim the message was edited.\n`;
     }
   }
 
@@ -1300,6 +1396,63 @@ CRITICAL INSTRUCTIONS FOR THIS WHATSAPP INQUIRY:
     }
   }
 
+  // 3b-6. Media / Link Research Tool (real fetch, honest about YouTube)
+  if (isMediaLinkReq && mediaLinkUrlMatch) {
+    const mediaUrl = mediaLinkUrlMatch[0];
+    const isYouTubeLink = /(?:youtube\.com|youtu\.be)/i.test(mediaUrl);
+    actionTag = "research_media_link";
+    onStatusUpdate?.(`Tool Calling: research_media_link (${mediaUrl.slice(0, 48)})...`);
+    recordTool({
+      name: "research_media_link",
+      summary: `Researching link: ${mediaUrl}`,
+      status: "calling",
+    });
+
+    if (isYouTubeLink) {
+      recordTool({
+        name: "research_media_link",
+        summary: "YouTube transcript extraction is unavailable in this build",
+        status: "error",
+      });
+      runtimeFacts += `\n[MEDIA RESEARCH NOT AVAILABLE — YOUTUBE]:\n• URL: ${mediaUrl}\n• The transcript backend was removed from this build, so the video content cannot be read.\nIMPORTANT: Tell the user honestly in Roman Urdu that YouTube transcript research is not available right now, and ask them to paste the video description or key points so you can still help. Do NOT pretend you watched or summarized the video.\n`;
+    } else {
+      try {
+        const fetchRes = await fetch(resolveApiUrl("/api/web/fetch"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: mediaUrl }),
+          signal: combineSignals(25000, signal),
+        });
+        const fetchData = (await fetchRes.json().catch(() => null)) as any;
+        const pageText: string = typeof fetchData?.text === "string" ? fetchData.text : "";
+        if (fetchData?.ok && pageText.trim().length > 0) {
+          const excerpt = pageText.trim().slice(0, 6000);
+          recordTool({
+            name: "research_media_link",
+            summary: `Fetched ${excerpt.length} chars of page content`,
+            status: "completed",
+            output: excerpt.slice(0, 1200),
+          });
+          runtimeFacts += `\n[MEDIA / LINK RESEARCH FETCHED VIA /api/web/fetch]:\n• URL: ${mediaUrl}\n• Page Text (excerpt):\n"""\n${excerpt}\n"""\nIMPORTANT: Summarize this real page content for the user in Roman Urdu. Do NOT invent details that are not in the excerpt.\n`;
+        } else {
+          recordTool({
+            name: "research_media_link",
+            summary: `Could not read link: ${fetchData?.error || "unknown error"}`,
+            status: "error",
+          });
+          runtimeFacts += `\n[MEDIA RESEARCH FAILED]:\n• URL: ${mediaUrl}\n• Error: ${fetchData?.error || "unknown error"}\nIMPORTANT: Tell the user honestly in Roman Urdu that the link could not be read and quote the error. Do NOT fabricate a summary.\n`;
+        }
+      } catch (mediaErr: any) {
+        recordTool({
+          name: "research_media_link",
+          summary: `Link research error: ${mediaErr?.message || "failed"}`,
+          status: "error",
+        });
+        runtimeFacts += `\n[MEDIA RESEARCH FAILED]: ${mediaErr?.message || "request failed"}. Tell the user honestly that the link could not be researched.\n`;
+      }
+    }
+  }
+
   // 4. Standup / History / Pending Ingestion
   if (/\b(standup|briefing|summary|status\s*report)\b/i.test(userText)) {
     actionTag = "standup_briefing";
@@ -1356,6 +1509,8 @@ CRITICAL INSTRUCTIONS FOR THIS WHATSAPP INQUIRY:
     systemPrompt,
     history: options.conversationHistory,
     signal,
+    language: lang,
+    projectName: targetName,
   });
 
   if (signal?.aborted) throw new DOMException("Aborted", "AbortError");

@@ -1,4 +1,4 @@
-import { getWhatsAppSettings } from "./config.ts";
+import { getWhatsAppSettings, getBotMasterSheetSettings } from "./config.ts";
 import { logWhatsAppEvent } from "./logger.ts";
 import { sendTextMessage } from "./client.ts";
 
@@ -58,6 +58,33 @@ export async function handleWhatsAppWebhook(
 
     // Check if Bot is enabled and auto-reply is ON
     if (settings.botEnabled && settings.autoReply && body.trim().length > 0) {
+      // Honour the Bot master-sheet settings. Before this, both were persisted
+      // by the UI but completely ignored here, so every stranger got auto-replies
+      // even with a primary client set and absence mode OFF.
+      const masterSheet = getBotMasterSheetSettings();
+      const digitsOf = (value: string) => value.replace(/@.*$/, "").replace(/\D/g, "");
+      const primaryDigits = digitsOf(masterSheet.primaryClientPhone);
+      if (primaryDigits) {
+        const senderDigits = digitsOf(String(from));
+        const isPrimary =
+          senderDigits.endsWith(primaryDigits) || primaryDigits.endsWith(senderDigits.slice(-9));
+        if (!isPrimary) {
+          logWhatsAppEvent({
+            type: "inbound",
+            sessionId,
+            from,
+            to: msg.to,
+            body,
+            senderName,
+            messageId,
+            status: "delivered",
+            error: "Ignored: sender is not the configured Primary Client Phone",
+            rawPayload: payload,
+          });
+          return { ok: true, processed: true, action: "ignored_non_primary_sender" };
+        }
+      }
+
       try {
         // Dynamically import processSuperBotTurn to avoid circular imports
         const { processSuperBotTurn } = await import("../index.ts");
@@ -69,6 +96,24 @@ export async function handleWhatsAppWebhook(
 
         const replyText = botTurnResult?.reply || botTurnResult?.spokenReply;
         if (replyText && replyText.trim().length > 0) {
+          // In absence mode the bot answers freely; otherwise it only records
+          // the inbound message so the human can reply from WhatsApp itself.
+          if (!masterSheet.absenceMode) {
+            logWhatsAppEvent({
+              type: "inbound",
+              sessionId,
+              from,
+              to: msg.to,
+              body,
+              senderName,
+              messageId,
+              status: "delivered",
+              error: "Auto-reply skipped: Autonomous Absence Mode is OFF",
+              rawPayload: payload,
+            });
+            return { ok: true, processed: true, action: "auto_reply_suppressed_absence_off" };
+          }
+
           // Send response back to the client
           await sendTextMessage({
             to: from,

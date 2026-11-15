@@ -305,6 +305,50 @@ export const WatchdogCard = memo(function WatchdogCard({
     [load, stoppingId],
   );
 
+  const [stoppingAll, setStoppingAll] = useState(false);
+
+  /**
+   * Stop every running watchdog through `/api/super-agent/workers/stop-all`.
+   *
+   * That endpoint already aborted the worker telemetry AND called
+   * `stopAllWatchdogs()`, but no UI ever called it — the route existed with no
+   * caller while the card only offered one Stop button per watchdog.
+   */
+  const handleStopAll = useCallback(async () => {
+    if (stoppingAll) return;
+    setStoppingAll(true);
+    try {
+      const res = await fetch("/api/super-agent/workers/stop-all", { method: "POST" });
+      const data = (await res.json().catch(() => null)) as {
+        ok?: boolean;
+        stoppedWorkers?: number;
+        stoppedGoals?: number;
+        stoppedWatchdogs?: number;
+        error?: string;
+      } | null;
+      if (data?.ok) {
+        toastManager.add({
+          type: "info",
+          title: "All watchdogs stopped",
+          description: `${data.stoppedWatchdogs ?? 0} watchdog(s), ${
+            data.stoppedWorkers ?? 0
+          } worker(s) aborted — nothing more will be merged.`,
+        });
+      } else {
+        toastManager.add({
+          type: "error",
+          title: "Could not stop all watchdogs",
+          description: data?.error ?? `Stop-all API returned ${res.status}`,
+        });
+      }
+    } catch {
+      toastManager.add({ type: "error", title: "Could not stop all watchdogs" });
+    } finally {
+      setStoppingAll(false);
+      void load();
+    }
+  }, [load, stoppingAll]);
+
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => new Set());
   const handleDismiss = useCallback((id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -360,6 +404,25 @@ export const WatchdogCard = memo(function WatchdogCard({
           ) : null}
         </div>
         <div className="flex items-center gap-1.5">
+          {activeCount > 0 ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                void handleStopAll();
+              }}
+              disabled={stoppingAll}
+              className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 transition-colors cursor-pointer disabled:opacity-60"
+              title="Stop every running watchdog"
+              aria-label="Stop every running watchdog"
+              aria-busy={stoppingAll || undefined}
+            >
+              {stoppingAll ? (
+                <SleekSpinnerRing className="size-2.5 text-rose-400 shrink-0 animate-spin" />
+              ) : null}
+              {stoppingAll ? "Stopping…" : "Stop all"}
+            </button>
+          ) : null}
           {visibleItems.some((w) => isTerminalStatus(w.status)) ? (
             <button
               type="button"

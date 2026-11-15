@@ -52,3 +52,46 @@ export function updateWhatsAppSettings(updates: Partial<WhatsAppSettings>): What
   }
   return updated;
 }
+
+export interface BotMasterSheetSettings {
+  primaryClientPhone: string;
+  absenceMode: boolean;
+}
+
+/**
+ * Reads the master-sheet settings that the Bot UI writes through
+ * /api/app-settings/save (primary client phone + autonomous absence mode).
+ * Without this, those two toggles were saved but never honoured by the
+ * inbound webhook, so every sender was auto-replied to.
+ */
+export function getBotMasterSheetSettings(): BotMasterSheetSettings {
+  const result: BotMasterSheetSettings = { primaryClientPhone: "", absenceMode: false };
+  try {
+    const autocodeHome = process.env.AUTOCODE_HOME?.trim();
+    const t3Home = process.env.T3CODE_BASE_DIR?.trim();
+    const candidateDirs = [
+      ...(autocodeHome ? [path.join(autocodeHome, "userdata"), autocodeHome] : []),
+      ...(t3Home ? [path.join(t3Home, "userdata"), t3Home] : []),
+      "/root/autojobs/data/userdata",
+      "/root/autojobs/data",
+      path.resolve(process.cwd(), "data", "userdata"),
+      path.resolve(process.cwd(), "data"),
+      path.resolve(process.cwd(), "userdata"),
+    ];
+    for (const dir of candidateDirs) {
+      const filePath = path.join(dir, "app-settings.json");
+      if (!fs.existsSync(filePath)) continue;
+      const parsed = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+      const phone =
+        typeof parsed?.primary_client_phone === "string" ? parsed.primary_client_phone : "";
+      const absence =
+        parsed?.autonomous_absence_mode === true || parsed?.autonomous_absence_mode === "true";
+      result.primaryClientPhone = phone.trim();
+      result.absenceMode = absence;
+      return result;
+    }
+  } catch {
+    // fall through with defaults
+  }
+  return result;
+}

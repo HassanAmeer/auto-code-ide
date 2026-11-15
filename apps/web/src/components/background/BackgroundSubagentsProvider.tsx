@@ -97,6 +97,15 @@ export function BackgroundSubagentsProvider({
   const missingWorkerPollsRef = useRef<Map<string, number>>(new Map());
   /** Worker ids the server has reported at least once — only these can go stale. */
   const seenLiveWorkerIdsRef = useRef<Set<string>>(new Set());
+  /**
+   * When the workers endpoint last answered successfully.
+   *
+   * The stale-row heuristic below must only fire while the server is actually
+   * reachable: a failing/blocked request (or a slow one) also produces "the
+   * worker is missing from this list", and treating that as a finished run is
+   * what painted live workers red.
+   */
+  const lastWorkersOkAtRef = useRef<number>(0);
   const [storedWorkers, setStoredWorkers] = useState<SubagentItem[]>(() => readStoredWorkers());
   const [apiWorkers, setApiWorkers] = useState<SubagentItem[]>([]);
   const [workersError, setWorkersError] = useState<string | null>(null);
@@ -141,6 +150,7 @@ export function BackgroundSubagentsProvider({
             ? data.workers
             : [];
         setWorkersError(null);
+        lastWorkersOkAtRef.current = Date.now();
         setApiWorkers(
           workers.map((worker: Record<string, unknown>, idx: number) => ({
             id: String(worker.id || `api-worker-${idx}`),
@@ -222,6 +232,17 @@ export function BackgroundSubagentsProvider({
     // Left alone it would spin forever, so a row the server previously DID
     // report, and now silently dropped, is closed out with a real reason.
     // Rows the server never reported (still starting) are never touched.
+    //
+    // This is a guess, so it must be a conservative one:
+    //   - only while the workers endpoint is healthy (a failed/slow poll also
+    //     "loses" every row, which used to fail live workers in ~18s);
+    //   - only after ~60s of silence (20 polls at the 3s tick), because a
+    //     watchdog worker can legitimately be invisible for a whole build;
+    //   - never when the server reports no workers at all: an empty list means
+    //     "restarted/cleared", not "every row finished", and failing a whole
+    //     batch on it was the loudest false positive.
+    const workersEndpointHealthy =
+      !workersError && Date.now() - lastWorkersOkAtRef.current < 15_000;
     const liveIds = new Set<string>([
       ...apiWorkers.map((item) => item.id),
       ...projectionSubagents.map((item) => item.id),
@@ -229,16 +250,22 @@ export function BackgroundSubagentsProvider({
     const seenLive = seenLiveWorkerIdsRef.current;
     for (const id of liveIds) seenLive.add(id);
     const missingPolls = missingWorkerPollsRef.current;
+    const anyWorkerStillReported = liveIds.size > 0;
     for (const [id, item] of map) {
-      if (item.status !== "running" || liveIds.has(id) || !seenLive.has(id)) {
+      if (
+        item.status !== "running" ||
+        liveIds.has(id) ||
+        !seenLive.has(id) ||
+        !workersEndpointHealthy ||
+        !anyWorkerStillReported
+      ) {
         missingPolls.delete(id);
         continue;
       }
       const misses = (missingPolls.get(id) ?? 0) + 1;
       missingPolls.set(id, misses);
-      // ~18s of silence at the 3s poll: long enough that a stop/finish would
-      // have been reported first, short enough that no spinner runs forever.
-      if (misses >= 6) {
+      // ~60s of continuous silence while the endpoint keeps answering.
+      if (misses >= 20) {
         map.set(id, {
           ...item,
           status: "failed",
@@ -284,7 +311,7 @@ export function BackgroundSubagentsProvider({
       }
       return (b.completedAt ?? 0) - (a.completedAt ?? 0);
     });
-  }, [apiWorkers, projectionSubagents, propSubagents, storedWorkers]);
+  }, [apiWorkers, projectionSubagents, propSubagents, storedWorkers, workersError]);
 
   const stopSubagent = useCallback(
     async (agent: SubagentItem) => {

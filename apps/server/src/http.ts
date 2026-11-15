@@ -1301,6 +1301,8 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
       headers?: Array<{ key: string; value: string }>;
       temperature?: number;
       maxTokens?: number;
+      language?: string;
+      projectName?: string;
     };
 
     const model = bodyJson?.model?.trim() || "default";
@@ -1318,10 +1320,22 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
     try {
       const botConfig = yield* ServerConfig.ServerConfig;
       let projectRoot = process.cwd();
+      // The client sends its provider instanceId, NOT a project name. Resolve the
+      // real project and use its title for bot memory writes (wishlist backlog,
+      // knowledge vault, spaces) so the /api/bot/wishlist card can read them back.
+      let botProjectName = bodyJson?.projectName?.trim() || "Workspace";
       try {
-        const target = resolveProjectTarget(botConfig.dbPath, bodyJson?.instanceId || "Workspace");
+        const target = resolveProjectTarget(
+          botConfig.dbPath,
+          bodyJson?.projectName?.trim() || bodyJson?.instanceId || "Workspace",
+        );
         if (target?.workspaceRoot) {
           projectRoot = target.workspaceRoot;
+        }
+        if (target?.projectName) {
+          botProjectName = target.projectName;
+        } else if (!bodyJson?.projectName?.trim() && target?.projectId) {
+          botProjectName = target.projectId;
         }
       } catch (resolveError) {
         console.warn("[super-bot] project root resolution failed, using cwd:", resolveError);
@@ -1330,7 +1344,7 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
       botResult = yield* Effect.promise(() =>
         runSuperBotTurn({
           userText: lastUserMsg,
-          projectName: bodyJson?.instanceId || "Workspace",
+          projectName: botProjectName,
           projectRoot,
           selectedModel: bodyJson?.model || "gemini-2.5-flash",
           language: superBotLanguage,
@@ -1821,12 +1835,14 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
 
                 if (toolName === "whatsapp_send_message") {
                   try {
+                    // Never guess a recipient. The old "0349" default silently sent
+                    // messages to a random contact whenever the model omitted "to".
                     let to =
                       parsedArgs.to ||
                       parsedArgs.recipient ||
                       parsedArgs.target ||
                       (parsedArgs._positional && parsedArgs._positional[0]) ||
-                      "0349";
+                      "";
                     let message =
                       parsedArgs.message ||
                       parsedArgs.text ||
@@ -1841,33 +1857,58 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
 
                     let resolvedJid = to;
                     let targetName = to;
-                    if (
+                    if (!to.trim()) {
+                      // No recipient given: only fall back to an explicit priority target.
+                      const activePriority = priorityTargets.find(
+                        (pt: any) => pt.jid === activePriorityJid,
+                      );
+                      if (activePriority?.jid) {
+                        resolvedJid = activePriority.jid;
+                        targetName =
+                          activePriority.name || activePriority.phoneNumber || activePriority.jid;
+                      } else {
+                        resolvedJid = "";
+                      }
+                    } else if (
                       to.toLowerCase().includes("priority") ||
-                      to === "0349" ||
                       /^\d{3,12}$/.test(to.replace(/[^\d]/g, ""))
                     ) {
                       const cleanDigits = to.replace(/[^\d]/g, "");
-                      const foundInPriority = priorityTargets.find(
+                      const priorityMatches = priorityTargets.filter(
                         (pt: any) =>
                           (cleanDigits && pt.jid && pt.jid.includes(cleanDigits)) ||
                           (cleanDigits && pt.phoneNumber && pt.phoneNumber.includes(cleanDigits)) ||
                           (to.toLowerCase().includes("priority") &&
                             (pt.jid === activePriorityJid || pt.isPriority)),
                       );
-                      if (foundInPriority) {
-                        resolvedJid = foundInPriority.jid;
+                      const chatMatches = chats.filter((c: any) =>
+                        [c.id, c.name, c.jid, c.phoneNumber].some(
+                          (v) => v && cleanDigits && String(v).includes(cleanDigits),
+                        ),
+                      );
+
+                      if (priorityMatches.length === 1) {
+                        resolvedJid = priorityMatches[0].jid;
                         targetName =
-                          foundInPriority.name || foundInPriority.phoneNumber || resolvedJid;
-                      } else {
-                        const matched = chats.find((c: any) =>
-                          [c.id, c.name, c.jid, c.phoneNumber].some(
-                            (v) => v && cleanDigits && String(v).includes(cleanDigits),
-                          ),
-                        );
-                        if (matched) {
-                          resolvedJid = matched.id || matched.jid;
-                          targetName = matched.name || matched.phoneNumber || resolvedJid;
-                        }
+                          priorityMatches[0].name || priorityMatches[0].phoneNumber || resolvedJid;
+                      } else if (chatMatches.length === 1) {
+                        resolvedJid = chatMatches[0].id || chatMatches[0].jid;
+                        targetName =
+                          chatMatches[0].name || chatMatches[0].phoneNumber || resolvedJid;
+                      } else if (priorityMatches.length + chatMatches.length > 1) {
+                        // Ambiguous fragment — refuse instead of messaging the wrong person.
+                        resolvedJid = "";
+                        const sendTool = {
+                          name: "whatsapp_send_message",
+                          summary: `Recipient "${to}" is ambiguous (${priorityMatches.length + chatMatches.length} matches) — message NOT sent`,
+                          args: { to },
+                          status: "error" as "completed" | "error",
+                        };
+                        toolsFound.push(sendTool);
+                        timelineEvents.push({ kind: "tool", tool: sendTool });
+                        successReply = `"${to}" se ${priorityMatches.length + chatMatches.length} contacts match hote hain, is liye message nahi bheja. Mukammal number batayein.\n\n[SPOKEN]: Recipient clear nahi tha, is liye message nahi bheja.`;
+                      } else if (cleanDigits.length >= 10) {
+                        resolvedJid = to;
                       }
                     }
 
@@ -1893,6 +1934,16 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
                       } else {
                         successReply = `WhatsApp message send karte waqt masla aaya: ${sendResult?.error || "Connection error"}.\n\n[SPOKEN]: WhatsApp message send nahi ho saka.`;
                       }
+                    } else if (!successReply) {
+                      const noTargetTool = {
+                        name: "whatsapp_send_message",
+                        summary: "No recipient resolved — message NOT sent",
+                        args: { to: to || "(none)" },
+                        status: "error" as "completed" | "error",
+                      };
+                      toolsFound.push(noTargetTool);
+                      timelineEvents.push({ kind: "tool", tool: noTargetTool });
+                      successReply = `Message bhejne ke liye koi recipient clear nahi tha, is liye kuch nahi bheja. Mukammal number batayein ya Priority Client select karein.\n\n[SPOKEN]: Recipient clear nahi tha, is liye message nahi bheja.`;
                     }
                   } catch (sErr) {
                     void sErr;
@@ -1904,26 +1955,59 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
                       parsedArgs.text ||
                       (parsedArgs._positional && parsedArgs._positional[0]) ||
                       "?";
-                    const chatId =
-                      parsedArgs.chatId || (parsedArgs._positional && parsedArgs._positional[1]);
-                    const messageId =
-                      parsedArgs.messageId || (parsedArgs._positional && parsedArgs._positional[2]);
-                    const editResult = await editWhatsAppMessage({
-                      chatId: chatId || "",
-                      messageId: messageId || "",
-                      newText,
-                    });
-                    const editTool = {
-                      name: "whatsapp_edit_message",
-                      summary: `Edited message to "${newText}"`,
-                      args: { newText, chatId, messageId },
-                      output: JSON.stringify(editResult),
-                      status: (editResult?.ok ? "completed" : "error") as "completed" | "error",
-                    };
-                    toolsFound.push(editTool);
-                    timelineEvents.push({ kind: "tool", tool: editTool });
-                    if (editResult?.ok) {
-                      successReply = `Pichla WhatsApp message kamyabi se edit ho kar "${newText}" ho chuka hai.\n\n[SPOKEN]: Maine pichla message edit kar diya hai.`;
+                    let chatId =
+                      parsedArgs.chatId ||
+                      (parsedArgs._positional && parsedArgs._positional[1]) ||
+                      "";
+                    let messageId =
+                      parsedArgs.messageId ||
+                      (parsedArgs._positional && parsedArgs._positional[2]) ||
+                      "";
+
+                    // /api/whatsapp/edit needs chatId + messageId. The model often
+                    // says "edit the last message" without ids, so resolve the most
+                    // recent outbound log entry instead of sending empty ids.
+                    if (!chatId || !messageId) {
+                      const logs = await fetchWhatsAppLogs({ type: "outbound", limit: 10 });
+                      const lastOut = (logs || []).find((l: any) => l?.messageId && l?.to);
+                      if (lastOut) {
+                        chatId = chatId || lastOut.to;
+                        messageId = messageId || lastOut.messageId;
+                      }
+                    }
+
+                    if (!chatId || !messageId) {
+                      const editTool = {
+                        name: "whatsapp_edit_message",
+                        summary: "No recent sent message found to edit",
+                        args: { newText },
+                        status: "error" as "completed" | "error",
+                      };
+                      toolsFound.push(editTool);
+                      timelineEvents.push({ kind: "tool", tool: editTool });
+                      successReply = `Edit karne ke liye koi recent sent message nahi mila (WhatsApp sirf 15 minute tak edit allow karta hai).\n\n[SPOKEN]: Koi recent message nahi mila jo edit kar sakoon.`;
+                    } else {
+                      const editResult = await editWhatsAppMessage({
+                        chatId,
+                        messageId,
+                        newText,
+                      });
+                      const editTool = {
+                        name: "whatsapp_edit_message",
+                        summary: editResult?.ok
+                          ? `Edited message to "${newText}"`
+                          : `Message edit failed: ${editResult?.error || "unknown error"}`,
+                        args: { newText, chatId, messageId },
+                        output: JSON.stringify(editResult),
+                        status: (editResult?.ok ? "completed" : "error") as "completed" | "error",
+                      };
+                      toolsFound.push(editTool);
+                      timelineEvents.push({ kind: "tool", tool: editTool });
+                      if (editResult?.ok) {
+                        successReply = `Pichla WhatsApp message kamyabi se edit ho kar "${newText}" ho chuka hai.\n\n[SPOKEN]: Maine pichla message edit kar diya hai.`;
+                      } else {
+                        successReply = `Message edit nahi ho saka: ${editResult?.error || "unknown error"}.\n\n[SPOKEN]: Message edit nahi ho saka.`;
+                      }
                     }
                   } catch (eErr) {
                     void eErr;
