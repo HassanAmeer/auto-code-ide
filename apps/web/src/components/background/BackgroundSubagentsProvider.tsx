@@ -53,6 +53,21 @@ interface BackgroundSubagentsProviderProps {
 
 const BackgroundSubagentsContext = createContext<BackgroundSubagentsController | null>(null);
 
+export function mergeSubagentStatus(previous: SubagentItem, incoming: SubagentItem): SubagentItem {
+  const terminal = (status?: string) =>
+    status === "completed" || status === "failed" || status === "error" || status === "cancelled";
+  const keepPreviousTerminal =
+    terminal(previous.status) &&
+    !terminal(incoming.status) &&
+    (incoming.completedAt ?? 0) <= (previous.completedAt ?? 0);
+  return {
+    ...previous,
+    ...incoming,
+    ...(keepPreviousTerminal ? { status: previous.status, completedAt: previous.completedAt } : {}),
+    childThreadId: incoming.childThreadId ?? previous.childThreadId,
+  };
+}
+
 function readStoredWorkers(): SubagentItem[] {
   if (typeof window === "undefined" || !window.localStorage) return [];
   try {
@@ -210,21 +225,15 @@ export function BackgroundSubagentsProvider({
     const map = new Map<string, SubagentItem>(seenSubagentsRef.current);
     for (const item of storedWorkers) {
       const previous = map.get(item.id);
-      map.set(
-        item.id,
-        previous ? { ...previous, ...item, childThreadId: previous.childThreadId } : item,
-      );
+      map.set(item.id, previous ? mergeSubagentStatus(previous, item) : item);
     }
     for (const item of apiWorkers) {
       const previous = map.get(item.id);
-      map.set(
-        item.id,
-        previous ? { ...previous, ...item, childThreadId: previous.childThreadId } : item,
-      );
+      map.set(item.id, previous ? mergeSubagentStatus(previous, item) : item);
     }
     for (const item of projectionSubagents) {
       const previous = map.get(item.id);
-      map.set(item.id, previous ? { ...previous, ...item } : item);
+      map.set(item.id, previous ? mergeSubagentStatus(previous, item) : item);
     }
 
     // A worker that the server stops reporting is gone: the server restarted,

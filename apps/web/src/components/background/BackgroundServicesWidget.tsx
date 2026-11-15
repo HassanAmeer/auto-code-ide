@@ -1,13 +1,20 @@
 import { memo, useCallback, useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import {
+  Circle,
   ChevronDownIcon,
+  Code2,
+  Database,
+  FileCode2,
+  Globe2,
   InfoIcon,
   Loader2Icon,
+  Palette,
+  Search,
+  Server,
   SquareIcon,
   CheckCircle2,
   AlertCircle,
-  Clock,
   Trash2,
   X,
 } from "lucide-react";
@@ -244,6 +251,24 @@ const DEMO_SHOWCASE_SUBAGENTS: ReadonlyArray<SubagentItem> = [];
 
 const DEMO_SHOWCASE_GOALS: ReadonlyArray<GoalItem> = [];
 
+function SubagentRoleIcon({ agent }: { agent: SubagentItem }) {
+  const context = `${agent.title} ${agent.role ?? ""} ${agent.goal ?? ""}`.toLowerCase();
+  const Icon = /database|sql|data/.test(context)
+    ? Database
+    : /server|api|backend|deploy|devops/.test(context)
+      ? Server
+      : /design|ui|ux|style|visual/.test(context)
+        ? Palette
+        : /search|research|audit|review|test/.test(context)
+          ? Search
+          : /web|browser|frontend|network/.test(context)
+            ? Globe2
+            : /file|doc|write|content/.test(context)
+              ? FileCode2
+              : Code2;
+  return <Icon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />;
+}
+
 function readStoredGoals(): GoalItem[] {
   if (typeof window === "undefined" || !window.localStorage) return [];
   try {
@@ -318,11 +343,10 @@ const BackgroundServicesWidgetContent = memo(function BackgroundServicesWidgetCo
     [environmentId, navigate],
   );
 
-  // Subagents and Goals are expanded by default as in the screenshot
-  // Collapsed by default — the sidebar stays quiet until something is running.
-  const [subagentsExpanded, setSubagentsExpanded] = useState(true);
+  // Keep the sidebar quiet until the user opens a section.
+  const [subagentsExpanded, setSubagentsExpanded] = useState(false);
   const [tasksExpanded, setTasksExpanded] = useState(initialExpanded);
-  const [goalsExpanded, setGoalsExpanded] = useState(true);
+  const [goalsExpanded, setGoalsExpanded] = useState(false);
 
   const [dismissedGoalIds, setDismissedGoalIds] = useState<Set<string>>(() => new Set());
   const [dismissedSubagentIds, setDismissedSubagentIds] = useState<Set<string>>(() => new Set());
@@ -733,7 +757,7 @@ const BackgroundServicesWidgetContent = memo(function BackgroundServicesWidgetCo
                     key={goal.id}
                     className={cn(
                       "flex h-7 items-center justify-between gap-2 px-2 rounded-md hover:bg-black/[0.035] dark:hover:bg-white/[0.08] transition-colors group cursor-default",
-                      isGoalCompleted ? "opacity-60 text-muted-foreground line-through" : undefined,
+                      isGoalCompleted ? "opacity-60 text-muted-foreground" : undefined,
                       !isGoalCompleted && !isGoalFailed ? "text-foreground font-medium" : undefined,
                     )}
                     title={goal.text}
@@ -743,22 +767,20 @@ const BackgroundServicesWidgetContent = memo(function BackgroundServicesWidgetCo
                         {idx + 1}.
                       </span>
                       {isGoalCompleted ? (
-                        <CheckCircle2 className="size-3.5 text-emerald-400 shrink-0" />
+                        <CheckCircle2 className="size-3.5 text-muted-foreground shrink-0" />
                       ) : isGoalFailed ? (
                         <AlertCircle className="size-3.5 text-rose-400 shrink-0" />
                       ) : isGoalCancelled ? (
                         <CancelledCircleIcon className="size-3.5 text-muted-foreground shrink-0" />
                       ) : isGoalPending ? (
-                        <Clock className="size-3.5 text-muted-foreground shrink-0" />
+                        <Circle className="size-3.5 text-muted-foreground shrink-0" />
                       ) : (
                         <SleekSpinnerRing className="size-3.5 text-cyan-400 shrink-0 animate-spin" />
                       )}
                       <span
                         className={cn(
                           "text-xs truncate",
-                          isGoalCompleted
-                            ? "text-muted-foreground line-through"
-                            : "text-foreground font-medium",
+                          isGoalCompleted ? "text-muted-foreground" : "text-foreground font-medium",
                         )}
                       >
                         {goal.text}
@@ -790,7 +812,7 @@ const BackgroundServicesWidgetContent = memo(function BackgroundServicesWidgetCo
         )}
       </div>
       {/* 3. Watchdog Section — only live supervision of sub-agents + final handoff */}
-      {showWatchdog ? <WatchdogCard projectName={projectName} initiallyExpanded={true} /> : null}
+      {showWatchdog ? <WatchdogCard projectName={projectName} initiallyExpanded={false} /> : null}
 
       {/* 4. Subagents Section */}
       {showSubagents ? (
@@ -889,8 +911,9 @@ const BackgroundServicesWidgetContent = memo(function BackgroundServicesWidgetCo
                       )}
                     >
                       <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <SubagentRoleIcon agent={agent} />
                         {isCompleted ? (
-                          <CheckCircle2 className="size-3.5 text-emerald-400 shrink-0" />
+                          <CheckCircle2 className="size-3.5 text-muted-foreground shrink-0" />
                         ) : isFailed ? (
                           <AlertCircle className="size-3.5 text-rose-400 shrink-0" />
                         ) : isCancelled ? (
@@ -916,11 +939,15 @@ const BackgroundServicesWidgetContent = memo(function BackgroundServicesWidgetCo
                               void handleStopSubagent(agent);
                             }}
                             disabled={busyTaskId === agent.id}
-                            className="px-1.5 py-0.5 rounded text-[10px] font-medium text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 transition-colors cursor-pointer disabled:opacity-40"
+                            className="size-6 flex items-center justify-center rounded text-rose-400 hover:bg-rose-500/20 transition-colors cursor-pointer disabled:opacity-40"
                             title="Stop Subagent"
                             aria-label={`Stop ${agent.title}`}
                           >
-                            Stop
+                            {busyTaskId === agent.id ? (
+                              <Loader2Icon className="size-3.5 animate-spin" />
+                            ) : (
+                              <SquareIcon className="size-3 fill-current" />
+                            )}
                           </button>
                         ) : (
                           <div className="flex items-center gap-1.5 shrink-0">

@@ -1,16 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import {
-  AlertCircle,
-  CheckCircle2,
-  ChevronDownIcon,
-  InfoIcon,
-  SquareIcon,
-  Trash2,
-  X,
-} from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronDownIcon, SquareIcon, Trash2, X } from "lucide-react";
 
 import { cn } from "../../lib/utils";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { toastManager } from "../ui/toast";
 import { SleekSpinnerRing } from "./sleekSpinner";
 import { CancelledCircleIcon } from "./BackgroundServicesWidget";
@@ -100,25 +91,6 @@ function phaseLabel(status: WatchdogStatus): string {
   }
 }
 
-function phaseTone(status: WatchdogStatus): string {
-  switch (status) {
-    case "reviewing":
-      return "bg-cyan-500/15 text-cyan-400 border border-cyan-500/30";
-    case "building":
-      return "bg-purple-500/15 text-purple-400 border border-purple-500/30";
-    case "testing":
-      return "bg-sky-500/15 text-sky-400 border border-sky-500/30";
-    case "completed":
-      return "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30";
-    case "failed":
-      return "bg-rose-500/15 text-rose-400 border border-rose-500/30";
-    case "cancelled":
-      return "bg-muted/60 text-muted-foreground border border-border/40";
-    default:
-      return "bg-cyan-500/15 text-cyan-400 border border-cyan-500/30";
-  }
-}
-
 function statusIcon(status: WatchdogStatus) {
   switch (status) {
     case "completed":
@@ -138,46 +110,6 @@ function statusIcon(status: WatchdogStatus) {
   }
 }
 
-function buildBadge(worker: WatchdogWorkerRow) {
-  if (!worker.buildRan) {
-    return (
-      <span className="rounded bg-muted/60 px-1 py-0.5 text-[9px] font-mono text-muted-foreground">
-        build skipped
-      </span>
-    );
-  }
-  return (
-    <span
-      className={cn(
-        "rounded px-1 py-0.5 text-[9px] font-mono",
-        worker.buildPassed ? "bg-emerald-500/15 text-emerald-400" : "bg-rose-500/15 text-rose-400",
-      )}
-    >
-      build {worker.buildPassed ? "✓" : "✗"}
-    </span>
-  );
-}
-
-function testBadge(worker: WatchdogWorkerRow) {
-  if (!worker.testRan) {
-    return (
-      <span className="rounded bg-muted/60 px-1 py-0.5 text-[9px] font-mono text-muted-foreground">
-        no tests
-      </span>
-    );
-  }
-  return (
-    <span
-      className={cn(
-        "rounded px-1 py-0.5 text-[9px] font-mono",
-        worker.testPassed ? "bg-sky-500/15 text-sky-400" : "bg-rose-500/15 text-rose-400",
-      )}
-    >
-      test {worker.testPassed ? "✓" : "✗"}
-    </span>
-  );
-}
-
 /**
  * Watchdog card — watches every sub-agent, shows what the watchdog is doing
  * right now (watching / reviewing / building / testing) and the verdict it
@@ -186,7 +118,7 @@ function testBadge(worker: WatchdogWorkerRow) {
 export const WatchdogCard = memo(function WatchdogCard({
   projectName,
   className,
-  initiallyExpanded = true,
+  initiallyExpanded = false,
 }: WatchdogCardProps) {
   const [items, setItems] = useState<WatchdogItem[]>([]);
   const [expanded, setExpanded] = useState(initiallyExpanded);
@@ -420,7 +352,7 @@ export const WatchdogCard = memo(function WatchdogCard({
               {stoppingAll ? (
                 <SleekSpinnerRing className="size-2.5 text-rose-400 shrink-0 animate-spin" />
               ) : null}
-              {stoppingAll ? "Stopping…" : "Stop all"}
+              {stoppingAll ? null : <SquareIcon className="size-2.5 fill-current" />}
             </button>
           ) : null}
           {visibleItems.some((w) => isTerminalStatus(w.status)) ? (
@@ -524,110 +456,67 @@ export const WatchdogCard = memo(function WatchdogCard({
                     <div className="flex items-center gap-1.5 pl-6 min-w-0">
                       <span
                         className={cn(
-                          "shrink-0 rounded px-1.5 py-0.5 text-[9px] font-mono uppercase leading-none",
-                          phaseTone(item.status),
+                          "text-[10px] truncate font-mono",
+                          isActive ? "text-foreground/80" : "text-muted-foreground",
                         )}
-                      >
-                        {item.status}
-                      </span>
-                      <span
-                        className="text-[10px] text-foreground/80 truncate font-mono"
                         title={item.lastAction}
                       >
                         {item.lastAction || phaseLabel(item.status)}
                       </span>
                     </div>
-                    <div className="text-[9.5px] text-muted-foreground/70 font-mono pl-6">
-                      {done}/{item.workers.length} sub-agents done
-                      {running > 0 ? ` · ${running} running in parallel` : ""}
-                    </div>
+                    {item.workers.length > 0 ? (
+                      <div className="text-[9.5px] text-muted-foreground/70 font-mono pl-6">
+                        {done}/{item.workers.length} sub-agents done
+                        {running > 0 ? ` · ${running} running` : ""}
+                      </div>
+                    ) : null}
 
-                    {item.workers.map((worker) => (
-                      <div key={worker.id} className="flex flex-col gap-0.5 pl-6">
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          {worker.status === "completed" ? (
-                            <CheckCircle2 className="size-3 text-emerald-400 shrink-0" />
-                          ) : worker.status === "failed" ? (
-                            <AlertCircle className="size-3 text-rose-400 shrink-0" />
-                          ) : worker.status === "cancelled" ? (
-                            <CancelledCircleIcon className="size-3 text-muted-foreground shrink-0" />
-                          ) : (
-                            <SleekSpinnerRing className="size-3 text-cyan-400 shrink-0 animate-spin" />
-                          )}
-                          <span className="text-[11.5px] text-foreground/85 truncate">
-                            {worker.role}
-                          </span>
-                          <span className="text-[10px] text-muted-foreground/70 font-mono shrink-0">
-                            {worker.filesChanged} file{worker.filesChanged === 1 ? "" : "s"}
-                          </span>
-                          <span className="ml-auto flex items-center gap-1 shrink-0">
-                            {buildBadge(worker)}
-                            {testBadge(worker)}
-                            {worker.status === "running" ? (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  void handleStopWorker(worker.id, worker.role);
-                                }}
-                                disabled={stoppingWorkerId === worker.id}
-                                className="rounded p-0.5 text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer disabled:opacity-40"
-                                title="Stop this sub-agent"
-                                aria-label={`Stop ${worker.role}`}
-                              >
-                                <SquareIcon className="size-2.5 fill-current" />
-                              </button>
-                            ) : null}
-                          </span>
+                    {item.workers
+                      .filter((worker) => worker.status === "running")
+                      .map((worker) => (
+                        <div key={worker.id} className="flex flex-col gap-0.5 pl-6">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            {worker.status === "completed" ? (
+                              <CheckCircle2 className="size-3 text-emerald-400 shrink-0" />
+                            ) : worker.status === "failed" ? (
+                              <AlertCircle className="size-3 text-rose-400 shrink-0" />
+                            ) : worker.status === "cancelled" ? (
+                              <CancelledCircleIcon className="size-3 text-muted-foreground shrink-0" />
+                            ) : (
+                              <SleekSpinnerRing className="size-3 text-cyan-400 shrink-0 animate-spin" />
+                            )}
+                            <span className="text-[11.5px] text-foreground/85 truncate">
+                              {worker.role}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground/70 font-mono shrink-0">
+                              {worker.filesChanged} file{worker.filesChanged === 1 ? "" : "s"}
+                            </span>
+                            <span className="ml-auto flex items-center gap-1 shrink-0">
+                              {worker.status === "running" ? (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    void handleStopWorker(worker.id, worker.role);
+                                  }}
+                                  disabled={stoppingWorkerId === worker.id}
+                                  className="rounded p-0.5 text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer disabled:opacity-40"
+                                  title="Stop this sub-agent"
+                                  aria-label={`Stop ${worker.role}`}
+                                >
+                                  <SquareIcon className="size-2.5 fill-current" />
+                                </button>
+                              ) : null}
+                            </span>
+                          </div>
+                          {worker.logs && worker.logs.length > 0 ? (
+                            <div className="truncate pl-5 text-[9.5px] font-mono text-cyan-400/75">
+                              {worker.logs[worker.logs.length - 1]}
+                            </div>
+                          ) : null}
                         </div>
-                        {worker.logs && worker.logs.length > 0 ? (
-                          <div className="truncate pl-5 text-[9.5px] font-mono text-cyan-400/75">
-                            {worker.logs[worker.logs.length - 1]}
-                          </div>
-                        ) : null}
-                        {worker.reviewNotes.length > 0 ? (
-                          <div className="flex items-center gap-1 pl-5">
-                            <Tooltip>
-                              <TooltipTrigger
-                                render={
-                                  <button
-                                    type="button"
-                                    className="rounded p-0.5 text-amber-400/90 hover:text-amber-300 transition-colors cursor-pointer"
-                                    aria-label={`Review notes for ${worker.role}`}
-                                  >
-                                    <InfoIcon className="size-3" />
-                                  </button>
-                                }
-                              />
-                              <TooltipPopup side="left" className="max-w-80 text-left">
-                                {worker.reviewNotes.join("\n")}
-                              </TooltipPopup>
-                            </Tooltip>
-                            <span className="text-[10px] text-amber-400/90 truncate">
-                              {worker.reviewNotes[0]}
-                            </span>
-                          </div>
-                        ) : null}
-                      </div>
-                    ))}
+                      ))}
 
-                    {item.verdict ? (
-                      <div className="text-[10px] text-muted-foreground/80 pl-6 font-mono">
-                        {item.verdict}
-                      </div>
-                    ) : null}
-                    {item.issues.length > 0 ? (
-                      <div className="flex flex-col gap-0.5 pl-6">
-                        {item.issues.slice(0, 3).map((issue, index) => (
-                          <div key={`issue-${index}`} className="flex items-start gap-1.5">
-                            <AlertCircle className="size-3 text-amber-400 shrink-0 mt-px" />
-                            <span className="text-[10px] text-amber-400/90 truncate" title={issue}>
-                              {issue}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : null}
                     {item.status === "completed" ? (
                       <div className="text-[10px] text-emerald-400/90 font-mono pl-6">
                         → Super Agent ko final result de diya
@@ -636,29 +525,6 @@ export const WatchdogCard = memo(function WatchdogCard({
                     {item.status === "cancelled" ? (
                       <div className="text-[10px] text-muted-foreground/80 font-mono pl-6">
                         → Aap ne rok diya — koi output merge nahi hua
-                      </div>
-                    ) : null}
-                    {item.checklist && item.checklist.length > 0 ? (
-                      <div className="flex flex-col gap-0.5 pl-6">
-                        {item.checklist.map((c) => (
-                          <div key={c.id} className="flex items-start gap-1.5">
-                            {c.status === "passed" ? (
-                              <CheckCircle2 className="size-3 text-emerald-400 shrink-0 mt-px" />
-                            ) : (
-                              <AlertCircle className="size-3 text-amber-400 shrink-0 mt-px" />
-                            )}
-                            <span className="text-[10px] text-foreground/70 truncate">
-                              {c.requirement}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : null}
-                    {item.recoveries && item.recoveries > 0 ? (
-                      <div className="pl-6">
-                        <span className="rounded bg-violet-500/15 px-1.5 py-0.5 text-[9.5px] font-mono text-violet-400">
-                          🛠 {item.recoveries} self-heal{item.recoveries === 1 ? "" : "s"}
-                        </span>
                       </div>
                     ) : null}
                   </div>

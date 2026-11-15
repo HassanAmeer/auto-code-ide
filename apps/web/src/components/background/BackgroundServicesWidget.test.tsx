@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import { renderToStaticMarkup } from "react-dom/server";
+import { mergeSubagentStatus } from "./BackgroundSubagentsProvider";
 import {
   BackgroundServicesWidget,
   SleekSpinnerRing,
@@ -28,7 +29,7 @@ describe("BackgroundServicesWidget", () => {
       />,
     );
 
-    // Subagents / Goals are collapsed by default (quiet sidebar), so only their
+    // Sections are collapsed by default (quiet sidebar), so only their
     // headers + counts render in static markup — not the row names/text.
     // 1. Subagents Section
     expect(html).toContain("Subagents");
@@ -41,8 +42,11 @@ describe("BackgroundServicesWidget", () => {
     expect(html).toContain("Goals");
     expect(html).toContain("1");
 
-    // Watchdog is expanded by default and shows only live supervision state.
-    expect(html).toContain("No active watchdog");
+    // Watchdog also stays collapsed until explicitly opened.
+    expect(html).not.toContain("No active watchdog");
+    expect(html).not.toContain("Server &amp; Deployment Specialist");
+    expect(html).not.toContain("please parallel worker chala k kar lo jaldi ...");
+    expect((html.match(/aria-expanded="false"/g) ?? []).length).toBe(4);
 
     // Should NOT contain the external IDE Overview navigation items
     expect(html).not.toContain("Overview");
@@ -58,6 +62,26 @@ describe("BackgroundServicesWidget", () => {
     expect(html).toContain("<svg");
     expect(html).toContain("animate-spin");
     expect(html).toContain('d="M12 3a9 9 0 1 0 9 9"');
+  });
+});
+
+describe("subagent status reconciliation", () => {
+  it("does not let stale running telemetry reopen a terminal subagent", () => {
+    expect(
+      mergeSubagentStatus(
+        { id: "worker-1", title: "Worker", status: "cancelled", completedAt: 10 },
+        { id: "worker-1", title: "Worker", status: "running" },
+      ),
+    ).toMatchObject({ status: "cancelled", completedAt: 10 });
+  });
+
+  it("accepts a newer terminal result from any reporting source", () => {
+    expect(
+      mergeSubagentStatus(
+        { id: "worker-1", title: "Worker", status: "cancelled", completedAt: 10 },
+        { id: "worker-1", title: "Worker", status: "completed", completedAt: 20 },
+      ),
+    ).toMatchObject({ status: "completed", completedAt: 20 });
   });
 });
 

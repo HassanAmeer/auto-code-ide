@@ -136,7 +136,7 @@ export const BackgroundModeDialog = memo(function BackgroundModeDialog() {
           </div>
 
           {/* Antigravity-Style Collapsible Background Services */}
-          <BackgroundServicesWidget initialExpanded={true} showOpenSheetButton={false} />
+          <BackgroundServicesWidget showOpenSheetButton={false} />
 
           {/* Screen Wake Lock Switch Card */}
           <div className="rounded-2xl bg-muted/50 border border-border/80 p-3.5 flex items-center justify-between gap-3 shadow-xs">
