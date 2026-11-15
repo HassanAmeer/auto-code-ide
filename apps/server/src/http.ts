@@ -3749,7 +3749,10 @@ export const layerSuperAgentWatchdogStopRoute = HttpRouter.add(
     return HttpServerResponse.jsonUnsafe(
       stopped
         ? { ok: true, stoppedWatchdog: watchdogId }
-        : { ok: false, error: "Watchdog not found" },
+        : {
+            ok: false,
+            error: "Watchdog is not running (already finished or unknown)",
+          },
       stopped ? { status: 200 } : { status: 404 },
     );
   }),
