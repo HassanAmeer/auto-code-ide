@@ -93,6 +93,10 @@ export function BackgroundSubagentsProvider({
   });
 
   const seenSubagentsRef = useRef<Map<string, SubagentItem>>(new Map());
+  /** Consecutive polls in which a still-"running" row vanished from the server. */
+  const missingWorkerPollsRef = useRef<Map<string, number>>(new Map());
+  /** Worker ids the server has reported at least once — only these can go stale. */
+  const seenLiveWorkerIdsRef = useRef<Set<string>>(new Set());
   const [storedWorkers, setStoredWorkers] = useState<SubagentItem[]>(() => readStoredWorkers());
   const [apiWorkers, setApiWorkers] = useState<SubagentItem[]>([]);
   const [workersError, setWorkersError] = useState<string | null>(null);
@@ -157,7 +161,11 @@ export function BackgroundSubagentsProvider({
     }
 
     void fetchWorkers();
-    const intervalId = window.setInterval(fetchWorkers, 15_000);
+    // Live supervision needs a fast tick; the sidebar must not show a worker
+    // as "running" for 15s after it already finished (or was stopped).
+    const intervalId = window.setInterval(() => {
+      void fetchWorkers();
+    }, 3000);
     const onUpdate = () => void fetchWorkers();
     window.addEventListener("super-agent-state-updated", onUpdate);
     window.addEventListener("t3-subagents-changed", onUpdate);
@@ -208,6 +216,44 @@ export function BackgroundSubagentsProvider({
       const previous = map.get(item.id);
       map.set(item.id, previous ? { ...previous, ...item } : item);
     }
+
+    // A worker that the server stops reporting is gone: the server restarted,
+    // the run was cleaned up, or the row is a leftover from an older build.
+    // Left alone it would spin forever, so a row the server previously DID
+    // report, and now silently dropped, is closed out with a real reason.
+    // Rows the server never reported (still starting) are never touched.
+    const liveIds = new Set<string>([
+      ...apiWorkers.map((item) => item.id),
+      ...projectionSubagents.map((item) => item.id),
+    ]);
+    const seenLive = seenLiveWorkerIdsRef.current;
+    for (const id of liveIds) seenLive.add(id);
+    const missingPolls = missingWorkerPollsRef.current;
+    for (const [id, item] of map) {
+      if (item.status !== "running" || liveIds.has(id) || !seenLive.has(id)) {
+        missingPolls.delete(id);
+        continue;
+      }
+      const misses = (missingPolls.get(id) ?? 0) + 1;
+      missingPolls.set(id, misses);
+      // ~18s of silence at the 3s poll: long enough that a stop/finish would
+      // have been reported first, short enough that no spinner runs forever.
+      if (misses >= 6) {
+        map.set(id, {
+          ...item,
+          status: "failed",
+          error:
+            item.error ??
+            "Server ne is worker ki reporting band kar di (run khatam ya server restart).",
+          completedAt: item.completedAt ?? Date.now(),
+        });
+        missingPolls.delete(id);
+      }
+    }
+    for (const id of missingPolls.keys()) {
+      if (!map.has(id)) missingPolls.delete(id);
+    }
+
     seenSubagentsRef.current = new Map(map);
 
     const statusRank = (status?: string) =>

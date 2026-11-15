@@ -129,6 +129,7 @@ import {
   getWatchdogSnapshot,
   startWatchdogSupervision,
   stopWatchdog,
+  stopAllWatchdogs,
 } from "./dsh/watchdogSupervisor.ts";
 import { getProjectChatEngineSkillPrompt } from "@t3tools/shared/superpowerSkills";
 import {
@@ -3758,8 +3759,12 @@ export const layerSuperAgentWorkersStopAllRoute = HttpRouter.add(
   "POST",
   "/api/super-agent/workers/stop-all",
   Effect.gen(function* () {
+    // Abort the worker telemetry AND every supervising watchdog. Without the
+    // watchdog half the loop kept running and still merged the cancelled
+    // workers' output afterwards.
     const result = stopAllRunningTelemetry();
-    return HttpServerResponse.jsonUnsafe({ ok: true, ...result });
+    const watchdogs = stopAllWatchdogs();
+    return HttpServerResponse.jsonUnsafe({ ok: true, ...result, ...watchdogs });
   }),
 );
 

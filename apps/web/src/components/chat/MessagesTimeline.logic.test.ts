@@ -2579,6 +2579,7 @@ describe("deriveMessagesTimelineRows", () => {
         runId: "turn-1" as never,
         status: "running",
         startedAt: "2026-01-01T00:00:00Z",
+        completedAt: null,
       },
       runningRunId: "turn-1" as never,
       isWorking: true,
@@ -2604,6 +2605,7 @@ describe("deriveMessagesTimelineRows", () => {
             runId: "turn-1" as never,
             createdAt: "2026-01-01T00:00:01Z",
             updatedAt: "2026-01-01T00:00:01Z",
+            streaming: false,
           },
         },
         {
@@ -2638,6 +2640,7 @@ describe("deriveMessagesTimelineRows", () => {
         runId: "turn-1" as never,
         status: "running",
         startedAt: "2026-01-01T00:00:00Z",
+        completedAt: null,
       },
       runningRunId: "turn-1" as never,
       isWorking: true,

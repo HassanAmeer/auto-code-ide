@@ -21,7 +21,13 @@ export type WatchdogStatus =
   | "building"
   | "testing"
   | "completed"
-  | "failed";
+  | "failed"
+  | "cancelled";
+
+/** A watchdog in one of these states is no longer supervising anything. */
+function isTerminalStatus(status: WatchdogStatus): boolean {
+  return status === "completed" || status === "failed" || status === "cancelled";
+}
 
 export interface WatchdogWorkerRow {
   readonly id: string;
@@ -87,6 +93,8 @@ function phaseLabel(status: WatchdogStatus): string {
       return "Sab sub-agents verified — kaam mukammal";
     case "failed":
       return "Masla mila — repair / manage kar raha hai";
+    case "cancelled":
+      return "Aap ne rok diya — koi kaam merge nahi hua";
     default:
       return "Sub-agents ko sahi track par chalaa raha hai";
   }
@@ -104,6 +112,8 @@ function phaseTone(status: WatchdogStatus): string {
       return "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30";
     case "failed":
       return "bg-rose-500/15 text-rose-400 border border-rose-500/30";
+    case "cancelled":
+      return "bg-muted/60 text-muted-foreground border border-border/40";
     default:
       return "bg-cyan-500/15 text-cyan-400 border border-cyan-500/30";
   }
@@ -115,6 +125,8 @@ function statusIcon(status: WatchdogStatus) {
       return <CheckCircle2 className="size-3.5 text-emerald-400 shrink-0" />;
     case "failed":
       return <AlertCircle className="size-3.5 text-rose-400 shrink-0" />;
+    case "cancelled":
+      return <CancelledCircleIcon className="size-3.5 text-muted-foreground shrink-0" />;
     case "reviewing":
       return <SleekSpinnerRing className="size-3.5 text-cyan-400 shrink-0 animate-spin" />;
     case "building":
@@ -203,17 +215,23 @@ export const WatchdogCard = memo(function WatchdogCard({
     [projectName],
   );
 
+  // Live supervision needs a fast tick (streamed worker logs, phase changes);
+  // a card that is only showing finished audits can be slow.
+  const hasActiveItem = items.some((item) => !isTerminalStatus(item.status));
   useEffect(() => {
     const controller = new AbortController();
     void load(controller.signal);
-    const interval = window.setInterval(() => {
-      void load(controller.signal);
-    }, 5000);
+    const interval = window.setInterval(
+      () => {
+        void load(controller.signal);
+      },
+      hasActiveItem ? 2000 : 5000,
+    );
     return () => {
       controller.abort();
       window.clearInterval(interval);
     };
-  }, [load]);
+  }, [hasActiveItem, load]);
 
   const [stoppingWorkerId, setStoppingWorkerId] = useState<string | null>(null);
 
@@ -252,19 +270,39 @@ export const WatchdogCard = memo(function WatchdogCard({
 
   const handleStop = useCallback(
     async (watchdogId: string) => {
+      if (stoppingId === watchdogId) return;
       setStoppingId(watchdogId);
       try {
-        await fetch("/api/super-agent/watchdog/stop", {
+        const res = await fetch("/api/super-agent/watchdog/stop", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ watchdogId }),
         });
+        const data = (await res.json().catch(() => null)) as {
+          ok?: boolean;
+          error?: string;
+        } | null;
+        if (data?.ok) {
+          toastManager.add({
+            type: "info",
+            title: "Watchdog stopped",
+            description: "Sub-agents aborted cooperatively — nothing was merged.",
+          });
+        } else {
+          toastManager.add({
+            type: "error",
+            title: "Could not stop watchdog",
+            description: data?.error ?? `Watchdog API returned ${res.status}`,
+          });
+        }
+      } catch {
+        toastManager.add({ type: "error", title: "Could not stop watchdog" });
       } finally {
         setStoppingId(null);
         void load();
       }
     },
-    [load],
+    [load, stoppingId],
   );
 
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => new Set());
@@ -275,9 +313,7 @@ export const WatchdogCard = memo(function WatchdogCard({
   const handleClearCompleted = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
-      const completedIds = items
-        .filter((w) => w.status === "completed" || w.status === "failed")
-        .map((w) => w.id);
+      const completedIds = items.filter((w) => isTerminalStatus(w.status)).map((w) => w.id);
       setDismissedIds((prev) => new Set([...prev, ...completedIds]));
     },
     [items],
@@ -322,7 +358,7 @@ export const WatchdogCard = memo(function WatchdogCard({
           ) : null}
         </div>
         <div className="flex items-center gap-1.5">
-          {visibleItems.some((w) => w.status === "completed" || w.status === "failed") ? (
+          {visibleItems.some((w) => isTerminalStatus(w.status)) ? (
             <button
               type="button"
               onClick={handleClearCompleted}
@@ -360,7 +396,7 @@ export const WatchdogCard = memo(function WatchdogCard({
           {visibleItems.length === 0
             ? null
             : visibleItems.map((item) => {
-                const isActive = item.status !== "completed" && item.status !== "failed";
+                const isActive = !isTerminalStatus(item.status);
                 const done = item.workers.filter((w) => w.status === "completed").length;
                 const running = item.workers.filter((w) => w.status === "running").length;
                 return (
@@ -391,16 +427,20 @@ export const WatchdogCard = memo(function WatchdogCard({
                             void handleStop(item.id);
                           }}
                           disabled={stoppingId === item.id}
-                          className="ml-auto px-1.5 py-0.5 rounded text-[10px] font-medium text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 transition-colors cursor-pointer disabled:opacity-40"
+                          className="ml-auto flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 transition-colors cursor-pointer disabled:opacity-60"
                           title="Stop Watchdog"
                           aria-label={`Stop watchdog for ${item.taskTitle}`}
+                          aria-busy={stoppingId === item.id || undefined}
                         >
-                          Stop
+                          {stoppingId === item.id ? (
+                            <SleekSpinnerRing className="size-2.5 text-rose-400 shrink-0 animate-spin" />
+                          ) : null}
+                          {stoppingId === item.id ? "Stopping…" : "Stop"}
                         </button>
                       ) : (
                         <div className="ml-auto flex items-center gap-1.5">
                           <span className="rounded px-1.5 py-0.5 text-[9px] font-mono uppercase leading-none bg-muted/60 text-muted-foreground border border-border/40">
-                            Audited
+                            {item.status === "cancelled" ? "Stopped" : "Audited"}
                           </span>
                           <button
                             type="button"
@@ -508,7 +548,7 @@ export const WatchdogCard = memo(function WatchdogCard({
 
                     {item.verdict ? (
                       <div className="text-[10px] text-muted-foreground/80 pl-6 font-mono">
-                        Watchdog verdict: {item.verdict}
+                        {item.verdict}
                       </div>
                     ) : null}
                     {item.issues.length > 0 ? (
@@ -526,6 +566,11 @@ export const WatchdogCard = memo(function WatchdogCard({
                     {item.status === "completed" ? (
                       <div className="text-[10px] text-emerald-400/90 font-mono pl-6">
                         → Super Agent ko final result de diya
+                      </div>
+                    ) : null}
+                    {item.status === "cancelled" ? (
+                      <div className="text-[10px] text-muted-foreground/80 font-mono pl-6">
+                        → Aap ne rok diya — koi output merge nahi hua
                       </div>
                     ) : null}
                     {item.checklist && item.checklist.length > 0 ? (

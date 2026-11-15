@@ -41,6 +41,12 @@ export interface BypassRequestOptions {
   maxTokens?: number | undefined;
   sessionId?: string | undefined;
   _isRetry?: boolean | undefined;
+  /**
+   * Cooperative cancellation from the caller (e.g. the Watchdog Stop button).
+   * Aborting it cancels the in-flight upstream request immediately instead of
+   * waiting for the model to finish streaming.
+   */
+  signal?: AbortSignal | undefined;
 }
 
 export interface BypassResponse {
@@ -141,6 +147,16 @@ export async function bypassChatStream(
   const controller = new AbortController();
   let timer: NodeJS.Timeout | null = null;
   let hasReceivedAnyChunk = false;
+
+  // Caller cancellation (the Watchdog Stop button) must kill the upstream
+  // request instantly. Without this, "Stop" only set a flag and the model kept
+  // streaming for minutes, burning quota and blocking the worker row.
+  const callerSignal = options.signal;
+  const abortFromCaller = () => controller.abort(new Error("Stopped by user"));
+  if (callerSignal) {
+    if (callerSignal.aborted) abortFromCaller();
+    else callerSignal.addEventListener("abort", abortFromCaller, { once: true });
+  }
 
   const resetTimeout = (ms: number, reason: string) => {
     if (timer) clearTimeout(timer);
@@ -334,6 +350,7 @@ export async function bypassChatStream(
     throw streamErr;
   } finally {
     if (timer) clearTimeout(timer);
+    if (callerSignal) callerSignal.removeEventListener("abort", abortFromCaller);
   }
 
   onDone?.(sessionId);

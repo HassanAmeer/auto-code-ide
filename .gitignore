@@ -19,6 +19,9 @@ release-mock/
 .jobi
 .adc
 .autocode
+# Local worker-pool worktrees created by the watchdog supervisor. They are
+# throwaway checkouts of this same repo, never sources to commit.
+.worktrees/
 .idea/
 apps/web/.playwright
 apps/web/playwright-report

@@ -41,8 +41,10 @@ import {
   deriveSpecialistRole,
   registerWorkerTelemetry,
   updateWorkerTelemetryStatus,
+  registerGoalTelemetry,
+  updateGoalTelemetryStatus,
 } from "./workerRegistry.ts";
-import { isWorkerAborted, clearWorkerAbort } from "./abortRegistry.ts";
+import { isWorkerAborted, clearWorkerAbort, markWorkerAborted } from "./abortRegistry.ts";
 
 export type WatchdogStatus =
   | "watching"
@@ -50,7 +52,13 @@ export type WatchdogStatus =
   | "building"
   | "testing"
   | "completed"
-  | "failed";
+  | "failed"
+  | "cancelled";
+
+/** A watchdog in one of these states is no longer supervising anything. */
+export function isWatchdogStatusTerminal(status: WatchdogStatus): boolean {
+  return status === "completed" || status === "failed" || status === "cancelled";
+}
 
 export interface WatchdogWorkerRow {
   id: string;
@@ -82,6 +90,8 @@ export interface WatchdogState {
   recoveries: number;
   /** Requirement checklist extracted from the user's task and audited vs the diff. */
   checklist: ChecklistItem[];
+  /** Set by `stopWatchdog`; every later phase boundary bails out on it. */
+  stopped?: boolean | undefined;
   startedAt: number;
   updatedAt: number;
   completedAt: number | undefined;
@@ -95,7 +105,23 @@ function now(): number {
 }
 
 /**
-/** Live snapshot for the UI watchdog card. */
+ * Finished watchdogs are kept for the UI history, but they must not accumulate
+ * forever: the process is long-lived and every task adds a full state object
+ * (workers, logs, issues). Anything terminal and older than the TTL is dropped
+ * at snapshot time — the same cheap prune the telemetry registry uses.
+ */
+const WATCHDOG_TTL_MS = Number(process.env.SUPER_AGENT_WATCHDOG_TTL_MS || 30 * 60 * 1000);
+function pruneWatchdogs(): void {
+  const cutoff = now() - WATCHDOG_TTL_MS;
+  for (const [id, state] of watchdogs) {
+    if (isWatchdogStatusTerminal(state.status) && (state.completedAt ?? state.updatedAt) < cutoff) {
+      watchdogs.delete(id);
+    }
+  }
+}
+
+/**
+ * Live snapshot for the UI watchdog card. */
 export function getWatchdogSnapshot(filter?: {
   projectName?: string | undefined;
   projectId?: string | undefined;
@@ -105,6 +131,7 @@ export function getWatchdogSnapshot(filter?: {
   active: number;
   timestamp: number;
 } {
+  pruneWatchdogs();
   let list = Array.from(watchdogs.values());
   if (filter?.projectName && filter.projectName !== "all" && filter.projectName !== "Workspace") {
     const needle = filter.projectName.toLowerCase();
@@ -117,19 +144,59 @@ export function getWatchdogSnapshot(filter?: {
   return {
     ok: true,
     watchdogs: list,
-    active: list.filter((w) => w.status !== "completed" && w.status !== "failed").length,
+    active: list.filter((w) => !isWatchdogStatusTerminal(w.status)).length,
     timestamp: now(),
   };
 }
 
+/**
+ * Stop a watchdog for real.
+ *
+ * Marking the card as failed was not enough: `startWatchdogSupervision` keeps
+ * running its own `Promise.allSettled` loop, so the workers stayed alive,
+ * burned provider quota, and merged their output afterwards. Stopping now
+ * cooperatively aborts every running worker (the same abort registry the
+ * per-worker Stop button uses), marks their rows cancelled, and asks the
+ * supervisor loop to bail out before review/merge/build/test.
+ */
 export function stopWatchdog(id: string): boolean {
   const existing = watchdogs.get(id);
   if (!existing) return false;
-  existing.status = "failed";
+  if (isWatchdogStatusTerminal(existing.status)) return false;
+
+  for (const worker of existing.workers) {
+    if (worker.status !== "running") continue;
+    // The supervisor loop polls `isWorkerAborted` at every checkpoint: before
+    // dispatch, after the model call, before merge, before review.
+    markWorkerAborted(worker.id);
+    worker.status = "cancelled";
+    worker.reviewNotes.push("stopped by user");
+    updateWorkerTelemetryStatus(worker.id, "cancelled", { completedAt: now() });
+    updateGoalTelemetryStatus(`goal-${worker.id}`, "cancelled", { completedAt: now() });
+  }
+
+  existing.status = "cancelled";
+  existing.stopped = true;
   existing.lastAction = "Stopped by user";
+  existing.verdict = "Watchdog verdict: stopped by user — no further work merged";
   existing.completedAt = now();
   existing.updatedAt = now();
   return true;
+}
+
+/**
+ * Stop every watchdog that is still supervising.
+ *
+ * The UI "Stop All" button only aborted the worker telemetry, so the watchdog
+ * loop kept running and still merged/built/tested the cancelled workers. This
+ * flips every live watchdog to `cancelled` and returns how many it stopped.
+ */
+export function stopAllWatchdogs(): { stoppedWatchdogs: number } {
+  let stoppedWatchdogs = 0;
+  for (const id of watchdogs.keys()) {
+    if (stopWatchdog(id)) stoppedWatchdogs += 1;
+  }
+  return { stoppedWatchdogs };
 }
 
 /* ───────────────────────── build & test helpers ───────────────────────── */
@@ -372,7 +439,10 @@ async function dispatchRepairSubAgent(opts: {
   kind: "build" | "test" | "requirement";
   model: string;
   onLog?: (msg: string) => undefined | ((msg: string) => void);
+  /** Cooperative abort — a stopped watchdog must not run (or merge) a repair. */
+  abortCheck?: (() => boolean) | undefined;
 }): Promise<{ ok: boolean; output: string }> {
+  if (opts.abortCheck?.()) return { ok: false, output: "stopped by user" };
   const repairId = `repair-${now()}-${Math.random().toString(36).slice(2, 7)}`;
   const worktree = createWorkerWorktree(opts.projectRoot, repairId);
   try {
@@ -395,11 +465,14 @@ async function dispatchRepairSubAgent(opts: {
       prompt,
       model: opts.model,
       onLog: (m) => opts.onLog?.(m),
+      abortCheck: opts.abortCheck,
     });
 
     if (!res.ok) {
       return { ok: false, output: res.error ?? "repair sub-agent failed" };
     }
+    // Do not merge a repair the user already cancelled.
+    if (opts.abortCheck?.()) return { ok: false, output: "stopped by user" };
     const changed = listChangedFiles(worktree.worktreePath);
     if (changed.length === 0) {
       return { ok: false, output: "repair sub-agent produced no changes" };
@@ -439,7 +512,10 @@ async function runVerificationSubAgent(opts: {
   diff: string;
   model: string;
   onLog?: (msg: string) => undefined | ((msg: string) => void);
+  /** Cooperative abort — a stopped watchdog must not run a verifier either. */
+  abortCheck?: (() => boolean) | undefined;
 }): Promise<{ passed: boolean; reason: string }> {
+  if (opts.abortCheck?.()) return { passed: false, reason: "stopped by user" };
   const requirements = opts.requirements.length > 0 ? opts.requirements : ["the requested task"];
   const prompt = [
     "You are a strict VERIFIER. Check whether the following code changes actually",
@@ -467,6 +543,7 @@ async function runVerificationSubAgent(opts: {
         prompt,
         model: opts.model,
         onLog: (m) => opts.onLog?.(m),
+        abortCheck: opts.abortCheck,
       });
       const content = res.outputSummary ?? "";
       // The verifier answers in its log stream; treat an explicit FAIL as a failure.
@@ -569,6 +646,32 @@ export async function startWatchdogSupervision(
   };
 
   try {
+    // Cooperative cancellation. `stopWatchdog` flips the card to `cancelled`
+    // and aborts the workers; every phase boundary calls this so a stopped run
+    // stops immediately instead of finishing its review/build/test cycle.
+    const stopIfRequested = (): WatchdogDispatchResult | undefined => {
+      if (!state.stopped && state.status !== "cancelled") return undefined;
+      state.stopped = true;
+      state.status = "cancelled";
+      state.completedAt ??= now();
+      state.updatedAt = now();
+      return {
+        ok: false,
+        watchdogId,
+        status: "cancelled",
+        verdict: state.verdict || "Watchdog verdict: stopped by user",
+        workersCompleted: state.workers.filter((w) => w.status === "completed").length,
+        workersTotal: state.workers.length,
+        issues: state.issues,
+      };
+    };
+    // Phase transitions must never resurrect a stopped watchdog: a stop that
+    // lands mid-build would otherwise put the card back on "building".
+    const setPhase = (status: WatchdogStatus) => {
+      if (state.stopped || state.status === "cancelled") return;
+      state.status = status;
+    };
+
     const subtasks: SubtaskPlanItem[] = decomposeTask(taskTitle, prompt, projectRoot);
     // The requirement checklist is the accuracy target: it is what the merged
     // code is audited against at the end.
@@ -600,8 +703,9 @@ export async function startWatchdogSupervision(
     // fold above: the rows have to match the allocations the watchdog really
     // dispatches, and `planned` does not exist before it is computed.
     for (const st of planned) {
+      const workerId = `${watchdogId}-w${st.order}`;
       state.workers.push({
-        id: `${watchdogId}-w${st.order}`,
+        id: workerId,
         role: deriveSpecialistRole(st.title, st.category, st.order),
         goal: st.title,
         status: "running",
@@ -611,6 +715,19 @@ export async function startWatchdogSupervision(
         buildPassed: undefined,
         testRan: false,
         testPassed: undefined,
+      });
+      // Goals panel and the Subagents panel read the telemetry registry, not
+      // the watchdog card. Registering here is what makes those two panels
+      // show the milestone the watchdog is actually supervising.
+      registerGoalTelemetry({
+        id: `goal-${workerId}`,
+        title: st.title,
+        status: "running",
+        workerId,
+        order: st.order,
+        projectName,
+        projectId,
+        createdAt: now(),
       });
     }
 
@@ -625,6 +742,16 @@ export async function startWatchdogSupervision(
     // Each worker gets its own model lane so the calls really run in parallel
     // instead of queueing behind one provider's rate limit.
     const laneModels = resolveWorkerLaneModels(model, allocations.length, params.lanes);
+
+    // Race guard: a Stop that landed while the task was being split/planned
+    // arrives before any worker row could be aborted. Mark every planned
+    // worker aborted here so the dispatch loop below bails out per worker, and
+    // return before a single model call is made.
+    if (state.stopped || state.status === "cancelled") {
+      for (const { st } of allocations) markWorkerAborted(`${watchdogId}-w${st.order}`);
+      const stoppedBeforeDispatch = stopIfRequested();
+      if (stoppedBeforeDispatch) return stoppedBeforeDispatch;
+    }
 
     // ── Workers run in parallel; the watchdog watches each completion ──
     const settled = await Promise.allSettled(
@@ -679,6 +806,7 @@ export async function startWatchdogSupervision(
             abortedRow.reviewNotes.push("stopped by user before dispatch");
           }
           updateWorkerTelemetryStatus(workerId, "cancelled", { completedAt: now() });
+          updateGoalTelemetryStatus(`goal-${workerId}`, "cancelled", { completedAt: now() });
           return { st, allocation, workerId, res: abortedResult };
         }
 
@@ -690,11 +818,17 @@ export async function startWatchdogSupervision(
           prompt: st.description,
           model: laneModel,
           onLog: workerLog,
+          // Without this the Stop button only flagged the worker: the model
+          // stream kept running (and burning quota) for minutes. The bridge
+          // polls this at every step and discards unfinished output.
+          abortCheck: () => isWorkerAborted(workerId),
         });
 
         // Watchdog self-heal #1: a failed model call is retried once with the
         // next model on the ladder before the worker is written off.
-        if (!res.ok) {
+        // A user stop is NOT a failure: retrying it would fire one more model
+        // call for work the user already cancelled, so bail out first.
+        if (!res.ok && !isWorkerAborted(workerId)) {
           const fallback = resolveFallbackModel(model);
           if (fallback && fallback !== model) {
             state.recoveries += 1;
@@ -709,6 +843,7 @@ export async function startWatchdogSupervision(
               prompt: st.description,
               model: fallback,
               onLog: workerLog,
+              abortCheck: () => isWorkerAborted(workerId),
             });
           }
         }
@@ -722,6 +857,7 @@ export async function startWatchdogSupervision(
             abortedRow.reviewNotes.push("stopped by user — output discarded");
           }
           updateWorkerTelemetryStatus(workerId, "cancelled", { completedAt: now() });
+          updateGoalTelemetryStatus(`goal-${workerId}`, "cancelled", { completedAt: now() });
           return { st, allocation, workerId, res: abortedResult };
         }
 
@@ -730,7 +866,11 @@ export async function startWatchdogSupervision(
     );
 
     // ── PHASE 2: Review every worker's output IN PARALLEL (cheap, no build) ──
-    state.status = "reviewing";
+    // A stop request may have landed while the workers were running: never
+    // review, merge, build, test, or report a verdict for a stopped watchdog.
+    const stoppedResult = stopIfRequested();
+    if (stoppedResult) return stoppedResult;
+    setPhase("reviewing");
     touch("Reviewing all sub-agent outputs in parallel");
 
     const reviewed = await Promise.all(
@@ -743,7 +883,12 @@ export async function startWatchdogSupervision(
         if (!row) return { crashed: true as const, reason: "row missing" };
 
         if (!res.ok) {
-          const cancelled = res.error === "Stopped by user";
+          // The bridge reports a cancelled run as "Aborted by user" while the
+          // local abort path uses "Stopped by user" — both mean the user
+          // stopped it, not that the worker failed. Treat them the same so a
+          // stop never shows up as a red failure in the card.
+          const cancelled =
+            isWorkerAborted(workerId) || /^(stopped|aborted) by user$/i.test(res.error ?? "");
           row.status = cancelled ? "cancelled" : "failed";
           row.reviewNotes.push(res.error ?? "worker failed");
           if (!cancelled) {
@@ -752,6 +897,9 @@ export async function startWatchdogSupervision(
           updateWorkerTelemetryStatus(workerId, cancelled ? "cancelled" : "failed", {
             completedAt: now(),
             error: res.error ?? "worker failed",
+          });
+          updateGoalTelemetryStatus(`goal-${workerId}`, cancelled ? "cancelled" : "failed", {
+            completedAt: now(),
           });
           // A failed worker still has to carry the same shape as a reviewed
           // one: the merge phase reads `reviewIssues`/`changed` off every row.
@@ -775,11 +923,22 @@ export async function startWatchdogSupervision(
           completedAt: now(),
           filesModified: changed,
         });
+        updateGoalTelemetryStatus(`goal-${workerId}`, "completed", { completedAt: now() });
         return { crashed: false as const, workerId, st, allocation, changed, reviewIssues };
       }),
     );
 
     // ── PHASE 3: Merge workers SEQUENTIALLY (git needs a stable order) ──
+    // A stop that landed during review must not merge anything: the user said
+    // stop, so the worktrees go back to the pool untouched.
+    const stoppedBeforeMerge = stopIfRequested();
+    if (stoppedBeforeMerge) {
+      for (const r of reviewed) {
+        if (r.crashed) continue;
+        releaseWorktree(projectRoot, r.allocation);
+      }
+      return stoppedBeforeMerge;
+    }
     const mergeable = reviewed.filter(
       (r): r is Extract<typeof r, { crashed: false }> =>
         !r.crashed && (r.reviewIssues ?? []).length === 0 && r.changed.length > 0,
@@ -819,9 +978,11 @@ export async function startWatchdogSupervision(
     // ── PHASE 3.5: Requirement checklist audit ──
     // Build and tests can pass while a requirement was never implemented.
     // The checklist is traced against the real merged diff.
+    const stoppedBeforeAudit = stopIfRequested();
+    if (stoppedBeforeAudit) return stoppedBeforeAudit;
     let mergedDiff = "";
     if (mergeable.length > 0) {
-      state.status = "reviewing";
+      setPhase("reviewing");
       touch("Auditing requirements against the merged diff");
       mergedDiff = getWorktreeDiff(projectRoot);
       const audit = auditRequirementChecklist(state.checklist, mergedDiff);
@@ -845,7 +1006,7 @@ export async function startWatchdogSupervision(
     if (mergeable.length === 0) {
       touch("Nothing merged — skipping build and tests");
     } else if (buildRequired) {
-      state.status = "building";
+      setPhase("building");
       touch(`Build required — running ${pm} build once for the merged workspace`);
       const buildCmd =
         pm === "pnpm" ? "pnpm run build" : pm === "yarn" ? "yarn build" : "npm run build";
@@ -868,6 +1029,7 @@ export async function startWatchdogSupervision(
           kind: "build",
           model,
           onLog: (m) => log?.(`[Watchdog/repair] ${m}`),
+          abortCheck: () => state.stopped === true || state.status === "cancelled",
         });
         if (repair.ok) {
           const rebuild = runCommand(buildCmd, projectRoot, BUILD_TIMEOUT_MS);
@@ -888,7 +1050,7 @@ export async function startWatchdogSupervision(
     }
 
     if (mergeable.length > 0 && scripts.test) {
-      state.status = "testing";
+      setPhase("testing");
       touch(`Running ${pm} test suite once`);
       const testCmd = pm === "pnpm" ? "pnpm run test" : pm === "yarn" ? "yarn test" : "npm test";
       const test = runCommand(testCmd, projectRoot, BUILD_TIMEOUT_MS);
@@ -909,6 +1071,7 @@ export async function startWatchdogSupervision(
           kind: "test",
           model,
           onLog: (m) => log?.(`[Watchdog/repair] ${m}`),
+          abortCheck: () => state.stopped === true || state.status === "cancelled",
         });
         if (repair.ok) {
           const retest = runCommand(testCmd, projectRoot, BUILD_TIMEOUT_MS);
@@ -932,8 +1095,10 @@ export async function startWatchdogSupervision(
     // The verifier reads the merged diff against the requirement checklist and
     // decides PASS/FAIL. On FAIL the watchdog dispatches a fix sub-agent and
     // verifies once more.
+    const stoppedBeforeVerification = stopIfRequested();
+    if (stoppedBeforeVerification) return stoppedBeforeVerification;
     if (mergeable.length > 0) {
-      state.status = "reviewing";
+      setPhase("reviewing");
       touch("Verification sub-agent checking the requirements");
       const requirements = state.checklist.map((c) => c.requirement);
       const verification = await runVerificationSubAgent({
@@ -944,6 +1109,7 @@ export async function startWatchdogSupervision(
         diff: mergedDiff,
         model,
         onLog: (m) => log?.(`[Watchdog/verify] ${m}`),
+        abortCheck: () => state.stopped === true || state.status === "cancelled",
       });
 
       if (verification.passed) {
@@ -988,6 +1154,8 @@ export async function startWatchdogSupervision(
 
     const completed = state.workers.filter((w) => w.status === "completed").length;
     const total = state.workers.length;
+    const stoppedBeforeVerdict = stopIfRequested();
+    if (stoppedBeforeVerdict) return stoppedBeforeVerdict;
     const failed = state.workers.some((w) => w.status === "failed") || state.issues.length > 0;
 
     state.status = failed ? "failed" : "completed";
@@ -1010,6 +1178,20 @@ export async function startWatchdogSupervision(
     };
   } catch (err: any) {
     const message = err?.message ?? String(err);
+    // A stopped watchdog must not restart itself through the crash self-heal.
+    if (state.stopped) {
+      state.status = "cancelled";
+      state.updatedAt = now();
+      return {
+        ok: false,
+        watchdogId,
+        status: "cancelled",
+        verdict: state.verdict || "Watchdog verdict: stopped by user",
+        workersCompleted: state.workers.filter((w) => w.status === "completed").length,
+        workersTotal: state.workers.length,
+        issues: state.issues,
+      };
+    }
     // Watchdog self-heal #4: if the watchdog itself crashes, it restarts the
     // whole supervision once with a fallback model instead of failing the task.
     const fallback = resolveFallbackModel(model);

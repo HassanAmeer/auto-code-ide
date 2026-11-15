@@ -12,6 +12,8 @@ import {
   listChangedFiles,
   getWatchdogSnapshot,
   stopWatchdog,
+  stopAllWatchdogs,
+  isWatchdogStatusTerminal,
   resolveFallbackModel,
   resolveWorkerLaneModels,
   WATCHDOG_FALLBACK_MODELS,
@@ -175,5 +177,24 @@ describe("watchdog snapshot", () => {
 
   it("does not stop an unknown watchdog", () => {
     expect(stopWatchdog("watchdog-does-not-exist")).toBe(false);
+  });
+
+  it("stopAllWatchdogs reports zero when nothing is supervising", () => {
+    // No live watchdog in this test process — the Stop All path must not throw
+    // and must report a real count.
+    const result = stopAllWatchdogs();
+    expect(typeof result.stoppedWatchdogs).toBe("number");
+    expect(result.stoppedWatchdogs).toBe(0);
+  });
+
+  it("treats completed, failed and cancelled as terminal", () => {
+    expect(isWatchdogStatusTerminal("completed")).toBe(true);
+    expect(isWatchdogStatusTerminal("failed")).toBe(true);
+    expect(isWatchdogStatusTerminal("cancelled")).toBe(true);
+    // A live phase is never terminal — the card keeps polling it.
+    expect(isWatchdogStatusTerminal("watching")).toBe(false);
+    expect(isWatchdogStatusTerminal("reviewing")).toBe(false);
+    expect(isWatchdogStatusTerminal("building")).toBe(false);
+    expect(isWatchdogStatusTerminal("testing")).toBe(false);
   });
 });

@@ -107,6 +107,14 @@ export async function executeOpenCodeTask(opts: {
 
     let filesWrittenCount = 0;
     let llmErrorMessage: string | null = null;
+    // Bridge the watchdog's cooperative `abortCheck` to a real AbortSignal so
+    // the upstream stream is cancelled at the socket, not just flagged after it
+    // finishes. The poll interval keeps the contract identical for callers that
+    // only know about `abortCheck`.
+    const abortController = new AbortController();
+    const abortPoll = setInterval(() => {
+      if (opts.abortCheck?.()) abortController.abort(new Error("Stopped by user"));
+    }, 250);
     try {
       // Skills come from the PROJECT root (not the worktree) so the system
       // prompt is identical for every worker — that is what lets the provider
@@ -150,6 +158,7 @@ export async function executeOpenCodeTask(opts: {
           model: modelToUse,
           messages,
           maxTokens: Number(process.env.SUPER_AGENT_MAX_TOKENS || 16384),
+          signal: abortController.signal,
         },
         (chunk: string) => {
           streamedContent += chunk;
@@ -213,6 +222,8 @@ export async function executeOpenCodeTask(opts: {
     } catch (llmErr: any) {
       llmErrorMessage = llmErr?.message || String(llmErr);
       onLog?.(`⚠️ Model execution failed: ${llmErrorMessage || "unknown error"}.`);
+    } finally {
+      clearInterval(abortPoll);
     }
 
     const indexPath = NodePath.join(worktreePath, "index.html");
