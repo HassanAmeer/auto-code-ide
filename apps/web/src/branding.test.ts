@@ -47,7 +47,7 @@ describe("branding", () => {
     expect(branding.HOSTED_APP_CHANNEL).toBe("nightly");
     expect(branding.HOSTED_APP_CHANNEL_LABEL).toBe("Nightly");
     expect(branding.APP_STAGE_LABEL).toBe("Nightly");
-    expect(branding.APP_DISPLAY_NAME).toBe("AutoCode (Nightly)");
+    expect(branding.APP_DISPLAY_NAME).toBe("BotCode (Nightly)");
   });
 
   it("does not label the latest hosted app channel", async () => {
@@ -58,7 +58,16 @@ describe("branding", () => {
     expect(branding.HOSTED_APP_CHANNEL).toBe("latest");
     expect(branding.HOSTED_APP_CHANNEL_LABEL).toBe("Latest");
     expect(branding.APP_STAGE_LABEL).toBe("Latest");
-    expect(branding.APP_DISPLAY_NAME).toBe("AutoCode");
+    expect(branding.APP_DISPLAY_NAME).toBe("BotCode");
+  });
+
+  it("formats display version consistently with v prefix", async () => {
+    const { formatDisplayVersion } = await import("./branding");
+    expect(formatDisplayVersion("1.0.0")).toBe("v1.0");
+    expect(formatDisplayVersion("1.0")).toBe("v1.0");
+    expect(formatDisplayVersion("v1.0")).toBe("v1.0");
+    expect(formatDisplayVersion("2.1.0")).toBe("v2.1");
+    expect(formatDisplayVersion("1.2.3")).toBe("v1.2.3");
   });
 
   it("ignores unknown hosted app channels", async () => {

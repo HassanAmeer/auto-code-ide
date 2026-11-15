@@ -16,6 +16,7 @@ import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { useNotes, useNotesSheetState } from "../../lib/notesStore";
 import { useImportSessionStore } from "../chat/importSessionStore";
 
+import { APP_VERSION, formatDisplayVersion } from "../../branding";
 import { useEnvironmentIdentificationMode } from "../../hooks/useSettings";
 import { cn } from "../../lib/utils";
 import { usePullRequestsSupported } from "../../state/environments";
@@ -129,7 +130,7 @@ function SidebarBrand({ onBackdrop }: { onBackdrop: boolean }) {
     <Link
       aria-label="Go to threads"
       className={cn(
-        "relative z-10 ml-[var(--workspace-titlebar-content-left)] hidden h-7 w-fit min-w-0 shrink-0 items-center overflow-hidden rounded-md outline-hidden ring-ring focus-visible:ring-2 md:flex",
+        "relative z-10 ml-[var(--workspace-titlebar-content-left)] flex h-7 w-fit min-w-0 shrink-0 items-center overflow-hidden rounded-md outline-hidden ring-ring focus-visible:ring-2",
         onBackdrop ? "text-white" : "text-foreground",
       )}
       to="/"
@@ -140,6 +141,7 @@ function SidebarBrand({ onBackdrop }: { onBackdrop: boolean }) {
 }
 
 function SidebarBrandMark({ onBackdrop }: { onBackdrop: boolean }) {
+  const displayVersion = formatDisplayVersion(APP_VERSION);
   return (
     <span className="inline-flex min-w-0 items-center gap-1.5 text-sm font-semibold tracking-tight">
       <AutoCodeIcon aria-label="BotCode" className="h-4 w-4 shrink-0 text-foreground" />
@@ -153,6 +155,17 @@ function SidebarBrandMark({ onBackdrop }: { onBackdrop: boolean }) {
         >
           Code
         </span>
+      </span>
+      <span
+        data-app-version={displayVersion}
+        className={cn(
+          "inline-flex items-center rounded border px-1.5 py-0.25 text-[10px] font-mono font-medium tracking-tight select-none",
+          onBackdrop
+            ? "border-white/15 bg-white/10 text-white/70"
+            : "border-border/50 bg-muted/70 text-muted-foreground",
+        )}
+      >
+        {displayVersion}
       </span>
     </span>
   );

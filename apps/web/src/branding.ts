@@ -29,3 +29,9 @@ export const APP_DISPLAY_NAME =
   injectedDesktopAppBranding?.displayName ??
   formatAppDisplayName({ baseName: APP_BASE_NAME, stageLabel: APP_STAGE_LABEL });
 export const APP_VERSION = import.meta.env.APP_VERSION || "1.0";
+
+export function formatDisplayVersion(version: string = APP_VERSION): string {
+  if (!version) return "v1.0";
+  const clean = version.startsWith("v") ? version : `v${version}`;
+  return clean.replace(/^v(\d+\.\d+)\.0$/, "v$1");
+}

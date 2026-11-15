@@ -25,6 +25,7 @@ import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../termina
 import { resolveThreadRouteRef } from "../threadRoutes";
 import { cn, isMacPlatform } from "../lib/utils";
 import { primaryServerKeybindingsAtom } from "../state/server";
+import { APP_VERSION, formatDisplayVersion } from "../branding";
 import { useEnvironmentIdentificationMode, useLegacySidebarEnabled } from "../hooks/useSettings";
 import {
   PanelAnimationSuppressionProvider,
@@ -139,7 +140,7 @@ function SidebarControl() {
     // the panel), so the trigger mirrors it: both clusters sit one extra pixel
     // off their edge and the titlebar reads symmetric.
     <div
-      className="pointer-events-none fixed left-[var(--workspace-controls-left)] top-[var(--workspace-controls-top)] z-50 ml-px flex h-[var(--workspace-topbar-height)] items-center"
+      className="pointer-events-none fixed left-[var(--workspace-controls-left)] top-[var(--workspace-controls-top)] z-50 ml-px flex h-[var(--workspace-topbar-height)] items-center gap-1.5"
       data-sidebar-control=""
     >
       <Tooltip>
@@ -161,6 +162,14 @@ function SidebarControl() {
           Toggle main sidebar{shortcutLabel ? ` (${shortcutLabel})` : ""}
         </TooltipPopup>
       </Tooltip>
+      {!isSidebarVisible && (
+        <span
+          data-app-version={formatDisplayVersion(APP_VERSION)}
+          className="pointer-events-none hidden items-center rounded border border-border/50 bg-muted/60 px-1.5 py-0.25 text-[10px] font-mono font-medium text-muted-foreground select-none md:inline-flex"
+        >
+          {formatDisplayVersion(APP_VERSION)}
+        </span>
+      )}
     </div>
   );
 }
