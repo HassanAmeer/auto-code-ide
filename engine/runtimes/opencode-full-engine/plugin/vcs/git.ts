@@ -11,7 +11,7 @@ import { FileDiff } from "@opencode/schema/file-diff";
 import { Base, BranchList, FileStatus, Info, Mode } from "@opencode/schema/vcs";
 import { AppProcess } from "@opencode/util/process";
 import { Location } from "../../location.js";
-import type { Adapter, BranchOptions, DiffOptions } from "../../vcs.js";
+import type { Adapter, BranchOptions, DiffOptions, Untracked } from "../../vcs.js";
 import { DiffError } from "../../vcs.js";
 import { gitExecutable } from "../../util/git-executable.js";
 import {
@@ -56,7 +56,12 @@ export const Plugin = define({
         base: () => adapter.base(),
         branches: (input) => adapter.branches({ search: input.search, limit: input.limit }),
         status: () => adapter.status(),
-        diff: (input) => adapter.diff(input.mode, { context: input.context, base: input.base }),
+        diff: (input) =>
+          adapter.diff(input.mode, {
+            context: input.context,
+            base: input.base,
+            untracked: input.untracked,
+          }),
       });
     });
   }),
@@ -96,7 +101,7 @@ function make(proc: AppProcess.Interface, input: { directory: string; worktree: 
       const ref = (yield* git.hasHead(ctx.directory)) ? "HEAD" : undefined;
       const [list, stats] = yield* Effect.all(
         [
-          git.status(ctx.directory),
+          statusItems(ctx).pipe(Effect.map((result) => result.list)),
           ref ? git.stats(ctx.directory, ref) : Effect.succeed([] as Stat[]),
         ],
         { concurrency: 2 },
@@ -213,18 +218,19 @@ const numstat = (text: string) =>
     if (a === -1 || b === -1) return [];
     const file = item.slice(b + 1);
     if (!file) return [];
-    const adds = item.slice(0, a);
-    const dels = item.slice(a + 1, b);
-    const additions = adds === "-" ? 0 : Number.parseInt(adds || "0", 10);
-    const deletions = dels === "-" ? 0 : Number.parseInt(dels || "0", 10);
     return [
       {
         file,
-        additions: Number.isFinite(additions) ? additions : 0,
-        deletions: Number.isFinite(deletions) ? deletions : 0,
+        additions: count(item.slice(0, a)),
+        deletions: count(item.slice(a + 1, b)),
       } satisfies Stat,
     ];
   });
+
+const count = (value: string) => {
+  const parsed = value === "-" ? 0 : Number.parseInt(value || "0", 10);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
 
 function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
   const run = Effect.fnUntraced(
@@ -280,21 +286,22 @@ function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
   });
 
   const branches = Effect.fn("VcsGit.branches")(function* (cwd: string, options?: BranchOptions) {
-    const search = options?.search?.trim().replace(/[*?[\]\\]/g, "\\$&");
+    const search = options?.search?.trim().toLowerCase();
+    // `refname:short` collapses `refs/remotes/<remote>/HEAD` to the bare remote name, so strip the namespace
+    // instead. Search and limit apply here because ref globs cannot cross `/` and `--count` precedes the filter.
     return (yield* lines(
       [
         "for-each-ref",
-        "--ignore-case",
         "--sort=refname",
         "--sort=-committerdate",
-        "--format=%(refname:short)",
-        ...(options?.limit ? [`--count=${options.limit}`] : []),
-        ...(search
-          ? [`refs/heads/*${search}*`, `refs/remotes/*${search}*`]
-          : ["refs/heads", "refs/remotes"]),
+        "--format=%(refname:lstrip=2)",
+        "refs/heads",
+        "refs/remotes",
       ],
       { cwd },
-    )).filter((item) => !item.endsWith("/HEAD")) satisfies BranchList;
+    ))
+      .filter((item) => !item.endsWith("/HEAD") && (!search || item.toLowerCase().includes(search)))
+      .slice(0, options?.limit) satisfies BranchList;
   });
 
   const defaultBranch = Effect.fn("VcsGit.defaultBranch")(function* (cwd: string) {
@@ -311,7 +318,9 @@ function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
       }
     }
 
-    const list = yield* lines(["for-each-ref", "--format=%(refname:short)", "refs/heads"], { cwd });
+    const list = yield* lines(["for-each-ref", "--format=%(refname:lstrip=2)", "refs/heads"], {
+      cwd,
+    });
     const next = yield* configured(cwd, list);
     if (next) return next;
     if (list.includes("main")) return { name: "main", ref: "main" };
@@ -400,10 +409,23 @@ function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
     return result.text().trim() || undefined;
   });
 
-  const status = Effect.fn("VcsGit.statusNames")(function* (cwd: string) {
+  const status = Effect.fn("VcsGit.statusNames")(function* (
+    cwd: string,
+    untracked: "normal" | "all" = "normal",
+    names?: readonly string[],
+  ) {
+    const pathspecs = names ? names.map((name) => `:(literal)${name}`) : ["."];
     return nuls(
       yield* text(
-        ["status", "--porcelain=v1", "--untracked-files=all", "--no-renames", "-z", "--", "."],
+        [
+          "status",
+          "--porcelain=v1",
+          `--untracked-files=${untracked}`,
+          "--no-renames",
+          "-z",
+          "--",
+          ...pathspecs,
+        ],
         { cwd },
       ),
     ).flatMap((item) => {
@@ -459,30 +481,44 @@ function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
     );
   });
 
+  const diffPatch = Effect.fnUntraced(function* (
+    cwd: string,
+    args: string[],
+    options: PatchOptions | undefined,
+    mode: { dropTruncated: boolean; noIndex?: boolean },
+  ) {
+    const result = yield* run(
+      [
+        "diff",
+        ...(mode.noIndex ? ["--no-index"] : []),
+        "--patch",
+        "--no-ext-diff",
+        "--no-renames",
+        `--unified=${options?.context ?? 3}`,
+        ...args,
+      ],
+      { cwd, maxOutputBytes: options?.maxOutputBytes },
+    );
+    return {
+      text: mode.dropTruncated && result.truncated ? "" : result.text(),
+      truncated: result.truncated,
+    } satisfies Patch;
+  });
+
   const patch = Effect.fn("VcsGit.patch")(function* (
     cwd: string,
     ref: string,
     file: string,
     options?: PatchOptions,
   ) {
-    const result = yield* run(
-      [
-        "diff",
-        "--patch",
-        "--no-ext-diff",
-        "--no-renames",
-        `--unified=${options?.context ?? 3}`,
-        ref,
-        ...(options?.target ? [options.target] : []),
-        "--",
-        file,
-      ],
-      { cwd, maxOutputBytes: options?.maxOutputBytes },
+    return yield* diffPatch(
+      cwd,
+      [ref, ...(options?.target ? [options.target] : []), "--", file],
+      options,
+      {
+        dropTruncated: true,
+      },
     );
-    return {
-      text: result.truncated ? "" : result.text(),
-      truncated: result.truncated,
-    } satisfies Patch;
   });
 
   const patchAll = Effect.fn("VcsGit.patchAll")(function* (
@@ -490,21 +526,14 @@ function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
     ref: string,
     options?: PatchOptions,
   ) {
-    const result = yield* run(
-      [
-        "diff",
-        "--patch",
-        "--no-ext-diff",
-        "--no-renames",
-        `--unified=${options?.context ?? 3}`,
-        ref,
-        ...(options?.target ? [options.target] : []),
-        "--",
-        ".",
-      ],
-      { cwd, maxOutputBytes: options?.maxOutputBytes },
+    return yield* diffPatch(
+      cwd,
+      [ref, ...(options?.target ? [options.target] : []), "--", "."],
+      options,
+      {
+        dropTruncated: false,
+      },
     );
-    return { text: result.text(), truncated: result.truncated } satisfies Patch;
   });
 
   const patchUntracked = Effect.fn("VcsGit.patchUntracked")(function* (
@@ -512,27 +541,16 @@ function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
     file: string,
     options?: PatchOptions,
   ) {
-    const result = yield* run(
-      [
-        "diff",
-        "--no-index",
-        "--patch",
-        "--no-ext-diff",
-        "--no-renames",
-        `--unified=${options?.context ?? 3}`,
-        "--",
-        "/dev/null",
-        file,
-      ],
-      { cwd, maxOutputBytes: options?.maxOutputBytes },
-    );
-    return {
-      text: result.truncated ? "" : result.text(),
-      truncated: result.truncated,
-    } satisfies Patch;
+    // A folder entry has no patch of its own.
+    if (file.endsWith("/")) return { text: "", truncated: false } satisfies Patch;
+    return yield* diffPatch(cwd, ["--", "/dev/null", file], options, {
+      dropTruncated: true,
+      noIndex: true,
+    });
   });
 
   const statUntracked = Effect.fn("VcsGit.statUntracked")(function* (cwd: string, file: string) {
+    if (file.endsWith("/")) return;
     const result = yield* run(["diff", "--no-index", "--numstat", "--", "/dev/null", file], {
       cwd,
       maxOutputBytes: 4096,
@@ -542,13 +560,7 @@ function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
     const parts = result.text().split("\t");
     if (parts.length < 2) return;
 
-    const additions = parts[0] === "-" ? 0 : Number.parseInt(parts[0] || "0", 10);
-    const deletions = parts[1] === "-" ? 0 : Number.parseInt(parts[1] || "0", 10);
-    return {
-      file,
-      additions: Number.isFinite(additions) ? additions : 0,
-      deletions: Number.isFinite(deletions) ? deletions : 0,
-    } satisfies Stat;
+    return { file, additions: count(parts[0]), deletions: count(parts[1]) } satisfies Stat;
   });
 
   // Paths are literal so names containing pathspec magic such as `*` or `[` match only themselves.
@@ -580,11 +592,7 @@ function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
     cwd: string,
     options?: PatchOptions,
   ) {
-    const result = yield* run(
-      ["diff", "--patch", "--no-ext-diff", "--no-renames", `--unified=${options?.context ?? 3}`],
-      { cwd, maxOutputBytes: options?.maxOutputBytes },
-    );
-    return { text: result.text(), truncated: result.truncated } satisfies Patch;
+    return yield* diffPatch(cwd, [], options, { dropTruncated: false });
   });
 
   return {
@@ -691,6 +699,72 @@ const untrackedBatch = Effect.fnUntraced(function* (
       ),
   );
 });
+
+/** Entries a folder listing shows, and checks per Git call. */
+const MAX_FOLDER_ENTRIES = 500;
+
+/** Entries, and time, a folder listing spends checking before it stops and reports that more were not checked. */
+const MAX_FOLDER_SCAN = 5_000;
+const MAX_FOLDER_SCAN_MS = 1_000;
+
+/**
+ * Untracked files, one by one unless the caller asks for folders. With folders, Git lists an untracked folder as one
+ * `dir/` entry, as `git status` shows it, and a directory inside such a folder lists only its immediate entries, with
+ * its subfolders again as one entry each.
+ */
+const statusItems = Effect.fnUntraced(function* (ctx: Ctx, untracked: Untracked = "files") {
+  if (untracked === "files")
+    return { list: yield* ctx.git.status(ctx.directory, "all"), more: undefined };
+
+  const list = yield* ctx.git.status(ctx.directory);
+  const prefix = path.relative(ctx.worktree, ctx.directory).split(path.sep).join("/");
+  if (
+    !prefix ||
+    !list.some(
+      (item) => item.code === "??" && item.file.endsWith("/") && `${prefix}/`.startsWith(item.file),
+    )
+  )
+    return { list, more: undefined };
+
+  const names = yield* Effect.promise(() =>
+    fs.readdir(ctx.directory).then((items) => items.toSorted()),
+  );
+  // Ignored entries do not list, so check entries a batch at a time until the listing fills, the folder runs out, or
+  // the scan budget does.
+  const entries: Item[] = [];
+  const started = Date.now();
+  let checked = 0;
+  while (
+    checked < names.length &&
+    entries.length < MAX_FOLDER_ENTRIES &&
+    checked < MAX_FOLDER_SCAN &&
+    Date.now() - started < MAX_FOLDER_SCAN_MS
+  ) {
+    const batch = names.slice(checked, checked + MAX_FOLDER_ENTRIES);
+    checked += batch.length;
+    entries.push(...(yield* ctx.git.status(ctx.directory, "normal", batch)));
+  }
+  return {
+    list: entries.slice(0, MAX_FOLDER_ENTRIES),
+    more: entries.length > MAX_FOLDER_ENTRIES || checked < names.length ? `${prefix}/` : undefined,
+  };
+});
+
+/** A folder listing that stopped early ends with an entry for the folder itself, marked `more`. */
+const withMore = (rows: FileDiff.Info[], folder: string | undefined) =>
+  folder === undefined
+    ? rows
+    : [
+        ...rows,
+        {
+          file: folder,
+          patch: "",
+          additions: 0,
+          deletions: 0,
+          status: "added" as const,
+          more: true as const,
+        },
+      ];
 
 const nums = (list: Stat[]) =>
   new Map(
@@ -836,21 +910,24 @@ const diffAgainstRef = Effect.fnUntraced(function* (
     [
       ctx.git.diff(ctx.directory, ref, options?.target),
       ctx.git.stats(ctx.directory, ref, options?.target),
-      options?.target ? Effect.succeed([]) : ctx.git.status(ctx.directory),
+      options?.target
+        ? Effect.succeed({ list: [], more: undefined })
+        : statusItems(ctx, options?.untracked),
     ],
     { concurrency: 3 },
   );
-  return yield* files(
+  const rows = yield* files(
     ctx,
     ref,
     merge(
       list,
-      extra.filter((item) => item.code === "??"),
+      extra.list.filter((item) => item.code === "??"),
     ),
     nums(stats),
     yield* batchPatches(ctx, ref, list, options),
     options,
   );
+  return withMore(rows, extra.more);
 });
 
 const track = Effect.fnUntraced(function* (
@@ -858,14 +935,12 @@ const track = Effect.fnUntraced(function* (
   ref: string | undefined,
   options?: DiffOptions,
 ) {
-  if (!ref)
-    return yield* files(
-      ctx,
-      ref,
-      yield* ctx.git.status(ctx.directory),
-      new Map(),
-      emptyBatch(),
-      options,
+  if (!ref) {
+    const status = yield* statusItems(ctx, options?.untracked);
+    return withMore(
+      yield* files(ctx, ref, status.list, new Map(), emptyBatch(), options),
+      status.more,
     );
+  }
   return yield* diffAgainstRef(ctx, ref, options);
 });

@@ -72,9 +72,7 @@ export const Plugin = {
               .assert({
                 action: "question",
                 resources: ["*"],
-                sessionID: context.sessionID,
-                agent: context.agent,
-                source: { type: "tool", messageID: context.messageID, id: context.id },
+                ...Permission.invocation(context),
               })
               .pipe(
                 Effect.mapError(

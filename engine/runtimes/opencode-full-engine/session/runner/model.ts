@@ -4,11 +4,13 @@ import { makeLocationNode } from "@opencode/util/effect/app-node";
 import { LanguageModel } from "@opencode/ai/effect";
 import { Model } from "@opencode/schema/model";
 import { Provider } from "@opencode/schema/provider";
-import { Context, Effect, Layer, Scope, Schema } from "effect";
+import { Context, Effect, Layer, Schema } from "effect";
+import type { SessionRequestKind } from "@opencode/plugin/effect/session";
 import { Agent } from "../../agent.js";
 import { CustomProviders } from "../../custom-providers.js";
 import { Model as RuntimeModel } from "../../model.js";
 import { ModelResolver } from "../../model-resolver.js";
+import { PluginHooks } from "../../plugin/hooks.js";
 import { Provider as RuntimeProvider } from "../../provider.js";
 import { SessionSchema } from "../schema.js";
 
@@ -41,6 +43,7 @@ export interface Interface {
   readonly resolve: (
     session: SessionSchema.Info,
     available: () => Effect.Effect<ReadonlyArray<Model.Info>>,
+    request: { readonly kind: SessionRequestKind; readonly agent: Agent.ID },
   ) => Effect.Effect<Resolved, Error>;
 }
 
@@ -79,45 +82,70 @@ const layer = Layer.effect(
     const scope = yield* Effect.scope;
     const resolver = yield* ModelResolver.Service;
     const agents = yield* Agent.Service;
-    const catalog = yield* RuntimeProvider.Service;
-    const models = yield* RuntimeModel.Service;
-    return Service.of({
-      resolve: Effect.fn("SessionRunnerModel.resolve")(function* (session, available) {
-        // Location plugins populate and filter the catalog asynchronously during layer startup.
-        if (!session.model) {
-          const agent = (yield* agents.select(session.agent)).info?.model;
-          const preferred =
-            agent &&
-            (yield* available()).find(
-              (model) => model.providerID === agent.providerID && model.id === agent.id,
-            );
-          const resolved = preferred
-            ? yield* resolver.resolveModel(preferred, agent.variant)
-            : yield* resolver.resolve();
-          if (resolved) return resolved;
-          return yield* new ModelNotSelectedError({ sessionID: session.id });
-        }
-        const find = Effect.fn("SessionRunnerModel.findSelected")(function* () {
-          return (yield* available()).find(
-            (candidate) =>
-              candidate.providerID === session.model?.providerID &&
-              candidate.id === session.model?.id,
-          );
-        });
-        let selected = yield* find();
-        if (!selected) {
+    const hooks = yield* PluginHooks.Service;
+    const providers = yield* RuntimeProvider.Service;
+    const catalog = yield* RuntimeModel.Service;
+    // Location plugins populate and filter the catalog asynchronously during layer startup.
+    const select = Effect.fn("SessionRunnerModel.select")(function* (
+      session: SessionSchema.Info,
+      available: () => Effect.Effect<ReadonlyArray<Model.Info>>,
+    ) {
+      const find = (ref: Model.Ref) =>
+        available().pipe(
+          Effect.map((models) =>
+            models.find((model) => model.providerID === ref.providerID && model.id === ref.id),
+          ),
+        );
+      if (session.model) {
+        let info = yield* find(session.model);
+        if (!info) {
           // The app can register custom providers while the server is running; pull the
           // selection from its storage on demand instead of failing until a restart.
-          if (yield* CustomProviders.ensure(session.model.providerID, catalog, models, scope)) {
-            selected = yield* find();
+          if (yield* CustomProviders.ensure(session.model.providerID, providers, catalog, scope)) {
+            info = yield* find(session.model);
           }
         }
-        if (!selected)
-          return yield* new ModelUnavailableError({
-            providerID: session.model.providerID,
-            modelID: session.model.id,
-          });
-        return yield* resolver.resolveModel(selected, session.model.variant);
+        if (info) return { info, variant: session.model.variant };
+        return yield* new ModelUnavailableError({
+          providerID: session.model.providerID,
+          modelID: session.model.id,
+        });
+      }
+      const agent = (yield* agents.select(session.agent)).info?.model;
+      const preferred = agent && (yield* find(agent));
+      if (preferred) return { info: preferred, variant: agent.variant };
+      const info = yield* resolver.fallback();
+      if (info) return { info, variant: undefined };
+      return yield* new ModelNotSelectedError({ sessionID: session.id });
+    });
+    return Service.of({
+      resolve: Effect.fn("SessionRunnerModel.resolve")(function* (session, available, request) {
+        const selected = yield* select(session, available);
+        const ref = Model.Ref.make({
+          providerID: selected.info.providerID,
+          id: selected.info.id,
+          ...(selected.variant === undefined ? {} : { variant: selected.variant }),
+        });
+        const model = (yield* hooks.trigger("session", "experimental.model.resolve", {
+          sessionID: session.id,
+          agent: request.agent,
+          kind: request.kind,
+          model: ref,
+        })).model;
+        if (
+          model.providerID === ref.providerID &&
+          model.id === ref.id &&
+          model.variant === ref.variant
+        )
+          return yield* resolver.resolveModel(selected.info, selected.variant);
+        // Same provider only: the model may be hidden from the picker, and its credentials and hooks stay the selection's.
+        const resolved =
+          model.providerID === ref.providerID ? yield* resolver.resolve(model) : undefined;
+        if (resolved) return resolved;
+        return yield* new ModelUnavailableError({
+          providerID: model.providerID,
+          modelID: model.id,
+        });
       }),
     });
   }),
@@ -126,5 +154,5 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [ModelResolver.node, Agent.node, RuntimeProvider.node, RuntimeModel.node],
+  deps: [ModelResolver.node, Agent.node, PluginHooks.node, RuntimeProvider.node, RuntimeModel.node],
 });

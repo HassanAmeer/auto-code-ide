@@ -3946,7 +3946,7 @@ export const layerEngineStatusRoute = HttpRouter.add(
       ok: true,
       activeEngine,
       engineName: "OpenCode Full Engine",
-      version: "2.0.0-embedded",
+      version: "2.3.0-embedded",
       standalone: true,
       runtimeMode: "embedded-standalone",
       memoryFootprint: "~45MB - 60MB RAM",
@@ -4051,7 +4051,7 @@ export const layerEngineTestRoute = HttpRouter.add(
     return HttpServerResponse.jsonUnsafe({
       ok: toolExecution === "pass" && fileOps === "pass",
       engine: "OpenCode Full Engine",
-      version: "2.0.0-embedded",
+      version: "2.3.0-embedded",
       standalone: true,
       durationMs,
       checks: {

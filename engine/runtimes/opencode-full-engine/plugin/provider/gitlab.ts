@@ -1,19 +1,21 @@
 import os from "os";
 import { App } from "../../app.js";
-import { Clock, Deferred, Effect, Exit, Option, Schema, Semaphore, Stream } from "effect";
+import { Clock, Deferred, Effect, Equal, Exit, Option, Schema, Semaphore } from "effect";
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 import type { Server, ServerResponse } from "node:http";
 import { define } from "@opencode/plugin/effect/plugin";
 import { Form } from "@opencode/schema/form";
 import type { DiscoveredWorkflowModel } from "gitlab-ai-provider";
-import { Bus } from "../../bus.js";
 import { Credential } from "../../credential.js";
 import { Integration } from "../../integration.js";
 import { IntegrationConnection } from "../../integration/connection.js";
 import { Model } from "../../model.js";
 import { OauthCallbackPage } from "../../oauth/page.js";
+import { OauthRedirect } from "../../oauth/redirect.js";
 import { Provider } from "../../provider.js";
 import type { PluginInternal } from "../internal.js";
+import { credentialSettings, metadataSettings } from "./credential-settings.js";
+import { ProviderRefresh } from "./refresh.js";
 
 const providerID = Provider.ID.gitlab;
 const integrationID = Integration.ID.make("gitlab");
@@ -60,7 +62,6 @@ export const GitLabPlugin = define({
   id: "opencode.provider.gitlab",
   effect: Effect.fn(function* (ctx) {
     const providers = yield* Provider.Service;
-    const bus = yield* Bus.Service;
     const http = yield* HttpClient.HttpClient;
     const loading = Semaphore.makeUnsafe(1);
     const loaded: {
@@ -78,9 +79,10 @@ export const GitLabPlugin = define({
             .pipe(Effect.orElseSucceed(() => undefined))
         : undefined;
       if (!stored || !credential || credential.type === "external") {
+        const changed = loaded.models !== undefined || loaded.connection !== undefined;
         loaded.models = undefined;
         loaded.connection = undefined;
-        return;
+        return changed;
       }
 
       const provider = yield* providers.get(providerID);
@@ -130,9 +132,13 @@ export const GitLabPlugin = define({
         IntegrationConnection.key(connection) !==
         IntegrationConnection.key(yield* ctx.integration.connection.active(integrationID))
       )
-        return;
+        return false;
+      const changed =
+        !Equal.equals(remote?.models, loaded.models) ||
+        !Equal.equals(connection, loaded.connection);
       loaded.models = remote?.models;
       loaded.connection = connection;
+      return changed;
     });
 
     yield* ctx.integration.transform((editor) => {
@@ -211,8 +217,9 @@ export const GitLabPlugin = define({
               "base64url",
             );
 
+            // `response` is the browser's pending callback request; a pasted redirect has none.
             const callback = yield* Deferred.make<
-              { code: string; response: ServerResponse },
+              { code: string; response?: ServerResponse },
               Error
             >();
             const { createServer } = yield* Effect.promise(() => import("node:http"));
@@ -266,7 +273,7 @@ export const GitLabPlugin = define({
                 const respond = (error?: string) =>
                   Effect.sync(() =>
                     request.response
-                      .writeHead(error ? 400 : 200, { "Content-Type": "text/html" })
+                      ?.writeHead(error ? 400 : 200, { "Content-Type": "text/html" })
                       .end(
                         error
                           ? OauthCallbackPage.error(error, { provider: "GitLab" })
@@ -289,15 +296,24 @@ export const GitLabPlugin = define({
                   Effect.tap(() => respond()),
                   Effect.tapError((error) => respond(error.message)),
                   // Bun's server.closeAllConnections() leaves an unanswered callback response pending.
-                  Effect.onInterrupt(() => Effect.sync(() => request.response.destroy())),
+                  Effect.onInterrupt(() => Effect.sync(() => request.response?.destroy())),
                 );
               }),
+              submit: OauthRedirect.submit({ state, callback, received: (code) => ({ code }) }),
             };
           }),
       });
     });
 
+    // An OAuth login pins the instance it was issued against, so requests go there too.
+    const login = yield* credentialSettings(ctx, integrationID, (value) =>
+      value.type === "oauth" ? metadataSettings(value.metadata, ["instanceUrl"]) : {},
+    );
     yield* ctx.provider.transform((editor) => {
+      if (login.settings.instanceUrl && editor.get(providerID))
+        editor.update(providerID, (provider) => {
+          provider.settings = { ...provider.settings, ...login.settings };
+        });
       const item = editor.get(providerID);
       if (!item || !loaded.models?.length) return;
       editor.add({
@@ -318,13 +334,11 @@ export const GitLabPlugin = define({
         ],
       });
     });
-    const refresh = () => loading.withPermit(load().pipe(Effect.andThen(ctx.provider.reload())));
-    yield* bus.subscribe(Credential.Event.Switched).pipe(
-      Stream.filter((event) => event.data.integrationID === integrationID),
-      Stream.runForEach(refresh),
-      Effect.forkScoped({ startImmediately: true }),
+    const refresh = loading.withPermit(
+      ProviderRefresh.reloadIfChanged(load(), ctx.provider.reload()),
     );
-    yield* refresh().pipe(Effect.forkScoped);
+    yield* ProviderRefresh.onSwitch(integrationID, refresh);
+    yield* refresh.pipe(Effect.forkScoped);
 
     yield* ctx.aisdk.hook(
       "sdk",
@@ -355,7 +369,6 @@ export const GitLabPlugin = define({
     yield* ctx.aisdk.hook(
       "language",
       Effect.fn(function* (evt) {
-        if (evt.model.providerID !== Provider.ID.gitlab) return;
         const featureFlags =
           typeof evt.options.featureFlags === "object" && evt.options.featureFlags
             ? evt.options.featureFlags
@@ -384,6 +397,7 @@ export const GitLabPlugin = define({
           featureFlags,
         });
       }),
+      { providerID: Provider.ID.gitlab },
     );
   }),
 } satisfies PluginInternal.InternalPlugin);

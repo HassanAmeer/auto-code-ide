@@ -36,6 +36,7 @@ export const mergeCapabilities = (
   const fallback = base ?? Capabilities.default();
   return {
     tools: config.tools ?? fallback.tools,
+    freeform: (config.freeform ?? base?.freeform)?.slice(),
     input: [...(config.input ?? fallback.input)],
     output: [...(config.output ?? fallback.output)],
     temperature: config.temperature ?? base?.temperature,
@@ -43,6 +44,9 @@ export const mergeCapabilities = (
 };
 
 export const Cost = Model.Cost;
+
+export const Type = Model.Type;
+export type Type = Model.Type;
 
 export const Ref = Model.Ref;
 export type Ref = typeof Ref.Type;
@@ -81,7 +85,8 @@ export interface Editor {
 export interface Interface extends State.Transformable<Editor> {
   readonly get: (providerID: Provider.ID, modelID: ID) => Effect.Effect<Info | undefined>;
   readonly all: () => Effect.Effect<readonly Info[]>;
-  readonly available: () => Effect.Effect<readonly Info[]>;
+  /** Enabled models of the given types, chat when none are given. Only chat models are offered for sessions. */
+  readonly available: (types?: readonly Model.Type[]) => Effect.Effect<readonly Info[]>;
   readonly default: () => Effect.Effect<Info | undefined>;
   readonly small: (providerID: Provider.ID) => Effect.Effect<Info | undefined>;
 }
@@ -155,6 +160,7 @@ const layer = Layer.effect(
             model.providerID = providerID;
             const provider = input?.records.get(providerID)?.provider;
             AISDKNative.rewrite(model, {
+              builtins: Provider.builtinPackages,
               specifier: model.package ?? provider?.package,
               providerID,
               canonical: model.canonical ?? provider?.canonical,
@@ -187,6 +193,7 @@ const layer = Layer.effect(
           data: Data;
           all: readonly Info[];
           available: readonly Info[];
+          other: ReadonlyMap<Model.Type, readonly Info[]>;
           byProvider: ReadonlyMap<Provider.ID, ReadonlyMap<ID, Info>>;
         }
       | undefined;
@@ -240,11 +247,30 @@ const layer = Layer.effect(
             byProvider.get(providerID)?.forEach((model, id, models) => {
               if (!model.cost.some((cost) => cost.input > 0)) models.delete(id);
             });
+        // Non-chat models (image, decision…) only show up when listed by type, so nothing that
+        // picks or resolves a session model can reach them.
+        const other = new Map<Model.Type, Info[]>();
+        byProvider.forEach((models) =>
+          models.forEach((model, id) => {
+            if ((model.type ?? "chat") === "chat") return;
+            models.delete(id);
+            if (model.enabled) other.set(model.type!, [...(other.get(model.type!) ?? []), model]);
+          }),
+        );
         const all = Array.from(byProvider.values())
           .flatMap((models) => Array.from(models.values()))
           .sort((left, right) => right.time.released - left.time.released);
+        other.forEach((models) =>
+          models.sort((left, right) => right.time.released - left.time.released),
+        );
         cached = freeze(
-          { data, all, available: preferFree(all.filter((model) => model.enabled)), byProvider },
+          {
+            data,
+            all,
+            available: preferFree(all.filter((model) => model.enabled)),
+            other,
+            byProvider,
+          },
           true,
         );
         return cached;
@@ -284,8 +310,16 @@ const layer = Layer.effect(
         read().pipe(Effect.map((value) => value.byProvider.get(providerID)?.get(modelID))),
       ),
       all: Effect.fn("Model.all")(() => read().pipe(Effect.map((value) => value.all))),
-      available: Effect.fn("Model.available")(() =>
-        read().pipe(Effect.map((value) => value.available)),
+      available: Effect.fn("Model.available")((types?: readonly Model.Type[]) =>
+        read().pipe(
+          Effect.map((value) =>
+            types === undefined || types.length === 0
+              ? value.available
+              : [...new Set(types)].flatMap((type) =>
+                  type === "chat" ? value.available : (value.other.get(type) ?? []),
+                ),
+          ),
+        ),
       ),
       default: Effect.fn("Model.default")(function* () {
         const value = yield* read();

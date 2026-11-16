@@ -52,7 +52,9 @@ export function importLegacyCredentials(
     if (content === undefined) return;
     const input = Option.getOrUndefined(decodeJson(content));
     if (typeof input !== "object" || input === null || Array.isArray(input)) {
-      return yield* Effect.fail(new Error("Legacy credential file must contain an object"));
+      return yield* Effect.logWarning("Skipped legacy credential file that is not a JSON object", {
+        path: filepath,
+      });
     }
 
     const origins: string[] = [];

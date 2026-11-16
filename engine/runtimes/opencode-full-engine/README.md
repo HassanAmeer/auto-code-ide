@@ -2,6 +2,7 @@
 
 > **[STANDALONE FULL ENGINE]**
 > Yeh folder OpenCode ka **Original OpenCode Full Engine** hai jo seedha upstream open-source repo (`sst/opencode/packages/core`) se extract kiya gaya hai.
+> Abhi yeh **v2.3.0** (release tag `v2.3.0`) ke source ke mutabiq hai.
 > Iske liye kisi bahar ki CLI ya external binary download karne ki zaroorat nahi hai.
 
 ---

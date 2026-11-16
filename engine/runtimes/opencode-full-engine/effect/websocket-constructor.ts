@@ -1,5 +1,5 @@
 // The platform barrel also exposes Redis and its optional native hash loader, which workerd cannot resolve.
-import { NodeWS } from "@effect/platform-node/NodeSocket";
+import { WebSocket as NodeWebSocket } from "@effect/platform-node/NodeWS";
 import { HttpProxyAgent } from "http-proxy-agent";
 import { HttpsProxyAgent } from "https-proxy-agent";
 import { Layer } from "effect";
@@ -81,8 +81,8 @@ const layer = Layer.succeed(Socket.WebSocketConstructor, (url, input) => {
     followRedirects: false,
   };
   return config.protocols
-    ? new NodeWS.WebSocket(url, config.protocols, native)
-    : new NodeWS.WebSocket(url, native);
+    ? new NodeWebSocket(url, config.protocols, native)
+    : new NodeWebSocket(url, native);
 });
 
 export const WebSocketConstructor = { layer, proxy } as const;

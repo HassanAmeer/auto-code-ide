@@ -1,7 +1,7 @@
 // @effect-diagnostics nodeBuiltinImport:off globalConsole:off globalConsoleInEffect:off globalDate:off globalDateInEffect:off globalRandomInEffect:off globalErrorInEffectFailure:off preferSchemaOverJson:off globalFetchInEffect:off anyUnknownInErrorContext:off globalFetch:off globalTimers:off
 /**
  * OpenCode Full Standalone Engine
- * Complete standalone runtime extracted from SST OpenCode core.
+ * Complete standalone runtime extracted from SST OpenCode core (v2.3.0).
  * Contains:
  * - 14 Embedded Tools (read, write, edit, patch, shell, grep, glob, subagent, webfetch, websearch, todo, question, file-diff, mcp-resource)
  * - AST Line/Hunk Diff Engine & Precision Search/Replace
@@ -16,7 +16,7 @@ import * as NodeOS from "node:os";
 import * as NodeChildProcess from "node:child_process";
 
 export const ENGINE_NAME = "OpenCode Full Engine";
-export const ENGINE_VERSION = "2.1.4-embedded";
+export const ENGINE_VERSION = "2.3.0-embedded";
 export const IS_STANDALONE = true;
 
 export interface EngineCapabilities {
