@@ -2285,6 +2285,16 @@ export default function ChatView(props: ChatViewProps) {
   const [autoRetryCancelledBannerKey, setAutoRetryCancelledBannerKey] = useState<string | null>(
     null,
   );
+  // Auto-retry / auto-route state is owned by the thread that failed. The
+  // countdown used to be one global value, so a timer started in thread A kept
+  // running after the user focused thread B and then fired a model switch in B
+  // — silently overriding the model the user had just picked there. Keep the
+  // live thread id and the model the user was on when the countdown started.
+  const activeThreadIdRef = useRef<string | null>(null);
+  const autoRetryBaselineRef = useRef<{
+    threadId: string;
+    modelSelection: ModelSelection | null;
+  } | null>(null);
   const [retryingRunId, setRetryingRunId] = useState<RunId | null>(null);
   const defaultRuntimeMode = resolveProjectSettings(settings, activeThread?.projectId ?? null)
     .settings.defaultRuntimeMode;
@@ -2297,6 +2307,7 @@ export default function ChatView(props: ChatViewProps) {
   const isLocalDraftThread = !isServerThread && localDraftThread !== undefined;
   const canCheckoutPullRequestIntoThread = canWriteSourceControl && isLocalDraftThread;
   const activeThreadId = activeThread?.id ?? null;
+  activeThreadIdRef.current = activeThreadId;
   // Prefer the larger of turn-item-committed ids and projection messages so
   // env lock does not unlock while turn items lag projection hydration.
   const activeMessageCount = isServerThread
@@ -11581,19 +11592,43 @@ export default function ChatView(props: ChatViewProps) {
       try {
         if (!options?.overrideModel) {
           if (isExhausted && autoRetrySettings.autoSwitchModel && nextFallbackCandidate) {
-            retryModelSelection = {
-              instanceId: nextFallbackCandidate.instanceId,
-              model: nextFallbackCandidate.model,
-            };
-            onProviderModelSelect(nextFallbackCandidate.instanceId, nextFallbackCandidate.model, {
-              focusComposer: false,
-            });
-            setAutoRetryAttempt(0);
-            toastManager.add({
-              type: "info",
-              title: "Auto-Routed to Next Model",
-              description: `Model reached ${autoRetrySettings.maxRetries} failed retries. Auto-switched to ${nextFallbackCandidate.displayName}.`,
-            });
+            const baseline = autoRetryBaselineRef.current;
+            const currentSelection =
+              composerRef.current?.getSendContext()?.selectedModelSelection ?? null;
+            // Only auto-route when the user is still on the model that failed.
+            // If they manually picked another model while the countdown ran,
+            // that explicit choice wins — never overwrite it with a fallback.
+            const userChoseDifferentModel =
+              baseline !== null &&
+              baseline.threadId === threadId &&
+              !(
+                baseline.modelSelection?.instanceId === currentSelection?.instanceId &&
+                baseline.modelSelection?.model === currentSelection?.model
+              );
+
+            if (userChoseDifferentModel) {
+              retryModelSelection = currentSelection ?? undefined;
+              setAutoRetryAttempt(0);
+              toastManager.add({
+                type: "info",
+                title: "Using your selected model",
+                description: "Auto-route skipped — you picked a model manually.",
+              });
+            } else {
+              retryModelSelection = {
+                instanceId: nextFallbackCandidate.instanceId,
+                model: nextFallbackCandidate.model,
+              };
+              onProviderModelSelect(nextFallbackCandidate.instanceId, nextFallbackCandidate.model, {
+                focusComposer: false,
+              });
+              setAutoRetryAttempt(0);
+              toastManager.add({
+                type: "info",
+                title: "Auto-Routed to Next Model",
+                description: `Model reached ${autoRetrySettings.maxRetries} failed retries. Auto-switched to ${nextFallbackCandidate.displayName}.`,
+              });
+            }
           } else {
             setAutoRetryAttempt((prev) => prev + 1);
             const sendCtx = composerRef.current?.getSendContext();
@@ -11712,8 +11747,18 @@ export default function ChatView(props: ChatViewProps) {
   useEffect(() => {
     if (!visibleThreadError) {
       setAutoRetryAttempt(0);
+      autoRetryBaselineRef.current = null;
     }
   }, [visibleThreadError, activeThread?.id]);
+
+  // A countdown always belongs to one thread. When focus moves, drop the old
+  // thread's timer/attempt instead of letting it fire in the newly focused chat.
+  useEffect(() => {
+    autoRetryBaselineRef.current = null;
+    setAutoRetryCountdown(null);
+    setAutoRetryAttempt(0);
+    setAutoRetryCancelledBannerKey(null);
+  }, [activeThreadId]);
 
   useEffect(() => {
     const hasError = Boolean(
@@ -11787,13 +11832,24 @@ export default function ChatView(props: ChatViewProps) {
       return;
     }
 
+    const scheduledThreadId = activeThread.id;
+
     if (autoRetryCountdown === null) {
+      // Remember the model the user is actually on right now. If they change it
+      // before the countdown ends, auto-route must not overwrite that choice.
+      autoRetryBaselineRef.current = {
+        threadId: scheduledThreadId,
+        modelSelection: composerRef.current?.getSendContext()?.selectedModelSelection ?? null,
+      };
       setAutoRetryCountdown(Math.max(1, autoRetrySettings.delaySeconds));
       return;
     }
 
     if (autoRetryCountdown <= 1) {
       const timer = setTimeout(() => {
+        // Focus may have moved to another thread while this timer ran. Only the
+        // thread that scheduled it is allowed to retry / auto-route.
+        if (activeThreadIdRef.current !== scheduledThreadId) return;
         setAutoRetryCountdown(null);
         void handleAutoRetryNowRef.current();
       }, 1000);

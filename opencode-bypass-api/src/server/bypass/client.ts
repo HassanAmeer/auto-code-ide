@@ -63,6 +63,19 @@ export interface BypassResponse {
     | undefined;
 }
 
+/**
+ * UI model slugs carry a provider prefix (e.g. `opencode/deepseek-v4.1-flash-free`),
+ * but the upstream free lane only accepts bare model ids. Sending the prefixed
+ * slug makes every model fail with HTTP 400 "Model is unavailable", so strip the
+ * leading `<provider>/` segment before the request leaves the process.
+ */
+export function normalizeBypassModel(model: string): string {
+  const trimmed = String(model ?? "").trim();
+  const slash = trimmed.indexOf("/");
+  const stripped = slash >= 0 ? trimmed.slice(slash + 1) : trimmed;
+  return stripped.length > 0 ? stripped : trimmed;
+}
+
 export function resolveChatEndpoint(baseUrl?: string): string {
   const base = (baseUrl || UPSTREAM_BASE || "https://opencode.ai").trim().replace(/\/+$/, "");
   if (base.endsWith("/chat/completions")) {
@@ -125,7 +138,7 @@ export async function bypassChatStream(
   }
 
   const body = {
-    model: options.model,
+    model: normalizeBypassModel(options.model),
     max_tokens: options.maxTokens ?? 8192,
     messages,
     stream: true,
