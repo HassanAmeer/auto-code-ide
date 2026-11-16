@@ -2025,11 +2025,20 @@ code {
   background: color-mix(in srgb, var(--contrast-border) 78%, transparent);
 }
 
+:is(.chat-markdown, .composer-tiptap) .chat-markdown-codeblock {
+  min-width: 0;
+  max-width: 100%;
+  contain: inline-size;
+}
+
 :is(.chat-markdown, .composer-tiptap) .chat-markdown-codeblock-header {
   color: color-mix(in srgb, var(--contrast-foreground) 72%, transparent);
 }
 
 :is(.chat-markdown, .composer-tiptap) .chat-markdown-codeblock pre {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
   margin: 0;
   border: none;
   border-radius: 0;

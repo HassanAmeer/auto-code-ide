@@ -121,6 +121,10 @@ function pruneWatchdogs(): void {
       watchdogs.delete(id);
     }
   }
+  const finished = Array.from(watchdogs.values())
+    .filter((state) => isWatchdogStatusTerminal(state.status))
+    .sort((a, b) => (b.completedAt ?? b.updatedAt) - (a.completedAt ?? a.updatedAt));
+  for (const state of finished.slice(100)) watchdogs.delete(state.id);
 }
 
 /**
@@ -284,6 +288,9 @@ export function requiresBuild(changedFiles: ReadonlyArray<string>, cwd: string):
 /** Files the worker actually touched (git-aware, not a full glob). */
 export function listChangedFiles(worktreePath: string): string[] {
   try {
+    if (!NodeFS.existsSync(NodePath.join(worktreePath, ".git"))) {
+      return [];
+    }
     const out = NodeChildProcess.execSync("git status --porcelain", {
       cwd: worktreePath,
       encoding: "utf8",
@@ -907,7 +914,7 @@ export async function startWatchdogSupervision(
           const target = state.workers.find((w) => w.id === workerId);
           if (target) {
             const lines = target.logs ?? [];
-            lines.push(m);
+            lines.push(m.slice(-2048));
             // Keep only the newest lines so a long stream cannot grow forever.
             target.logs = lines.slice(-12);
           }
@@ -1339,6 +1346,8 @@ export async function startWatchdogSupervision(
     if (!params.__isRetry && fallback && fallback !== model) {
       state.recoveries += 1;
       state.lastAction = `Watchdog crashed (${message}) — restarting with ${fallback}`;
+      state.status = "failed";
+      state.completedAt = now();
       state.updatedAt = now();
       log?.(`[Watchdog] crashed (${message}) — restarting supervision with ${fallback}`);
       return startWatchdogSupervision({ ...params, model: fallback, __isRetry: true });
@@ -1364,5 +1373,9 @@ export async function startWatchdogSupervision(
     // return). Those ids then stayed in the registry Set for the lifetime of
     // the process. Clear every id this run owned as it finishes.
     for (const worker of state.workers) clearWorkerAbort(worker.id);
+    // Stream buffers are useful only while supervising. Keep the final audit
+    // and worker statuses for history without retaining the streamed payloads.
+    for (const worker of state.workers) worker.logs = [];
+    pruneWatchdogs();
   }
 }

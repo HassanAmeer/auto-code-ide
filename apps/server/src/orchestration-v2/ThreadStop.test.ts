@@ -146,6 +146,37 @@ const threadState = (threadId: ThreadId) =>
     };
   });
 
+it.effect("a late interrupt leaves a completed run unchanged and emits no interrupt item", () =>
+  Effect.gen(function* () {
+    const orchestrator = yield* Orchestrator.OrchestratorV2;
+    const projections = yield* ProjectionStore.ProjectionStoreV2;
+    const threadId = ThreadId.make("thread:late-interrupt");
+    yield* createWatchingThread(threadId, 99);
+    yield* send(threadId, "finish", "start_immediately");
+    const run = (yield* orchestrator.getThreadProjection(threadId)).runs[0]!;
+    const now = yield* DateTime.now;
+    yield* projections.apply({
+      id: EventId.make("event:late-interrupt:completed"),
+      type: "run.updated",
+      threadId,
+      runId: run.id,
+      occurredAt: now,
+      payload: { ...run, status: "completed", startedAt: now, completedAt: now },
+    });
+    for (const suffix of ["first", "retry"]) {
+      yield* orchestrator.dispatch({
+        type: "run.interrupt",
+        commandId: CommandId.make(`late-interrupt:${suffix}`),
+        threadId,
+        runId: run.id,
+      });
+    }
+    const after = yield* orchestrator.getThreadProjection(threadId);
+    assert.equal(after.runs[0]?.status, "completed");
+    assert.isFalse(after.turnItems.some((item) => item.type === "run_interrupt_request"));
+  }).pipe(Effect.provide(layerTest)),
+);
+
 it.effect("Stop ends watches, holds queues, and stops the delegated tasks under the thread", () =>
   Effect.gen(function* () {
     const orchestrator = yield* Orchestrator.OrchestratorV2;

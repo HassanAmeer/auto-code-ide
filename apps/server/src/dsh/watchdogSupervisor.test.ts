@@ -15,15 +15,17 @@ const harness = vi.hoisted(() => {
   const acquired: Array<{ worktreePath: string; branchName: string; isIsolated: boolean }> = [];
   const released: string[] = [];
   const modelCalls: string[] = [];
-  return { acquired, released, modelCalls };
+  return { acquired, released, modelCalls, logMessage: "" };
 });
 
 vi.mock("./opencodeBridge.ts", () => ({
   executeOpenCodeTask: async (opts: {
     taskTitle: string;
     abortCheck?: (() => boolean) | undefined;
+    onLog?: ((message: string) => void) | undefined;
   }) => {
     harness.modelCalls.push(opts.taskTitle);
+    if (harness.logMessage) opts.onLog?.(harness.logMessage);
     // Block like a real model call does, but bail out the moment the watchdog
     // aborts this worker — exactly the cooperative contract the bridge has.
     for (let i = 0; i < 400; i++) {
@@ -272,6 +274,7 @@ describe("watchdog cancel path", () => {
     harness.acquired.length = 0;
     harness.released.length = 0;
     harness.modelCalls.length = 0;
+    harness.logMessage = "";
   });
 
   /**
@@ -316,6 +319,31 @@ describe("watchdog cancel path", () => {
     // Every allocation came back to the pool.
     expect(harness.acquired.length).toBeGreaterThan(0);
     expect(harness.released.length).toBe(harness.acquired.length);
+  });
+
+  it("bounds streamed log entries and releases them when supervision finishes", async () => {
+    const projectRoot = makeProject({ "package.json": JSON.stringify({ name: "demo" }) });
+    harness.logMessage = "x".repeat(100_000);
+    try {
+      const run = startWatchdogSupervision({
+        projectId: "bounded-logs",
+        projectName: "demo",
+        projectRoot,
+        taskTitle: "Add search",
+        prompt: "Add search",
+        model: "test-model",
+      });
+      const live = getWatchdogSnapshot({ projectId: "bounded-logs" }).watchdogs[0]!;
+      expect(live.workers[0]?.logs?.[0]?.length).toBeLessThanOrEqual(2048);
+      stopWatchdog(live.id);
+      await run;
+      expect(
+        getWatchdogSnapshot({ projectId: "bounded-logs" }).watchdogs[0]?.workers[0]?.logs,
+      ).toEqual([]);
+    } finally {
+      harness.logMessage = "";
+      NodeFS.rmSync(projectRoot, { recursive: true, force: true });
+    }
   });
 
   it("clears every abort flag of its workers when the run ends", async () => {
@@ -372,5 +400,37 @@ describe("watchdog cancel path", () => {
     expect(result.status).toBe("cancelled");
     const after = getWatchdogSnapshot({ projectId: "p3" }).watchdogs.find((w) => w.id === live!.id);
     expect(after?.status).toBe("cancelled");
+  });
+
+  it("evicts older finished history while preserving an active watchdog", async () => {
+    const projectRoot = makeProject({ "package.json": JSON.stringify({ name: "demo" }) });
+    const start = (projectId: string) =>
+      startWatchdogSupervision({
+        projectId,
+        projectName: "demo",
+        projectRoot,
+        taskTitle: "Add search",
+        prompt: "Add search",
+        model: "test-model",
+      });
+    const active = start("retention-active");
+    try {
+      for (let index = 0; index < 101; index++) {
+        const run = start(`retention-${index}`);
+        const state = getWatchdogSnapshot({ projectId: `retention-${index}` }).watchdogs[0]!;
+        stopWatchdog(state.id);
+        await run;
+      }
+      const snapshot = getWatchdogSnapshot();
+      expect(
+        snapshot.watchdogs.filter((state) => isWatchdogStatusTerminal(state.status)).length,
+      ).toBeLessThanOrEqual(100);
+      expect(snapshot.watchdogs.some((state) => state.projectId === "retention-active")).toBe(true);
+    } finally {
+      const state = getWatchdogSnapshot({ projectId: "retention-active" }).watchdogs[0];
+      if (state) stopWatchdog(state.id);
+      await active;
+      NodeFS.rmSync(projectRoot, { recursive: true, force: true });
+    }
   });
 });

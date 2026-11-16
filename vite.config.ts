@@ -67,6 +67,7 @@ export default defineConfig({
       },
     },
     exclude: [
+      "**/.worktrees/**",
       "**/.repos/**",
       "**/.t3/**",
       "**/.autocode/**",
@@ -88,6 +89,8 @@ export default defineConfig({
   },
   fmt: {
     ignorePatterns: [
+      ".worktrees",
+      ".worktrees/**",
       ".alchemy",
       "dist",
       "node_modules",
@@ -107,6 +110,8 @@ export default defineConfig({
   },
   lint: {
     ignorePatterns: [
+      ".worktrees",
+      ".worktrees/**",
       ".repos",
       ".repos/**",
       "dist",

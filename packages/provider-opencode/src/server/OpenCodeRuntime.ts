@@ -494,20 +494,22 @@ export function parseOpenCodeModelSlug(
             }
           }
 
-          for (const cp of list) {
-            if (cp && Array.isArray(cp.models)) {
-              for (const m of cp.models) {
-                if (
-                  m &&
-                  (m.id === trimmed ||
-                    m.name === trimmed ||
-                    norm(m.id) === rawNorm ||
-                    (m.name && norm(m.name) === rawNorm))
-                ) {
-                  return {
-                    providerID: cp.instanceId || cp.id,
-                    modelID: m.id,
-                  };
+          if (!trimmed.includes("/")) {
+            for (const cp of list) {
+              if (cp && Array.isArray(cp.models)) {
+                for (const m of cp.models) {
+                  if (
+                    m &&
+                    (m.id === trimmed ||
+                      m.name === trimmed ||
+                      norm(m.id) === rawNorm ||
+                      (m.name && norm(m.name) === rawNorm))
+                  ) {
+                    return {
+                      providerID: cp.instanceId || cp.id,
+                      modelID: m.id,
+                    };
+                  }
                 }
               }
             }

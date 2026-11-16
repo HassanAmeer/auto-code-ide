@@ -147,13 +147,22 @@ function skillRoots(cwd: string | undefined): ReadonlyArray<{
   readonly scope: CustomSkillScope;
 }> {
   const roots: Array<{ directory: string; scope: CustomSkillScope }> = [];
-  let directory = cwd;
+  const tmpDir = NodePath.resolve(NodeOS.tmpdir());
+  const homeDir = NodePath.resolve(NodeOS.homedir());
+  let directory = cwd ? NodePath.resolve(cwd) : undefined;
   for (let depth = 0; depth < 8 && directory; depth += 1) {
     for (const tree of [".agents/skills", ".claude/skills", ".opencode/skills"]) {
       const candidate = NodePath.join(directory, tree);
       if (!NodeFS.existsSync(candidate)) continue;
       if (roots.some((root) => root.directory === candidate)) continue;
       roots.push({ directory: candidate, scope: "project" });
+    }
+    if (
+      directory === tmpDir ||
+      directory === homeDir ||
+      NodeFS.existsSync(NodePath.join(directory, ".git"))
+    ) {
+      break;
     }
     const parent = NodePath.dirname(directory);
     if (parent === directory) break;

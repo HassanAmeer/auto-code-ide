@@ -230,12 +230,12 @@ export function getProviderOptionCurrentValue(
   // Reported values are display-only; callers that build dispatch options omit this context.
   const reportedValue = getReportedOptionValue(descriptor.id, selection, reportedSelection);
   if (reportedValue !== undefined) return reportedValue;
+  if (descriptor.id === "variant" && selection && !hasExplicitOption) return undefined;
   if (descriptor.type === "boolean") {
     return descriptor.currentValue;
   }
-  if (hasExplicitOption) {
-    const explicit = selection?.options?.find((option) => option.id === descriptor.id)?.value;
-    if (explicit !== undefined) return explicit;
+  if (descriptor.currentValue) {
+    return descriptor.currentValue;
   }
   if (
     descriptor.id === "variant" ||
@@ -244,13 +244,6 @@ export function getProviderOptionCurrentValue(
   ) {
     const highOption = descriptor.options.find((option) => option.id === "high");
     if (highOption) return highOption.id;
-    if (descriptor.currentValue) return descriptor.currentValue;
-    const defaultOption = descriptor.options.find((option) => option.isDefault);
-    if (defaultOption) return defaultOption.id;
-  }
-  if (descriptor.id === "variant" && selection && !hasExplicitOption) return undefined;
-  if (descriptor.currentValue) {
-    return descriptor.currentValue;
   }
   return descriptor.options.find((option) => option.isDefault)?.id;
 }
@@ -271,17 +264,14 @@ export function getProviderOptionCurrentLabel(
       : undefined;
   }
   const currentValue = getProviderOptionCurrentValue(descriptor, selection, reportedSelection);
-  const matched = descriptor.options.find((option) => option.id === currentValue)?.label;
-  if (matched) return matched;
-  if (getReportedOptionValue(descriptor.id, selection, reportedSelection) === "default") {
-    return "Default";
-  }
-  const highOpt = descriptor.options.find((option) => option.id === "high");
-  if (highOpt) return highOpt.label;
-  if (descriptor.id === "variant") {
-    return "Unknown";
-  }
-  return undefined;
+  return (
+    descriptor.options.find((option) => option.id === currentValue)?.label ??
+    (getReportedOptionValue(descriptor.id, selection, reportedSelection) === "default"
+      ? "Default"
+      : descriptor.id === "variant"
+        ? "Unknown"
+        : undefined)
+  );
 }
 
 export function buildProviderOptionSelectionsFromDescriptors(

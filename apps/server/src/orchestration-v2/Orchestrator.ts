@@ -8716,6 +8716,17 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
               });
             });
 
+      // Completion can commit before an already-sent Stop reaches this queue.
+      // Preserve that terminal result and avoid creating an orphan interrupt.
+      // A settled run may still own background work, which must remain stoppable.
+      if (
+        ["completed", "failed", "cancelled", "interrupted", "rolled_back"].includes(run.status) &&
+        !hasBackgroundWork
+      ) {
+        yield* stopRemainingWork();
+        return undefined;
+      }
+
       const emitEvent = emit(events, command);
       const interruptRequestItem: OrchestrationV2TurnItem = {
         id: idAllocator.derive.runSignalTurnItem({
@@ -10505,6 +10516,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         // its expected outcome, not a failure.
         planned.events.length > 0 ||
         command.type === "thread.background-work.settle" ||
+        command.type === "run.interrupt" ||
         command.type === "thread.stop"
           ? Effect.succeed(planned)
           : Effect.fail(
