@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" role="img" aria-labelledby="title desc">
+  <title id="title">Watchdog, goals, and subagents: recommended flow</title>
+  <desc id="desc">User task flows through manager, watchdog, parallel workers, review, build and tests, semantic verification, and a final verdict. Stop cancels workers and skips later actions. Goal loops continue only with progress, otherwise pause.</desc>
+  <defs>
+    <linearGradient id="bg" x2="0" y2="1"><stop stop-color="#0b1220"/><stop offset="1" stop-color="#111b2e"/></linearGradient>
+    <linearGradient id="head" x2="1"><stop stop-color="#123047"/><stop offset="1" stop-color="#172746"/></linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#020617" flood-opacity=".42"/></filter>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0 0 10 5 0 10Z" fill="#55c5df"/></marker>
+    <marker id="arrowAmber" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0 0 10 5 0 10Z" fill="#f3b84b"/></marker>
+    <marker id="arrowRed" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0 0 10 5 0 10Z" fill="#fb7185"/></marker>
+    <style>
+      text{font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;fill:#e5edf8}
+      .title{font-size:30px;font-weight:750;letter-spacing:.2px}.subtitle{font-size:15px;fill:#9fb2ca}
+      .label{font-size:17px;font-weight:700}.small{font-size:13px;fill:#b6c5d9}.tiny{font-size:11px;fill:#94a8c2}
+      .node{filter:url(#shadow);stroke-width:1.5}.line{fill:none;stroke:#55c5df;stroke-width:3;marker-end:url(#arrow)}
+      .goalLine{fill:none;stroke:#a78bfa;stroke-width:2.5;stroke-dasharray:7 6;marker-end:url(#arrow)}
+      .amberLine{fill:none;stroke:#f3b84b;stroke-width:3;marker-end:url(#arrowAmber)}
+      .redLine{fill:none;stroke:#fb7185;stroke-width:2.5;stroke-dasharray:6 5;marker-end:url(#arrowRed)}
+    </style>
+  </defs>
+  <rect width="1440" height="900" fill="url(#bg)"/>
+  <circle cx="1250" cy="100" r="240" fill="#164e63" opacity=".11"/><circle cx="170" cy="780" r="230" fill="#6d28d9" opacity=".08"/>
+  <text x="72" y="70" class="title">🐕 Watchdog + 🎯 Goals + 🤖 Subagents</text>
+  <text x="74" y="102" class="subtitle">Safe execution flow — explicit task dispatch, isolated work, verified changes, honest final status</text>
+
+  <!-- entry -->
+  <g class="node">
+    <rect x="72" y="152" width="205" height="82" rx="18" fill="#14253a" stroke="#4b7188"/>
+    <text x="174" y="184" text-anchor="middle" class="label">👤 User task</text><text x="174" y="208" text-anchor="middle" class="small">clear request / goal</text>
+  </g>
+  <path class="line" d="M279 193 H347"/>
+  <g class="node">
+    <rect x="354" y="152" width="230" height="82" rx="18" fill="#172746" stroke="#6683ce"/>
+    <text x="469" y="184" text-anchor="middle" class="label">🧠 Manager</text><text x="469" y="208" text-anchor="middle" class="small">keeps user informed</text>
+  </g>
+  <path class="line" d="M586 193 H654"/>
+  <g class="node">
+    <rect x="661" y="142" width="260" height="102" rx="20" fill="url(#head)" stroke="#38bdf8" stroke-width="2"/>
+    <text x="791" y="178" text-anchor="middle" class="label">🐕 Watchdog</text><text x="791" y="202" text-anchor="middle" class="small">split • track • review</text><text x="791" y="222" text-anchor="middle" class="tiny">Stop remains available</text>
+  </g>
+  <path class="line" d="M923 193 H1000 V300 H1066"/>
+  <path class="goalLine" d="M790 246 V310 H500 V354"/>
+  <text x="646" y="300" class="tiny" fill="#c4b5fd">goal checklist</text>
+
+  <!-- goal sidecar -->
+  <g class="node">
+    <rect x="278" y="356" width="450" height="108" rx="18" fill="#201b3d" stroke="#8b75df"/>
+    <text x="503" y="390" text-anchor="middle" class="label">🎯 Goal loop</text>
+    <text x="503" y="416" text-anchor="middle" class="small">continue only when progress is real</text>
+    <text x="503" y="440" text-anchor="middle" class="tiny">✅ complete   ·   ⏸ pause on stall / timeout / error</text>
+  </g>
+  <path class="goalLine" d="M503 465 V500"/>
+  <g class="node">
+    <rect x="318" y="506" width="370" height="74" rx="16" fill="#19182f" stroke="#6554a8"/>
+    <text x="503" y="537" text-anchor="middle" class="small">No progress? Pause + show reason</text>
+    <text x="503" y="559" text-anchor="middle" class="tiny">Never claim success on an unclear result</text>
+  </g>
+
+  <!-- worker lane -->
+  <g class="node">
+    <rect x="1073" y="250" width="275" height="92" rx="18" fill="#14283a" stroke="#38bdf8"/>
+    <text x="1210" y="285" text-anchor="middle" class="label">🤖 Parallel subagents</text><text x="1210" y="310" text-anchor="middle" class="small">separate roles + worktrees</text><text x="1210" y="330" text-anchor="middle" class="tiny">bounded worker count / model lanes</text>
+  </g>
+  <path class="line" d="M1210 344 V387"/>
+  <g class="node">
+    <rect x="1073" y="395" width="275" height="86" rx="18" fill="#14283a" stroke="#38bdf8"/>
+    <text x="1210" y="430" text-anchor="middle" class="label">🔍 Review each result</text><text x="1210" y="455" text-anchor="middle" class="small">reject unsafe / empty output</text>
+  </g>
+  <path class="line" d="M1210 483 V526"/>
+  <g class="node">
+    <rect x="1073" y="534" width="275" height="86" rx="18" fill="#14283a" stroke="#38bdf8"/>
+    <text x="1210" y="569" text-anchor="middle" class="label">🔀 Merge clean changes</text><text x="1210" y="594" text-anchor="middle" class="small">report conflicts; don't hide them</text>
+  </g>
+  <path class="line" d="M1210 622 V665"/>
+  <g class="node">
+    <rect x="1073" y="673" width="275" height="86" rx="18" fill="#14283a" stroke="#38bdf8"/>
+    <text x="1210" y="708" text-anchor="middle" class="label">🧪 Build + tests</text><text x="1210" y="733" text-anchor="middle" class="small">run once on merged workspace</text>
+  </g>
+  <path class="line" d="M1071 716 H1017 V573 H965"/>
+
+  <!-- verification and result -->
+  <g class="node">
+    <rect x="708" y="520" width="255" height="106" rx="18" fill="#16303a" stroke="#42b8aa"/>
+    <text x="835" y="556" text-anchor="middle" class="label">🧾 Verify requirements</text><text x="835" y="582" text-anchor="middle" class="small">explicit PASS or FAIL only</text><text x="835" y="605" text-anchor="middle" class="tiny">invalid / blank answer = fail closed</text>
+  </g>
+  <path class="line" d="M708 573 H660 V438 H728"/>
+  <path class="line" d="M835 628 V680 H775"/>
+  <g class="node">
+    <path d="M635 735 775 675 915 735 775 795Z" fill="#1c2a3a" stroke="#66c7d6" stroke-width="1.7" filter="url(#shadow)"/>
+    <text x="775" y="731" text-anchor="middle" class="label">PASS?</text><text x="775" y="753" text-anchor="middle" class="tiny">all required checks green</text>
+  </g>
+  <path class="line" d="M635 735 H518 V678 H405"/>
+  <text x="548" y="721" class="tiny" fill="#86efac">YES</text>
+  <g class="node">
+    <rect x="147" y="637" width="260" height="84" rx="18" fill="#12352e" stroke="#34d399"/>
+    <text x="277" y="672" text-anchor="middle" class="label">✅ Final verdict</text><text x="277" y="697" text-anchor="middle" class="small">honest result → Manager → User</text>
+  </g>
+  <path class="amberLine" d="M775 795 V830 H1074"/>
+  <text x="797" y="820" class="tiny" fill="#fcd34d">NO</text>
+  <g class="node">
+    <rect x="1082" y="802" width="266" height="70" rx="16" fill="#382b1d" stroke="#f3b84b"/>
+    <text x="1215" y="832" text-anchor="middle" class="label">🛠 Repair subagent</text><text x="1215" y="854" text-anchor="middle" class="tiny">fix → re-run checks (bounded)</text>
+  </g>
+  <path class="amberLine" d="M1080 837 H1018 V445 H1071"/>
+
+  <!-- stop rail -->
+  <path class="redLine" d="M950 193 H982 V271 H1065"/>
+  <g class="node">
+    <rect x="72" y="300" width="170" height="78" rx="16" fill="#3a1f2b" stroke="#fb7185"/>
+    <text x="157" y="333" text-anchor="middle" class="label">⏹ Stop</text><text x="157" y="356" text-anchor="middle" class="small">user cancellation</text>
+  </g>
+  <path class="redLine" d="M157 300 V270 H1042 V296 H1070"/>
+  <text x="466" y="263" class="tiny" fill="#fda4af">abort workers • skip repair / merge • release worktrees</text>
+
+  <text x="73" y="854" class="tiny">Key safety rule: cancellation wins at every phase boundary; a stopped run must not start new model work or modify the project.</text>
+</svg>

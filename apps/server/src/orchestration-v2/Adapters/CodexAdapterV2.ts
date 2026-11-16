@@ -4518,6 +4518,7 @@ export function makeCodexAdapterV2(adapterOptions: CodexAdapterV2Options): Provi
                 nativeMessage: payload.error.message,
                 failure: makeProviderFailure({
                   message: payload.error.additionalDetails?.trim() || payload.error.message,
+                  responseBody: payload.error.additionalDetails?.trim() || null,
                   code: notificationCode,
                   class:
                     notificationCode === "usageLimitExceeded" ||
@@ -4543,6 +4544,7 @@ export function makeCodexAdapterV2(adapterOptions: CodexAdapterV2Options): Provi
                 additionalDetails === undefined || additionalDetails.length === 0
                   ? payload.error.message
                   : additionalDetails,
+              responseBody: additionalDetails || null,
               code,
               class:
                 code === "usageLimitExceeded" || code === "rateLimitExceeded"

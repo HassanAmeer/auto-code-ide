@@ -48,6 +48,15 @@
         }
       },
       "models": {
+        "anthropic/qwen/qwen4-max[1m]": {
+          "name": "anthropic/qwen/qwen4-max[1m]"
+        },
+        "anthropic/inclusionai/ling-3.2-flash:free[1m]": {
+          "name": "anthropic/inclusionai/ling-3.2-flash:free[1m]"
+        },
+        "anthropic/google/gemini-4-hydrogen[1m]": {
+          "name": "anthropic/google/gemini-4-hydrogen[1m]"
+        },
         "anthropic/baidu/ernie-5.5-flash-preview:free[1m]": {
           "name": "anthropic/baidu/ernie-5.5-flash-preview:free[1m]"
         },
@@ -62,6 +71,9 @@
         },
         "anthropic/thinkingmachines/inkling-2-small:free[1m]": {
           "name": "anthropic/thinkingmachines/inkling-2-small:free[1m]"
+        },
+        "anthropic/thinkingmachines/inkling-2-small[1m]": {
+          "name": "anthropic/thinkingmachines/inkling-2-small[1m]"
         },
         "anthropic/claude-fable-5.2[1m]": {
           "name": "anthropic/claude-fable-5.2[1m]"
@@ -95,18 +107,6 @@
         },
         "anthropic/tencent/hy4[1m]": {
           "name": "anthropic/tencent/hy4[1m]"
-        },
-        "anthropic/motif-technologies/motif-3": {
-          "name": "anthropic/motif-technologies/motif-3"
-        },
-        "anthropic/z-ai/glm-5.3-flashx-legal[1m]": {
-          "name": "anthropic/z-ai/glm-5.3-flashx-legal[1m]"
-        },
-        "anthropic/particle-ai/particle-1[1m]": {
-          "name": "anthropic/particle-ai/particle-1[1m]"
-        },
-        "anthropic/openai/gpt-6.1-terra-pro": {
-          "name": "anthropic/openai/gpt-6.1-terra-pro"
         }
       }
     },
@@ -2558,6 +2558,15 @@
         }
       },
       "models": {
+        "anthropic/qwen/qwen4-max[1m]": {
+          "name": "anthropic/qwen/qwen4-max[1m]"
+        },
+        "anthropic/inclusionai/ling-3.2-flash:free[1m]": {
+          "name": "anthropic/inclusionai/ling-3.2-flash:free[1m]"
+        },
+        "anthropic/google/gemini-4-hydrogen[1m]": {
+          "name": "anthropic/google/gemini-4-hydrogen[1m]"
+        },
         "anthropic/baidu/ernie-5.5-flash-preview:free[1m]": {
           "name": "anthropic/baidu/ernie-5.5-flash-preview:free[1m]"
         },
@@ -2572,6 +2581,9 @@
         },
         "anthropic/thinkingmachines/inkling-2-small:free[1m]": {
           "name": "anthropic/thinkingmachines/inkling-2-small:free[1m]"
+        },
+        "anthropic/thinkingmachines/inkling-2-small[1m]": {
+          "name": "anthropic/thinkingmachines/inkling-2-small[1m]"
         },
         "anthropic/claude-fable-5.2[1m]": {
           "name": "anthropic/claude-fable-5.2[1m]"
@@ -2605,18 +2617,6 @@
         },
         "anthropic/tencent/hy4[1m]": {
           "name": "anthropic/tencent/hy4[1m]"
-        },
-        "anthropic/motif-technologies/motif-3": {
-          "name": "anthropic/motif-technologies/motif-3"
-        },
-        "anthropic/z-ai/glm-5.3-flashx-legal[1m]": {
-          "name": "anthropic/z-ai/glm-5.3-flashx-legal[1m]"
-        },
-        "anthropic/particle-ai/particle-1[1m]": {
-          "name": "anthropic/particle-ai/particle-1[1m]"
-        },
-        "anthropic/openai/gpt-6.1-terra-pro": {
-          "name": "anthropic/openai/gpt-6.1-terra-pro"
         }
       }
     },
@@ -5837,6 +5837,1308 @@
         },
         "kilo-auto/small": {
           "name": "Auto Small"
+        }
+      }
+    },
+    "custom_1794604298215_b4wab": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "numes",
+      "options": {
+        "baseURL": "https://api.numes.ai/api/v1",
+        "apiKey": "sk-numes-v1-715ed5b85db3fe6a276ff0287e5d4927ad779fd427871b6537a7216548e5d5b9"
+      },
+      "models": {
+        "anthropic/claude-fable-5": {
+          "name": "Claude Fable 5"
+        },
+        "anthropic/claude-fable-5.1": {
+          "name": "Claude Fable 5.1"
+        },
+        "anthropic/claude-fable-5.2": {
+          "name": "Claude Fable 5.2"
+        },
+        "anthropic/claude-haiku-4.5": {
+          "name": "Claude Haiku 4.5"
+        },
+        "anthropic/claude-haiku-5.5": {
+          "name": "Claude Haiku 5.5"
+        },
+        "anthropic/claude-opus-4.5": {
+          "name": "Claude Opus 4.5"
+        },
+        "anthropic/claude-opus-4.6": {
+          "name": "Claude Opus 4.6"
+        },
+        "anthropic/claude-opus-4.7": {
+          "name": "Claude Opus 4.7"
+        },
+        "anthropic/claude-opus-4.8": {
+          "name": "Claude Opus 4.8"
+        },
+        "anthropic/claude-opus-5": {
+          "name": "Claude Opus 5"
+        },
+        "anthropic/claude-opus-5.5": {
+          "name": "Claude Opus 5.5"
+        },
+        "anthropic/claude-sonnet-4.6": {
+          "name": "Claude Sonnet 4.6"
+        },
+        "anthropic/claude-sonnet-5": {
+          "name": "Claude Sonnet 5"
+        },
+        "anthropic/claude-sonnet-5.5": {
+          "name": "Claude Sonnet 5.5"
+        },
+        "baichuan/baichuan-m2-32b": {
+          "name": "Baichuan M2 32B"
+        },
+        "baidu/cobuddy": {
+          "name": "CoBuddy"
+        },
+        "bytedance/seed-1.8": {
+          "name": "Seed 1.8"
+        },
+        "bytedance/seed-2.0-code": {
+          "name": "Seed 2.0 Code"
+        },
+        "bytedance/seed-2.0-mini": {
+          "name": "Seed 2.0 Mini"
+        },
+        "bytedance/seed-2.0-pro": {
+          "name": "Seed 2.0 Pro"
+        },
+        "dealignai/deepseek-v4.1-flash-1017-uncensored": {
+          "name": "DeepSeek V4.1 Flash 1017 Uncensored"
+        },
+        "dealignai/deepseek-v4.1-flash-uncensored-fp8": {
+          "name": "DeepSeek V4.1 Flash Uncensored FP8"
+        },
+        "dealignai/glm-5.3-flash-uncensored-fp8": {
+          "name": "GLM 5.3 Flash Uncensored FP8"
+        },
+        "dealignai/glm-5.3-uncensored-fp8": {
+          "name": "GLM 5.3 Uncensored FP8"
+        },
+        "deepseek/deepseek-chat": {
+          "name": "DeepSeek V3"
+        },
+        "deepseek/deepseek-chat-v3.1": {
+          "name": "DeepSeek V3.1"
+        },
+        "deepseek/deepseek-ocr-2": {
+          "name": "DeepSeek OCR 2"
+        },
+        "deepseek/deepseek-r1-0528": {
+          "name": "DeepSeek R1 0528"
+        },
+        "deepseek/deepseek-r1-0528-qwen3-8b": {
+          "name": "DeepSeek R1 Distill Qwen3 8B 0528"
+        },
+        "deepseek/deepseek-r1-turbo": {
+          "name": "DeepSeek R1 Turbo"
+        },
+        "deepseek/deepseek-v3.2": {
+          "name": "DeepSeek V3.2"
+        },
+        "deepseek/deepseek-v4-flash-0731": {
+          "name": "DeepSeek V4 Flash 0731"
+        },
+        "deepseek/deepseek-v4-pro": {
+          "name": "DeepSeek V4 Pro 0423"
+        },
+        "deepseek/deepseek-v4-pro-0813": {
+          "name": "DeepSeek V4 Pro 0813"
+        },
+        "deepseek/deepseek-v4.1-flash": {
+          "name": "DeepSeek V4.1 Flash"
+        },
+        "deepseek/deepseek-v4.1-flash-1017": {
+          "name": "DeepSeek V4.1 Flash 1017"
+        },
+        "deepseek/deepseek-v4.1-flash-1017-ultrafast": {
+          "name": "Deepseek V4.1 Flash 1017 Ultrafast"
+        },
+        "deepseek/deepseek-v4.1-flash-dst": {
+          "name": "DeepSeek V4.1 Flash DST"
+        },
+        "deepseek/deepseek-v4.1-flash:e2ee": {
+          "name": "DeepSeek V4.1 Flash"
+        },
+        "google/gemini-2.5-flash": {
+          "name": "Gemini 2.5 Flash"
+        },
+        "google/gemini-2.5-pro": {
+          "name": "Gemini 2.5 Pro"
+        },
+        "google/gemini-3.1-flash-lite": {
+          "name": "Gemini 3.1 Flash Lite"
+        },
+        "google/gemini-3.1-pro": {
+          "name": "Gemini 3.1 Pro"
+        },
+        "google/gemini-3.5-flash": {
+          "name": "Gemini 3.5 Flash"
+        },
+        "google/gemini-3.7-flash": {
+          "name": "Gemini 3.7 Flash"
+        },
+        "google/gemma-3-12b-it": {
+          "name": "Gemma 3 12B It"
+        },
+        "google/gemma-3-27b-it": {
+          "name": "Gemma 3 27B It"
+        },
+        "google/gemma-3-4b-it": {
+          "name": "Gemma 3 4B It"
+        },
+        "google/gemma-4-26b-a4b-it": {
+          "name": "Gemma 4 26B A4B It"
+        },
+        "google/gemma-4-31b-it": {
+          "name": "Gemma 4 31B It"
+        },
+        "google/gemma-4-31b-it-turbo": {
+          "name": "Gemma 4 31B It Turbo"
+        },
+        "google/gemma-4-31b-it-ultra": {
+          "name": "Gemma 4 31B It Ultra"
+        },
+        "google/gemma-4-31b-it:e2ee": {
+          "name": "Gemma 4 31B It"
+        },
+        "gryphe/mythomax-l2-13b": {
+          "name": "MythoMax L2 13B"
+        },
+        "ibm-granite/granite-4.2-8b": {
+          "name": "Granite 4.2 8B"
+        },
+        "inclusionai/ling-3.0-flash": {
+          "name": "Ling 3.0 Flash"
+        },
+        "inclusionai/ling-3.0-flash-fin": {
+          "name": "Ling 3.0 Flash Fin"
+        },
+        "inclusionai/ling-3.0-flash-sante": {
+          "name": "Ling 3.0 Flash Sante"
+        },
+        "inclusionai/ling-3.0-flash-vl": {
+          "name": "Ling 3.0 Flash VL"
+        },
+        "inclusionai/ling-3.1-flash": {
+          "name": "Ling 3.1 Flash"
+        },
+        "meta-llama/llama-3.1-8b-instruct": {
+          "name": "Llama 3.1 8B Instruct"
+        },
+        "meta-llama/llama-3.3-70b-instruct": {
+          "name": "Llama 3.3 70B Instruct"
+        },
+        "meta-llama/llama-4-maverick": {
+          "name": "Llama 4 Maverick"
+        },
+        "meta-llama/llama-4-scout": {
+          "name": "Llama 4 Scout"
+        },
+        "meta-llama/llama-guard-4-12b": {
+          "name": "Llama Guard 4 12B"
+        },
+        "meta-llama/meta-llama-3.1-8b-instruct-turbo": {
+          "name": "Meta Llama 3.1 8B Instruct Turbo"
+        },
+        "meta/muse-glimmer-30b": {
+          "name": "Muse Glimmer 30B"
+        },
+        "meta/muse-spark-open": {
+          "name": "Muse Spark Open"
+        },
+        "meta/muse-wonder": {
+          "name": "Muse Wonder"
+        },
+        "microsoft/phi-4": {
+          "name": "Phi 4"
+        },
+        "microsoft/wizardlm-2-8x22b": {
+          "name": "WizardLM-2 8x22B"
+        },
+        "mindai/macaron-v1-tall": {
+          "name": "Macaron V1 Tall"
+        },
+        "mindai/macaron-v1-venti": {
+          "name": "Macaron V1 Venti"
+        },
+        "minimax/minimax-m2.5": {
+          "name": "MiniMax M2.5"
+        },
+        "minimax/minimax-m2.7": {
+          "name": "MiniMax M2.7"
+        },
+        "minimax/minimax-m2.7-highspeed": {
+          "name": "MiniMax M2.7-highspeed"
+        },
+        "minimax/minimax-m3": {
+          "name": "MiniMax M3"
+        },
+        "minimax/minimax-m3.1-flash": {
+          "name": "MiniMax M3.1 Flash"
+        },
+        "minimaxai/minimax-m1-80k": {
+          "name": "MiniMax M1"
+        },
+        "mistralai/mistral-nemo": {
+          "name": "Mistral Nemo"
+        },
+        "mistralai/mistral-small-24b-instruct-2501": {
+          "name": "Mistral Small 3"
+        },
+        "mistralai/mistral-small-3.2-24b-instruct": {
+          "name": "Mistral Small 3.2 24B Instruct 2506"
+        },
+        "moonshotai/kimi-k2-0905": {
+          "name": "Kimi K2 Instruct 0905"
+        },
+        "moonshotai/kimi-k2-instruct": {
+          "name": "Kimi K2 Instruct"
+        },
+        "moonshotai/kimi-k2-thinking": {
+          "name": "Kimi K2 Thinking"
+        },
+        "moonshotai/kimi-k2.5": {
+          "name": "Kimi K2.5"
+        },
+        "moonshotai/kimi-k2.6": {
+          "name": "Kimi K2.6"
+        },
+        "moonshotai/kimi-k2.7-code": {
+          "name": "Kimi K2.7 Code"
+        },
+        "moonshotai/kimi-k3": {
+          "name": "Kimi K3"
+        },
+        "moonshotai/kimi-k3.1-pro": {
+          "name": "Kimi K3.1 Pro"
+        },
+        "moonshotai/kimi-k3.1-pro-highspeed": {
+          "name": "Kimi K3.1 Pro Highspeed"
+        },
+        "moonshotai/kimi-k3.1-pro:e2ee": {
+          "name": "Kimi K3.1 Pro"
+        },
+        "nousresearch/hermes-2-pro-llama-3-8b": {
+          "name": "Hermes 2 Pro Llama 3 8B"
+        },
+        "nvidia/nemotron-3-nano-30b-a3b": {
+          "name": "Nemotron 3 Nano 30B A3B"
+        },
+        "nvidia/nemotron-3-super-120b-a12b": {
+          "name": "Nemotron 3 Super"
+        },
+        "nvidia/nemotron-3-ultra-550b-a55b": {
+          "name": "Nemotron 3 Ultra"
+        },
+        "nvidia/nemotron-3.5-content-safety": {
+          "name": "Nemotron 3.5 Content Safety"
+        },
+        "nvidia/nemotron-3.5-lightning": {
+          "name": "Nemotron 3.5 Lightning"
+        },
+        "nvidia/nemotron-3.5-super-vl": {
+          "name": "Nemotron 3.5 Super VL"
+        },
+        "openai/gpt-6-astra": {
+          "name": "GPT-6 Astra"
+        },
+        "openai/gpt-6-luna": {
+          "name": "GPT-6 Luna"
+        },
+        "openai/gpt-6.1-sol": {
+          "name": "GPT-6.1 Sol"
+        },
+        "openai/gpt-oss-120b": {
+          "name": "gpt-oss-120b"
+        },
+        "openai/gpt-oss-120b:e2ee": {
+          "name": "gpt-oss-120b"
+        },
+        "openai/gpt-oss-20b": {
+          "name": "gpt-oss-20b"
+        },
+        "paddlepaddle/paddleocr-vl": {
+          "name": "PaddleOCR VL"
+        },
+        "qwen/qwen-2.5-72b-instruct": {
+          "name": "Qwen2.5 72B Instruct"
+        },
+        "qwen/qwen-mt-plus": {
+          "name": "Qwen MT Plus"
+        },
+        "qwen/qwen3-14b": {
+          "name": "Qwen3 14B"
+        },
+        "qwen/qwen3-235b-a22b-2507": {
+          "name": "Qwen3 235B A22B Instruct 2507"
+        },
+        "qwen/qwen3-30b-a3b": {
+          "name": "Qwen3 30B A3B"
+        },
+        "qwen/qwen3-32b": {
+          "name": "Qwen3 32B"
+        },
+        "qwen/qwen3-coder": {
+          "name": "Qwen3 Coder 480B A35B Instruct Turbo"
+        },
+        "qwen/qwen3-next-80b-a3b-instruct": {
+          "name": "Qwen3 Next 80B A3B Instruct"
+        },
+        "qwen/qwen3-omni-30b-a3b-thinking": {
+          "name": "Qwen3 Omni 30B A3B Thinking"
+        },
+        "qwen/qwen3-vl-235b-a22b-instruct": {
+          "name": "Qwen3 VL 235B A22B Instruct"
+        },
+        "qwen/qwen3-vl-30b-a3b-instruct": {
+          "name": "Qwen3 VL 30B A3B Instruct"
+        },
+        "qwen/qwen3.5-122b-a10b": {
+          "name": "Qwen3.5 122B A10B"
+        },
+        "qwen/qwen3.5-27b": {
+          "name": "Qwen3.5 27B"
+        },
+        "qwen/qwen3.5-35b-a3b": {
+          "name": "Qwen3.5 35B A3B"
+        },
+        "qwen/qwen3.5-397b-a17b": {
+          "name": "Qwen3.5 397B A17B"
+        },
+        "qwen/qwen3.5-9b": {
+          "name": "Qwen3.5-9B"
+        },
+        "qwen/qwen3.6-27b": {
+          "name": "Qwen3.6 27B"
+        },
+        "qwen/qwen3.6-35b-a3b": {
+          "name": "Qwen3.6 35B A3B"
+        },
+        "qwen/qwen3.7-max": {
+          "name": "Qwen3.7 Max"
+        },
+        "qwen/qwen3.8-2.4t-a95b": {
+          "name": "Qwen3.8 2.4T A95B"
+        },
+        "qwen/qwen3.8-27b": {
+          "name": "Qwen3.8 27B"
+        },
+        "qwen/qwen3.8-flash": {
+          "name": "Qwen3.8 Flash"
+        },
+        "qwen/qwen3.8-max": {
+          "name": "Qwen3.8 Max"
+        },
+        "sao10k/l3-70b-euryale-v2.1": {
+          "name": "Llama 3 70B Euryale V2.1"
+        },
+        "sao10k/l3-lunaris-8b": {
+          "name": "L3 8B Lunaris V1 Turbo"
+        },
+        "sao10k/l3.1-euryale-70b": {
+          "name": "L3.1 70B Euryale V2.2"
+        },
+        "stepfun/step-3.7-flash": {
+          "name": "Step 3.7 Flash"
+        },
+        "stepfun/step-5-preview": {
+          "name": "Step 5 Preview"
+        },
+        "tencent/hy3": {
+          "name": "Hy3"
+        },
+        "tencent/hy4": {
+          "name": "Hy4"
+        },
+        "tencent/hy4-preview": {
+          "name": "Hy4 Preview"
+        },
+        "thinkingmachines/inkling-small": {
+          "name": "Inkling Small"
+        },
+        "uniboshi/kimi-k3-abliterated-v1": {
+          "name": "Kimi K3 Abliterated"
+        },
+        "xiaomi/mimo-v2.6-flash": {
+          "name": "MiMo V2.6 Flash"
+        },
+        "xiaomi/mimo-v2.6-pro": {
+          "name": "MiMo-V2.6-Pro"
+        },
+        "z-ai/glm-4.5-air": {
+          "name": "GLM 4.5 Air"
+        },
+        "z-ai/glm-4.5v": {
+          "name": "GLM 4.5V"
+        },
+        "z-ai/glm-4.6": {
+          "name": "GLM 4.6"
+        },
+        "z-ai/glm-4.6v": {
+          "name": "GLM 4.6V"
+        },
+        "z-ai/glm-4.7": {
+          "name": "GLM 4.7"
+        },
+        "z-ai/glm-4.7-flash": {
+          "name": "GLM 4.7 Flash"
+        },
+        "z-ai/glm-5": {
+          "name": "GLM 5"
+        },
+        "z-ai/glm-5.1": {
+          "name": "GLM 5.1"
+        },
+        "z-ai/glm-5.2": {
+          "name": "GLM 5.2"
+        },
+        "z-ai/glm-5.3": {
+          "name": "GLM 5.3"
+        },
+        "z-ai/glm-5.3-flash": {
+          "name": "GLM 5.3 Flash"
+        },
+        "z-ai/glm-5.3-flashx": {
+          "name": "GLM 5.3 FlashX"
+        },
+        "z-ai/glm-5.3:e2ee": {
+          "name": "GLM 5.3"
+        },
+        "zai-org/autoglm-phone-9b-multilingual": {
+          "name": "AutoGLM Phone 9B Multilingual"
+        }
+      }
+    },
+    "numes": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "numes",
+      "options": {
+        "baseURL": "https://api.numes.ai/api/v1",
+        "apiKey": "sk-numes-v1-715ed5b85db3fe6a276ff0287e5d4927ad779fd427871b6537a7216548e5d5b9"
+      },
+      "models": {
+        "anthropic/claude-fable-5": {
+          "name": "Claude Fable 5"
+        },
+        "anthropic/claude-fable-5.1": {
+          "name": "Claude Fable 5.1"
+        },
+        "anthropic/claude-fable-5.2": {
+          "name": "Claude Fable 5.2"
+        },
+        "anthropic/claude-haiku-4.5": {
+          "name": "Claude Haiku 4.5"
+        },
+        "anthropic/claude-haiku-5.5": {
+          "name": "Claude Haiku 5.5"
+        },
+        "anthropic/claude-opus-4.5": {
+          "name": "Claude Opus 4.5"
+        },
+        "anthropic/claude-opus-4.6": {
+          "name": "Claude Opus 4.6"
+        },
+        "anthropic/claude-opus-4.7": {
+          "name": "Claude Opus 4.7"
+        },
+        "anthropic/claude-opus-4.8": {
+          "name": "Claude Opus 4.8"
+        },
+        "anthropic/claude-opus-5": {
+          "name": "Claude Opus 5"
+        },
+        "anthropic/claude-opus-5.5": {
+          "name": "Claude Opus 5.5"
+        },
+        "anthropic/claude-sonnet-4.6": {
+          "name": "Claude Sonnet 4.6"
+        },
+        "anthropic/claude-sonnet-5": {
+          "name": "Claude Sonnet 5"
+        },
+        "anthropic/claude-sonnet-5.5": {
+          "name": "Claude Sonnet 5.5"
+        },
+        "baichuan/baichuan-m2-32b": {
+          "name": "Baichuan M2 32B"
+        },
+        "baidu/cobuddy": {
+          "name": "CoBuddy"
+        },
+        "bytedance/seed-1.8": {
+          "name": "Seed 1.8"
+        },
+        "bytedance/seed-2.0-code": {
+          "name": "Seed 2.0 Code"
+        },
+        "bytedance/seed-2.0-mini": {
+          "name": "Seed 2.0 Mini"
+        },
+        "bytedance/seed-2.0-pro": {
+          "name": "Seed 2.0 Pro"
+        },
+        "dealignai/deepseek-v4.1-flash-1017-uncensored": {
+          "name": "DeepSeek V4.1 Flash 1017 Uncensored"
+        },
+        "dealignai/deepseek-v4.1-flash-uncensored-fp8": {
+          "name": "DeepSeek V4.1 Flash Uncensored FP8"
+        },
+        "dealignai/glm-5.3-flash-uncensored-fp8": {
+          "name": "GLM 5.3 Flash Uncensored FP8"
+        },
+        "dealignai/glm-5.3-uncensored-fp8": {
+          "name": "GLM 5.3 Uncensored FP8"
+        },
+        "deepseek/deepseek-chat": {
+          "name": "DeepSeek V3"
+        },
+        "deepseek/deepseek-chat-v3.1": {
+          "name": "DeepSeek V3.1"
+        },
+        "deepseek/deepseek-ocr-2": {
+          "name": "DeepSeek OCR 2"
+        },
+        "deepseek/deepseek-r1-0528": {
+          "name": "DeepSeek R1 0528"
+        },
+        "deepseek/deepseek-r1-0528-qwen3-8b": {
+          "name": "DeepSeek R1 Distill Qwen3 8B 0528"
+        },
+        "deepseek/deepseek-r1-turbo": {
+          "name": "DeepSeek R1 Turbo"
+        },
+        "deepseek/deepseek-v3.2": {
+          "name": "DeepSeek V3.2"
+        },
+        "deepseek/deepseek-v4-flash-0731": {
+          "name": "DeepSeek V4 Flash 0731"
+        },
+        "deepseek/deepseek-v4-pro": {
+          "name": "DeepSeek V4 Pro 0423"
+        },
+        "deepseek/deepseek-v4-pro-0813": {
+          "name": "DeepSeek V4 Pro 0813"
+        },
+        "deepseek/deepseek-v4.1-flash": {
+          "name": "DeepSeek V4.1 Flash"
+        },
+        "deepseek/deepseek-v4.1-flash-1017": {
+          "name": "DeepSeek V4.1 Flash 1017"
+        },
+        "deepseek/deepseek-v4.1-flash-1017-ultrafast": {
+          "name": "Deepseek V4.1 Flash 1017 Ultrafast"
+        },
+        "deepseek/deepseek-v4.1-flash-dst": {
+          "name": "DeepSeek V4.1 Flash DST"
+        },
+        "deepseek/deepseek-v4.1-flash:e2ee": {
+          "name": "DeepSeek V4.1 Flash"
+        },
+        "google/gemini-2.5-flash": {
+          "name": "Gemini 2.5 Flash"
+        },
+        "google/gemini-2.5-pro": {
+          "name": "Gemini 2.5 Pro"
+        },
+        "google/gemini-3.1-flash-lite": {
+          "name": "Gemini 3.1 Flash Lite"
+        },
+        "google/gemini-3.1-pro": {
+          "name": "Gemini 3.1 Pro"
+        },
+        "google/gemini-3.5-flash": {
+          "name": "Gemini 3.5 Flash"
+        },
+        "google/gemini-3.7-flash": {
+          "name": "Gemini 3.7 Flash"
+        },
+        "google/gemma-3-12b-it": {
+          "name": "Gemma 3 12B It"
+        },
+        "google/gemma-3-27b-it": {
+          "name": "Gemma 3 27B It"
+        },
+        "google/gemma-3-4b-it": {
+          "name": "Gemma 3 4B It"
+        },
+        "google/gemma-4-26b-a4b-it": {
+          "name": "Gemma 4 26B A4B It"
+        },
+        "google/gemma-4-31b-it": {
+          "name": "Gemma 4 31B It"
+        },
+        "google/gemma-4-31b-it-turbo": {
+          "name": "Gemma 4 31B It Turbo"
+        },
+        "google/gemma-4-31b-it-ultra": {
+          "name": "Gemma 4 31B It Ultra"
+        },
+        "google/gemma-4-31b-it:e2ee": {
+          "name": "Gemma 4 31B It"
+        },
+        "gryphe/mythomax-l2-13b": {
+          "name": "MythoMax L2 13B"
+        },
+        "ibm-granite/granite-4.2-8b": {
+          "name": "Granite 4.2 8B"
+        },
+        "inclusionai/ling-3.0-flash": {
+          "name": "Ling 3.0 Flash"
+        },
+        "inclusionai/ling-3.0-flash-fin": {
+          "name": "Ling 3.0 Flash Fin"
+        },
+        "inclusionai/ling-3.0-flash-sante": {
+          "name": "Ling 3.0 Flash Sante"
+        },
+        "inclusionai/ling-3.0-flash-vl": {
+          "name": "Ling 3.0 Flash VL"
+        },
+        "inclusionai/ling-3.1-flash": {
+          "name": "Ling 3.1 Flash"
+        },
+        "meta-llama/llama-3.1-8b-instruct": {
+          "name": "Llama 3.1 8B Instruct"
+        },
+        "meta-llama/llama-3.3-70b-instruct": {
+          "name": "Llama 3.3 70B Instruct"
+        },
+        "meta-llama/llama-4-maverick": {
+          "name": "Llama 4 Maverick"
+        },
+        "meta-llama/llama-4-scout": {
+          "name": "Llama 4 Scout"
+        },
+        "meta-llama/llama-guard-4-12b": {
+          "name": "Llama Guard 4 12B"
+        },
+        "meta-llama/meta-llama-3.1-8b-instruct-turbo": {
+          "name": "Meta Llama 3.1 8B Instruct Turbo"
+        },
+        "meta/muse-glimmer-30b": {
+          "name": "Muse Glimmer 30B"
+        },
+        "meta/muse-spark-open": {
+          "name": "Muse Spark Open"
+        },
+        "meta/muse-wonder": {
+          "name": "Muse Wonder"
+        },
+        "microsoft/phi-4": {
+          "name": "Phi 4"
+        },
+        "microsoft/wizardlm-2-8x22b": {
+          "name": "WizardLM-2 8x22B"
+        },
+        "mindai/macaron-v1-tall": {
+          "name": "Macaron V1 Tall"
+        },
+        "mindai/macaron-v1-venti": {
+          "name": "Macaron V1 Venti"
+        },
+        "minimax/minimax-m2.5": {
+          "name": "MiniMax M2.5"
+        },
+        "minimax/minimax-m2.7": {
+          "name": "MiniMax M2.7"
+        },
+        "minimax/minimax-m2.7-highspeed": {
+          "name": "MiniMax M2.7-highspeed"
+        },
+        "minimax/minimax-m3": {
+          "name": "MiniMax M3"
+        },
+        "minimax/minimax-m3.1-flash": {
+          "name": "MiniMax M3.1 Flash"
+        },
+        "minimaxai/minimax-m1-80k": {
+          "name": "MiniMax M1"
+        },
+        "mistralai/mistral-nemo": {
+          "name": "Mistral Nemo"
+        },
+        "mistralai/mistral-small-24b-instruct-2501": {
+          "name": "Mistral Small 3"
+        },
+        "mistralai/mistral-small-3.2-24b-instruct": {
+          "name": "Mistral Small 3.2 24B Instruct 2506"
+        },
+        "moonshotai/kimi-k2-0905": {
+          "name": "Kimi K2 Instruct 0905"
+        },
+        "moonshotai/kimi-k2-instruct": {
+          "name": "Kimi K2 Instruct"
+        },
+        "moonshotai/kimi-k2-thinking": {
+          "name": "Kimi K2 Thinking"
+        },
+        "moonshotai/kimi-k2.5": {
+          "name": "Kimi K2.5"
+        },
+        "moonshotai/kimi-k2.6": {
+          "name": "Kimi K2.6"
+        },
+        "moonshotai/kimi-k2.7-code": {
+          "name": "Kimi K2.7 Code"
+        },
+        "moonshotai/kimi-k3": {
+          "name": "Kimi K3"
+        },
+        "moonshotai/kimi-k3.1-pro": {
+          "name": "Kimi K3.1 Pro"
+        },
+        "moonshotai/kimi-k3.1-pro-highspeed": {
+          "name": "Kimi K3.1 Pro Highspeed"
+        },
+        "moonshotai/kimi-k3.1-pro:e2ee": {
+          "name": "Kimi K3.1 Pro"
+        },
+        "nousresearch/hermes-2-pro-llama-3-8b": {
+          "name": "Hermes 2 Pro Llama 3 8B"
+        },
+        "nvidia/nemotron-3-nano-30b-a3b": {
+          "name": "Nemotron 3 Nano 30B A3B"
+        },
+        "nvidia/nemotron-3-super-120b-a12b": {
+          "name": "Nemotron 3 Super"
+        },
+        "nvidia/nemotron-3-ultra-550b-a55b": {
+          "name": "Nemotron 3 Ultra"
+        },
+        "nvidia/nemotron-3.5-content-safety": {
+          "name": "Nemotron 3.5 Content Safety"
+        },
+        "nvidia/nemotron-3.5-lightning": {
+          "name": "Nemotron 3.5 Lightning"
+        },
+        "nvidia/nemotron-3.5-super-vl": {
+          "name": "Nemotron 3.5 Super VL"
+        },
+        "openai/gpt-6-astra": {
+          "name": "GPT-6 Astra"
+        },
+        "openai/gpt-6-luna": {
+          "name": "GPT-6 Luna"
+        },
+        "openai/gpt-6.1-sol": {
+          "name": "GPT-6.1 Sol"
+        },
+        "openai/gpt-oss-120b": {
+          "name": "gpt-oss-120b"
+        },
+        "openai/gpt-oss-120b:e2ee": {
+          "name": "gpt-oss-120b"
+        },
+        "openai/gpt-oss-20b": {
+          "name": "gpt-oss-20b"
+        },
+        "paddlepaddle/paddleocr-vl": {
+          "name": "PaddleOCR VL"
+        },
+        "qwen/qwen-2.5-72b-instruct": {
+          "name": "Qwen2.5 72B Instruct"
+        },
+        "qwen/qwen-mt-plus": {
+          "name": "Qwen MT Plus"
+        },
+        "qwen/qwen3-14b": {
+          "name": "Qwen3 14B"
+        },
+        "qwen/qwen3-235b-a22b-2507": {
+          "name": "Qwen3 235B A22B Instruct 2507"
+        },
+        "qwen/qwen3-30b-a3b": {
+          "name": "Qwen3 30B A3B"
+        },
+        "qwen/qwen3-32b": {
+          "name": "Qwen3 32B"
+        },
+        "qwen/qwen3-coder": {
+          "name": "Qwen3 Coder 480B A35B Instruct Turbo"
+        },
+        "qwen/qwen3-next-80b-a3b-instruct": {
+          "name": "Qwen3 Next 80B A3B Instruct"
+        },
+        "qwen/qwen3-omni-30b-a3b-thinking": {
+          "name": "Qwen3 Omni 30B A3B Thinking"
+        },
+        "qwen/qwen3-vl-235b-a22b-instruct": {
+          "name": "Qwen3 VL 235B A22B Instruct"
+        },
+        "qwen/qwen3-vl-30b-a3b-instruct": {
+          "name": "Qwen3 VL 30B A3B Instruct"
+        },
+        "qwen/qwen3.5-122b-a10b": {
+          "name": "Qwen3.5 122B A10B"
+        },
+        "qwen/qwen3.5-27b": {
+          "name": "Qwen3.5 27B"
+        },
+        "qwen/qwen3.5-35b-a3b": {
+          "name": "Qwen3.5 35B A3B"
+        },
+        "qwen/qwen3.5-397b-a17b": {
+          "name": "Qwen3.5 397B A17B"
+        },
+        "qwen/qwen3.5-9b": {
+          "name": "Qwen3.5-9B"
+        },
+        "qwen/qwen3.6-27b": {
+          "name": "Qwen3.6 27B"
+        },
+        "qwen/qwen3.6-35b-a3b": {
+          "name": "Qwen3.6 35B A3B"
+        },
+        "qwen/qwen3.7-max": {
+          "name": "Qwen3.7 Max"
+        },
+        "qwen/qwen3.8-2.4t-a95b": {
+          "name": "Qwen3.8 2.4T A95B"
+        },
+        "qwen/qwen3.8-27b": {
+          "name": "Qwen3.8 27B"
+        },
+        "qwen/qwen3.8-flash": {
+          "name": "Qwen3.8 Flash"
+        },
+        "qwen/qwen3.8-max": {
+          "name": "Qwen3.8 Max"
+        },
+        "sao10k/l3-70b-euryale-v2.1": {
+          "name": "Llama 3 70B Euryale V2.1"
+        },
+        "sao10k/l3-lunaris-8b": {
+          "name": "L3 8B Lunaris V1 Turbo"
+        },
+        "sao10k/l3.1-euryale-70b": {
+          "name": "L3.1 70B Euryale V2.2"
+        },
+        "stepfun/step-3.7-flash": {
+          "name": "Step 3.7 Flash"
+        },
+        "stepfun/step-5-preview": {
+          "name": "Step 5 Preview"
+        },
+        "tencent/hy3": {
+          "name": "Hy3"
+        },
+        "tencent/hy4": {
+          "name": "Hy4"
+        },
+        "tencent/hy4-preview": {
+          "name": "Hy4 Preview"
+        },
+        "thinkingmachines/inkling-small": {
+          "name": "Inkling Small"
+        },
+        "uniboshi/kimi-k3-abliterated-v1": {
+          "name": "Kimi K3 Abliterated"
+        },
+        "xiaomi/mimo-v2.6-flash": {
+          "name": "MiMo V2.6 Flash"
+        },
+        "xiaomi/mimo-v2.6-pro": {
+          "name": "MiMo-V2.6-Pro"
+        },
+        "z-ai/glm-4.5-air": {
+          "name": "GLM 4.5 Air"
+        },
+        "z-ai/glm-4.5v": {
+          "name": "GLM 4.5V"
+        },
+        "z-ai/glm-4.6": {
+          "name": "GLM 4.6"
+        },
+        "z-ai/glm-4.6v": {
+          "name": "GLM 4.6V"
+        },
+        "z-ai/glm-4.7": {
+          "name": "GLM 4.7"
+        },
+        "z-ai/glm-4.7-flash": {
+          "name": "GLM 4.7 Flash"
+        },
+        "z-ai/glm-5": {
+          "name": "GLM 5"
+        },
+        "z-ai/glm-5.1": {
+          "name": "GLM 5.1"
+        },
+        "z-ai/glm-5.2": {
+          "name": "GLM 5.2"
+        },
+        "z-ai/glm-5.3": {
+          "name": "GLM 5.3"
+        },
+        "z-ai/glm-5.3-flash": {
+          "name": "GLM 5.3 Flash"
+        },
+        "z-ai/glm-5.3-flashx": {
+          "name": "GLM 5.3 FlashX"
+        },
+        "z-ai/glm-5.3:e2ee": {
+          "name": "GLM 5.3"
+        },
+        "zai-org/autoglm-phone-9b-multilingual": {
+          "name": "AutoGLM Phone 9B Multilingual"
+        }
+      }
+    },
+    "custom_1794605442772_u7qja": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "coarena",
+      "options": {
+        "baseURL": "https://coarena.ai/api/v1",
+        "apiKey": "coa_9a185212cb1f6aa2c26e0a44371d13b4"
+      },
+      "models": {
+        "claude-fable-5": {
+          "name": "claude-fable-5"
+        },
+        "claude-fable-5-1": {
+          "name": "claude-fable-5-1"
+        },
+        "claude-fable-5-2": {
+          "name": "claude-fable-5-2"
+        },
+        "claude-haiku-5-5": {
+          "name": "claude-haiku-5-5"
+        },
+        "claude-opus-5-5": {
+          "name": "claude-opus-5-5"
+        },
+        "claude-sonnet-5-5": {
+          "name": "claude-sonnet-5-5"
+        },
+        "deepseek-v4-1-flash-1017": {
+          "name": "deepseek-v4-1-flash-1017"
+        },
+        "gemini-3-8-flash": {
+          "name": "gemini-3-8-flash"
+        },
+        "gemini-4-argon": {
+          "name": "gemini-4-argon"
+        },
+        "gemini-4-carbon": {
+          "name": "gemini-4-carbon"
+        },
+        "glm-5-3-flash": {
+          "name": "glm-5-3-flash"
+        },
+        "gpt-6-1-sol": {
+          "name": "gpt-6-1-sol"
+        },
+        "gpt-6-1-terra": {
+          "name": "gpt-6-1-terra"
+        },
+        "gpt-6-astra": {
+          "name": "gpt-6-astra"
+        },
+        "gpt-6-luna": {
+          "name": "gpt-6-luna"
+        },
+        "grok-4-7": {
+          "name": "grok-4-7"
+        },
+        "hy4": {
+          "name": "hy4"
+        },
+        "kimi-k3": {
+          "name": "kimi-k3"
+        },
+        "kimi-k3-1-pro": {
+          "name": "kimi-k3-1-pro"
+        },
+        "mimo-v2-6-pro": {
+          "name": "mimo-v2-6-pro"
+        },
+        "minimax-m3-1-flash": {
+          "name": "minimax-m3-1-flash"
+        },
+        "qwen3-8-2-4t-a95b": {
+          "name": "qwen3-8-2-4t-a95b"
+        }
+      }
+    },
+    "coarena": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "coarena",
+      "options": {
+        "baseURL": "https://coarena.ai/api/v1",
+        "apiKey": "coa_9a185212cb1f6aa2c26e0a44371d13b4"
+      },
+      "models": {
+        "claude-fable-5": {
+          "name": "claude-fable-5"
+        },
+        "claude-fable-5-1": {
+          "name": "claude-fable-5-1"
+        },
+        "claude-fable-5-2": {
+          "name": "claude-fable-5-2"
+        },
+        "claude-haiku-5-5": {
+          "name": "claude-haiku-5-5"
+        },
+        "claude-opus-5-5": {
+          "name": "claude-opus-5-5"
+        },
+        "claude-sonnet-5-5": {
+          "name": "claude-sonnet-5-5"
+        },
+        "deepseek-v4-1-flash-1017": {
+          "name": "deepseek-v4-1-flash-1017"
+        },
+        "gemini-3-8-flash": {
+          "name": "gemini-3-8-flash"
+        },
+        "gemini-4-argon": {
+          "name": "gemini-4-argon"
+        },
+        "gemini-4-carbon": {
+          "name": "gemini-4-carbon"
+        },
+        "glm-5-3-flash": {
+          "name": "glm-5-3-flash"
+        },
+        "gpt-6-1-sol": {
+          "name": "gpt-6-1-sol"
+        },
+        "gpt-6-1-terra": {
+          "name": "gpt-6-1-terra"
+        },
+        "gpt-6-astra": {
+          "name": "gpt-6-astra"
+        },
+        "gpt-6-luna": {
+          "name": "gpt-6-luna"
+        },
+        "grok-4-7": {
+          "name": "grok-4-7"
+        },
+        "hy4": {
+          "name": "hy4"
+        },
+        "kimi-k3": {
+          "name": "kimi-k3"
+        },
+        "kimi-k3-1-pro": {
+          "name": "kimi-k3-1-pro"
+        },
+        "mimo-v2-6-pro": {
+          "name": "mimo-v2-6-pro"
+        },
+        "minimax-m3-1-flash": {
+          "name": "minimax-m3-1-flash"
+        },
+        "qwen3-8-2-4t-a95b": {
+          "name": "qwen3-8-2-4t-a95b"
+        }
+      }
+    },
+    "custom_1794730388630_eeoxn": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "100milionseek",
+      "options": {
+        "baseURL": "https://100milionseek.top/v1",
+        "apiKey": "hms-wesqcWO6N_Rlr45kkCKHu9chx_irZB-0NA87KE35kRo"
+      },
+      "models": {
+        "deepseek-v4.1-flash-free": {
+          "name": "deepseek-v4.1-flash-free"
+        },
+        "jev-1.13-free": {
+          "name": "JEV"
+        }
+      }
+    },
+    "100milionseek": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "100milionseek",
+      "options": {
+        "baseURL": "https://100milionseek.top/v1",
+        "apiKey": "hms-wesqcWO6N_Rlr45kkCKHu9chx_irZB-0NA87KE35kRo"
+      },
+      "models": {
+        "deepseek-v4.1-flash-free": {
+          "name": "deepseek-v4.1-flash-free"
+        },
+        "jev-1.13-free": {
+          "name": "JEV"
+        }
+      }
+    },
+    "custom_1794731452760_rs43b": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "howtofix",
+      "options": {
+        "baseURL": "https://api.howtofix.id/v1",
+        "apiKey": "sk-7HwzQOcnHsVrddl65yhjY2MGzXDWOzdzzro1MweyI8azD67z"
+      },
+      "models": {
+        "big-pickle": {
+          "name": "big-pickle"
+        },
+        "deepseek-v4.1-flash": {
+          "name": "deepseek-v4.1-flash"
+        },
+        "deepseek-v4.1-flash-1017": {
+          "name": "deepseek-v4.1-flash-1017"
+        },
+        "deepSeek-v4.1-flash-1017-sg": {
+          "name": "deepSeek-v4.1-flash-1017-sg"
+        },
+        "glm-5.3-flash": {
+          "name": "glm-5.3-flash"
+        },
+        "grok-4.5": {
+          "name": "grok-4.5"
+        },
+        "grok-4.5-liberated-sg": {
+          "name": "grok-4.5-liberated-sg"
+        },
+        "grok-4.6": {
+          "name": "grok-4.6"
+        },
+        "grok-4.6-liberated-sg": {
+          "name": "grok-4.6-liberated-sg"
+        },
+        "grok-4.7": {
+          "name": "grok-4.7"
+        },
+        "grok-4.7-liberated-sg": {
+          "name": "grok-4.7-liberated-sg"
+        },
+        "mimo-2.6-flash": {
+          "name": "mimo-2.6-flash"
+        }
+      }
+    },
+    "howtofix": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "howtofix",
+      "options": {
+        "baseURL": "https://api.howtofix.id/v1",
+        "apiKey": "sk-7HwzQOcnHsVrddl65yhjY2MGzXDWOzdzzro1MweyI8azD67z"
+      },
+      "models": {
+        "big-pickle": {
+          "name": "big-pickle"
+        },
+        "deepseek-v4.1-flash": {
+          "name": "deepseek-v4.1-flash"
+        },
+        "deepseek-v4.1-flash-1017": {
+          "name": "deepseek-v4.1-flash-1017"
+        },
+        "deepSeek-v4.1-flash-1017-sg": {
+          "name": "deepSeek-v4.1-flash-1017-sg"
+        },
+        "glm-5.3-flash": {
+          "name": "glm-5.3-flash"
+        },
+        "grok-4.5": {
+          "name": "grok-4.5"
+        },
+        "grok-4.5-liberated-sg": {
+          "name": "grok-4.5-liberated-sg"
+        },
+        "grok-4.6": {
+          "name": "grok-4.6"
+        },
+        "grok-4.6-liberated-sg": {
+          "name": "grok-4.6-liberated-sg"
+        },
+        "grok-4.7": {
+          "name": "grok-4.7"
+        },
+        "grok-4.7-liberated-sg": {
+          "name": "grok-4.7-liberated-sg"
+        },
+        "mimo-2.6-flash": {
+          "name": "mimo-2.6-flash"
+        }
+      }
+    },
+    "custom_1794736064094_toxpc": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "xingchiapi",
+      "options": {
+        "baseURL": "https://api.xingchiapi.com",
+        "apiKey": "sk-adb1d40db7a9e5009a3ab98f784829236b196edfa819c56ba627d6cd568d1645"
+      },
+      "models": {
+        "gpt-6-astra": {
+          "name": "gpt-6-astra"
+        },
+        "gpt-6.1-sol": {
+          "name": "gpt-6.1-sol"
+        }
+      }
+    },
+    "xingchiapi": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "xingchiapi",
+      "options": {
+        "baseURL": "https://api.xingchiapi.com",
+        "apiKey": "sk-adb1d40db7a9e5009a3ab98f784829236b196edfa819c56ba627d6cd568d1645"
+      },
+      "models": {
+        "gpt-6-astra": {
+          "name": "gpt-6-astra"
+        },
+        "gpt-6.1-sol": {
+          "name": "gpt-6.1-sol"
+        }
+      }
+    },
+    "custom_1794743792227_87jzu": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "zro",
+      "options": {
+        "baseURL": "https://zro.moonmath.ai/v1",
+        "apiKey": "sk-gs0mDsK_dQEEdkVo3PRy-w"
+      },
+      "models": {
+        "deepseek-v4-flash-0731": {
+          "name": "deepseek-v4-flash-0731"
+        },
+        "zro/deepseek-v4-flash-0731": {
+          "name": "zro/deepseek-v4-flash-0731"
+        },
+        "zro/deepseek-v4.1-flash": {
+          "name": "zro/deepseek-v4.1-flash"
+        },
+        "deepseek-v4.1-flash": {
+          "name": "deepseek-v4.1-flash"
+        }
+      }
+    },
+    "zro": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "zro",
+      "options": {
+        "baseURL": "https://zro.moonmath.ai/v1",
+        "apiKey": "sk-gs0mDsK_dQEEdkVo3PRy-w"
+      },
+      "models": {
+        "deepseek-v4-flash-0731": {
+          "name": "deepseek-v4-flash-0731"
+        },
+        "zro/deepseek-v4-flash-0731": {
+          "name": "zro/deepseek-v4-flash-0731"
+        },
+        "zro/deepseek-v4.1-flash": {
+          "name": "zro/deepseek-v4.1-flash"
+        },
+        "deepseek-v4.1-flash": {
+          "name": "deepseek-v4.1-flash"
         }
       }
     }

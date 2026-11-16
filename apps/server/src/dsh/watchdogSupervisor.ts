@@ -478,24 +478,26 @@ export function auditRequirementChecklist(
 ): { passed: number; missing: string[] } {
   const haystack = diff.toLowerCase();
   const missing: string[] = [];
-  let passed = 0;
   for (const item of checklist) {
     const keywords = item.requirement
       .toLowerCase()
       .split(/\s+/)
       .filter((k) => k.length > 3);
     const matched = keywords.some((k) => haystack.includes(k));
-    if (matched || (haystack.length > 50 && keywords.length === 0)) {
-      item.status = "passed";
-      item.evidence = "Matched changes in the merged diff";
-      passed += 1;
-    } else {
-      item.status = "missing";
-      item.evidence = "No matching change found in the merged diff";
-      missing.push(item.requirement);
-    }
+    // Diff text is useful evidence for review, but keyword overlap cannot prove
+    // that a requirement is implemented. Only the semantic verifier may pass it.
+    item.status = "pending";
+    item.evidence = matched
+      ? "Diff contains related text; semantic verification required"
+      : "No related text found in the diff; semantic verification required";
+    missing.push(item.requirement);
   }
-  return { passed, missing };
+  return { passed: 0, missing };
+}
+
+/** The verifier must give an explicit, unambiguous PASS as its first line. */
+export function isExplicitVerificationPass(output: string): boolean {
+  return /^PASS\s*$/i.test(output.trim().split(/\r?\n/, 1)[0] ?? "");
 }
 
 /* ────────────────────── watchdog self-healing helpers ────────────────────── */
@@ -530,10 +532,16 @@ export function resolveWorkerLaneModels(
     .split(",")
     .map((m) => m.trim())
     .filter((m) => m.length > 0);
-  const pool = override.length > 0 ? override : [...WATCHDOG_FALLBACK_MODELS];
+  // Sub-agents (workers) use the same model as the manager (baseModel) by
+  // default, so the user's selected model is honoured across all workers.
+  // Only an explicit lane override (or env) spreads workers over other models.
   const lanes: string[] = [];
   for (let i = 0; i < Math.max(1, workerCount); i++) {
-    lanes.push(i === 0 ? baseModel : (pool[i % pool.length] ?? baseModel));
+    if (override.length > 0) {
+      lanes.push(override[i % override.length] ?? baseModel);
+    } else {
+      lanes.push(baseModel);
+    }
   }
   return lanes;
 }
@@ -659,15 +667,14 @@ async function runVerificationSubAgent(opts: {
         projectName: opts.projectName,
         projectRoot: opts.projectRoot,
         taskTitle: "Verify requirements",
+        readOnly: true,
         prompt,
         model: opts.model,
         onLog: (m) => opts.onLog?.(m),
         abortCheck: opts.abortCheck,
       });
-      const content = res.outputSummary ?? "";
-      // The verifier answers in its log stream; treat an explicit FAIL as a failure.
-      const failed = /\bFAIL\b/i.test(content);
-      const passed = res.ok && !failed;
+      const content = res.modelOutput ?? res.outputSummary ?? "";
+      const passed = res.ok && isExplicitVerificationPass(content);
       return {
         passed,
         reason: passed
@@ -757,6 +764,12 @@ export async function startWatchdogSupervision(
     verdict: "",
   };
   watchdogs.set(watchdogId, state);
+  const readyWorkers = new Set<string>();
+  const ownedAllocations = new Set<ReturnType<typeof acquireWorktree>>();
+  const releaseOwned = (allocation: ReturnType<typeof acquireWorktree>) => {
+    if (!ownedAllocations.delete(allocation)) return;
+    releaseWorktree(projectRoot, allocation);
+  };
 
   const touch = (action: string) => {
     state.lastAction = action;
@@ -859,11 +872,20 @@ export async function startWatchdogSupervision(
 
     // Park a few worktrees ahead of time so the first dispatch is instant too.
     prewarmWorktrees(projectRoot);
+    let baseline = "HEAD";
+    try {
+      baseline = NodeChildProcess.execFileSync("git", ["rev-parse", "HEAD"], {
+        cwd: projectRoot,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }).trim();
+    } catch {}
 
-    const allocations = planned.map((st) => ({
-      st,
-      allocation: acquireWorktree(projectRoot, `${watchdogId}-${st.order}`),
-    }));
+    const allocations = planned.map((st) => {
+      const allocation = acquireWorktree(projectRoot, `${watchdogId}-${st.order}`);
+      ownedAllocations.add(allocation);
+      return { st, allocation };
+    });
 
     // Each worker gets its own model lane so the calls really run in parallel
     // instead of queueing behind one provider's rate limit.
@@ -878,7 +900,7 @@ export async function startWatchdogSupervision(
       // The allocations above are already parked in the pool, so a stop that
       // arrives here must hand them back or the pool leaks one worktree (and
       // one git branch) per cancelled task.
-      for (const { allocation } of allocations) releaseWorktree(projectRoot, allocation);
+      for (const { allocation } of allocations) releaseOwned(allocation);
       const stoppedBeforeDispatch = stopIfRequested();
       if (stoppedBeforeDispatch) return stoppedBeforeDispatch;
     }
@@ -1008,7 +1030,7 @@ export async function startWatchdogSupervision(
       // Every worker allocation is still parked: hand them all back before
       // bailing out so a stopped run does not drain the worktree pool.
       for (const outcome of settled) {
-        if (outcome.status === "fulfilled") releaseWorktree(projectRoot, outcome.value.allocation);
+        if (outcome.status === "fulfilled") releaseOwned(outcome.value.allocation);
       }
       return stoppedResult;
     }
@@ -1016,8 +1038,13 @@ export async function startWatchdogSupervision(
     touch("Reviewing all sub-agent outputs in parallel");
 
     const reviewed = await Promise.all(
-      settled.map(async (outcome) => {
+      settled.map(async (outcome, index) => {
         if (outcome.status === "rejected") {
+          const row = state.workers[index];
+          if (row) {
+            row.status = "failed";
+            row.reviewNotes.push(String(outcome.reason));
+          }
           return { crashed: true as const, reason: String(outcome.reason) };
         }
         const { st, allocation, workerId, res } = outcome.value;
@@ -1057,15 +1084,34 @@ export async function startWatchdogSupervision(
 
         const changed = listChangedFiles(allocation.worktreePath);
         row.filesChanged = changed.length;
+        if (changed.length === 0) {
+          const issue = `${st.title}: worker produced no changes`;
+          row.status = "failed";
+          row.reviewNotes.push(issue);
+          state.issues.push(issue);
+          updateWorkerTelemetryStatus(workerId, "failed", {
+            completedAt: now(),
+            filesModified: [],
+            error: issue,
+          });
+          updateGoalTelemetryStatus(`goal-${workerId}`, "failed", { completedAt: now() });
+          return {
+            crashed: false as const,
+            workerId,
+            st,
+            allocation,
+            changed,
+            reviewIssues: [issue],
+          };
+        }
         const reviewIssues = reviewWorkerOutput(changed, allocation.worktreePath);
         row.reviewNotes.push(...reviewIssues);
         state.issues.push(...reviewIssues);
-        row.status = "completed";
-        updateWorkerTelemetryStatus(workerId, "completed", {
-          completedAt: now(),
+        if (reviewIssues.length > 0) row.status = "failed";
+        else readyWorkers.add(workerId);
+        updateWorkerTelemetryStatus(workerId, "running", {
           filesModified: changed,
         });
-        updateGoalTelemetryStatus(`goal-${workerId}`, "completed", { completedAt: now() });
         return { crashed: false as const, workerId, st, allocation, changed, reviewIssues };
       }),
     );
@@ -1077,7 +1123,7 @@ export async function startWatchdogSupervision(
     if (stoppedBeforeMerge) {
       for (const r of reviewed) {
         if (r.crashed) continue;
-        releaseWorktree(projectRoot, r.allocation);
+        releaseOwned(r.allocation);
       }
       return stoppedBeforeMerge;
     }
@@ -1094,6 +1140,7 @@ export async function startWatchdogSupervision(
       }
       const row = state.workers.find((w) => w.id === r.workerId);
       if (!row) continue;
+      if (!readyWorkers.has(row.id) || row.status === "cancelled") continue;
       if ((r.reviewIssues ?? []).length > 0) {
         row.reviewNotes.push("skipped merge — review found issues");
         continue;
@@ -1114,7 +1161,7 @@ export async function startWatchdogSupervision(
     // Park the worktrees instead of deleting them — the next task reuses them.
     for (const r of reviewed) {
       if (r.crashed) continue;
-      releaseWorktree(projectRoot, r.allocation);
+      releaseOwned(r.allocation);
     }
 
     // ── PHASE 3.5: Requirement checklist audit ──
@@ -1126,13 +1173,10 @@ export async function startWatchdogSupervision(
     if (mergeable.length > 0) {
       setPhase("reviewing");
       touch("Auditing requirements against the merged diff");
-      mergedDiff = getWorktreeDiff(projectRoot);
+      mergedDiff = getWorktreeDiff(projectRoot, baseline);
       const audit = auditRequirementChecklist(state.checklist, mergedDiff);
       if (audit.missing.length > 0) {
-        for (const missing of audit.missing) {
-          state.issues.push(`Requirement not found in changes: ${missing}`);
-        }
-        touch(`${audit.missing.length} requirement(s) missing from the changes`);
+        touch(`${audit.missing.length} requirement(s) awaiting semantic verification`);
       } else {
         touch(`All ${audit.passed} requirement(s) traced to the changes`);
       }
@@ -1154,7 +1198,7 @@ export async function startWatchdogSupervision(
         pm === "pnpm" ? "pnpm run build" : pm === "yarn" ? "yarn build" : "npm run build";
       const build = await runCommandAsync(buildCmd, projectRoot, BUILD_TIMEOUT_MS, isStopped);
       for (const row of state.workers) {
-        if (row.status === "completed") {
+        if (readyWorkers.has(row.id) && row.status !== "cancelled") {
           row.buildRan = true;
           row.buildPassed = build.ok;
         }
@@ -1179,7 +1223,8 @@ export async function startWatchdogSupervision(
         if (repair.ok) {
           const rebuild = await runCommandAsync(buildCmd, projectRoot, BUILD_TIMEOUT_MS, isStopped);
           for (const row of state.workers) {
-            if (row.status === "completed") row.buildPassed = rebuild.ok;
+            if (readyWorkers.has(row.id) && row.status !== "cancelled")
+              row.buildPassed = rebuild.ok;
           }
           if (rebuild.ok) {
             touch("Build repaired by sub-agent — verified clean");
@@ -1200,7 +1245,7 @@ export async function startWatchdogSupervision(
       const testCmd = pm === "pnpm" ? "pnpm run test" : pm === "yarn" ? "yarn test" : "npm test";
       const test = await runCommandAsync(testCmd, projectRoot, BUILD_TIMEOUT_MS, isStopped);
       for (const row of state.workers) {
-        if (row.status === "completed") {
+        if (readyWorkers.has(row.id) && row.status !== "cancelled") {
           row.testRan = true;
           row.testPassed = test.ok;
         }
@@ -1224,10 +1269,28 @@ export async function startWatchdogSupervision(
         if (repair.ok) {
           const retest = await runCommandAsync(testCmd, projectRoot, BUILD_TIMEOUT_MS, isStopped);
           for (const row of state.workers) {
-            if (row.status === "completed") row.testPassed = retest.ok;
+            if (readyWorkers.has(row.id) && row.status !== "cancelled") row.testPassed = retest.ok;
           }
           if (retest.ok) {
             touch("Tests repaired by sub-agent — verified clean");
+            if (scripts.build) {
+              const rebuild = await runCommandAsync(
+                `${pm} run build`,
+                projectRoot,
+                BUILD_TIMEOUT_MS,
+                isStopped,
+              );
+              const stoppedAfterRebuild = stopIfRequested();
+              if (stoppedAfterRebuild) return stoppedAfterRebuild;
+              for (const row of state.workers) {
+                if (readyWorkers.has(row.id) && row.status !== "cancelled") {
+                  row.buildRan = true;
+                  row.buildPassed = rebuild.ok;
+                }
+              }
+              if (!rebuild.ok)
+                state.issues.push(`Build failed after test repair: ${rebuild.output}`);
+            }
           } else {
             state.issues.push(`Tests failed: ${retest.output}`);
           }
@@ -1254,23 +1317,22 @@ export async function startWatchdogSupervision(
         projectName,
         taskTitle,
         requirements,
-        diff: mergedDiff,
+        diff: getWorktreeDiff(projectRoot, baseline),
         model,
         onLog: (m) => log?.(`[Watchdog/verify] ${m}`),
         abortCheck: isStopped,
       });
 
+      const stoppedAfterVerification = stopIfRequested();
+      if (stoppedAfterVerification) return stoppedAfterVerification;
       if (verification.passed) {
         state.checklist.forEach((c) => {
-          if (c.status === "missing") {
-            c.status = "passed";
-            c.evidence = "Confirmed by the verification sub-agent";
-          }
+          c.status = "passed";
+          c.evidence = "Confirmed by the verification sub-agent";
         });
         touch("Verification passed — requirements met");
       } else {
         state.recoveries += 1;
-        state.issues.push(verification.reason);
         touch("Verification failed — dispatching fix sub-agent");
         const fix = await dispatchRepairSubAgent({
           projectRoot,
@@ -1280,31 +1342,75 @@ export async function startWatchdogSupervision(
           kind: "requirement",
           model,
           onLog: (m) => log?.(`[Watchdog/fix] ${m}`),
+          abortCheck: isStopped,
         });
+        const stoppedAfterFix = stopIfRequested();
+        if (stoppedAfterFix) return stoppedAfterFix;
         if (fix.ok) {
+          // Repairs change the workspace after the original build/test gate.
+          // Validate the repaired code before allowing a semantic PASS.
+          const repairedScripts = readProjectScripts(projectRoot);
+          for (const kind of ["build", "test"] as const) {
+            if (!repairedScripts[kind]) continue;
+            setPhase(kind === "build" ? "building" : "testing");
+            const checked = await runCommandAsync(
+              `${pm} run ${kind}`,
+              projectRoot,
+              BUILD_TIMEOUT_MS,
+              isStopped,
+            );
+            const stoppedDuringRepairCheck = stopIfRequested();
+            if (stoppedDuringRepairCheck) return stoppedDuringRepairCheck;
+            for (const row of state.workers) {
+              if (!readyWorkers.has(row.id) || row.status === "cancelled") continue;
+              if (kind === "build") {
+                row.buildRan = true;
+                row.buildPassed = checked.ok;
+              } else {
+                row.testRan = true;
+                row.testPassed = checked.ok;
+              }
+            }
+            if (!checked.ok)
+              state.issues.push(`${kind} failed after requirement repair: ${checked.output}`);
+          }
           const recheck = await runVerificationSubAgent({
             projectRoot,
             projectName,
             taskTitle,
             requirements,
-            diff: getWorktreeDiff(projectRoot),
+            diff: getWorktreeDiff(projectRoot, baseline),
             model,
             onLog: (m) => log?.(`[Watchdog/verify] ${m}`),
+            abortCheck: isStopped,
           });
+          const stoppedAfterRecheck = stopIfRequested();
+          if (stoppedAfterRecheck) return stoppedAfterRecheck;
           if (recheck.passed) {
+            state.checklist.forEach((c) => {
+              c.status = "passed";
+              c.evidence = "Confirmed after repair by the verification sub-agent";
+            });
             touch("Fix applied — re-verified ✓");
           } else {
             state.issues.push(recheck.reason);
           }
+        } else {
+          state.issues.push(fix.output || verification.reason);
         }
       }
     }
 
-    const completed = state.workers.filter((w) => w.status === "completed").length;
+    for (const worker of state.workers) {
+      if (isWorkerAborted(worker.id)) worker.status = "cancelled";
+    }
+    const completed = state.workers.filter(
+      (w) => readyWorkers.has(w.id) && w.status === "running",
+    ).length;
     const total = state.workers.length;
     const stoppedBeforeVerdict = stopIfRequested();
     if (stoppedBeforeVerdict) return stoppedBeforeVerdict;
-    const failed = state.workers.some((w) => w.status === "failed") || state.issues.length > 0;
+    const failed = completed !== total || state.issues.length > 0;
 
     state.status = failed ? "failed" : "completed";
     state.completedAt = now();
@@ -1367,6 +1473,19 @@ export async function startWatchdogSupervision(
       issues: state.issues,
     };
   } finally {
+    for (const allocation of ownedAllocations) releaseOwned(allocation);
+    for (const worker of state.workers) {
+      if (worker.status !== "cancelled") {
+        worker.status =
+          state.status === "completed"
+            ? "completed"
+            : state.status === "cancelled"
+              ? "cancelled"
+              : "failed";
+      }
+      updateWorkerTelemetryStatus(worker.id, worker.status, { completedAt: now() });
+      updateGoalTelemetryStatus(`goal-${worker.id}`, worker.status, { completedAt: now() });
+    }
     // Abort flags are per-run, not per-id-forever. A stopped watchdog marks its
     // workers aborted, but an aborted worker may bail out at a boundary that
     // never reaches a `clearWorkerAbort` call (pre-dispatch, crash, early

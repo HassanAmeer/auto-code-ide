@@ -1272,6 +1272,7 @@ const OrchestrationV2ProviderFailureMessage = TrimmedNonEmptyString.check(
   Schema.isMaxLength(4_096),
 );
 const OrchestrationV2ProviderFailureCode = TrimmedNonEmptyString.check(Schema.isMaxLength(128));
+const OrchestrationV2ProviderFailureResponseBody = Schema.String.check(Schema.isMaxLength(16_384));
 
 /**
  * Transport-safe failure information suitable for persistence and display.
@@ -1285,6 +1286,8 @@ export const OrchestrationV2ProviderFailure = Schema.Struct({
   retryable: Schema.NullOr(Schema.Boolean),
   /** Reported reset time; absent when the provider cannot name one. */
   resetAt: Schema.optional(Schema.NullOr(IsoDateTime)),
+  /** Sanitized original provider response text, when the adapter exposes it. */
+  responseBody: Schema.optional(OrchestrationV2ProviderFailureResponseBody),
 });
 export type OrchestrationV2ProviderFailure = typeof OrchestrationV2ProviderFailure.Type;
 

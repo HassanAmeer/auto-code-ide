@@ -295,6 +295,10 @@ export const layer: Layer.Layer<
           cause: `Run ${runId} is missing its execution projection state.`,
         });
       }
+      const userText = projectComposerContextForProvider({
+        text: message.text,
+        records: message.context?.records ?? [],
+      });
       // Settles a run that never reached the provider: one signal turn item plus
       // terminal run, attempt and root node, written only while the run is still
       // the current starting attempt.
@@ -1004,10 +1008,7 @@ export const layer: Layer.Layer<
       const routableSubagents = projection.subagents.filter((subagent) =>
         RunExecutionService.canRouteRelatedSubagent(subagent.status),
       );
-      const userText = projectComposerContextForProvider({
-        text: message.text,
-        records: message.context?.records ?? [],
-      });
+      // userText already computed above (see TDZ fix).
       // Delivered once: this run's provider turn marks the work as told. A
       // restart continuation is prompted by its own text or resumes natively.
       const noteContinuation = isRestartNoteContinuation(

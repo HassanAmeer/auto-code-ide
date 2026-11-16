@@ -1994,3 +1994,95 @@ it("suppresses fallback timeout error card when the assistant response was alrea
     ),
   ).toBe(false);
 });
+
+it("does not fabricate an APIError card when a failed attempt has no failure payload", () => {
+  const threadId = ThreadId.make("thread-no-failure-payload");
+  const runId = RunId.make("run-no-failure-payload");
+  const now = DateTime.makeUnsafe("2026-06-20T00:00:00.000Z");
+  const attempt: OrchestrationV2RunAttempt = {
+    id: RunAttemptId.make("attempt-no-failure-payload"),
+    runId,
+    attemptOrdinal: 1 as any,
+    rootNodeId: NodeId.make("node-no-failure-payload"),
+    providerInstanceId: ProviderInstanceId.make("claude"),
+    providerThreadId: ProviderThreadId.make("provider-thread-no-failure-payload"),
+    providerTurnId: null,
+    reason: "initial",
+    status: "failed",
+    startedAt: now,
+    completedAt: now,
+  };
+
+  const entries = deriveTimelineEntriesFromVisibleTurnItems({
+    visibleTurnItems: [],
+    optimisticMessages: [],
+    nodes: [
+      {
+        id: attempt.rootNodeId,
+        threadId,
+        runId,
+        parentNodeId: null,
+        rootNodeId: attempt.rootNodeId,
+      } as any,
+    ],
+    attempts: [attempt],
+  });
+
+  expect(
+    entries.some(
+      (entry) => entry.kind === "work" && entry.entry.projectedItem?.item.type === "error",
+    ),
+  ).toBe(false);
+});
+
+it("preserves real failure details on a failed attempt without synthesizing fake error codes", () => {
+  const threadId = ThreadId.make("thread-real-failure");
+  const runId = RunId.make("run-real-failure");
+  const now = DateTime.makeUnsafe("2026-06-20T00:00:00.000Z");
+  const attempt = {
+    id: RunAttemptId.make("attempt-real-failure"),
+    runId,
+    attemptOrdinal: 1 as any,
+    rootNodeId: NodeId.make("node-real-failure"),
+    providerInstanceId: ProviderInstanceId.make("claude"),
+    providerThreadId: ProviderThreadId.make("provider-thread-real-failure"),
+    providerTurnId: null,
+    reason: "initial",
+    status: "failed",
+    startedAt: now,
+    completedAt: now,
+    failure: {
+      class: "provider_error",
+      message: "Custom provider overload 503",
+      code: "503",
+      retryable: true,
+      responseBody: '{"error":"overloaded"}',
+    },
+  };
+
+  const entries = deriveTimelineEntriesFromVisibleTurnItems({
+    visibleTurnItems: [],
+    optimisticMessages: [],
+    nodes: [
+      {
+        id: attempt.rootNodeId,
+        threadId,
+        runId,
+        parentNodeId: null,
+        rootNodeId: attempt.rootNodeId,
+      } as any,
+    ],
+    attempts: [attempt as any],
+  });
+
+  const errorEntry = entries.find(
+    (entry) => entry.kind === "work" && entry.entry.projectedItem?.item.type === "error",
+  );
+  expect(errorEntry).toBeDefined();
+  expect((errorEntry as any)?.entry.projectedItem?.item.failure).toMatchObject({
+    message: "Custom provider overload 503",
+    code: "503",
+    retryable: true,
+    responseBody: '{"error":"overloaded"}',
+  });
+});

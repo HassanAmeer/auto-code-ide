@@ -1003,8 +1003,15 @@ export function deriveTimelineEntriesFromVisibleTurnItems(
   }
 
   for (const attempt of input.attempts ?? []) {
+    const realFailure =
+      (attempt as any).failure && typeof (attempt as any).failure === "object"
+        ? (attempt as any).failure
+        : null;
     if (
       attempt.status === "failed" &&
+      realFailure &&
+      typeof realFailure.message === "string" &&
+      realFailure.message.trim().length > 0 &&
       !runIdsWithErrors.has(attempt.runId) &&
       !retriedRunIds.has(attempt.runId) &&
       !runsWithSubstantialAssistantMessage.has(attempt.runId)
@@ -1036,11 +1043,12 @@ export function deriveTimelineEntriesFromVisibleTurnItems(
         updatedAt: attempt.completedAt ?? DateTime.makeUnsafe(createdAt),
         type: "error",
         failure: {
-          class: "provider_error",
-          message:
-            "The AI provider failed to generate a response or the request timed out. Please retry.",
-          code: "APIError",
-          retryable: true,
+          class: realFailure.class ?? "provider_error",
+          message: realFailure.message,
+          code: realFailure.code ?? null,
+          retryable: realFailure.retryable ?? null,
+          ...(realFailure.responseBody ? { responseBody: realFailure.responseBody } : {}),
+          ...(realFailure.resetAt ? { resetAt: realFailure.resetAt } : {}),
         },
       };
       const projectedItem: OrchestrationV2ProjectedTurnItem = {

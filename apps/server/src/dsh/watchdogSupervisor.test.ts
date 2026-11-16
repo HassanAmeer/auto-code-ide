@@ -2,6 +2,7 @@
 import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
+import * as NodeChildProcess from "node:child_process";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
 /**
@@ -15,20 +16,55 @@ const harness = vi.hoisted(() => {
   const acquired: Array<{ worktreePath: string; branchName: string; isIsolated: boolean }> = [];
   const released: string[] = [];
   const modelCalls: string[] = [];
-  return { acquired, released, modelCalls, logMessage: "" };
+  return {
+    acquired,
+    released,
+    modelCalls,
+    logMessage: "",
+    prepareWorktree: undefined as ((worktreePath: string) => void) | undefined,
+    onTaskStart: undefined as ((taskTitle: string) => void) | undefined,
+    blockVerifier: false,
+    writeWorkerChanges: false,
+    verifierOutput: "",
+    diff: "",
+    verifierPrompt: "",
+  };
 });
 
 vi.mock("./opencodeBridge.ts", () => ({
   executeOpenCodeTask: async (opts: {
     taskTitle: string;
+    prompt: string;
+    worktreePath: string;
     abortCheck?: (() => boolean) | undefined;
     onLog?: ((message: string) => void) | undefined;
   }) => {
     harness.modelCalls.push(opts.taskTitle);
+    harness.onTaskStart?.(opts.taskTitle);
+    if (harness.writeWorkerChanges && opts.taskTitle !== "Verify requirements") {
+      NodeFS.writeFileSync(
+        NodePath.join(opts.worktreePath, "worker-change.txt"),
+        "changed",
+        "utf8",
+      );
+    }
+    if (opts.taskTitle === "Verify requirements") {
+      harness.verifierPrompt = opts.prompt;
+      return {
+        ok: true,
+        filesModified: [],
+        outputSummary: "Verifier finished",
+        modelOutput: harness.verifierOutput,
+      };
+    }
     if (harness.logMessage) opts.onLog?.(harness.logMessage);
     // Block like a real model call does, but bail out the moment the watchdog
     // aborts this worker — exactly the cooperative contract the bridge has.
-    for (let i = 0; i < 400; i++) {
+    for (
+      let i = 0;
+      i < (harness.blockVerifier && opts.taskTitle === "Verify requirements" ? 4000 : 400);
+      i++
+    ) {
       if (opts.abortCheck?.()) {
         return {
           ok: false,
@@ -44,14 +80,18 @@ vi.mock("./opencodeBridge.ts", () => ({
 }));
 
 vi.mock("./worktreeRunner.ts", () => ({
-  createWorkerWorktree: (_projectRoot: string, taskId: string) => ({
-    worktreePath: `/tmp/watchdog-wt/${taskId}`,
-    branchName: `worker/task-${taskId}`,
-    isIsolated: true,
-  }),
+  createWorkerWorktree: (_projectRoot: string, taskId: string) => {
+    const worktree = {
+      worktreePath: `/tmp/watchdog-wt/${taskId}`,
+      branchName: `worker/task-${taskId}`,
+      isIsolated: true,
+    };
+    harness.prepareWorktree?.(worktree.worktreePath);
+    return worktree;
+  },
   mergeWorkerWorktree: () => ({ ok: true }),
   cleanupWorkerWorktree: () => {},
-  getWorktreeDiff: () => "",
+  getWorktreeDiff: () => harness.diff,
 }));
 
 vi.mock("./worktreePool.ts", () => ({
@@ -62,6 +102,7 @@ vi.mock("./worktreePool.ts", () => ({
       branchName: `worker/task-${taskId}`,
       isIsolated: true,
     };
+    harness.prepareWorktree?.(worktree.worktreePath);
     harness.acquired.push(worktree);
     return worktree;
   },
@@ -74,6 +115,7 @@ vi.mock("./worktreePool.ts", () => ({
 
 import {
   auditRequirementChecklist,
+  isExplicitVerificationPass,
   detectPackageManager,
   requiresBuild,
   reviewWorkerOutput,
@@ -88,6 +130,7 @@ import {
   WATCHDOG_FALLBACK_MODELS,
 } from "./watchdogSupervisor.ts";
 import { isWorkerAborted } from "./abortRegistry.ts";
+import { getTelemetrySnapshot, stopWorkerTelemetry } from "./workerRegistry.ts";
 
 function makeProject(files: Record<string, string>): string {
   const dir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "watchdog-test-"));
@@ -199,9 +242,10 @@ describe("watchdog model lanes", () => {
     expect(lanes.length).toBe(3);
   });
 
-  it("spreads the remaining workers over different models", () => {
+  it("uses the manager's model for every worker by default", () => {
     const lanes = resolveWorkerLaneModels("my-model", 3);
-    expect(new Set(lanes).size).toBeGreaterThan(1);
+    expect(new Set(lanes).size).toBe(1);
+    expect(lanes.every((lane) => lane === "my-model")).toBe(true);
   });
 
   it("always returns at least one lane", () => {
@@ -210,7 +254,7 @@ describe("watchdog model lanes", () => {
 });
 
 describe("requirement checklist audit", () => {
-  it("marks a requirement as passed when the diff mentions it", () => {
+  it("keeps keyword overlap pending until semantic verification confirms it", () => {
     const checklist = [
       { id: "req-1", requirement: "build the table booking form", status: "pending" as const },
     ];
@@ -218,9 +262,9 @@ describe("requirement checklist audit", () => {
       checklist,
       "diff --git a/BookingForm.tsx\n+export function BookingForm() {}",
     );
-    expect(result.passed).toBe(1);
-    expect(result.missing).toEqual([]);
-    expect(checklist[0]?.status).toBe("passed");
+    expect(result.passed).toBe(0);
+    expect(checklist[0]?.status).toBe("pending");
+    expect(checklist[0]?.evidence).toContain("semantic");
   });
 
   it("flags a requirement that never appears in the diff", () => {
@@ -233,7 +277,16 @@ describe("requirement checklist audit", () => {
     );
     expect(result.passed).toBe(0);
     expect(result.missing.length).toBe(1);
-    expect(checklist[0]?.status).toBe("missing");
+    expect(checklist[0]?.status).toBe("pending");
+  });
+});
+
+describe("verification verdict parsing", () => {
+  it("accepts only an explicit PASS token on the first line", () => {
+    expect(isExplicitVerificationPass("PASS\nAll requirements are met.")).toBe(true);
+    expect(isExplicitVerificationPass("FAIL\nThe requested route is missing.")).toBe(false);
+    expect(isExplicitVerificationPass("The result is not PASS")).toBe(false);
+    expect(isExplicitVerificationPass("")).toBe(false);
   });
 });
 
@@ -275,7 +328,268 @@ describe("watchdog cancel path", () => {
     harness.released.length = 0;
     harness.modelCalls.length = 0;
     harness.logMessage = "";
+    harness.prepareWorktree = undefined;
+    harness.onTaskStart = undefined;
+    harness.blockVerifier = false;
+    harness.writeWorkerChanges = false;
+    harness.verifierOutput = "";
+    harness.diff = "";
+    harness.verifierPrompt = "";
   });
+
+  it("does not report a clean verdict when workers produce no changes", async () => {
+    const projectRoot = makeProject({ "package.json": JSON.stringify({ name: "demo" }) });
+    const result = await startWatchdogSupervision({
+      projectId: "no-op-worker",
+      projectName: "demo",
+      projectRoot,
+      taskTitle: "Add search",
+      prompt: "Add search",
+      model: "test-model",
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("failed");
+    expect(result.issues.some((issue) => issue.includes("no changes"))).toBe(true);
+    NodeFS.rmSync(projectRoot, { recursive: true, force: true });
+  });
+
+  it.each(["crash", "cancel"])(
+    "finalizes %s workers without success or leaked allocations",
+    async (mode) => {
+      const projectRoot = makeProject({ "package.json": "{}" });
+      const projectId = `terminal-${mode}`;
+      harness.onTaskStart = () => {
+        if (mode === "crash") throw new Error("worker crashed");
+        const worker = getTelemetrySnapshot({ projectId }).workers[0]!;
+        stopWorkerTelemetry(worker.id);
+      };
+      try {
+        const result = await startWatchdogSupervision({
+          projectId,
+          projectName: "demo",
+          projectRoot,
+          taskTitle: "Add search",
+          prompt: "Add search",
+          model: "test-model",
+        });
+        expect(result.ok).toBe(false);
+        expect(harness.released.length).toBe(harness.acquired.length);
+        const telemetry = getTelemetrySnapshot({ projectId });
+        expect(telemetry.workers.every((w) => w.status !== "running")).toBe(true);
+        expect(telemetry.goals.every((g) => g.status !== "running")).toBe(true);
+      } finally {
+        NodeFS.rmSync(projectRoot, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it("keeps telemetry uncompleted until verification and fails it on a bad verdict", async () => {
+    const projectRoot = makeProject({ "package.json": "{}" });
+    const projectId = "verification-telemetry";
+    harness.writeWorkerChanges = true;
+    harness.prepareWorktree = (cwd) => {
+      NodeFS.mkdirSync(cwd, { recursive: true });
+      NodeChildProcess.execFileSync("git", ["init"], { cwd, stdio: "ignore" });
+    };
+    let prematureCompletion = false;
+    harness.onTaskStart = (title) => {
+      if (title === "Verify requirements") {
+        prematureCompletion ||= getTelemetrySnapshot({ projectId }).goals.some(
+          (g) => g.status === "completed",
+        );
+        prematureCompletion ||= getWatchdogSnapshot({ projectId }).watchdogs[0]!.workers.some(
+          (w) => w.status === "completed",
+        );
+      }
+    };
+    try {
+      const result = await startWatchdogSupervision({
+        projectId,
+        projectName: "demo",
+        projectRoot,
+        taskTitle: "Add search",
+        prompt: "Add search",
+        model: "test-model",
+      });
+      expect(result.ok).toBe(false);
+      expect(prematureCompletion).toBe(false);
+      expect(getTelemetrySnapshot({ projectId }).goals.every((g) => g.status === "failed")).toBe(
+        true,
+      );
+    } finally {
+      NodeFS.rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  it.each([false, true])(
+    "runs build and tests again after requirement repair; broken build=%s",
+    async (broken) => {
+      const projectRoot = makeProject({
+        "package.json": JSON.stringify({
+          scripts: {
+            build: `node -e "require('fs').appendFileSync('build-runs','x');process.exit(${broken ? 1 : 0})"`,
+            test: "node -e \"require('fs').appendFileSync('test-runs','x')\"",
+          },
+        }),
+      });
+      harness.writeWorkerChanges = true;
+      harness.verifierOutput = "FAIL\nMissing search";
+      harness.prepareWorktree = (cwd) => {
+        NodeFS.mkdirSync(cwd, { recursive: true });
+        NodeChildProcess.execFileSync("git", ["init"], { cwd, stdio: "ignore" });
+      };
+      harness.onTaskStart = (title) => {
+        if (title === "Repair requirement failure") harness.verifierOutput = "PASS\nRepaired";
+      };
+      try {
+        const result = await startWatchdogSupervision({
+          projectId: "repair-validation",
+          projectName: "demo",
+          projectRoot,
+          taskTitle: "Add search",
+          prompt: "Add search",
+          model: "test-model",
+        });
+        expect(result.ok).toBe(!broken);
+        if (broken)
+          expect(
+            result.issues.some((issue) => issue.includes("build failed after requirement repair")),
+          ).toBe(true);
+        expect(NodeFS.readFileSync(NodePath.join(projectRoot, "build-runs"), "utf8")).toBe("x");
+        expect(NodeFS.readFileSync(NodePath.join(projectRoot, "test-runs"), "utf8")).toBe("xx");
+      } finally {
+        NodeFS.rmSync(projectRoot, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it("does not start a repair subagent after stop during verification", async () => {
+    const projectRoot = makeProject({ "package.json": JSON.stringify({ name: "demo" }) });
+    harness.blockVerifier = true;
+    harness.writeWorkerChanges = true;
+    harness.prepareWorktree = (worktreePath) => {
+      NodeFS.mkdirSync(worktreePath, { recursive: true });
+      if (!NodeFS.existsSync(NodePath.join(worktreePath, ".git"))) {
+        NodeFS.writeFileSync(NodePath.join(worktreePath, "base.txt"), "base", "utf8");
+        NodeChildProcess.execFileSync("git", ["init"], { cwd: worktreePath, stdio: "ignore" });
+        NodeChildProcess.execFileSync("git", ["config", "user.email", "test@example.com"], {
+          cwd: worktreePath,
+        });
+        NodeChildProcess.execFileSync("git", ["config", "user.name", "Test"], {
+          cwd: worktreePath,
+        });
+        NodeChildProcess.execFileSync("git", ["add", "base.txt"], { cwd: worktreePath });
+        NodeChildProcess.execFileSync("git", ["commit", "-m", "base"], {
+          cwd: worktreePath,
+          stdio: "ignore",
+        });
+      }
+    };
+    harness.onTaskStart = (taskTitle) => {
+      if (taskTitle !== "Verify requirements") return;
+      const live = getWatchdogSnapshot({ projectId: "stop-during-verification" }).watchdogs[0];
+      if (live) stopWatchdog(live.id);
+    };
+
+    const result = await startWatchdogSupervision({
+      projectId: "stop-during-verification",
+      projectName: "demo",
+      projectRoot,
+      taskTitle: "Add search",
+      prompt: "Add search",
+      model: "test-model",
+    });
+
+    expect(result.status, JSON.stringify({ result, calls: harness.modelCalls })).toBe("cancelled");
+    expect(harness.modelCalls).not.toContain("Repair requirement failure");
+    NodeFS.rmSync(projectRoot, { recursive: true, force: true });
+  });
+
+  it("keeps the run failed when verifier output is blank", async () => {
+    const projectRoot = makeProject({ "package.json": JSON.stringify({ name: "demo" }) });
+    harness.writeWorkerChanges = true;
+    harness.verifierOutput = "";
+    harness.prepareWorktree = (worktreePath) => {
+      NodeFS.mkdirSync(worktreePath, { recursive: true });
+      if (!NodeFS.existsSync(NodePath.join(worktreePath, ".git"))) {
+        NodeFS.writeFileSync(NodePath.join(worktreePath, "base.txt"), "base", "utf8");
+        NodeChildProcess.execFileSync("git", ["init"], { cwd: worktreePath, stdio: "ignore" });
+        NodeChildProcess.execFileSync("git", ["config", "user.email", "test@example.com"], {
+          cwd: worktreePath,
+        });
+        NodeChildProcess.execFileSync("git", ["config", "user.name", "Test"], {
+          cwd: worktreePath,
+        });
+        NodeChildProcess.execFileSync("git", ["add", "base.txt"], { cwd: worktreePath });
+        NodeChildProcess.execFileSync("git", ["commit", "-m", "base"], {
+          cwd: worktreePath,
+          stdio: "ignore",
+        });
+      }
+    };
+    const result = await startWatchdogSupervision({
+      projectId: "blank-verifier",
+      projectName: "demo",
+      projectRoot,
+      taskTitle: "Add search",
+      prompt: "Add search",
+      model: "test-model",
+    });
+
+    expect(result.ok).toBe(false);
+    expect(
+      result.issues.some((issue) => issue.includes("no reason recorded")),
+      JSON.stringify(result),
+    ).toBe(true);
+    NodeFS.rmSync(projectRoot, { recursive: true, force: true });
+  });
+
+  it.each([false, true])(
+    "verifies current changes and preserves pending requirements on stop=%s",
+    async (stop) => {
+      const projectRoot = makeProject({ "package.json": JSON.stringify({ name: "demo" }) });
+      const projectId = `current-verification-${stop}`;
+      harness.writeWorkerChanges = true;
+      harness.verifierOutput = "PASS\nRequirements satisfied.";
+      harness.diff = "initial worker changes";
+      harness.prepareWorktree = (worktreePath) => {
+        NodeFS.mkdirSync(worktreePath, { recursive: true });
+        NodeChildProcess.execFileSync("git", ["init"], { cwd: worktreePath, stdio: "ignore" });
+      };
+      harness.onTaskStart = (title) => {
+        if (stop && title === "Verify requirements") {
+          const live = getWatchdogSnapshot({ projectId }).watchdogs[0];
+          if (live) stopWatchdog(live.id);
+        }
+      };
+      try {
+        const result = await startWatchdogSupervision({
+          projectId,
+          projectName: "demo",
+          projectRoot,
+          taskTitle: "Add search",
+          prompt: "Add search",
+          model: "test-model",
+          onLog: (message) => {
+            if (message.includes("Verification sub-agent checking")) {
+              harness.diff = "latest changes including repairs";
+            }
+          },
+        });
+        if (stop) {
+          expect(result.status).toBe("cancelled");
+          const snapshot = getWatchdogSnapshot({ projectId }).watchdogs[0];
+          expect(snapshot?.checklist.every((item) => item.status !== "passed")).toBe(true);
+        } else {
+          expect(harness.verifierPrompt).toContain("latest changes including repairs");
+          expect(result.ok).toBe(true);
+        }
+      } finally {
+        NodeFS.rmSync(projectRoot, { recursive: true, force: true });
+      }
+    },
+  );
 
   /**
    * A stop that lands mid-run must end the run cooperatively: workers abort,

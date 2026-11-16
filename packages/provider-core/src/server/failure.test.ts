@@ -59,6 +59,34 @@ it("bounds provider-controlled failure strings", () => {
   assert.match(failure.code ?? "", /…$/u);
 });
 
+it("preserves a bounded, redacted provider response body", () => {
+  const failure = makeProviderFailure({
+    message: "Provider rejected the request.",
+    responseBody:
+      '{"api_key":"secret-value","error":"Bearer bearer-secret","url":"https://user:pass@example.test/path?token=url-secret"}',
+  });
+
+  assert.equal(
+    failure.responseBody,
+    '{"api_key":"[REDACTED]","error":"Bearer [REDACTED]","url":"https://example.test/path"}',
+  );
+  assert.notInclude(failure.responseBody ?? "", "secret-value");
+  assert.notInclude(failure.responseBody ?? "", "bearer-secret");
+  assert.notInclude(failure.responseBody ?? "", "url-secret");
+});
+
+it("omits an unavailable provider response body and bounds oversized response bodies", () => {
+  const noBody = makeProviderFailure({ message: "Provider rejected the request." });
+  const largeBody = makeProviderFailure({
+    message: "Provider rejected the request.",
+    responseBody: "x".repeat(20_000),
+  });
+
+  assert.equal(noBody.responseBody, undefined);
+  assert.equal(largeBody.responseBody?.length, 16_384);
+  assert.match(largeBody.responseBody ?? "", /…$/u);
+});
+
 it("does not split a surrogate pair at the truncation boundary", () => {
   const failure = makeProviderFailure({
     message: `${"a".repeat(MAX_PROVIDER_FAILURE_MESSAGE_LENGTH - 2)}🚀tail`,

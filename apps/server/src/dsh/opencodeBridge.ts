@@ -17,6 +17,8 @@ export interface OpenCodeExecutionResult {
   sessionId?: string | undefined;
   filesModified: string[];
   outputSummary: string;
+  /** Full model response when available (used by strict semantic verification). */
+  modelOutput?: string | undefined;
   error?: string | undefined;
 }
 
@@ -70,6 +72,7 @@ export async function executeOpenCodeTask(opts: {
   onLog?: (msg: string) => void;
   /** Cooperative abort — when it starts returning true, unfinished writes/steps are skipped. */
   abortCheck?: (() => boolean) | undefined;
+  readOnly?: boolean | undefined;
 }): Promise<OpenCodeExecutionResult> {
   const { worktreePath, projectName, taskTitle, prompt, model, onLog } = opts;
   const abortedResult = (): OpenCodeExecutionResult => ({
@@ -83,6 +86,7 @@ export async function executeOpenCodeTask(opts: {
     return abortedResult();
   }
   const activeEngine = getActiveCoreEngine();
+  const readOnly = opts.readOnly ?? taskTitle === "Verify requirements";
 
   // 1. STANDALONE EMBEDDED ENGINE (opencode-full-engine)
   // Zero external port dependencies, zero background daemons, 100% internal tool execution
@@ -106,6 +110,29 @@ export async function executeOpenCodeTask(opts: {
     );
 
     let filesWrittenCount = 0;
+    let streamedContent = "";
+    const modifiedFiles = new Set<string>();
+    const readFiles = new Set<string>();
+    const resolveFile = (path: string) => {
+      const full = NodePath.resolve(worktreePath, path);
+      const relative = NodePath.relative(worktreePath, full);
+      if (
+        relative.startsWith("..") ||
+        NodePath.isAbsolute(relative) ||
+        relative.split(NodePath.sep).includes(".git")
+      ) {
+        throw new Error("Tool path must stay inside the worktree");
+      }
+      let ancestor = full;
+      while (!NodeFS.existsSync(ancestor)) ancestor = NodePath.dirname(ancestor);
+      const realRelative = NodePath.relative(
+        NodeFS.realpathSync(worktreePath),
+        NodeFS.realpathSync(ancestor),
+      );
+      if (realRelative.startsWith("..") || NodePath.isAbsolute(realRelative))
+        throw new Error("Tool path escapes worktree through symlink");
+      return full;
+    };
     let llmErrorMessage: string | null = null;
     // Bridge the watchdog's cooperative `abortCheck` to a real AbortSignal so
     // the upstream stream is cancelled at the socket, not just flagged after it
@@ -124,6 +151,11 @@ export async function executeOpenCodeTask(opts: {
         "You are an autonomous AI coding subagent within an isolated Git worktree.",
         "Your task is to write real, production-ready, clean code without placeholder comments.",
         codingSkillsPrompt || "",
+        "Inspect existing files before editing. Preserve surrounding code. Never replace an existing file with a generated full-file block.",
+        'To read or edit, emit a JSON block: ```tool:read {"path":"src/app.ts"} ``` or ```tool:edit {"path":"src/app.ts","oldString":"exact old text","newString":"replacement"} ``` (put JSON on the next line). Tool results arrive in the next message.',
+        readOnly
+          ? "Read-only verification: do not write code or call edit. Return PASS or FAIL on the first line when finished."
+          : "Use filepath blocks only to create NEW files; use tool:edit for existing files.",
         "When outputting code, enclose each file inside a markdown block with the relative file path like:",
         "```filepath:src/index.ts",
         "// file contents here",
@@ -143,32 +175,64 @@ export async function executeOpenCodeTask(opts: {
         { role: "system" as const, content: systemMsg },
         {
           role: "user" as const,
-          content: `[PROJECT: ${projectName} in ${worktreePath}]\nTask: ${taskTitle}\n\nRequirements:\n${prompt}\n\nPlease generate full implementation files.`,
+          content: `[PROJECT: ${projectName} in ${worktreePath}]\nTask: ${taskTitle}\n\nRequirements:\n${prompt}\n\nFiles:\n${existingFiles.slice(0, 500).join("\n")}\n\n${readOnly ? "Verify only; do not modify files." : "Read existing files and apply targeted edits; create new files only where needed."}`,
         },
       ];
 
-      let streamedContent = "";
       let streamedChars = 0;
       let lastReport = 0;
       const bypassStreamMod = await import(
         "../../../../opencode-bypass-api/src/server/bypass/client.ts" as string
       );
-      await bypassStreamMod.bypassChatStream(
-        {
-          model: modelToUse,
-          messages,
-          maxTokens: Number(process.env.SUPER_AGENT_MAX_TOKENS || 16384),
-          signal: abortController.signal,
-        },
-        (chunk: string) => {
-          streamedContent += chunk;
-          streamedChars += chunk.length;
-          if (streamedChars - lastReport >= 400) {
-            lastReport = streamedChars;
-            onLog?.(`   ⏳ streaming… ${streamedChars} chars`);
+      for (let step = 0; step < 12; step++) {
+        if (opts.abortCheck?.()) return abortedResult();
+        streamedContent = "";
+        await bypassStreamMod.bypassChatStream(
+          {
+            model: modelToUse,
+            messages,
+            maxTokens: Number(process.env.SUPER_AGENT_MAX_TOKENS || 16384),
+            signal: abortController.signal,
+          },
+          (chunk: string) => {
+            streamedContent += chunk;
+            streamedChars += chunk.length;
+            if (streamedChars - lastReport >= 400) {
+              lastReport = streamedChars;
+              onLog?.(`   ⏳ streaming… ${streamedChars} chars`);
+            }
+          },
+        );
+        const calls = [...streamedContent.matchAll(/```tool:(read|edit)\s*\n([\s\S]*?)```/g)];
+        if (calls.length === 0) break;
+        const results: string[] = [];
+        for (const call of calls) {
+          if (opts.abortCheck?.()) return abortedResult();
+          const input = JSON.parse(call[2]!) as {
+            path: string;
+            oldString: string;
+            newString: string;
+          };
+          const full = resolveFile(input.path);
+          if (call[1] === "read") {
+            const result = executeReadTool({ path: input.path, limit: 2000 }, worktreePath);
+            if (!result.truncated) readFiles.add(full);
+            results.push(`${input.path}:\n${result.content}`);
+          } else {
+            if (readOnly) throw new Error("Verifier cannot modify files");
+            if (!readFiles.has(full)) throw new Error("Read the complete file before editing it");
+            executeEditTool(input, worktreePath);
+            modifiedFiles.add(input.path);
+            filesWrittenCount++;
+            results.push(`Edited ${input.path}`);
           }
-        },
-      );
+        }
+        messages.push({
+          role: "user",
+          content: `Previous tool requests:\n${streamedContent}\n\nTool results:\n${results.join("\n")}\nContinue or give your final response.`,
+        });
+        if (step === 11) throw new Error("Worker tool step limit reached");
+      }
 
       if (opts.abortCheck?.()) {
         onLog?.("⛔ Aborted by user — response discarded, no files written.");
@@ -177,7 +241,7 @@ export async function executeOpenCodeTask(opts: {
 
       const response = { content: streamedContent };
 
-      if (response && response.content) {
+      if (!readOnly && response && response.content) {
         onLog?.(`✓ Response received (${response.content.length} chars). Parsing files...`);
 
         // Match ```filepath:relative/path/file.ext or ```path/to/file.ext
@@ -200,11 +264,15 @@ export async function executeOpenCodeTask(opts: {
             )
           ) {
             try {
+              const full = resolveFile(rawRelPath);
+              if (NodeFS.existsSync(full))
+                throw new Error("Use a targeted edit for existing files");
               executeWriteTool({ path: rawRelPath, content: fileContent }, worktreePath);
+              modifiedFiles.add(rawRelPath);
               filesWrittenCount++;
               onLog?.(`   📝 Generated: ${rawRelPath}`);
             } catch (wErr: any) {
-              onLog?.(`   ⚠️ Write error for ${rawRelPath}: ${wErr?.message}`);
+              throw new Error(`Write error for ${rawRelPath}: ${wErr?.message}`);
             }
           }
         }
@@ -213,7 +281,10 @@ export async function executeOpenCodeTask(opts: {
         if (filesWrittenCount === 0 && /<!DOCTYPE\s+html>/i.test(response.content)) {
           const htmlMatch = response.content.match(/<!DOCTYPE html>[\s\S]*?<\/html>/i);
           if (htmlMatch) {
+            if (NodeFS.existsSync(resolveFile("index.html")))
+              throw new Error("Use a targeted edit for existing index.html");
             executeWriteTool({ path: "index.html", content: htmlMatch[0] }, worktreePath);
+            modifiedFiles.add("index.html");
             filesWrittenCount++;
             onLog?.(`   📝 Generated: index.html (from full HTML document)`);
           }
@@ -226,13 +297,12 @@ export async function executeOpenCodeTask(opts: {
       clearInterval(abortPoll);
     }
 
-    const indexPath = NodePath.join(worktreePath, "index.html");
     if (opts.abortCheck?.()) {
       onLog?.("⛔ Aborted by user — execution stopped.");
       return abortedResult();
     }
-    if (filesWrittenCount === 0 && llmErrorMessage) {
-      // The model failed and produced nothing — never fabricate a starter file.
+    if (llmErrorMessage) {
+      // A failed tool/model step must not turn partial output into success.
       return {
         ok: false,
         filesModified: [],
@@ -241,15 +311,23 @@ export async function executeOpenCodeTask(opts: {
       };
     }
 
-    const finalFiles = executeGlobTool({ pattern: "**/*" }, worktreePath);
+    const finalFiles = [...modifiedFiles];
     return {
       ok: true,
       filesModified: finalFiles,
       outputSummary: `OpenCode Full Engine (Standalone) executed task across ${finalFiles.length} files.`,
+      modelOutput: streamedContent,
     };
   }
 
   // 2. EXTERNAL CLI ADAPTER (opencode-adapter)
+  if (activeEngine !== "opencode-adapter")
+    return {
+      ok: false,
+      filesModified: [],
+      outputSummary: "Unsupported core engine",
+      error: `Unsupported core engine: ${activeEngine}`,
+    };
   // Only runs when explicitly enabled in settings. Detects port and uses standard /prompt endpoint.
   onLog?.(`🚀 OpenCode External CLI Adapter active. Discovering running daemon port...`);
 
@@ -344,14 +422,27 @@ export async function executeOpenCodeTask(opts: {
             ].join("\n");
 
         // Standard endpoint: /prompt (replacing non-standard /turn)
-        await fetch(`${activeBase}/session/${sessionId}/prompt`, {
+        const promptResponse = await fetch(`${activeBase}/session/${sessionId}/prompt`, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: activeAuth },
           body: JSON.stringify({
-            text: fullPromptText,
+            text: readOnly
+              ? `${fullPromptText}\nRead-only verification. Do not modify files.`
+              : fullPromptText,
           }),
           signal: AbortSignal.timeout(45000),
-        }).catch(() => null);
+        });
+        if (!promptResponse.ok)
+          throw new Error(`Adapter prompt failed: HTTP ${promptResponse.status}`);
+        const reply = (await promptResponse.json()) as {
+          data?: { parts?: Array<{ type: string; text?: string }> };
+          parts?: Array<{ type: string; text?: string }>;
+        };
+        const modelOutput = (reply.data?.parts ?? reply.parts ?? [])
+          .filter((part) => part.type === "text")
+          .map((part) => part.text ?? "")
+          .join("\n");
+        if (opts.abortCheck?.()) return abortedResult();
 
         const files = NodeFS.existsSync(worktreePath) ? NodeFS.readdirSync(worktreePath) : [];
         return {
@@ -359,10 +450,16 @@ export async function executeOpenCodeTask(opts: {
           sessionId,
           filesModified: files,
           outputSummary: `OpenCode CLI Adapter executed task in worktree across ${files.length} files.`,
+          modelOutput,
         };
       }
     } catch (err: any) {
-      onLog?.(`ℹ️ OpenCode CLI daemon notice: ${err?.message || "fallback to local generator"}.`);
+      return {
+        ok: false,
+        filesModified: [],
+        outputSummary: "OpenCode adapter task failed",
+        error: err?.message ?? String(err),
+      };
     }
   }
 

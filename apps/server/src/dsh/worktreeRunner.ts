@@ -76,9 +76,9 @@ export function createWorkerWorktree(projectRoot: string, taskId: string): Workt
 /**
  * Captures Git diff of files modified by worker inside the worktree
  */
-export function getWorktreeDiff(worktreePath: string): string {
+export function getWorktreeDiff(worktreePath: string, baseline = "HEAD"): string {
   try {
-    const diff = NodeChildProcess.execSync("git diff HEAD", {
+    const diff = NodeChildProcess.execFileSync("git", ["diff", baseline, "--"], {
       cwd: worktreePath,
       encoding: "utf8",
     });

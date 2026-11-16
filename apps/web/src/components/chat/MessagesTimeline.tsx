@@ -3234,6 +3234,8 @@ function v2EventPresentation(item: OrchestrationV2TurnItem): {
 
 function CupertinoTimelineErrorCard({
   rawError,
+  responseBody,
+  isRetryable,
   errorType,
   explicitModel,
   statusCode: explicitStatusCode,
@@ -3251,6 +3253,8 @@ function CupertinoTimelineErrorCard({
   inspectorContent,
 }: {
   rawError: string;
+  responseBody?: string | null | undefined;
+  isRetryable?: boolean | null | undefined;
   errorType?: string | undefined;
   explicitModel?: string | null | undefined;
   statusCode?: string | undefined;
@@ -3296,6 +3300,7 @@ function CupertinoTimelineErrorCard({
     // ONLY the latest error card in the thread runs auto-retry countdown!
     if (!isLatestError) return;
     if (isInterruptedRun) return;
+    if (isRetryable === false) return;
     if (!onRetryTurn && !retryAction) return;
     if (autoRetrySettings.enabled === false) return;
     if (isPaused || isWorking || isAutoRetried) return;
@@ -3360,22 +3365,24 @@ function CupertinoTimelineErrorCard({
     displayModel,
     fullModelName,
   } = useMemo(() => {
-    const trimmed = (rawError || "").trim();
+    const responsePayload = (responseBody || "").trim();
+    const errorPayload = (rawError || "").trim();
+    const primaryForJson = responsePayload || errorPayload;
     let parsed: any = null;
     let isJson = false;
 
     try {
       if (
-        (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
-        (trimmed.startsWith("[") && trimmed.endsWith("]"))
+        (primaryForJson.startsWith("{") && primaryForJson.endsWith("}")) ||
+        (primaryForJson.startsWith("[") && primaryForJson.endsWith("]"))
       ) {
-        parsed = JSON.parse(trimmed);
+        parsed = JSON.parse(primaryForJson);
         isJson = true;
       } else {
-        const firstBrace = trimmed.indexOf("{");
-        const lastBrace = trimmed.lastIndexOf("}");
+        const firstBrace = primaryForJson.indexOf("{");
+        const lastBrace = primaryForJson.lastIndexOf("}");
         if (firstBrace !== -1 && lastBrace > firstBrace) {
-          const potentialJson = trimmed.slice(firstBrace, lastBrace + 1);
+          const potentialJson = primaryForJson.slice(firstBrace, lastBrace + 1);
           parsed = JSON.parse(potentialJson);
           isJson = true;
         }
@@ -3488,7 +3495,7 @@ function CupertinoTimelineErrorCard({
 
     return {
       exactJson: isJson ? parsed : null,
-      rawResponseText: trimmed,
+      rawResponseText: responsePayload || errorPayload,
       displayStatusCode: formattedStatus,
       exactStatusCode: code,
       exactErrorTitle: title,
@@ -3496,7 +3503,7 @@ function CupertinoTimelineErrorCard({
       displayModel: truncateModelName(model),
       fullModelName: model,
     };
-  }, [rawError, explicitStatusCode, errorType, explicitModel, isWarning]);
+  }, [rawError, responseBody, explicitStatusCode, errorType, explicitModel, isWarning]);
 
   const [viewMode, setViewMode] = useState<"response" | "raw">("response");
 
@@ -3860,6 +3867,8 @@ function CupertinoErrorRow({
   return (
     <CupertinoTimelineErrorCard
       rawError={presentation.detail || item.failure.message}
+      responseBody={item.failure.responseBody}
+      isRetryable={item.failure.retryable}
       errorType={
         item.failure.class && item.failure.class !== "unknown"
           ? item.failure.class
@@ -6206,6 +6215,8 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
     return (
       <CupertinoTimelineErrorCard
         rawError={failureItem.failure.message}
+        responseBody={failureItem.failure.responseBody}
+        isRetryable={failureItem.failure.retryable}
         errorType={failureItem.failure.class !== "unknown" ? failureItem.failure.class : label}
         statusCode={failureItem.failure.code ?? undefined}
         explicitModel={

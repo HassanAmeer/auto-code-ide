@@ -11742,6 +11742,27 @@ export default function ChatView(props: ChatViewProps) {
       return;
     }
 
+    const latestRun = serverProjection?.runs[serverProjection.runs.length - 1] ?? null;
+    const latestFailure = serverProjection
+      ? latestRootProviderFailure(latestRun, serverProjection.turnItems)
+      : null;
+    if (latestFailure && latestFailure.retryable === false) {
+      setAutoRetryCountdown(null);
+      return;
+    }
+
+    const hasSuccessfulAssistantMessage = Boolean(
+      latestRun &&
+      serverProjection?.messages.some(
+        (msg) =>
+          msg.role === "assistant" && msg.runId === latestRun.id && (msg.content?.length ?? 0) > 0,
+      ),
+    );
+    if (hasSuccessfulAssistantMessage) {
+      setAutoRetryCountdown(null);
+      return;
+    }
+
     // Only favorited models are permitted to auto-retry
     const isCurrentModelFavorited = Boolean(
       activeThread?.modelSelection &&

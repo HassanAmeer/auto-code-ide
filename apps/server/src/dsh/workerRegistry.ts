@@ -78,12 +78,8 @@ export function pruneStaleTelemetry(): void {
  * spawn order so every agent in a parallel run is uniquely identifiable.
  */
 export function deriveSpecialistRole(title: string, category?: string, order?: number): string {
-  if (order === 1) return "Worker #1: Frontend & UI Specialist";
-  if (order === 2) return "Worker #2: Backend API & Logic Specialist";
-  if (order === 3) return "Worker #3: Database & State Specialist";
-  if (order === 4) return "Worker #4: QA & Verification Specialist";
-
   const lower = title.toLowerCase();
+  let role: string;
 
   if (
     lower.includes("server") ||
@@ -94,10 +90,8 @@ export function deriveSpecialistRole(title: string, category?: string, order?: n
     lower.includes("route") ||
     lower.includes("api")
   ) {
-    return "Server & Deployment Specialist";
-  }
-
-  if (
+    role = "Server & Deployment Specialist";
+  } else if (
     lower.includes("android") ||
     lower.includes("native") ||
     lower.includes("mobile") ||
@@ -105,10 +99,8 @@ export function deriveSpecialistRole(title: string, category?: string, order?: n
     lower.includes("java") ||
     lower.includes("webrtc audio")
   ) {
-    return "Android Native Specialist";
-  }
-
-  if (
+    role = "Android Native Specialist";
+  } else if (
     lower.includes("ui") ||
     lower.includes("web") ||
     lower.includes("frontend") ||
@@ -120,35 +112,36 @@ export function deriveSpecialistRole(title: string, category?: string, order?: n
     lower.includes("css") ||
     lower.includes("tailwind")
   ) {
-    return "Web UI & Signaling Specialist";
-  }
-
-  if (
+    role = "Web UI & Signaling Specialist";
+  } else if (
     lower.includes("database") ||
     lower.includes("schema") ||
     lower.includes("sqlite") ||
     lower.includes("sql") ||
     lower.includes("storage")
   ) {
-    return "Database & Storage Specialist";
-  }
-
-  if (
+    role = "Database & Storage Specialist";
+  } else if (
     lower.includes("test") ||
     lower.includes("qa") ||
     lower.includes("audit") ||
     lower.includes("review") ||
     lower.includes("syntax")
   ) {
-    return "Quality Assurance & Review Specialist";
+    role = "Quality Assurance & Review Specialist";
+  } else if (category === "architecture_schema") {
+    role = "System Architecture Specialist";
+  } else if (category === "frontend_ui") {
+    role = "Web UI & Signaling Specialist";
+  } else if (category === "core_logic_api") {
+    role = "Server & Backend Specialist";
+  } else if (category === "integration_polish") {
+    role = "Integration & Deployment Specialist";
+  } else {
+    role = "Autonomous Parallel Specialist";
   }
 
-  if (category === "architecture_schema") return "System Architecture Specialist";
-  if (category === "frontend_ui") return "Web UI & Signaling Specialist";
-  if (category === "core_logic_api") return "Server & Backend Specialist";
-  if (category === "integration_polish") return "Integration & Deployment Specialist";
-
-  return "Autonomous Parallel Specialist";
+  return order === undefined ? role : `Worker #${order}: ${role}`;
 }
 
 /**

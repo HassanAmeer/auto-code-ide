@@ -29,6 +29,7 @@ export class ContextHandoffBudgetError extends Schema.TaggedError<ContextHandoff
 
 export const MAX_PROVIDER_FAILURE_MESSAGE_LENGTH = 4_096;
 export const MAX_PROVIDER_FAILURE_CODE_LENGTH = 128;
+export const MAX_PROVIDER_FAILURE_RESPONSE_BODY_LENGTH = 16_384;
 
 const DEFAULT_PROVIDER_FAILURE_MESSAGE = "Provider turn failed.";
 
@@ -143,7 +144,7 @@ function replaceUnsafeControlCharacters(value: string): string {
 function redactProviderFailureText(value: string): string {
   return replaceUnsafeControlCharacters(value)
     .replace(/\bhttps?:\/\/[^\s<>"']+/giu, redactUrl)
-    .replace(/\b(Bearer|Basic)\s+[^\s,;]+/giu, "$1 [REDACTED]")
+    .replace(/\b(Bearer|Basic)\s+[^\s,;"\x27]+/giu, "$1 [REDACTED]")
     .replace(
       /(["'](?:access[_-]?token|api[_-]?key|authorization|credential|password|secret|token)["']\s*:\s*["'])[^"']*(["'])/giu,
       "$1[REDACTED]$2",
@@ -170,6 +171,7 @@ function boundedText(value: string, maxLength: number): string {
 export function makeProviderFailure(input: {
   readonly cause?: unknown;
   readonly message?: string | undefined;
+  readonly responseBody?: string | null | undefined;
   readonly code?: string | null | undefined;
   readonly class?: OrchestrationV2ProviderFailureClass;
   readonly retryable?: boolean | null;
@@ -200,6 +202,9 @@ export function makeProviderFailure(input: {
     message: message || DEFAULT_PROVIDER_FAILURE_MESSAGE,
     code,
     retryable: input.retryable ?? null,
+    ...(typeof input.responseBody === "string"
+      ? { responseBody: boundedText(input.responseBody, MAX_PROVIDER_FAILURE_RESPONSE_BODY_LENGTH) }
+      : {}),
     ...(input.class === "usage_limit" &&
     input.resetAt != null &&
     Number.isFinite(Date.parse(input.resetAt))

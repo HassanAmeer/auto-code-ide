@@ -32,11 +32,16 @@ echo -e "${C_BOLD}${C_CYAN} 🚀 AUTO GIT PUSH & VPS DEPLOY PIPELINE${C_RESET}"
 echo -e "${C_BOLD}${C_CYAN}====================================================================${C_RESET}"
 
 SKIP_BUILD=false
+AUTOJOBS_ONLY=false
 COMMIT_MSG=""
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --autojobs-only)
+      AUTOJOBS_ONLY=true
+      shift
+      ;;
     --skip-build|--no-build|-s)
       SKIP_BUILD=true
       shift
@@ -139,7 +144,9 @@ fi
 
 # Rsync web and server dist for zero-downtime, fast asset delivery
 RSYNC_SSH="ssh -o ConnectTimeout=15 -o ServerAliveInterval=5"
-for TARGET_DIR in "${VPS_DIR}" "/root/bot-autojobs"; do
+TARGET_DIRS=("${VPS_DIR}" "/root/bot-autojobs")
+if [ "$AUTOJOBS_ONLY" = true ]; then TARGET_DIRS=("${VPS_DIR}"); fi
+for TARGET_DIR in "${TARGET_DIRS[@]}"; do
   echo -e "  ${C_DIM}Syncing to ${TARGET_DIR}...${C_RESET}"
   # Runtime config (opencode.json on the servers holds the live provider
   # catalog + keys and is intentionally NOT what origin/main carries). Back it
@@ -164,7 +171,7 @@ for TARGET_DIR in "${VPS_DIR}" "/root/bot-autojobs"; do
     fi
 
     ( cd "${TARGET_DIR}" && git fetch origin "${CURRENT_BRANCH}" > /dev/null 2>&1 \
-      && git reset --hard "origin/${CURRENT_BRANCH}" > /dev/null 2>&1 )
+      && git merge --ff-only "origin/${CURRENT_BRANCH}" > /dev/null 2>&1 ) || exit 1
     if [ -n "$OPENCODE_BACKUP" ]; then cp "$OPENCODE_BACKUP" "${TARGET_DIR}/opencode.json"; fi
     [ -n "$OPENCODE_BACKUP" ] && rm -f "$OPENCODE_BACKUP"
     continue
@@ -185,7 +192,7 @@ for TARGET_DIR in "${VPS_DIR}" "/root/bot-autojobs"; do
   ssh "${VPS_USER}@${VPS_HOST}" "bash -s" << EOF
     cd "${TARGET_DIR}" || exit 1
     git fetch origin "${CURRENT_BRANCH}" > /dev/null 2>&1
-    git reset --hard "origin/${CURRENT_BRANCH}" > /dev/null 2>&1
+    git merge --ff-only "origin/${CURRENT_BRANCH}" > /dev/null 2>&1 || exit 1
 EOF
   if [ -n "$OPENCODE_BACKUP" ]; then
     rsync -az -e "${RSYNC_SSH}" "$OPENCODE_BACKUP" "${VPS_USER}@${VPS_HOST}:${TARGET_DIR}/opencode.json"
@@ -199,8 +206,9 @@ echo -e "  ${C_GREEN}✓ VPS repositories synchronized with commit ${CURRENT_COM
 # ------------------------------------------------------------------------------
 echo -e "\n${C_BOLD}${C_BLUE}[5/5] Restarting VPS Services (autojobs + bot) & Performing Health Checks...${C_RESET}"
 if [ "$LOCAL_MODE" = true ]; then
-  HEALTH_RESULT=$(bash -s << 'HEALTH_EOF'
-  systemctl restart autojobs.service bot-autojobs.service
+  HEALTH_RESULT=$(AUTOJOBS_ONLY="$AUTOJOBS_ONLY" bash -s << 'HEALTH_EOF'
+  systemctl restart autojobs.service
+  if [ "$AUTOJOBS_ONLY" != true ]; then systemctl restart bot-autojobs.service; fi
 
   STATUS="unknown"
   HTTP_CODE="000"
@@ -225,7 +233,8 @@ HEALTH_EOF
 )
 else
 HEALTH_RESULT=$(ssh "${VPS_USER}@${VPS_HOST}" "bash -s" << EOF
-  systemctl restart autojobs.service bot-autojobs.service
+  systemctl restart autojobs.service
+  if [ "$AUTOJOBS_ONLY" != true ]; then systemctl restart bot-autojobs.service; fi
 
   STATUS="unknown"
   HTTP_CODE="000"

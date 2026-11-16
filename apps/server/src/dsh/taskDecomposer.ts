@@ -65,7 +65,7 @@ export function decomposeTask(
     .filter((line) => line.length > 5);
 
   if (explicitMatches.length >= 2) {
-    return explicitMatches.slice(0, 4).map((item, idx) => ({
+    return explicitMatches.map((item, idx) => ({
       id: `subtask-${idx + 1}`,
       order: idx + 1,
       title: item.slice(0, 60),

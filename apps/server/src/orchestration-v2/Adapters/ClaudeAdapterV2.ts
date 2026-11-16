@@ -2558,6 +2558,7 @@ function providerFailureFromResult(
   const apiErrorStatus = message.api_error_status ?? null;
   return makeProviderFailure({
     message: listedError ?? structuredError ?? failureHint ?? message.result,
+    responseBody: typeof message.result === "string" ? message.result : null,
     code:
       apiErrorStatus === null
         ? (message.terminal_reason ?? "sdk_result_error")
