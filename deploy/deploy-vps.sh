@@ -170,8 +170,12 @@ for TARGET_DIR in "${TARGET_DIRS[@]}"; do
       rsync -az bot/ "${TARGET_DIR}/bot/"
     fi
 
+    # Move the local branch pointer to the just-pushed commit without touching
+    # the working tree or index. The deployed dirs intentionally carry live
+    # runtime state (keys, caches, parallel-session files); a merge/reset would
+    # refuse or destroy those. Built artifacts are already synced by rsync above.
     ( cd "${TARGET_DIR}" && git fetch origin "${CURRENT_BRANCH}" > /dev/null 2>&1 \
-      && git merge --ff-only "origin/${CURRENT_BRANCH}" > /dev/null 2>&1 ) || exit 1
+      && git update-ref "refs/heads/${CURRENT_BRANCH}" "origin/${CURRENT_BRANCH}" ) || exit 1
     if [ -n "$OPENCODE_BACKUP" ]; then cp "$OPENCODE_BACKUP" "${TARGET_DIR}/opencode.json"; fi
     [ -n "$OPENCODE_BACKUP" ] && rm -f "$OPENCODE_BACKUP"
     continue
