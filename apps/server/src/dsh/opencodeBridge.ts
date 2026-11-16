@@ -2,14 +2,7 @@
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 import * as NodeOS from "node:os";
-import {
-  executeWriteTool,
-  executeEditTool,
-  executePatchTool,
-  executeShellTool,
-  executeReadTool,
-  executeGlobTool,
-} from "../../../../engine/runtimes/opencode-full-engine/index.ts";
+import { executeSubagentTool } from "../../../../engine/runtimes/opencode-full-engine/index.ts";
 import { getProjectChatEngineSkillPrompt } from "@t3tools/shared/superpowerSkills";
 
 export interface OpenCodeExecutionResult {
@@ -91,232 +84,46 @@ export async function executeOpenCodeTask(opts: {
   // 1. STANDALONE EMBEDDED ENGINE (opencode-full-engine)
   // Zero external port dependencies, zero background daemons, 100% internal tool execution
   if (activeEngine === "opencode-full-engine") {
-    onLog?.(
-      `⚡ OpenCode Full Engine (Standalone Embedded) active. Running internal tools in worktree (${model})...`,
-    );
+    onLog?.(`⚡ OpenCode Full Engine (native subagents) active. Running in worktree (${model})...`);
 
-    const existingFiles = executeGlobTool({ pattern: "**/*" }, worktreePath);
-    onLog?.(`📂 Scanned ${existingFiles.length} files in worktree.`);
-
-    // Honor the caller's explicit model; the DeepSeek gateway model is only a
-    // fallback when nothing is configured (or a custom SUPER_AGENT_WORKER_MODEL
-    // is set). Never silently swap a configured model.
+    // Native engine subagent replaces the old DeepSeek-specific worker harness.
+    // The engine owns session tracking, parentID depth, tool execution and
+    // model override; this bridge only maps the result to the watchdog contract.
     const modelToUse =
       model && model !== "default"
         ? model
-        : process.env.SUPER_AGENT_WORKER_MODEL || "deepseek-v4.1-flash-free";
-    onLog?.(
-      `⚡ Standalone Engine: Invoking DeepSeek Harness model (${modelToUse}) for real code synthesis...`,
+        : process.env.SUPER_AGENT_WORKER_MODEL || "opencode/beam-free";
+    const result = await executeSubagentTool(
+      {
+        agent: "build",
+        description: taskTitle,
+        prompt,
+        model: modelToUse,
+        readOnly,
+        abortCheck: opts.abortCheck,
+        onLog,
+      },
+      worktreePath,
     );
 
-    let filesWrittenCount = 0;
-    let streamedContent = "";
-    const modifiedFiles = new Set<string>();
-    const readFiles = new Set<string>();
-    const resolveFile = (path: string) => {
-      const full = NodePath.resolve(worktreePath, path);
-      const relative = NodePath.relative(worktreePath, full);
-      if (
-        relative.startsWith("..") ||
-        NodePath.isAbsolute(relative) ||
-        relative.split(NodePath.sep).includes(".git")
-      ) {
-        throw new Error("Tool path must stay inside the worktree");
-      }
-      let ancestor = full;
-      while (!NodeFS.existsSync(ancestor)) ancestor = NodePath.dirname(ancestor);
-      const realRelative = NodePath.relative(
-        NodeFS.realpathSync(worktreePath),
-        NodeFS.realpathSync(ancestor),
-      );
-      if (realRelative.startsWith("..") || NodePath.isAbsolute(realRelative))
-        throw new Error("Tool path escapes worktree through symlink");
-      return full;
-    };
-    let llmErrorMessage: string | null = null;
-    // Bridge the watchdog's cooperative `abortCheck` to a real AbortSignal so
-    // the upstream stream is cancelled at the socket, not just flagged after it
-    // finishes. The poll interval keeps the contract identical for callers that
-    // only know about `abortCheck`.
-    const abortController = new AbortController();
-    const abortPoll = setInterval(() => {
-      if (opts.abortCheck?.()) abortController.abort(new Error("Stopped by user"));
-    }, 250);
-    try {
-      // Skills come from the PROJECT root (not the worktree) so the system
-      // prompt is identical for every worker — that is what lets the provider
-      // cache the prefix instead of re-processing it per worker.
-      const codingSkillsPrompt = getProjectChatEngineSkillPrompt(opts.projectRoot ?? worktreePath);
-      const systemMsg = [
-        "You are an autonomous AI coding subagent within an isolated Git worktree.",
-        "Your task is to write real, production-ready, clean code without placeholder comments.",
-        codingSkillsPrompt || "",
-        "Inspect existing files before editing. Preserve surrounding code. Never replace an existing file with a generated full-file block.",
-        'To read or edit, emit a JSON block: ```tool:read {"path":"src/app.ts"} ``` or ```tool:edit {"path":"src/app.ts","oldString":"exact old text","newString":"replacement"} ``` (put JSON on the next line). Tool results arrive in the next message.',
-        readOnly
-          ? "Read-only verification: do not write code or call edit. Return PASS or FAIL on the first line when finished."
-          : "Use filepath blocks only to create NEW files; use tool:edit for existing files.",
-        "When outputting code, enclose each file inside a markdown block with the relative file path like:",
-        "```filepath:src/index.ts",
-        "// file contents here",
-        "```",
-        "Or for web apps with single page, provide full HTML in:",
-        "```filepath:index.html",
-        "<!DOCTYPE html>...",
-        "```",
-      ]
-        .filter(Boolean)
-        .join("\n\n");
-
-      // Stream the model output so the watchdog card shows live progress
-      // instead of a frozen spinner. The system prompt stays byte-identical
-      // across workers so the gateway can serve it from its prompt cache.
-      const messages = [
-        { role: "system" as const, content: systemMsg },
-        {
-          role: "user" as const,
-          content: `[PROJECT: ${projectName} in ${worktreePath}]\nTask: ${taskTitle}\n\nRequirements:\n${prompt}\n\nFiles:\n${existingFiles.slice(0, 500).join("\n")}\n\n${readOnly ? "Verify only; do not modify files." : "Read existing files and apply targeted edits; create new files only where needed."}`,
-        },
-      ];
-
-      let streamedChars = 0;
-      let lastReport = 0;
-      const bypassStreamMod = await import(
-        "../../../../opencode-bypass-api/src/server/bypass/client.ts" as string
-      );
-      for (let step = 0; step < 12; step++) {
-        if (opts.abortCheck?.()) return abortedResult();
-        streamedContent = "";
-        await bypassStreamMod.bypassChatStream(
-          {
-            model: modelToUse,
-            messages,
-            maxTokens: Number(process.env.SUPER_AGENT_MAX_TOKENS || 16384),
-            signal: abortController.signal,
-          },
-          (chunk: string) => {
-            streamedContent += chunk;
-            streamedChars += chunk.length;
-            if (streamedChars - lastReport >= 400) {
-              lastReport = streamedChars;
-              onLog?.(`   ⏳ streaming… ${streamedChars} chars`);
-            }
-          },
-        );
-        const calls = [...streamedContent.matchAll(/```tool:(read|edit)\s*\n([\s\S]*?)```/g)];
-        if (calls.length === 0) break;
-        const results: string[] = [];
-        for (const call of calls) {
-          if (opts.abortCheck?.()) return abortedResult();
-          const input = JSON.parse(call[2]!) as {
-            path: string;
-            oldString: string;
-            newString: string;
-          };
-          const full = resolveFile(input.path);
-          if (call[1] === "read") {
-            const result = executeReadTool({ path: input.path, limit: 2000 }, worktreePath);
-            if (!result.truncated) readFiles.add(full);
-            results.push(`${input.path}:\n${result.content}`);
-          } else {
-            if (readOnly) throw new Error("Verifier cannot modify files");
-            if (!readFiles.has(full)) throw new Error("Read the complete file before editing it");
-            executeEditTool(input, worktreePath);
-            modifiedFiles.add(input.path);
-            filesWrittenCount++;
-            results.push(`Edited ${input.path}`);
-          }
-        }
-        messages.push({
-          role: "user",
-          content: `Previous tool requests:\n${streamedContent}\n\nTool results:\n${results.join("\n")}\nContinue or give your final response.`,
-        });
-        if (step === 11) throw new Error("Worker tool step limit reached");
-      }
-
-      if (opts.abortCheck?.()) {
-        onLog?.("⛔ Aborted by user — response discarded, no files written.");
-        return abortedResult();
-      }
-
-      const response = { content: streamedContent };
-
-      if (!readOnly && response && response.content) {
-        onLog?.(`✓ Response received (${response.content.length} chars). Parsing files...`);
-
-        // Match ```filepath:relative/path/file.ext or ```path/to/file.ext
-        const fileBlockRegex =
-          /```(?:filepath:)?([a-zA-Z0-9_\-./\\]+\.[a-zA-Z0-9]+)\n([\s\S]*?)```/g;
-        let match;
-        while ((match = fileBlockRegex.exec(response.content)) !== null) {
-          if (opts.abortCheck?.()) {
-            onLog?.("⛔ Aborted by user — stopping file writes.");
-            return abortedResult();
-          }
-          const rawRelPath = match[1]?.trim();
-          const fileContent = match[2];
-          if (
-            rawRelPath &&
-            fileContent &&
-            !rawRelPath.startsWith("http") &&
-            !["json", "js", "ts", "tsx", "html", "css", "bash", "sh"].includes(
-              rawRelPath.toLowerCase(),
-            )
-          ) {
-            try {
-              const full = resolveFile(rawRelPath);
-              if (NodeFS.existsSync(full))
-                throw new Error("Use a targeted edit for existing files");
-              executeWriteTool({ path: rawRelPath, content: fileContent }, worktreePath);
-              modifiedFiles.add(rawRelPath);
-              filesWrittenCount++;
-              onLog?.(`   📝 Generated: ${rawRelPath}`);
-            } catch (wErr: any) {
-              throw new Error(`Write error for ${rawRelPath}: ${wErr?.message}`);
-            }
-          }
-        }
-
-        // If no file blocks matched but raw HTML is present
-        if (filesWrittenCount === 0 && /<!DOCTYPE\s+html>/i.test(response.content)) {
-          const htmlMatch = response.content.match(/<!DOCTYPE html>[\s\S]*?<\/html>/i);
-          if (htmlMatch) {
-            if (NodeFS.existsSync(resolveFile("index.html")))
-              throw new Error("Use a targeted edit for existing index.html");
-            executeWriteTool({ path: "index.html", content: htmlMatch[0] }, worktreePath);
-            modifiedFiles.add("index.html");
-            filesWrittenCount++;
-            onLog?.(`   📝 Generated: index.html (from full HTML document)`);
-          }
-        }
-      }
-    } catch (llmErr: any) {
-      llmErrorMessage = llmErr?.message || String(llmErr);
-      onLog?.(`⚠️ Model execution failed: ${llmErrorMessage || "unknown error"}.`);
-    } finally {
-      clearInterval(abortPoll);
-    }
-
-    if (opts.abortCheck?.()) {
-      onLog?.("⛔ Aborted by user — execution stopped.");
-      return abortedResult();
-    }
-    if (llmErrorMessage) {
-      // A failed tool/model step must not turn partial output into success.
+    if (result.status === "aborted") {
       return {
         ok: false,
         filesModified: [],
-        outputSummary: `Model execution failed: ${llmErrorMessage}`,
-        error: llmErrorMessage,
+        outputSummary: "Task aborted by user — execution stopped before completion.",
+        error: "Aborted by user",
       };
     }
 
-    const finalFiles = [...modifiedFiles];
     return {
-      ok: true,
-      filesModified: finalFiles,
-      outputSummary: `OpenCode Full Engine (Standalone) executed task across ${finalFiles.length} files.`,
-      modelOutput: streamedContent,
+      ok: result.status === "completed",
+      filesModified: result.filesModified,
+      outputSummary:
+        result.status === "completed"
+          ? `OpenCode Full Engine native subagent ${result.sessionID} executed task across ${result.filesModified.length} files.`
+          : `OpenCode Full Engine subagent ${result.status}: ${result.error || result.output}`,
+      modelOutput: result.output,
+      ...(result.error ? { error: result.error } : {}),
     };
   }
 

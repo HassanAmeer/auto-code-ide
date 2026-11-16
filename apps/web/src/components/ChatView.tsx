@@ -11292,7 +11292,11 @@ export default function ChatView(props: ChatViewProps) {
   );
 
   const onProviderModelSelect = useCallback(
-    (instanceId: ProviderInstanceId, model: string, options?: { focusComposer?: boolean }) => {
+    (
+      instanceId: ProviderInstanceId,
+      model: string,
+      options?: { focusComposer?: boolean; threadScopedOnly?: boolean },
+    ) => {
       if (!activeThread) return;
       // Look up the configured instance so model normalization and custom
       // model lookup stay scoped to that exact instance. Unknown instance ids
@@ -11354,6 +11358,15 @@ export default function ChatView(props: ChatViewProps) {
         nextModelSelection,
       });
       if (modelChangeBlockReason) {
+        if (options?.threadScopedOnly) {
+          // An automatic route must never open a new chat or touch other threads.
+          setComposerDraftModelSelection(
+            scopeThreadRef(activeThread.environmentId, activeThread.id),
+            nextModelSelection,
+            { explicit: true, replaceOptions: true },
+          );
+          return;
+        }
         // The running thread keeps its provider, so the chosen model moves to a
         // fresh chat. The pick is never refused.
         saveLastSelectedModel(nextModelSelection);
@@ -11375,18 +11388,20 @@ export default function ChatView(props: ChatViewProps) {
         if (options?.focusComposer !== false) scheduleComposerFocus();
         return;
       }
-      // Save permanently to localStorage so it survives page reloads
-      saveLastSelectedModel(nextModelSelection);
-
-      // Persist to server settings as default model
-      void updateProjectScriptSettings({
-        environmentId,
-        input: {
-          patch: {
-            defaultModelSelection: nextModelSelection,
+      if (!options?.threadScopedOnly) {
+        // A user's manual pick is remembered globally. An automatic route is
+        // local to this thread — writing it to the global default would make
+        // every other chat silently switch models too.
+        saveLastSelectedModel(nextModelSelection);
+        void updateProjectScriptSettings({
+          environmentId,
+          input: {
+            patch: {
+              defaultModelSelection: nextModelSelection,
+            },
           },
-        },
-      });
+        });
+      }
 
       setComposerDraftModelSelection(
         scopeThreadRef(activeThread.environmentId, activeThread.id),
@@ -11395,7 +11410,7 @@ export default function ChatView(props: ChatViewProps) {
         // model default", not "keep the previous model's options".
         { explicit: true, replaceOptions: true },
       );
-      setStickyComposerModelSelection(nextModelSelection);
+      if (!options?.threadScopedOnly) setStickyComposerModelSelection(nextModelSelection);
       if (options?.focusComposer !== false) scheduleComposerFocus();
     },
     [
@@ -11621,6 +11636,7 @@ export default function ChatView(props: ChatViewProps) {
               };
               onProviderModelSelect(nextFallbackCandidate.instanceId, nextFallbackCandidate.model, {
                 focusComposer: false,
+                threadScopedOnly: true,
               });
               setAutoRetryAttempt(0);
               toastManager.add({
@@ -11733,6 +11749,7 @@ export default function ChatView(props: ChatViewProps) {
     });
     onProviderModelSelect(nextFallbackCandidate.instanceId, nextFallbackCandidate.model, {
       focusComposer: false,
+      threadScopedOnly: true,
     });
     setAutoRetryAttempt(0);
     setAutoRetryCountdown(null);

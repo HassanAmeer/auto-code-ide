@@ -152,7 +152,7 @@ export function registerWorkerTelemetry(worker: ActiveWorkerTelemetry): void {
   activeWorkers.set(worker.id, {
     ...worker,
     startedAt: worker.startedAt || Date.now(),
-    model: worker.model || "DeepSeek / Gemini",
+    model: worker.model || "Engine subagent",
   });
 }
 
@@ -178,7 +178,7 @@ export function updateWorkerTelemetryStatus(
       id,
       role: updates.role || "Autonomous Parallel Specialist",
       status,
-      model: updates.model || "DeepSeek / Gemini",
+      model: updates.model || "Engine subagent",
       cwd: updates.cwd || process.cwd(),
       goal: updates.goal || "Autonomous Task Execution",
       startedAt: updates.startedAt || Date.now(),

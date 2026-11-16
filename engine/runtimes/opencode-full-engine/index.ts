@@ -14,6 +14,7 @@ import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 import * as NodeOS from "node:os";
 import * as NodeChildProcess from "node:child_process";
+import { bypassChatStream } from "../../../opencode-bypass-api/src/server/bypass/client.ts";
 
 export const ENGINE_NAME = "OpenCode Full Engine";
 export const ENGINE_VERSION = "2.3.0-embedded";
@@ -455,6 +456,247 @@ export function compactSessionHistory(
 }
 
 // ---------------------------------------------------------------------------
+// 4b. Native Subagent Orchestrator (in-process, mirrors opencode's
+// experimental.subagent_depth / parentID child-session design)
+// ---------------------------------------------------------------------------
+
+export interface SubagentSessionInfo {
+  readonly id: string;
+  readonly parentID?: string;
+  readonly agent: string;
+  readonly model: string;
+  readonly description: string;
+  readonly createdAt: string;
+}
+
+export interface SubagentTaskInput {
+  /** Agent id/persona, e.g. "build" or "verify". */
+  readonly agent?: string;
+  readonly description?: string;
+  readonly prompt: string;
+  /** Model override; falls back to the parent session model. */
+  readonly model?: string;
+  /** Parent session id — enables depth accounting and follow-ups. */
+  readonly parentID?: string;
+  /** Follow-up to an existing child session id. */
+  readonly sessionID?: string;
+  readonly cwd?: string;
+  readonly readOnly?: boolean;
+  readonly abortCheck?: () => boolean;
+  readonly maxSteps?: number;
+  readonly onLog?: (message: string) => void;
+}
+
+export interface SubagentTaskResult {
+  readonly sessionID: string;
+  readonly agent: string;
+  readonly status: "completed" | "error" | "aborted";
+  readonly output: string;
+  readonly filesModified: string[];
+  readonly error?: string;
+}
+
+const SUBAGENT_SESSIONS = new Map<string, SubagentSessionInfo>();
+
+/** Nesting depth of a session, walking the parentID chain (native semantics). */
+export function getSubagentDepth(sessionID: string | undefined): number {
+  let depth = 0;
+  let cursor = sessionID;
+  const seen = new Set<string>();
+  while (cursor && SUBAGENT_SESSIONS.has(cursor) && !seen.has(cursor)) {
+    seen.add(cursor);
+    depth += 1;
+    cursor = SUBAGENT_SESSIONS.get(cursor)?.parentID;
+  }
+  return depth;
+}
+
+export function getSubagentSession(sessionID: string): SubagentSessionInfo | undefined {
+  return SUBAGENT_SESSIONS.get(sessionID);
+}
+
+export function listSubagentSessions(): SubagentSessionInfo[] {
+  return [...SUBAGENT_SESSIONS.values()];
+}
+
+function openSubagentSession(input: SubagentTaskInput): SubagentSessionInfo {
+  const followUp = input.sessionID ? SUBAGENT_SESSIONS.get(input.sessionID) : undefined;
+  if (input.sessionID && !followUp) {
+    throw new Error(`Unknown subagent session: ${input.sessionID}`);
+  }
+  if (followUp && input.parentID && followUp.parentID !== input.parentID) {
+    throw new Error("Subagent session belongs to a different parent");
+  }
+  const maxDepth = Number(process.env.OPENCODE_SUBAGENT_DEPTH || 1);
+  const parentID = followUp?.parentID ?? input.parentID;
+  if (!followUp && getSubagentDepth(parentID) >= maxDepth) {
+    throw new Error(`Subagent depth limit reached (${maxDepth})`);
+  }
+  if (followUp) return followUp;
+
+  const id = `sub_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+  const info: SubagentSessionInfo = {
+    id,
+    ...(parentID ? { parentID } : {}),
+    agent: input.agent || "build",
+    model: input.model || "",
+    description: input.description || input.prompt.slice(0, 80),
+    createdAt: new Date().toISOString(),
+  };
+  SUBAGENT_SESSIONS.set(id, info);
+  return info;
+}
+
+/**
+ * Runs one native subagent task in-process: a real read -> edit -> verify loop
+ * driven by the embedded engine tools and the free-lane model client. No port,
+ * background daemon, or DeepSeek-specific worker harness is involved.
+ */
+export async function executeSubagentTool(
+  input: SubagentTaskInput,
+  cwd: string = process.cwd(),
+): Promise<SubagentTaskResult> {
+  const session = openSubagentSession(input);
+  const worktree = input.cwd || cwd;
+  const aborted = (): SubagentTaskResult => ({
+    sessionID: session.id,
+    agent: session.agent,
+    status: "aborted",
+    output: "Subagent aborted by user.",
+    filesModified: [],
+  });
+  if (input.abortCheck?.()) return aborted();
+
+  const existingFiles = executeGlobTool({ pattern: "**/*" }, worktree);
+  const systemPrompt = [
+    "You are a native subagent of the OpenCode Full Engine. Work in the provided workspace.",
+    "Inspect existing files before editing. Preserve surrounding code; never overwrite an existing file wholesale.",
+    'To read or edit emit ```tool:read {"path":"src/app.ts"}``` or ```tool:edit {"path":"src/app.ts","oldString":"exact old","newString":"new"}```.',
+    input.readOnly
+      ? "Read-only verification: do not write files. Finish with PASS or FAIL on the first line."
+      : "Use ```filepath:relative/path``` blocks only to create NEW files; use tool:edit for existing files.",
+  ].join("\n");
+
+  const messages: Array<{ role: "system" | "user"; content: string }> = [
+    { role: "system", content: systemPrompt },
+    {
+      role: "user",
+      content: `[SUBAGENT ${session.agent}] ${session.description}\n\n${input.prompt}\n\nWorkspace files:\n${existingFiles.slice(0, 300).join("\n")}`,
+    },
+  ];
+
+  const modifiedFiles: string[] = [];
+  let output = "";
+  try {
+    const steps = Math.max(1, Math.min(input.maxSteps ?? 12, 24));
+    for (let step = 0; step < steps; step++) {
+      if (input.abortCheck?.()) return aborted();
+      output = "";
+      await bypassChatStream(
+        {
+          model: session.model || input.model || "default",
+          messages,
+          maxTokens: Number(process.env.SUBAGENT_MAX_TOKENS || 16384),
+        },
+        (chunk: string) => {
+          output += chunk;
+        },
+      );
+      const calls = [...output.matchAll(/```tool:(read|edit)\s*\n([\s\S]*?)```/g)];
+      if (calls.length === 0) break;
+      const results: string[] = [];
+      for (const call of calls) {
+        if (input.abortCheck?.()) return aborted();
+        const args = JSON.parse(call[2] || "{}") as {
+          path?: string;
+          oldString?: string;
+          newString?: string;
+        };
+        if (!args.path) continue;
+        if (call[1] === "read") {
+          const res = executeReadTool({ path: args.path, limit: 2000 }, worktree);
+          results.push(`${args.path}:\n${res.content}`);
+        } else {
+          if (input.readOnly) throw new Error("Read-only subagent cannot edit files");
+          if (!args.oldString || args.newString === undefined) {
+            throw new Error("tool:edit requires oldString and newString");
+          }
+          executeEditTool(
+            { path: args.path, oldString: args.oldString, newString: args.newString },
+            worktree,
+          );
+          if (!modifiedFiles.includes(args.path)) modifiedFiles.push(args.path);
+          results.push(`Edited ${args.path}`);
+        }
+      }
+      messages.push({
+        role: "user",
+        content: `Tool calls:\n${output}\n\nTool results:\n${results.join("\n")}\nContinue or give the final response.`,
+      });
+      input.onLog?.(`   subagent ${session.id} step ${step + 1}/${steps}`);
+    }
+
+    if (!input.readOnly && output) {
+      const blockRegex = /```(?:filepath:)?([a-zA-Z0-9_\-./\\]+\.[a-zA-Z0-9]+)\n([\s\S]*?)```/g;
+      let match: RegExpExecArray | null;
+      while ((match = blockRegex.exec(output)) !== null) {
+        const rel = match[1]?.trim();
+        const content = match[2];
+        if (!rel || content === undefined || rel.startsWith("http")) continue;
+        if (["json", "js", "ts", "tsx", "html", "css", "bash", "sh"].includes(rel.toLowerCase())) {
+          continue;
+        }
+        if (NodeFS.existsSync(NodePath.resolve(worktree, rel))) {
+          throw new Error(`Use a targeted edit for existing file: ${rel}`);
+        }
+        executeWriteTool({ path: rel, content }, worktree);
+        if (!modifiedFiles.includes(rel)) modifiedFiles.push(rel);
+      }
+    }
+  } catch (err: any) {
+    const message = err?.message || String(err);
+    saveSessionMessage(session.id, { role: "assistant", content: `ERROR: ${message}` });
+    return {
+      sessionID: session.id,
+      agent: session.agent,
+      status: "error",
+      output: output || message,
+      filesModified: modifiedFiles,
+      error: message,
+    };
+  }
+
+  saveSessionMessage(session.id, { role: "assistant", content: output });
+  compactSessionHistory(session.id);
+  return {
+    sessionID: session.id,
+    agent: session.agent,
+    status: "completed",
+    output,
+    filesModified: modifiedFiles,
+  };
+}
+
+/** Runs several native subagents concurrently with bounded parallelism. */
+export async function executeParallelSubagents(
+  tasks: readonly SubagentTaskInput[],
+  cwd: string = process.cwd(),
+  concurrency = 4,
+): Promise<SubagentTaskResult[]> {
+  const limit = Math.max(1, Math.min(concurrency, 12));
+  const results: SubagentTaskResult[] = new Array(tasks.length);
+  let cursor = 0;
+  const worker = async () => {
+    while (cursor < tasks.length) {
+      const index = cursor++;
+      results[index] = await executeSubagentTool(tasks[index]!, cwd);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, () => worker()));
+  return results;
+}
+
+// ---------------------------------------------------------------------------
 // 5. Universal Tool Dispatcher
 // ---------------------------------------------------------------------------
 
@@ -519,7 +761,21 @@ export async function executeEngineTool(
     case "file-diff":
       return { ok: true, file: params?.path, status: "diff-generated" };
     case "subagent":
-      return { ok: true, agent: params?.agent || "subagent-worker", status: "dispatched" };
+      return executeSubagentTool(
+        {
+          agent: params?.agent,
+          description: params?.description,
+          prompt: params?.prompt || "",
+          model: params?.model,
+          parentID: params?.parentID,
+          sessionID: params?.sessionID,
+          readOnly: params?.readOnly,
+          abortCheck: params?.abortCheck,
+          maxSteps: params?.maxSteps,
+          onLog: params?.onLog,
+        },
+        cwd,
+      );
     case "preview":
     case "preview_file":
     case "preview_port":
@@ -558,6 +814,7 @@ export async function runEngineSelfTest(): Promise<{
     diffEngine: "pass" | "fail";
     grepGlob: "pass" | "fail";
     shellExecution: "pass" | "fail";
+    subagentOrchestration: "pass" | "fail";
   };
   toolsVerified: string[];
   details: string;
@@ -609,6 +866,31 @@ export async function runEngineSelfTest(): Promise<{
       throw new Error("Session memory failed to persist messages");
     }
 
+    // 7. Native subagent orchestration (session + depth + parentID chain)
+    const previousDepth = process.env.OPENCODE_SUBAGENT_DEPTH;
+    process.env.OPENCODE_SUBAGENT_DEPTH = "2";
+    try {
+      const rootSubagent = openSubagentSession({
+        prompt: "self-test root",
+        agent: "build",
+        description: "self-test",
+      });
+      const childSubagent = openSubagentSession({
+        prompt: "self-test child",
+        agent: "build",
+        description: "self-test child",
+        parentID: rootSubagent.id,
+      });
+      if (getSubagentDepth(childSubagent.id) !== 2) {
+        throw new Error("Subagent parentID depth accounting failed");
+      }
+      SUBAGENT_SESSIONS.delete(childSubagent.id);
+      SUBAGENT_SESSIONS.delete(rootSubagent.id);
+    } finally {
+      if (previousDepth === undefined) delete process.env.OPENCODE_SUBAGENT_DEPTH;
+      else process.env.OPENCODE_SUBAGENT_DEPTH = previousDepth;
+    }
+
     // Cleanup temp file
     NodeFS.unlinkSync(testFile);
 
@@ -623,6 +905,7 @@ export async function runEngineSelfTest(): Promise<{
         diffEngine: "pass",
         grepGlob: "pass",
         shellExecution: "pass",
+        subagentOrchestration: "pass",
       },
       toolsVerified: [...ATTACHED_TOOLS],
       details: `All 14 engine tools and 7 subsystems verified in ${Date.now() - start}ms.`,
@@ -644,6 +927,7 @@ export async function runEngineSelfTest(): Promise<{
         diffEngine: "fail",
         grepGlob: "fail",
         shellExecution: "fail",
+        subagentOrchestration: "fail",
       },
       toolsVerified: [],
       details: err?.message || String(err),

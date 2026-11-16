@@ -138,7 +138,7 @@ export function SubagentsAndGoalsCard({
               </span>
             </div>
             <p className="text-[10px] text-muted-foreground truncate">
-              Live DeepSeek / DSH Telemetry & Task Workers
+              Live Engine Subagents & Task Workers
             </p>
           </div>
         </div>

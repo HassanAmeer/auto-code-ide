@@ -742,7 +742,7 @@ export async function startWatchdogSupervision(
     projectRoot,
     taskTitle,
     prompt,
-    model = "deepseek-v4.1-flash-free",
+    model = "opencode/beam-free",
   } = params;
   const log = typeof params.onLog === "function" ? params.onLog : undefined;
 

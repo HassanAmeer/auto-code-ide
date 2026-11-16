@@ -170,7 +170,7 @@ export async function runAutonomousHarnessWorkflow(
     };
   });
 
-  // 3. Concurrent Subtask Execution via OpenCode Engine & DeepSeek Harness (Promise.all)
+  // 3. Concurrent subtask execution via native OpenCode engine subagents
   const filesModifiedSet = new Set<string>();
 
   const parallelSettled = await Promise.allSettled(
@@ -224,7 +224,7 @@ export async function runAutonomousHarnessWorkflow(
         id: workerId,
         role: specialistRole,
         status: "running",
-        model: model.includes("deepseek") ? "DeepSeek V4.1" : model || "DeepSeek V4.1",
+        model: model || "Engine subagent",
         cwd: allocation.worktreePath,
         goal: st.title,
         projectName,

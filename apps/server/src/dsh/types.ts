@@ -1,7 +1,7 @@
 import type { SupervisorWorkerTaskEnvelope } from "@t3tools/shared/taskEnvelope";
 
 /**
- * Autonomous DeepSeek Harness & Worker Types
+ * Native engine subagent & worker types
  * Defines tickets, worktree isolation states, review rounds, and checklist audits.
  */
 

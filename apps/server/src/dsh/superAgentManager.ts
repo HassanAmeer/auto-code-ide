@@ -71,7 +71,7 @@ export class SuperAgentManager {
       projectRoot,
       taskTitle,
       prompt,
-      model = "deepseek-v4.1-flash-free",
+      model = "opencode/beam-free",
       clientNotificationTarget,
     } = input;
 

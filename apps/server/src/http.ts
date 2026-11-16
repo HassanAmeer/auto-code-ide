@@ -1435,7 +1435,7 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
           projectRoot: targetProject.workspaceRoot,
           taskTitle: cleanPrompt.slice(0, 50),
           prompt: cleanPrompt,
-          model: bodyJson?.model || "deepseek-v4.1-flash-free",
+          model: bodyJson?.model || "opencode/beam-free",
           lanes:
             typeof appSettings?.super_agent_worker_lanes === "string"
               ? appSettings.super_agent_worker_lanes
