@@ -483,6 +483,8 @@ export interface SubagentTaskInput {
   readonly cwd?: string;
   readonly readOnly?: boolean;
   readonly abortCheck?: () => boolean;
+  /** Cancels an in-flight upstream request immediately (e.g. Watchdog Stop). */
+  readonly signal?: AbortSignal;
   readonly maxSteps?: number;
   readonly onLog?: (message: string) => void;
 }
@@ -597,6 +599,7 @@ export async function executeSubagentTool(
           model: session.model || input.model || "default",
           messages,
           maxTokens: Number(process.env.SUBAGENT_MAX_TOKENS || 16384),
+          signal: input.signal,
         },
         (chunk: string) => {
           output += chunk;
@@ -655,6 +658,7 @@ export async function executeSubagentTool(
     }
   } catch (err: any) {
     const message = err?.message || String(err);
+    if (input.signal?.aborted || input.abortCheck?.()) return aborted();
     saveSessionMessage(session.id, { role: "assistant", content: `ERROR: ${message}` });
     return {
       sessionID: session.id,
@@ -819,18 +823,21 @@ export async function runEngineSelfTest(): Promise<{
   details: string;
 }> {
   const start = Date.now();
-  const tmpDir = NodeOS.tmpdir();
-  const testFile = NodePath.join(tmpDir, `opencode_engine_selftest_${Date.now()}.txt`);
+  // Use an isolated directory: scanning a shared OS tmp root (which can hold
+  // gigabytes of unrelated files) makes the grep check hang for minutes.
+  const selftestDir = NodePath.join(NodeOS.tmpdir(), `opencode_engine_selftest_${Date.now()}`);
+  NodeFS.mkdirSync(selftestDir, { recursive: true });
+  const testFile = NodePath.join(selftestDir, "fixture.txt");
 
   try {
     // 1. Test Write Tool
     executeWriteTool(
       { path: testFile, content: "OPENCODE_CORE_LINE_1\nTARGET_TO_REPLACE\nOPENCODE_CORE_LINE_3" },
-      tmpDir,
+      selftestDir,
     );
 
     // 2. Test Read Tool
-    const readRes = executeReadTool({ path: testFile }, tmpDir);
+    const readRes = executeReadTool({ path: testFile }, selftestDir);
     if (!readRes.content.includes("OPENCODE_CORE_LINE_1")) {
       throw new Error("Read tool failed to read written content");
     }
@@ -838,20 +845,23 @@ export async function runEngineSelfTest(): Promise<{
     // 3. Test Edit Tool (AST / String match)
     const editRes = executeEditTool(
       { path: testFile, oldString: "TARGET_TO_REPLACE", newString: "REPLACED_SUCCESSFULLY" },
-      tmpDir,
+      selftestDir,
     );
     if (editRes.replacements !== 1) {
       throw new Error("Edit tool replacement count mismatch");
     }
 
     // 4. Test Grep Tool
-    const grepRes = executeGrepTool({ pattern: "REPLACED_SUCCESSFULLY", path: tmpDir }, tmpDir);
+    const grepRes = executeGrepTool(
+      { pattern: "REPLACED_SUCCESSFULLY", path: selftestDir },
+      selftestDir,
+    );
     if (grepRes.length === 0) {
       throw new Error("Grep tool failed to find replaced string");
     }
 
     // 5. Test Shell Tool
-    const shellRes = await executeShellTool({ command: "echo 'OPENCODE_SHELL_OK'" }, tmpDir);
+    const shellRes = await executeShellTool({ command: "echo 'OPENCODE_SHELL_OK'" }, selftestDir);
     if (!shellRes.stdout.includes("OPENCODE_SHELL_OK")) {
       throw new Error("Shell tool failed to execute echo command");
     }
@@ -865,8 +875,8 @@ export async function runEngineSelfTest(): Promise<{
       throw new Error("Session memory failed to persist messages");
     }
 
-    // Cleanup temp file
-    NodeFS.unlinkSync(testFile);
+    // Cleanup isolated temp directory
+    NodeFS.rmSync(selftestDir, { recursive: true, force: true });
 
     return {
       ok: true,
@@ -884,11 +894,9 @@ export async function runEngineSelfTest(): Promise<{
       details: `All 14 engine tools and 7 subsystems verified in ${Date.now() - start}ms.`,
     };
   } catch (err: any) {
-    if (NodeFS.existsSync(testFile)) {
-      try {
-        NodeFS.unlinkSync(testFile);
-      } catch {}
-    }
+    try {
+      NodeFS.rmSync(selftestDir, { recursive: true, force: true });
+    } catch {}
     return {
       ok: false,
       engine: ENGINE_NAME,

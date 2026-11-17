@@ -368,6 +368,16 @@ export function getTelemetrySnapshot(filter?: {
 /**
  * Clears telemetry or removes completed entries older than threshold
  */
+/** Remove one goal from live telemetry (UI delete control). */
+export function deleteGoalTelemetry(id: string): boolean {
+  return activeGoals.delete(id);
+}
+
+/** Remove one worker from live telemetry (UI delete control). */
+export function deleteWorkerTelemetry(id: string): boolean {
+  return activeWorkers.delete(id);
+}
+
 export function clearTelemetry(olderThanMs?: number): void {
   if (!olderThanMs) {
     activeWorkers.clear();

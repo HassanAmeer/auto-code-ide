@@ -1,22 +1,25 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   Cpu,
-  CheckCircle2,
-  AlertCircle,
   RefreshCw,
   FolderGit2,
   Target,
   Bot,
-  Zap,
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
 import { cn } from "~/lib/utils";
+import {
+  DeleteIconButton,
+  normalizeStatus,
+  StatusIcon,
+  StopIconButton,
+} from "../../background/StatusIcon";
 
 export interface WorkerTelemetryItem {
   id: string;
   role: string;
-  status: "running" | "completed" | "failed";
+  status: "running" | "completed" | "failed" | "cancelled" | "pending";
   model: string;
   cwd: string;
   goal: string;
@@ -31,7 +34,8 @@ export interface WorkerTelemetryItem {
 export interface GoalTelemetryItem {
   id: string;
   title: string;
-  status: "running" | "completed" | "failed";
+  status: "running" | "completed" | "failed" | "cancelled" | "pending";
+  workerId?: string;
   workerId?: string;
   order?: number;
   projectName?: string;
@@ -75,6 +79,7 @@ export function SubagentsAndGoalsCard({
   const [isLoading, setIsLoading] = useState(false);
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const [activeTab, setActiveTab] = useState<"workers" | "goals">("workers");
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => new Set());
 
   const fetchTelemetry = useCallback(async () => {
     try {
@@ -99,6 +104,38 @@ export function SubagentsAndGoalsCard({
       setIsLoading(false);
     }
   }, [projectName, projectId]);
+
+  const handleStop = useCallback(
+    async (workerId: string) => {
+      try {
+        const res = await fetch("/api/super-agent/workers/stop", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ workerId }),
+        });
+        if (res.ok) void fetchTelemetry();
+      } catch {
+        // keep current state on transient error
+      }
+    },
+    [fetchTelemetry],
+  );
+
+  const handleDelete = useCallback(
+    async (payload: { goalId?: string; workerId?: string }, id: string) => {
+      setDismissedIds((prev) => new Set([...prev, id]));
+      try {
+        await fetch("/api/super-agent/workers/delete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      } catch {
+        // local dismissal already applied
+      }
+    },
+    [],
+  );
 
   // Initial fetch and auto-polling
   useEffect(() => {
@@ -224,30 +261,24 @@ export function SubagentsAndGoalsCard({
                   No parallel workers registered yet.
                 </div>
               ) : (
-                workers.map((worker) => {
-                  const isRunning = worker.status === "running";
-                  return (
+                workers
+                  .filter((worker) => !dismissedIds.has(worker.id))
+                  .map((worker) => {
+                    const kind = normalizeStatus(worker.status);
+                    return (
                     <div
                       key={worker.id}
                       className={cn(
                         "p-2.5 rounded-xl border text-xs space-y-1.5 transition-colors",
-                        isRunning
+                        kind === "running"
                           ? "border-emerald-500/40 bg-emerald-500/5 hover:border-emerald-500/60"
                           : "border-border/60 bg-muted/20 hover:border-border",
+                        kind === "completed" && "opacity-60",
                       )}
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <div
-                            className={cn(
-                              "size-5 rounded-md flex items-center justify-center shrink-0 text-[10px]",
-                              isRunning
-                                ? "bg-emerald-500/20 text-emerald-400"
-                                : "bg-muted text-muted-foreground",
-                            )}
-                          >
-                            <Bot className="size-3" />
-                          </div>
+                      <div className="flex items-center justify-between gap-1.5">
+                        <div className="flex items-center gap-1 min-w-0">
+                          <StatusIcon status={worker.status} />
                           <div className="min-w-0">
                             <span className="font-semibold text-foreground truncate block">
                               {worker.role}
@@ -255,43 +286,32 @@ export function SubagentsAndGoalsCard({
                           </div>
                         </div>
 
-                        {/* Status & Model Badges */}
-                        <div className="flex items-center gap-1.5 shrink-0">
+                        {/* Model + icon-only actions */}
+                        <div className="flex items-center gap-1 shrink-0">
                           <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-muted/60 text-muted-foreground border border-border/40">
                             {worker.model}
                           </span>
-                          <span
-                            className={cn(
-                              "text-[9px] font-mono uppercase px-2 py-0.5 rounded-full border flex items-center gap-1",
-                              isRunning
-                                ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
-                                : worker.status === "completed"
-                                  ? "bg-muted text-muted-foreground border-border/40"
-                                  : "bg-destructive/15 text-destructive border-destructive/30",
-                            )}
-                          >
-                            {isRunning && (
-                              <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                            )}
-                            {worker.status === "completed" && (
-                              <CheckCircle2 className="size-2.5 text-emerald-400" />
-                            )}
-                            {worker.status === "failed" && (
-                              <AlertCircle className="size-2.5 text-destructive" />
-                            )}
-                            <span>{worker.status}</span>
-                          </span>
+                          {kind === "running" ? (
+                            <StopIconButton
+                              onClick={() => void handleStop(worker.id)}
+                              label={`Stop ${worker.role}`}
+                            />
+                          ) : null}
+                          <DeleteIconButton
+                            onClick={() => void handleDelete({ workerId: worker.id }, worker.id)}
+                            label={`Delete ${worker.role}`}
+                          />
                         </div>
                       </div>
 
                       {/* Goal Description */}
-                      <p className="text-[11px] text-zinc-300 leading-snug pl-7">
+                      <p className="text-[11px] text-zinc-300 leading-snug">
                         <span className="text-muted-foreground">Goal:</span> {worker.goal}
                       </p>
 
                       {/* Working Directory / Worktree */}
                       {worker.cwd && (
-                        <div className="flex items-center gap-1 pl-7 text-[9px] text-muted-foreground font-mono truncate">
+                        <div className="flex items-center gap-1 text-[9px] text-muted-foreground font-mono truncate">
                           <FolderGit2 className="size-2.5 shrink-0 text-primary" />
                           <span className="truncate">{worker.cwd}</span>
                         </div>
@@ -311,41 +331,48 @@ export function SubagentsAndGoalsCard({
                   No active goals registered yet.
                 </div>
               ) : (
-                goals.map((goal, idx) => {
-                  const isRunning = goal.status === "running";
-                  return (
+                goals
+                  .filter((goal) => !dismissedIds.has(goal.id))
+                  .map((goal) => {
+                    const kind = normalizeStatus(goal.status);
+                    const workerId =
+                      goal.workerId ??
+                      (goal.id.startsWith("goal-") ? goal.id.slice("goal-".length) : goal.id);
+                    return (
                     <div
-                      key={goal.id || idx}
+                      key={goal.id}
                       className={cn(
-                        "p-2.5 rounded-xl border text-xs flex items-start gap-2.5 transition-colors",
-                        isRunning
+                        "p-2.5 rounded-xl border text-xs flex items-start gap-1.5 transition-colors",
+                        kind === "running"
                           ? "border-cyan-500/40 bg-cyan-500/5 hover:border-cyan-500/60"
                           : "border-border/60 bg-muted/20 hover:border-border",
+                        kind === "completed" && "opacity-60",
                       )}
                     >
-                      <span className="shrink-0 text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-primary/15 text-primary border border-primary/20">
-                        #{goal.order || idx + 1}
-                      </span>
+                      <StatusIcon status={goal.status} />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-1">
-                          <span className="font-medium text-foreground truncate">{goal.title}</span>
                           <span
                             className={cn(
-                              "text-[9px] font-mono uppercase px-1.5 py-0.5 rounded shrink-0",
-                              isRunning
-                                ? "bg-cyan-500/15 text-cyan-400 border border-cyan-500/30"
-                                : "bg-muted text-muted-foreground",
+                              "font-medium truncate",
+                              kind === "completed" ? "text-muted-foreground" : "text-foreground",
                             )}
                           >
-                            {goal.status}
+                            {goal.title}
                           </span>
-                        </div>
-                        {goal.workerId && (
-                          <div className="flex items-center gap-1 mt-1 text-[9px] text-muted-foreground font-mono">
-                            <Zap className="size-2.5 text-primary shrink-0" />
-                            <span className="truncate">Assigned: {goal.workerId}</span>
+                          <div className="flex items-center gap-0.5 shrink-0">
+                            {kind === "running" ? (
+                              <StopIconButton
+                                onClick={() => void handleStop(workerId)}
+                                label={`Stop ${goal.title}`}
+                              />
+                            ) : null}
+                            <DeleteIconButton
+                              onClick={() => void handleDelete({ goalId: goal.id }, goal.id)}
+                              label={`Delete ${goal.title}`}
+                            />
                           </div>
-                        )}
+                        </div>
                       </div>
                     </div>
                   );

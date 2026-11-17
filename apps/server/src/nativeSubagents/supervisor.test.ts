@@ -1,12 +1,16 @@
 import { expect, it, beforeEach, vi } from "vitest";
 
-const calls = vi.hoisted(() => ({ prompts: [] as string[] }));
+const calls = vi.hoisted(() => ({
+  prompts: [] as string[],
+  gate: null as null | Promise<void>,
+}));
 vi.mock("../../../../opencode-bypass-api/src/server/bypass/client.ts", () => ({
   bypassChatStream: async (
     input: { messages: Array<{ content: string }> },
     onChunk: (text: string) => void,
   ) => {
     calls.prompts.push(input.messages.map((m) => m.content).join("\n"));
+    if (calls.gate) await calls.gate;
     onChunk("native subagent output");
   },
 }));
@@ -20,6 +24,7 @@ import {
 
 beforeEach(() => {
   calls.prompts = [];
+  calls.gate = null;
 });
 
 const base = {
@@ -63,4 +68,34 @@ it("stops a running watchdog and cancels its workers", async () => {
 
   const snapshot = getWatchdogSnapshot({ projectName: "demo" });
   expect(snapshot.watchdogs.some((w) => w.id === result.watchdogId)).toBe(true);
+});
+
+it("keeps the watchdog cancelled when a mid-flight stop races late results", async () => {
+  let release!: () => void;
+  calls.gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+
+  const started = startWatchdogSupervision({
+    ...base,
+    prompt: "- first long milestone\n- second long milestone",
+    maxWorkers: 2,
+  });
+  await vi.waitFor(() => expect(calls.prompts.length).toBe(2));
+
+  const running = getWatchdogSnapshot({ projectName: "demo" }).watchdogs.find(
+    (w) => w.status === "watching",
+  );
+  expect(running).toBeDefined();
+  expect(stopWatchdog(running!.id)).toBe(true);
+
+  release();
+  const result = await started;
+  expect(result.status).toBe("cancelled");
+  expect(result.verdict).toBe("Cancelled by user.");
+
+  const final = getWatchdogSnapshot({ projectName: "demo" }).watchdogs.find(
+    (w) => w.id === running!.id,
+  );
+  expect(final?.status).toBe("cancelled");
 });

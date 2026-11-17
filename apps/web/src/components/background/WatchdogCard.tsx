@@ -1,10 +1,14 @@
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import { AlertCircle, CheckCircle2, ChevronDownIcon, SquareIcon, Trash2, X } from "lucide-react";
+import { AlertCircle, ChevronDownIcon } from "lucide-react";
 
 import { cn } from "../../lib/utils";
 import { toastManager } from "../ui/toast";
-import { SleekSpinnerRing } from "./sleekSpinner";
-import { CancelledCircleIcon } from "./BackgroundServicesWidget";
+import {
+  DeleteIconButton,
+  normalizeStatus,
+  StatusIcon,
+  StopIconButton,
+} from "./StatusIcon";
 
 export type WatchdogStatus =
   | "watching"
@@ -92,22 +96,7 @@ function phaseLabel(status: WatchdogStatus): string {
 }
 
 function statusIcon(status: WatchdogStatus) {
-  switch (status) {
-    case "completed":
-      return <CheckCircle2 className="size-3.5 text-emerald-400 shrink-0" />;
-    case "failed":
-      return <AlertCircle className="size-3.5 text-rose-400 shrink-0" />;
-    case "cancelled":
-      return <CancelledCircleIcon className="size-3.5 text-muted-foreground shrink-0" />;
-    case "reviewing":
-      return <SleekSpinnerRing className="size-3.5 text-cyan-400 shrink-0 animate-spin" />;
-    case "building":
-      return <SleekSpinnerRing className="size-3.5 text-purple-400 shrink-0 animate-spin" />;
-    case "testing":
-      return <SleekSpinnerRing className="size-3.5 text-sky-400 shrink-0 animate-spin" />;
-    default:
-      return <SleekSpinnerRing className="size-3.5 text-cyan-400 shrink-0 animate-spin" />;
-  }
+  return <StatusIcon status={status} />;
 }
 
 /**
@@ -282,9 +271,14 @@ export const WatchdogCard = memo(function WatchdogCard({
   }, [load, stoppingAll]);
 
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => new Set());
+  const [dismissedWorkerIds, setDismissedWorkerIds] = useState<Set<string>>(() => new Set());
   const handleDismiss = useCallback((id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setDismissedIds((prev) => new Set([...prev, id]));
+  }, []);
+  const handleDismissWorker = useCallback((id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDismissedWorkerIds((prev) => new Set([...prev, id]));
   }, []);
   const handleClearCompleted = useCallback(
     (e: React.MouseEvent) => {
@@ -335,36 +329,22 @@ export const WatchdogCard = memo(function WatchdogCard({
             </span>
           ) : null}
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-0.5">
           {activeCount > 0 ? (
-            <button
-              type="button"
+            <StopIconButton
               onClick={(e) => {
                 e.stopPropagation();
                 void handleStopAll();
               }}
-              disabled={stoppingAll}
-              className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 transition-colors cursor-pointer disabled:opacity-60"
-              title="Stop every running watchdog"
-              aria-label="Stop every running watchdog"
-              aria-busy={stoppingAll || undefined}
-            >
-              {stoppingAll ? (
-                <SleekSpinnerRing className="size-2.5 text-rose-400 shrink-0 animate-spin" />
-              ) : null}
-              {stoppingAll ? null : <SquareIcon className="size-2.5 fill-current" />}
-            </button>
+              busy={stoppingAll}
+              label="Stop every running watchdog"
+            />
           ) : null}
           {visibleItems.some((w) => isTerminalStatus(w.status)) ? (
-            <button
-              type="button"
+            <DeleteIconButton
               onClick={handleClearCompleted}
-              className="p-1 rounded text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
-              title="Clear completed watchdog audits"
-              aria-label="Clear completed watchdog audits"
-            >
-              <Trash2 className="size-3" />
-            </button>
+              label="Clear completed watchdog audits"
+            />
           ) : null}
           <ChevronDownIcon
             className={cn(
@@ -416,40 +396,22 @@ export const WatchdogCard = memo(function WatchdogCard({
                       >
                         {item.taskTitle}
                       </span>
-                      {isActive ? (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            void handleStop(item.id);
-                          }}
-                          disabled={stoppingId === item.id}
-                          className="ml-auto flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 transition-colors cursor-pointer disabled:opacity-60"
-                          title="Stop Watchdog"
-                          aria-label={`Stop watchdog for ${item.taskTitle}`}
-                          aria-busy={stoppingId === item.id || undefined}
-                        >
-                          {stoppingId === item.id ? (
-                            <SleekSpinnerRing className="size-2.5 text-rose-400 shrink-0 animate-spin" />
-                          ) : null}
-                          {stoppingId === item.id ? "Stopping…" : "Stop"}
-                        </button>
-                      ) : (
-                        <div className="ml-auto flex items-center gap-1.5">
-                          <span className="rounded px-1.5 py-0.5 text-[9px] font-mono uppercase leading-none bg-muted/60 text-muted-foreground border border-border/40">
-                            {item.status === "cancelled" ? "Stopped" : "Audited"}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={(e) => handleDismiss(item.id, e)}
-                            className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 transition-all cursor-pointer"
-                            title="Delete watchdog record"
-                            aria-label={`Delete record for ${item.taskTitle}`}
-                          >
-                            <X className="size-3" />
-                          </button>
-                        </div>
-                      )}
+                      <div className="ml-auto flex items-center gap-0.5 shrink-0">
+                        {isActive ? (
+                          <StopIconButton
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void handleStop(item.id);
+                            }}
+                            busy={stoppingId === item.id}
+                            label={`Stop watchdog for ${item.taskTitle}`}
+                          />
+                        ) : null}
+                        <DeleteIconButton
+                          onClick={(e) => handleDismiss(item.id, e)}
+                          label={`Delete record for ${item.taskTitle}`}
+                        />
+                      </div>
                     </div>
 
                     {/* Live supervision action — what the watchdog is doing to its sub-agents right now. */}
@@ -472,50 +434,48 @@ export const WatchdogCard = memo(function WatchdogCard({
                     ) : null}
 
                     {item.workers
-                      .filter((worker) => worker.status === "running")
+                      .filter((worker) => !dismissedWorkerIds.has(worker.id))
                       .map((worker) => (
-                        <div key={worker.id} className="flex flex-col gap-0.5 pl-6">
-                          <div className="flex items-center gap-1.5 min-w-0">
-                            {worker.status === "completed" ? (
-                              <CheckCircle2 className="size-3 text-emerald-400 shrink-0" />
-                            ) : worker.status === "failed" ? (
-                              <AlertCircle className="size-3 text-rose-400 shrink-0" />
-                            ) : worker.status === "cancelled" ? (
-                              <CancelledCircleIcon className="size-3 text-muted-foreground shrink-0" />
-                            ) : (
-                              <SleekSpinnerRing className="size-3 text-cyan-400 shrink-0 animate-spin" />
+                      <div key={worker.id} className="flex flex-col gap-0.5 pl-6">
+                        <div className="flex items-center gap-1 min-w-0">
+                          <StatusIcon status={worker.status} small />
+                          <span
+                            className={cn(
+                              "text-[11.5px] truncate",
+                              normalizeStatus(worker.status) === "completed"
+                                ? "text-muted-foreground"
+                                : "text-foreground/85",
                             )}
-                            <span className="text-[11.5px] text-foreground/85 truncate">
-                              {worker.role}
-                            </span>
-                            <span className="text-[10px] text-muted-foreground/70 font-mono shrink-0">
-                              {worker.filesChanged} file{worker.filesChanged === 1 ? "" : "s"}
-                            </span>
-                            <span className="ml-auto flex items-center gap-1 shrink-0">
-                              {worker.status === "running" ? (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    void handleStopWorker(worker.id, worker.role);
-                                  }}
-                                  disabled={stoppingWorkerId === worker.id}
-                                  className="rounded p-0.5 text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer disabled:opacity-40"
-                                  title="Stop this sub-agent"
-                                  aria-label={`Stop ${worker.role}`}
-                                >
-                                  <SquareIcon className="size-2.5 fill-current" />
-                                </button>
-                              ) : null}
-                            </span>
-                          </div>
-                          {worker.logs && worker.logs.length > 0 ? (
-                            <div className="truncate pl-5 text-[9.5px] font-mono text-cyan-400/75">
-                              {worker.logs[worker.logs.length - 1]}
-                            </div>
-                          ) : null}
+                          >
+                            {worker.role}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground/70 font-mono shrink-0">
+                            {worker.filesChanged} file{worker.filesChanged === 1 ? "" : "s"}
+                          </span>
+                          <span className="ml-auto flex items-center gap-0.5 shrink-0">
+                            {normalizeStatus(worker.status) === "running" ? (
+                              <StopIconButton
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void handleStopWorker(worker.id, worker.role);
+                                }}
+                                busy={stoppingWorkerId === worker.id}
+                                label={`Stop ${worker.role}`}
+                              />
+                            ) : null}
+                            <DeleteIconButton
+                              onClick={(e) => handleDismissWorker(worker.id, e)}
+                              label={`Delete ${worker.role} record`}
+                            />
+                          </span>
                         </div>
-                      ))}
+                        {worker.logs && worker.logs.length > 0 ? (
+                          <div className="truncate pl-5 text-[9.5px] font-mono text-cyan-400/75">
+                            {worker.logs[worker.logs.length - 1]}
+                          </div>
+                        ) : null}
+                      </div>
+                    ))}
 
                     {item.status === "completed" ? (
                       <div className="text-[10px] text-emerald-400/90 font-mono pl-6">

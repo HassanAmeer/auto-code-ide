@@ -722,6 +722,7 @@ const layerMakeRoutes = Layer.mergeAll(
     ServerHttp.layerSuperAgentWorkersPostRoute,
     ServerHttp.layerSuperAgentWorkersStopAllRoute,
     ServerHttp.layerSuperAgentWorkerStopRoute,
+    ServerHttp.layerSuperAgentWorkersDeleteRoute,
     ServerHttp.layerSuperAgentWatchdogRoute,
     ServerHttp.layerSuperAgentWatchdogDispatchRoute,
     ServerHttp.layerSuperAgentWatchdogStopRoute,

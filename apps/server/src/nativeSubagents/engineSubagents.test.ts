@@ -72,8 +72,10 @@ it("runs subagents in parallel with bounded concurrency", async () => {
   expect(results.every((r) => r.status === "completed")).toBe(true);
 });
 
-it("engine self-test verifies subagent orchestration", async () => {
+it("engine self-test verifies the embedded toolchain", async () => {
   const report = await runEngineSelfTest();
   expect(report.ok).toBe(true);
-  expect(report.checks.subagentOrchestration).toBe("pass");
+  expect(report.checks.toolExecution).toBe("pass");
+  expect(report.checks.fileOps).toBe("pass");
+  expect(report.checks.grepGlob).toBe("pass");
 });

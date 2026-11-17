@@ -124,6 +124,8 @@ import {
   stopAllRunningTelemetry,
   stopWorkerTelemetry,
   pruneStaleTelemetry,
+  deleteGoalTelemetry,
+  deleteWorkerTelemetry,
 } from "./nativeSubagents/index.ts";
 import {
   getWatchdogSnapshot,
@@ -1425,9 +1427,9 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
       };
 
       // The Watchdog supervises this run end to end: it assigns the related
-      // work to the matching sub-agents, watches every one of them, and when a
-      // sub-agent finishes it reviews the output, builds only when the change
-      // can break the build, and runs the test suite.
+      // work to the matching sub-agents, watches every one of them, and reviews
+      // the output before reporting back. It does not run builds or tests —
+      // the UI reports those steps as skipped.
       const watchdogRes = yield* Effect.promise(() =>
         startWatchdogSupervision({
           projectId: targetProject.projectId,
@@ -1459,7 +1461,7 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
         )
         .join("\n");
 
-      const reply = `### 🐕 Watchdog Supervised Parallel Workers — ${watchdogRes.verdict}\n\nWatchdog ne task ko related sub-agents mein divide kiya, har ek par nazar rakhi, aur complete hone par **review + build (agar zaruri ho) + test** kiya:\n\n${workerRows}\n\n• **Sub-Agents:** ${watchdogRes.workersCompleted}/${watchdogRes.workersTotal}\n• **Issues:** ${watchdogRes.issues.length}\n• **Live Preview URL:** ${watchdogState ? `/api/projects/preview/${targetProject.projectName}/index.html` : "Ready"}\n\nWatchdog card sidebar mein live status dikha raha hai — Super Agent is dauran free hai, aap discussion ya naya task de sakte hain.`;
+      const reply = `### 🐕 Watchdog Supervised Parallel Workers — ${watchdogRes.verdict}\n\nWatchdog ne task ko related sub-agents mein divide kiya, har ek par nazar rakhi, aur complete hone par **review** kiya:\n\n${workerRows}\n\n• **Sub-Agents:** ${watchdogRes.workersCompleted}/${watchdogRes.workersTotal}\n• **Issues:** ${watchdogRes.issues.length}\n• **Live Preview URL:** ${watchdogState ? `/api/projects/preview/${targetProject.projectName}/index.html` : "Ready"}\n\nWatchdog card sidebar mein live status dikha raha hai — Super Agent is dauran free hai, aap discussion ya naya task de sakte hain.`;
 
       return HttpServerResponse.jsonUnsafe({
         ok: watchdogRes.ok,
@@ -3569,8 +3571,8 @@ export const layerSuperAgentDispatchWorkerRoute = HttpRouter.add(
     );
 
     // Every Manager task runs UNDER the Watchdog: the watchdog assigns the
-    // related work to the matching sub-agents, watches each one, and reviews +
-    // builds/tests every result before reporting back.
+    // related work to the matching sub-agents, watches each one, and reviews
+    // every result before reporting back.
     const watchdogResult = yield* Effect.promise(() =>
       startWatchdogSupervision({
         projectId: project.projectId,
@@ -3875,12 +3877,38 @@ export const layerSuperAgentWorkerStopRoute = HttpRouter.add(
       );
     }
     const stopped = stopWorkerTelemetry(workerId);
+    if (stopped) {
+      // Keep the linked goal in sync — otherwise the Goals panel keeps showing
+      // a stopped worker's step as running.
+      updateGoalTelemetryStatus(`goal-${workerId}`, "cancelled", { completedAt: Date.now() });
+    }
     return HttpServerResponse.jsonUnsafe(
       stopped
         ? { ok: true, stoppedWorker: workerId }
         : { ok: false, error: "Worker not found or already finished" },
       stopped ? { status: 200 } : { status: 404 },
     );
+  }),
+);
+
+export const layerSuperAgentWorkersDeleteRoute = HttpRouter.add(
+  "POST",
+  "/api/super-agent/workers/delete",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      goalId?: string;
+      workerId?: string;
+    };
+    const goalId = bodyJson?.goalId?.trim();
+    const workerId = bodyJson?.workerId?.trim();
+    const deletedGoal = goalId ? deleteGoalTelemetry(goalId) : false;
+    const deletedWorker = workerId ? deleteWorkerTelemetry(workerId) : false;
+    return HttpServerResponse.jsonUnsafe({
+      ok: deletedGoal || deletedWorker,
+      deletedGoal,
+      deletedWorker,
+    });
   }),
 );
 

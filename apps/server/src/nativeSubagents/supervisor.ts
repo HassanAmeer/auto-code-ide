@@ -66,6 +66,8 @@ export interface WatchdogState {
 }
 
 const watchdogs = new Map<string, WatchdogState>();
+/** Per-run controllers let stopWatchdog() kill in-flight upstream LLM streams. */
+const watchdogAbortControllers = new Map<string, AbortController>();
 const now = () => Date.now();
 
 const WATCHDOG_TTL_MS = Number(process.env.SUPER_AGENT_WATCHDOG_TTL_MS || 6 * 60 * 60 * 1000);
@@ -123,6 +125,7 @@ export function splitTaskIntoMilestones(prompt: string, maxWorkers: number): str
 export function stopWatchdog(id: string): boolean {
   const state = watchdogs.get(id);
   if (!state || isWatchdogStatusTerminal(state.status)) return false;
+  watchdogAbortControllers.get(id)?.abort();
   for (const worker of state.workers) {
     if (worker.status === "running") {
       markWorkerAborted(worker.id);
@@ -194,6 +197,8 @@ export async function startWatchdogSupervision(
   const models = laneModels.length > 0 ? laneModels : [baseModel];
 
   const id = `watchdog-${now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const runController = new AbortController();
+  watchdogAbortControllers.set(id, runController);
   const state: WatchdogState = {
     id,
     status: "watching",
@@ -263,6 +268,7 @@ export async function startWatchdogSupervision(
       model,
       cwd: projectRoot,
       abortCheck: () => isWorkerAborted(workerId),
+      signal: runController.signal,
       onLog: (msg: string) => {
         logs.push(msg);
         if (logs.length > 40) logs.shift();
@@ -277,13 +283,16 @@ export async function startWatchdogSupervision(
   } catch (error: any) {
     state.issues.push(error?.message || String(error));
   }
+  watchdogAbortControllers.delete(id);
 
   state.status = "reviewing";
   state.updatedAt = now();
   let completed = 0;
   results.forEach((result, index) => {
     const row = state.workers[index];
-    if (!row) return;
+    // stopWatchdog() may already have cancelled this row; its late result must
+    // never flip it back to completed/failed.
+    if (!row || row.status === "cancelled") return;
     if (result.status === "completed") {
       completed += 1;
       row.status = "completed";
@@ -310,6 +319,22 @@ export async function startWatchdogSupervision(
     updateWorkerTelemetryStatus(row.id, "cancelled");
     updateGoalTelemetryStatus(`goal-${row.id}`, "cancelled");
   });
+
+  if (state.stopped) {
+    // stopWatchdog() already set the final cancelled verdict. Late worker
+    // results must not overwrite it with failed/completed.
+    state.status = "cancelled";
+    state.updatedAt = now();
+    return {
+      ok: false,
+      watchdogId: id,
+      status: "cancelled",
+      verdict: state.verdict,
+      workersCompleted: completed,
+      workersTotal: state.workers.length,
+      issues: state.issues,
+    };
+  }
 
   const ok = completed === state.workers.length && state.issues.length === 0;
   state.status = ok ? "completed" : "failed";
