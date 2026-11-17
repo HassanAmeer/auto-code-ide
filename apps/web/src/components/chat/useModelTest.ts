@@ -91,5 +91,5 @@ export function useModelTest() {
   );
   const isTesting = useCallback((key: string): boolean => Boolean(testing[key]), [testing]);
 
-  return { testModel, getResult, isTesting, results };
+  return { testModel, getResult, isTesting, results, testing };
 }

@@ -205,7 +205,7 @@ export const ModelListRow = memo(function ModelListRow(props: {
         {props.testResult ? (
           <div
             className="mt-1 flex h-3.5 items-center overflow-hidden rounded bg-muted/15 text-3xs font-mono"
-            title={`${props.testResult.statusCode}|${props.testResult.text}`}
+            title={`${props.testResult.statusCode}|${props.testResult.text}\nTested: ${props.testResult.testedAt}`}
           >
             <span
               className={

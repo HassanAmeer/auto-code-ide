@@ -228,7 +228,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
     model: props.model,
     options: modelOptionsByInstance.get(props.activeInstanceId) ?? [],
   });
-  const { testModel, getResult, isTesting } = useModelTest();
+  const { testModel, getResult, isTesting, results: testResults, testing: testTesting } = useModelTest();
   const activeModelSlug =
     activeModel?.slug ?? (props.model === ANTIGRAVITY_DEFAULT_MODEL ? "" : props.model);
   const activeModelKey = activeModelSlug
@@ -908,8 +908,15 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
     return mapping.size > 0 ? mapping : EMPTY_MODEL_JUMP_LABELS;
   }, [keybindings, modelJumpCommandByKey, modelJumpShortcutContext]);
   const modelListExtraData = useMemo(
-    () => ({ favoritesSet, modelJumpLabelByKey, activeModelKey, selectedModelKeySet }),
-    [favoritesSet, modelJumpLabelByKey, activeModelKey, selectedModelKeySet],
+    () => ({
+      favoritesSet,
+      modelJumpLabelByKey,
+      activeModelKey,
+      selectedModelKeySet,
+      testResults,
+      testTesting,
+    }),
+    [favoritesSet, modelJumpLabelByKey, activeModelKey, selectedModelKeySet, testResults, testTesting],
   );
 
   useEffect(() => {
