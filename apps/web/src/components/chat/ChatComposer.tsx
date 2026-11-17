@@ -7249,7 +7249,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
               composerProviderState.composerSurfaceClassName,
             )}
           >
-            {!isComposerResting && !isComposerApprovalState ? <ComposerDictationMicButton /> : null}
+            {!isComposerApprovalState ? <ComposerDictationMicButton /> : null}
             {showCollapsedMobilePromptRow ? (
               <div className="flex items-center justify-between gap-2 px-3 py-2">
                 <button

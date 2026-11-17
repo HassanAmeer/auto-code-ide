@@ -34,10 +34,10 @@ export const ComposerDictationMicButton = memo(function ComposerDictationMicButt
             }
             aria-pressed={isDictating}
             className={cn(
-              "absolute -top-px -right-px z-10 flex h-[34px] w-[38px] cursor-pointer items-center justify-center border outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-ring rounded-tr-[23px] rounded-bl-[14px]",
+              "absolute -top-px -right-px z-10 flex h-[34px] w-[38px] cursor-pointer items-center justify-center border outline-none transition-all duration-150 focus-visible:ring-2 focus-visible:ring-ring rounded-tr-[23px] rounded-bl-[14px] scale-100 [[data-chat-composer-mobile-collapsed=true]_&]:scale-80",
               isDictating
                 ? "border-red-400/60 bg-red-500/15 text-red-400 hover:bg-red-500/25 opacity-100"
-                : "border-[#2a2a31] bg-[#1a1a20] text-zinc-500 hover:bg-[#222228] hover:text-zinc-400 opacity-50",
+                : "border-[#2a2a31] bg-[#1a1a20] text-zinc-500 hover:bg-[#222228] hover:text-zinc-400 opacity-35",
               className,
             )}
           >
