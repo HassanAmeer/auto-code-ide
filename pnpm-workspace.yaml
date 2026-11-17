@@ -61,6 +61,6 @@ catalog:
   unified: 11.0.5
 
 minimumReleaseAgeExclude:
-  - "@opencode/client@2.3.0"
-  - "@opencode/protocol@2.3.0"
-  - "@opencode/schema@2.3.0"
+  - "@opencode/client@2.1.2"
+  - "@opencode/protocol@2.1.2"
+  - "@opencode/schema@2.1.2"
