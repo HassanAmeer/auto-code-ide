@@ -6471,20 +6471,22 @@ export const layerModelTestRoute = HttpRouter.add(
       );
     }
     const message = String(bodyJson?.message || "hy").trim() || "hy";
-    try {
-      let text = "";
-      yield* Effect.promise(() =>
-        bypassChatStream(
-          {
-            model,
-            messages: [{ role: "user", content: message }],
-            maxTokens: 256,
-          },
-          (chunk: string) => {
-            text += chunk;
-          },
-        ),
-      );
+    let text = "";
+    // Use Effect.either so a failing promise becomes a value — a plain JS
+    // try/catch cannot catch an Effect failure raised by `yield*`.
+    const outcome = yield* Effect.promise(() =>
+      bypassChatStream(
+        {
+          model,
+          messages: [{ role: "user", content: message }],
+          maxTokens: 256,
+        },
+        (chunk: string) => {
+          text += chunk;
+        },
+      ),
+    ).pipe(Effect.either);
+    if (outcome._tag === "Right") {
       return HttpServerResponse.jsonUnsafe({
         ok: true,
         model,
@@ -6493,18 +6495,17 @@ export const layerModelTestRoute = HttpRouter.add(
         response: text.trim().slice(0, 2000),
         testedAt: new Date().toISOString(),
       });
-    } catch (error: any) {
-      const errorMessage = String(error?.message || error);
-      const statusMatch = errorMessage.match(/\bHTTP\s+(\d{3})\b/);
-      return HttpServerResponse.jsonUnsafe({
-        ok: false,
-        model,
-        instanceId: bodyJson?.instanceId ?? null,
-        statusCode: statusMatch ? Number(statusMatch[1]) : 500,
-        error: errorMessage.slice(0, 2000),
-        testedAt: new Date().toISOString(),
-      });
     }
+    const errorMessage = String((outcome.left as any)?.message || outcome.left);
+    const statusMatch = errorMessage.match(/\bHTTP\s+(\d{3})\b/);
+    return HttpServerResponse.jsonUnsafe({
+      ok: false,
+      model,
+      instanceId: bodyJson?.instanceId ?? null,
+      statusCode: statusMatch ? Number(statusMatch[1]) : 500,
+      error: errorMessage.slice(0, 2000),
+      testedAt: new Date().toISOString(),
+    });
   }).pipe(
     Effect.catchCause((cause) =>
       Effect.succeed(HttpServerResponse.jsonUnsafe({ ok: false, error: Cause.pretty(cause) })),
