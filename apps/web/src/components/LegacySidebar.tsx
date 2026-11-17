@@ -925,7 +925,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                 <TooltipTrigger
                   render={
                     <span
-                      className="min-w-0 flex-1 truncate text-[13px] leading-snug"
+                      className="min-w-0 flex-1 truncate text-[13px] leading-snug group-hover/thread-row:pr-11 group-focus-within/thread-row:pr-11 transition-[padding]"
                       data-testid={`thread-title-${thread.id}`}
                     >
                       {thread.title}
@@ -937,7 +937,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
             )}
           </div>
           {renamingThreadKey !== threadKey && (threadStatus || formattedDate) && (
-            <div className="flex items-center gap-1.5 min-w-0 mt-0.5">
+            <div className="flex items-center gap-1.5 min-w-0 mt-0.5 group-hover/thread-row:pr-11 group-focus-within/thread-row:pr-11 transition-[padding]">
               {threadStatus && <ThreadStatusLabel status={threadStatus} />}
               {formattedDate && (
                 <span className="text-[10px] opacity-60 block truncate leading-none">
@@ -990,9 +990,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
               </Tooltip>
             )}
             <div
-              className={`flex min-w-12 justify-end ${
-                isRemoteThread ? "max-sm:min-w-24" : "max-sm:min-w-20"
-              }`}
+              className="flex min-w-0 justify-end"
             >
               {isConfirmingArchive ? (
                 <button
@@ -1008,7 +1006,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                   Confirm
                 </button>
               ) : canOperateThread && !isThreadRunning && renamingThreadKey !== threadKey ? (
-                <div className="pointer-events-none absolute top-1/2 right-1 -translate-y-1/2 flex items-center gap-0.5 opacity-0 transition-opacity duration-150 max-sm:pointer-events-auto max-sm:opacity-100 group-hover/thread-row:pointer-events-auto group-hover/thread-row:opacity-100 group-focus-within/thread-row:pointer-events-auto group-focus-within/thread-row:opacity-100 shrink-0">
+                <div className="pointer-events-none absolute top-0.5 right-1 flex items-center gap-0.5 rounded bg-sidebar/95 px-0.5 py-0.5 shadow-xs opacity-0 transition-opacity duration-150 max-sm:pointer-events-auto max-sm:opacity-100 group-hover/thread-row:pointer-events-auto group-hover/thread-row:opacity-100 group-focus-within/thread-row:pointer-events-auto group-focus-within/thread-row:opacity-100 shrink-0">
                   <Tooltip>
                     <TooltipTrigger
                       render={
