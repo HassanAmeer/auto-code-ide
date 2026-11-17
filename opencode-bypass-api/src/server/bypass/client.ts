@@ -14,6 +14,7 @@
 import { buildBypassHeaders, injectFingerprintTools, UPSTREAM_BASE } from "./fingerprint.ts";
 import { mintSession } from "./session.ts";
 import { getBypassDispatcher } from "./proxy.ts";
+import { resolveCustomRoute } from "./modelRoute.ts";
 import { fetch as undiciFetch } from "undici";
 
 export const OPENCODE_BYPASS_ENABLED: boolean = process.env.OPENCODE_BYPASS_ENABLED !== "false";
@@ -106,6 +107,14 @@ export async function bypassChatStream(
 ): Promise<void> {
   const sessionId = options.sessionId ?? mintSession();
   const headers = buildBypassHeaders(sessionId, { stream: true });
+  // If the selected model belongs to a configured custom provider, route there
+  // instead of the opencode.ai free lane (the thread may still be bound to
+  // opencodebypasssetup even after the user picked another provider's model).
+  const customRoute = resolveCustomRoute(options.model);
+  if (customRoute) {
+    headers.authorization = `Bearer ${customRoute.apiKey}`;
+    for (const [k, v] of Object.entries(customRoute.headers)) headers[k] = v;
+  }
   const { tools, placeholderNote } = injectFingerprintTools([]);
 
   const messages = [...options.messages];
@@ -125,7 +134,7 @@ export async function bypassChatStream(
   }
 
   const body = {
-    model: options.model,
+    model: customRoute ? customRoute.model : options.model,
     max_tokens: options.maxTokens ?? 8192,
     messages,
     stream: true,
@@ -139,7 +148,9 @@ export async function bypassChatStream(
     })),
   };
 
-  const endpoint = resolveChatEndpoint(options.baseUrl);
+  const endpoint = customRoute
+    ? `${customRoute.baseUrl.replace(/\/+$/, "")}/chat/completions`
+    : resolveChatEndpoint(options.baseUrl);
 
   // If WARP/Privoxy is running, attach dispatcher to bypass datacenter IP 429
   const dispatcher = await getBypassDispatcher();
