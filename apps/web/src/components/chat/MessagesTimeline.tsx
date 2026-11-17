@@ -145,6 +145,7 @@ import {
   MousePointerClickIcon,
   PaintbrushIcon,
   MinusIcon,
+  PinIcon,
   Redo2Icon,
   Minimize2Icon,
   SearchIcon,
@@ -306,6 +307,8 @@ import { SecretRequestCard } from "./SecretRequestCard";
 import { TimelineSystemDivider } from "./TimelineSystemDivider";
 
 import { SkillChipIcon, SkillInlineText } from "./SkillInlineText";
+import { resolvePinnedRowIndices, type PinnableRow } from "./pinnedMessages.logic";
+import { selectPinnedIds, selectPinnedNav, usePinnedMessagesStore } from "~/pinnedMessagesStore";
 import * as DateTime from "effect/DateTime";
 import { formatWorkspaceRelativePath } from "../../filePathDisplay";
 import {
@@ -367,6 +370,9 @@ interface TimelineRowSharedState {
   openPullRequest: (event: MouseEvent<HTMLElement>, url: string) => void;
   onToggleWorkGroup: (groupId: string, anchorKey: string) => void;
   onToggleWorkEntry: (anchorKey: string, collapsed: boolean) => void;
+  /** Ids of pinned assistant responses in this thread, for per-message toggles. */
+  pinnedMessageIds: ReadonlySet<string>;
+  onTogglePin: (messageId: string) => void;
   onCancelWorktreeSetup: (() => void) | null;
   retryableWorkspacePreparationRunIds: ReadonlySet<RunId>;
   onRetryWorkspacePreparation: ((runId: RunId) => void) | null;
@@ -656,6 +662,18 @@ const ConversationTimeline = memo(function ConversationTimeline({
   onRetryTurn = null,
 }: MessagesTimelineProps) {
   const listIdentityKey = displayThreadKey ?? routeThreadKey;
+  const pinnedIds = usePinnedMessagesStore((state) => selectPinnedIds(state, routeThreadKey));
+  const pinnedIdSet = useMemo(() => new Set(pinnedIds), [pinnedIds]);
+  const togglePin = useCallback(
+    (messageId: string) => {
+      usePinnedMessagesStore.getState().togglePin(routeThreadKey, messageId);
+    },
+    [routeThreadKey],
+  );
+  const pinnedJumpSeq = usePinnedMessagesStore(
+    (state) => selectPinnedNav(state, routeThreadKey).jumpSeq,
+  );
+  const lastPinnedJumpSeqRef = useRef(0);
   const rememberedPosition = useMemo(
     () => readTimelinePosition(listIdentityKey),
     [listIdentityKey],
@@ -3045,6 +3063,7 @@ function AssistantMessageMeta({
         showCopyButton={showCopyButton}
         streaming={copyStreaming}
       />
+      <AssistantPinButton messageId={message.id} />
       {projectedItem?.item.type === "assistant_message" ? (
         <AssistantForkButton projectedItem={projectedItem} />
       ) : null}
@@ -3059,6 +3078,34 @@ function AssistantMessageMeta({
         </Tooltip>
       )}
     </div>
+  );
+}
+
+function AssistantPinButton({ messageId }: { messageId: string }) {
+  const ctx = use(TimelineRowCtx);
+  const pinned = ctx.pinnedMessageIds.has(messageId);
+  const label = pinned ? "Unpin this response" : "Pin this response";
+
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            type="button"
+            size="icon-xs"
+            variant="ghost"
+            aria-label={label}
+            aria-pressed={pinned}
+            data-pinned={pinned ? "true" : "false"}
+            onClick={() => ctx.onTogglePin(messageId)}
+            className={cn("size-5", pinned && "text-primary")}
+          />
+        }
+      >
+        <PinIcon className={cn("size-3", pinned && "fill-current")} />
+      </TooltipTrigger>
+      <TooltipPopup side="top">{label}</TooltipPopup>
+    </Tooltip>
   );
 }
 
