@@ -5,7 +5,6 @@ export {
   OPENCODE_BYPASS_ENABLED,
   FREE_MODELS,
   resolveChatEndpoint,
-  normalizeBypassModel,
 } from "./client.ts";
 export type { BypassChatMessage, BypassRequestOptions, BypassResponse } from "./client.ts";
 
