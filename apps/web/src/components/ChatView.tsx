@@ -510,6 +510,7 @@ import {
   resolveScrollToEndClearance,
 } from "./composerFooterLayout";
 import { ChatHeader } from "./chat/ChatHeader";
+import { PinnedMessagesNav } from "./chat/PinnedMessagesNav";
 import { MobileProjectThreadTabs } from "./chat/MobileProjectThreadTabs";
 import { useRemoteOpenState } from "~/remoteOpen";
 import { shouldShowOpenInPicker } from "./chat/OpenInPicker.logic";
@@ -12379,6 +12380,7 @@ export default function ChatView(props: ChatViewProps) {
               ? { onOpenProjectSettings: handleOpenDraftProjectSettings }
               : {})}
           />
+          <PinnedMessagesNav threadKey={routeThreadKey} className="ml-1" />
         </header>
 
         {/* Mobile Concept 2: Segmented Tabs Switcher (Chat vs Fullscreen Terminal) */}

@@ -961,6 +961,32 @@ const ConversationTimeline = memo(function ConversationTimeline({
     worktreeSetup,
   ]);
   const rows = useStableRows(rawRows, listIdentityKey);
+  const pinnedRowIndices = useMemo(() => {
+    const pinnable: PinnableRow[] = rows.map((row) => ({
+      messageId: row.kind === "message" || row.kind === "assistant-meta" ? row.message.id : null,
+      isAssistant:
+        row.kind === "message" ? row.message.role === "assistant" : row.kind === "assistant-meta",
+    }));
+    return resolvePinnedRowIndices(pinnable, pinnedIdSet);
+  }, [rows, pinnedIdSet]);
+  const pinnedRowKey = pinnedRowIndices.join(",");
+  const pinnedRowIndicesRef = useRef(pinnedRowIndices);
+  pinnedRowIndicesRef.current = pinnedRowIndices;
+
+  useEffect(() => {
+    usePinnedMessagesStore.getState().setPinnedRows(routeThreadKey, pinnedRowIndicesRef.current);
+  }, [routeThreadKey, pinnedRowKey]);
+
+  useEffect(() => {
+    if (pinnedJumpSeq === 0 || pinnedJumpSeq === lastPinnedJumpSeqRef.current) return;
+    lastPinnedJumpSeqRef.current = pinnedJumpSeq;
+    const nav = selectPinnedNav(usePinnedMessagesStore.getState(), routeThreadKey);
+    const targetRow = nav.rowIndices[nav.activeIndex];
+    if (targetRow === undefined) return;
+    onManualNavigation();
+    void listRef.current?.scrollToIndex({ index: targetRow, animated: true, viewOffset: 24 });
+  }, [pinnedJumpSeq, routeThreadKey, listRef, onManualNavigation]);
+
   const staleErrorRowIds = useMemo(() => {
     const result = new Set<string>();
     // Sentinel for entries without a runId so runless legacy projections still
@@ -1481,6 +1507,8 @@ const ConversationTimeline = memo(function ConversationTimeline({
       onToggleAttemptFold,
       onToggleWorkGroup,
       onToggleWorkEntry: suspendEndScrollMaintenanceForDisclosure,
+      pinnedMessageIds: pinnedIdSet,
+      onTogglePin: togglePin,
       onCancelWorktreeSetup: onCancelWorktreeSetup ?? null,
       retryableWorkspacePreparationRunIds,
       onRetryWorkspacePreparation: onRetryWorkspacePreparation ?? null,
@@ -1524,6 +1552,8 @@ const ConversationTimeline = memo(function ConversationTimeline({
       onToggleAttemptFold,
       onToggleWorkGroup,
       suspendEndScrollMaintenanceForDisclosure,
+      pinnedIdSet,
+      togglePin,
       onCancelWorktreeSetup,
       retryableWorkspacePreparationRunIds,
       onRetryWorkspacePreparation,
