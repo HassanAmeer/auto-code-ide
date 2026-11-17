@@ -148,6 +148,7 @@ import { useComposerDraftStore } from "../composerDraftStore";
 import { useNewThreadHandler } from "../hooks/useHandleNewThread";
 
 import { useThreadActions } from "../hooks/useThreadActions";
+import { useServerConfigs } from "~/state/entities";
 import { projectEnvironment } from "../state/projects";
 import { threadEnvironment, useEnvironmentThread } from "../state/threads";
 import { useEnvironment, useEnvironments, usePrimaryEnvironmentId } from "../state/environments";
@@ -1379,6 +1380,10 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
   const toggleThreadSelection = useThreadSelectionStore((state) => state.toggleThread);
   const rangeSelectTo = useThreadSelectionStore((state) => state.rangeSelectTo);
   const clearSelection = useThreadSelectionStore((state) => state.clearSelection);
+  // Chats nested under an expanded project use this component's context menu
+  // (not Sidebar.tsx's), so pin/unpin has to be wired up here too.
+  const { pinThread, confirmAndUnpinThread } = useThreadActions();
+  const serverConfigs = useServerConfigs();
   const removeFromSelection = useThreadSelectionStore((state) => state.removeFromSelection);
   const setSelectionAnchor = useThreadSelectionStore((state) => state.setAnchor);
   const { copyToClipboard: copyThreadIdToClipboard } = useCopyToClipboard<{
@@ -2895,10 +2900,20 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         thread.environmentId,
         AuthOrchestrationOperateScope,
       );
+      const supportsPinning =
+        serverConfigs.get(thread.environmentId)?.environment.capabilities.threadPinning === true;
+      const isPinned = thread.pinnedAt != null;
       const clicked = await api.contextMenu.show(
         [
           ...(thread.branch
             ? [{ id: "new-thread-on-branch", label: `New thread on ${thread.branch}` }]
+            : []),
+          ...(supportsPinning
+            ? [
+                isPinned
+                  ? { id: "unpin", label: "Unpin chat", icon: "pin-off" }
+                  : { id: "pin", label: "Pin chat", icon: "pin" },
+              ]
             : []),
           { id: "rename", label: "Rename chat", icon: "pencil", disabled: !canOperateThread },
           { id: "mark-unread", label: "Mark unread" },
@@ -2922,6 +2937,22 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
           to: "/projects/$projectKey",
           params: { projectKey: project.projectKey },
         });
+        return;
+      }
+
+      if (clicked === "pin" || clicked === "unpin") {
+        const result =
+          clicked === "pin" ? await pinThread(threadRef) : await confirmAndUnpinThread(threadRef);
+        if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+          const error = squashAtomCommandFailure(result);
+          toastManager.add(
+            stackedThreadToast({
+              type: "error",
+              title: clicked === "pin" ? "Failed to pin chat" : "Failed to unpin chat",
+              description: error instanceof Error ? error.message : "Please try again.",
+            }),
+          );
+        }
         return;
       }
 
