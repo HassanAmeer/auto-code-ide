@@ -746,12 +746,11 @@ export const OpenCodeBypassSetupDriver: ProviderDriver<
                         },
                       });
 
-                      // 2. Finalize assistant message with clear formatted error notice
-                      const errorNotice = `⚠️ **Provider Error (HTTP ${errorCode})**\n> **Model:** \`${selectedModel}\`\n> **Issue:** ${isUsageLimit ? "Usage Limit Reached (Limit Full)" : isTimeout ? "Request Timeout" : "Provider Error"}\n\n${aiLogError}`;
-                      const finalText =
-                        accumulatedText.trim().length > 0
-                          ? `${accumulatedText}\n\n${errorNotice}`
-                          : errorNotice;
+                      // 2. Finalize assistant message WITHOUT an embedded error notice.
+                      // A text-bearing assistant message makes session-logic suppress the
+                      // first-class error card ("substantial assistant response" rule), so
+                      // the error must live ONLY in the turn.terminal failure below.
+                      const finalText = accumulatedText;
 
                       yield* Queue.offer(eventsQueue, {
                         type: "message.updated",
@@ -830,6 +829,7 @@ export const OpenCodeBypassSetupDriver: ProviderDriver<
                           message: aiLogError,
                           code: errorCode,
                           retryable: isUsageLimit || isTimeout,
+                          responseBody: aiLogError,
                         },
                         failureItemOrdinal: NonNegativeInt.make(turnOrdinal * 100 + 2),
                         threadDisposition: "reusable",
