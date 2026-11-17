@@ -48,11 +48,19 @@ export function useModelTest() {
     setTesting((prev) => ({ ...prev, [key]: true }));
     let result: ModelTestResult;
     try {
-      const res = await fetch("/api/models/test", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ instanceId, model, message: "hy" }),
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 45_000);
+      let res: Response;
+      try {
+        res = await fetch("/api/models/test", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ instanceId, model, message: "hy" }),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
       const data = await res.json().catch(() => ({}));
       result = {
         ok: Boolean(data?.ok),
