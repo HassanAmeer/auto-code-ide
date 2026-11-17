@@ -124,13 +124,13 @@ import {
   stopAllRunningTelemetry,
   stopWorkerTelemetry,
   pruneStaleTelemetry,
-} from "./dsh/index.ts";
+} from "./nativeSubagents/index.ts";
 import {
   getWatchdogSnapshot,
   startWatchdogSupervision,
   stopWatchdog,
   stopAllWatchdogs,
-} from "./dsh/watchdogSupervisor.ts";
+} from "./nativeSubagents/supervisor.ts";
 import { getProjectChatEngineSkillPrompt } from "@t3tools/shared/superpowerSkills";
 import {
   createSupervisorWorkerEnvelope,

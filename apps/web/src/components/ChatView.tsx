@@ -64,6 +64,7 @@ import {
   EnvironmentAuthorizationError,
   type EnvironmentId,
   type MessageId,
+  type OrchestrationV2ProviderFailure,
   type ModelSelection,
   type ProjectScript,
   type ProjectId,
@@ -895,6 +896,37 @@ function formatOutgoingPrompt(params: {
   const promptEffort = resolvePromptInjectedEffort(caps, params.effort);
   return applyClaudePromptEffortPrefix(params.text, promptEffort);
 }
+/**
+ * The auto-route toast used to always claim "N failed retries", even when the
+ * turn actually died on a quota / 429. Describe the recorded failure instead,
+ * and only fall back to the retry count when the provider gave us no detail.
+ */
+function describeAutoRouteReason(input: {
+  readonly failure: OrchestrationV2ProviderFailure | null;
+  readonly maxRetries: number;
+}): string {
+  const { failure, maxRetries } = input;
+  const retriesFallback = `Model reached ${maxRetries} failed retries.`;
+  if (!failure) return retriesFallback;
+
+  const code = failure.code?.trim() ?? "";
+  const message = failure.message.toLowerCase();
+  const isQuota =
+    failure.class === "usage_limit" ||
+    code === "429" ||
+    /quota|usage limit|limit reached|limit exhausted/.test(message);
+  const isRateLimit = /rate limit|too many requests|throttl/.test(message);
+
+  if (isQuota || isRateLimit) {
+    const label = isQuota ? "usage limit" : "rate limit";
+    return `Model ${label} reached${code ? ` (${code})` : ""}.`;
+  }
+  if (failure.class === "permission_error") return "Model access was refused.";
+  if (failure.class === "transport_error") return "Model connection failed.";
+  if (failure.class === "provider_error") return "Model provider returned an error.";
+  return retriesFallback;
+}
+
 const SCRIPT_TERMINAL_COLS = 120;
 const SCRIPT_TERMINAL_ROWS = 30;
 
@@ -11603,6 +11635,14 @@ export default function ChatView(props: ChatViewProps) {
       }
 
       const isExhausted = autoRetryAttempt + 1 >= autoRetrySettings.maxRetries;
+      // Describe what actually killed the turn (quota / 429 / provider error)
+      // instead of always blaming the retry counter.
+      const routeReason = describeAutoRouteReason({
+        failure: lastFailedRun
+          ? latestRootProviderFailure(lastFailedRun, serverProjection?.turnItems ?? [])
+          : null,
+        maxRetries: autoRetrySettings.maxRetries,
+      });
       let retryModelSelection: ModelSelection | undefined = options?.overrideModel;
 
       try {
@@ -11643,7 +11683,7 @@ export default function ChatView(props: ChatViewProps) {
               toastManager.add({
                 type: "info",
                 title: "Auto-Routed to Next Model",
-                description: `Model reached ${autoRetrySettings.maxRetries} failed retries. Auto-switched to ${nextFallbackCandidate.displayName}.`,
+                description: `${routeReason} Auto-switched to ${nextFallbackCandidate.displayName}.`,
               });
             }
           } else {
@@ -11722,6 +11762,7 @@ export default function ChatView(props: ChatViewProps) {
       resumableRunId,
       routeThreadKey,
       runtimeMode,
+      serverProjection,
       setThreadError,
       startThreadTurn,
       threadErrorBannerKey,

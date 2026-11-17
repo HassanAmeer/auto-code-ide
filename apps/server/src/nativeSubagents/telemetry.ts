@@ -1,5 +1,15 @@
 // @effect-diagnostics globalDateInEffect:off globalRandomInEffect:off nodeBuiltinImport:off globalTimers:off globalTimersInEffect:off preferSchemaOverJson:off globalDate:off globalFetchInEffect:off globalFetch:off globalConsoleInEffect:off
-import { markWorkerAborted } from "./abortRegistry.ts";
+// Native subagent abort registry — in-process, no DeepSeek worker harness.
+const abortedWorkers = new Set<string>();
+export function markWorkerAborted(id: string): void {
+  abortedWorkers.add(id);
+}
+export function isWorkerAborted(id: string): boolean {
+  return abortedWorkers.has(id);
+}
+export function clearWorkerAbort(id: string): void {
+  abortedWorkers.delete(id);
+}
 
 export interface ActiveWorkerTelemetry {
   id: string;

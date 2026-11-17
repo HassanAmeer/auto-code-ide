@@ -185,35 +185,35 @@ async function runEngineTask(args: {
   model: string;
   onLog?: (msg: string) => void;
 }): Promise<EngineTaskResult> {
-  const bridge = (await import("../../apps/server/src/dsh/opencodeBridge.ts" as string)) as {
-    executeOpenCodeTask: (opts: {
-      worktreePath: string;
-      projectName: string;
-      projectRoot?: string;
-      taskTitle: string;
-      prompt: string;
-      model: string;
-      onLog?: (msg: string) => void;
-    }) => Promise<EngineTaskResult>;
+  // Native OpenCode engine subagent — no DeepSeek worker harness, no worktree.
+  const { executeSubagentTool } = (await import(
+    "../../engine/runtimes/opencode-full-engine/index.ts" as string
+  )) as {
+    executeSubagentTool: (
+      input: any,
+      cwd: string,
+    ) => Promise<{
+      status: string;
+      filesModified: string[];
+      output: string;
+      error?: string;
+    }>;
   };
 
-  const payload: {
-    worktreePath: string;
-    projectName: string;
-    projectRoot: string;
-    taskTitle: string;
-    prompt: string;
-    model: string;
-    onLog?: (msg: string) => void;
-  } = {
-    worktreePath: args.projectRoot,
-    projectName: args.projectName,
-    projectRoot: args.projectRoot,
-    taskTitle: args.taskTitle,
-    prompt: args.prompt,
-    model: args.model,
+  const result = await executeSubagentTool(
+    {
+      agent: "build",
+      description: args.taskTitle,
+      prompt: args.prompt,
+      model: args.model,
+      onLog: args.onLog,
+    },
+    args.projectRoot,
+  );
+  return {
+    ok: result.status === "completed",
+    filesModified: result.filesModified,
+    outputSummary: result.output,
+    ...(result.error ? { error: result.error } : {}),
   };
-  if (args.onLog) payload.onLog = args.onLog;
-
-  return bridge.executeOpenCodeTask(payload);
 }
