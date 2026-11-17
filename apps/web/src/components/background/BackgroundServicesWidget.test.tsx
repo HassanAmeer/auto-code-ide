@@ -5,7 +5,9 @@ import {
   BackgroundServicesWidget,
   SleekSpinnerRing,
   collectRunningTurnItemTasks,
+  collectImportantCompletedTurnItems,
   filterLiveBackgroundTasks,
+  isImportantBackgroundCommand,
   type BackgroundTurnItem,
   type UnifiedBackgroundTaskItem,
 } from "./BackgroundServicesWidget";
@@ -121,5 +123,41 @@ describe("Background Tasks — live-only rule", () => {
   it("returns an empty list when there are no turn items", () => {
     expect(collectRunningTurnItemTasks(undefined)).toEqual([]);
     expect(collectRunningTurnItemTasks([])).toEqual([]);
+  });
+});
+
+describe("Background Tasks — two kinds: live services and kept important commands", () => {
+  it("recognises long-running service commands as important", () => {
+    expect(isImportantBackgroundCommand("pnpm dev")).toBe(true);
+    expect(isImportantBackgroundCommand("npm run start")).toBe(true);
+    expect(isImportantBackgroundCommand("python3 -m http.server 8080")).toBe(true);
+    expect(isImportantBackgroundCommand("docker compose up")).toBe(true);
+    // One-off / chat-history commands are NOT important.
+    expect(isImportantBackgroundCommand('echo "=== deploy ==="')).toBe(false);
+    expect(isImportantBackgroundCommand("pnpm build")).toBe(false);
+    expect(isImportantBackgroundCommand("ls -la")).toBe(false);
+  });
+
+  it("keeps only finished important commands as persistent grey rows", () => {
+    const tasks = collectImportantCompletedTurnItems([
+      { id: "a", type: "command_execution", status: "completed", input: "pnpm dev" },
+      { id: "b", type: "command_execution", status: "completed", input: 'echo "done"' },
+      { id: "c", type: "command_execution", status: "failed", input: "pnpm build" },
+      { id: "d", type: "web_search", status: "completed", query: "pnpm dev" },
+    ]);
+    expect(tasks.map((t) => t.id)).toEqual(["turn-done-a"]);
+    expect(tasks[0]!.status).toBe("completed");
+    expect(tasks[0]!.persistent).toBe(true);
+  });
+
+  it("keeps running and important-finished tasks, drops transient history", () => {
+    const all: ReadonlyArray<UnifiedBackgroundTaskItem> = [
+      { id: "live", title: "live terminal", kind: "command", status: "running" },
+      { id: "server", title: "pnpm dev", kind: "command", status: "completed", persistent: true },
+      { id: "echo", title: "echo done", kind: "command", status: "completed" },
+      { id: "build", title: "pnpm build", kind: "command", status: "failed" },
+      { id: "timer", title: "reminder", kind: "timer", status: "pending" },
+    ];
+    expect(filterLiveBackgroundTasks(all).map((t) => t.id)).toEqual(["live", "server"]);
   });
 });

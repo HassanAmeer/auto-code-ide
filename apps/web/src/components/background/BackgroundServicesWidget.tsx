@@ -30,6 +30,7 @@ import { cn } from "../../lib/utils";
 import { useEnvironmentQuery } from "../../state/query";
 import { serverEnvironment } from "../../state/server";
 import { terminalEnvironment } from "../../state/terminal";
+import { threadEnvironment } from "../../state/threads";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { useEnvironmentScope } from "../../state/session";
 import { useActiveEnvironmentId } from "../../state/entities";
@@ -140,6 +141,8 @@ export interface UnifiedBackgroundTaskItem {
   readonly pid?: number | null;
   /** Exit code from a finished command execution. */
   readonly exitCode?: number | null;
+  /** Important finished command (e.g. server start) kept visible in muted grey. */
+  readonly persistent?: boolean | undefined;
   /** Full command text or scheduled-task prompt for the expanded detail. */
   readonly detail?: string;
 }
@@ -190,9 +193,49 @@ export interface BackgroundTurnItem {
 }
 
 /**
+ * A finished command worth keeping in the list (a long-running service the
+ * user started). Everything else finished is transient chat history (echo,
+ * build logs, one-off scripts) and is dropped.
+ */
+const IMPORTANT_COMMAND_RE =
+  /\b(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?(?:dev|start|serve|preview)\b|\bvite\b|\bnext dev\b|\bhttp-server\b|http\.server|\bserve\b|\bnodemon\b|\bts-node\b|\bpm2\s+start\b|\bsystemctl\b|\bdocker\s+(?:run|compose)\b|\bgo run\b|\bcargo run\b|\bphp -S\b/i;
+
+export function isImportantBackgroundCommand(title: string): boolean {
+  return IMPORTANT_COMMAND_RE.test(title);
+}
+
+/**
+ * Finished-but-important turn-item commands (server start and friends).
+ * Kept as muted rows; ordinary finished commands are chat history and skipped.
+ */
+export function collectImportantCompletedTurnItems(
+  turnItems: ReadonlyArray<BackgroundTurnItem> | undefined,
+): UnifiedBackgroundTaskItem[] {
+  const list: UnifiedBackgroundTaskItem[] = [];
+  for (const item of (turnItems ?? []).slice().reverse()) {
+    if (list.length >= 12) break;
+    if (item.status !== "completed" && item.status !== "failed") continue;
+    if (item.type !== "command_execution") continue;
+    const cleanCmd = (item.input || "").replace(/\s+/g, " ").trim();
+    if (!cleanCmd || !isImportantBackgroundCommand(cleanCmd)) continue;
+    list.push({
+      id: `turn-done-${item.id}`,
+      title: cleanCmd,
+      kind: "command",
+      status: item.status === "failed" ? "failed" : "completed",
+      persistent: true,
+      detail: (item.input || "").trim().slice(0, 400),
+      exitCode: item.exitCode ?? null,
+    });
+  }
+  return list;
+}
+
+/**
  * Turn-item commands are chat *history* (echo ..., "Preparing workspace", build
  * logs), not live background services. Only commands still RUNNING belong in
- * the Background Tasks list — completed/failed ones are deliberately dropped.
+ * the Background Tasks list — completed/failed ones are kept only when they
+ * started a long-running service (see collectImportantCompletedTurnItems).
  * Exported as a pure helper so this rule is directly testable.
  */
 export function collectRunningTurnItemTasks(
@@ -225,11 +268,15 @@ export function collectRunningTurnItemTasks(
   return list;
 }
 
-/** Only tasks actually running in the background are shown in the sidebar. */
+/**
+ * Running background services plus finished-but-important commands (server
+ * start etc.), which stay visible in muted grey. Ordinary finished commands,
+ * failed runs and pending timers are dropped.
+ */
 export function filterLiveBackgroundTasks(
   tasks: ReadonlyArray<UnifiedBackgroundTaskItem>,
 ): UnifiedBackgroundTaskItem[] {
-  return tasks.filter((t) => t.status === "running").slice(0, 30);
+  return tasks.filter((t) => t.status === "running" || t.persistent === true).slice(0, 30);
 }
 
 // Fallback showcase items matching the user's screenshot when no active thread or tasks exist
@@ -472,6 +519,36 @@ const BackgroundServicesWidgetContent = memo(function BackgroundServicesWidgetCo
   const closeTerminalMutation = useAtomCommand(terminalEnvironment.close, {
     label: "stop background command from background services",
   });
+  const interruptTurnMutation = useAtomCommand(threadEnvironment.interruptTurn, {
+    label: "stop running command from background services",
+  });
+  const [stoppingTaskId, setStoppingTaskId] = useState<string | null>(null);
+
+  /** Stop a running turn-item command (no terminal of its own) by interrupting its thread. */
+  const handleStopTurnItem = useCallback(
+    async (task: UnifiedBackgroundTaskItem) => {
+      if (!environmentId || !threadId || stoppingTaskId !== null) return;
+      setStoppingTaskId(task.id);
+      try {
+        const result = await interruptTurnMutation({
+          environmentId,
+          input: { threadId },
+        });
+        if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+          toastManager.add({
+            type: "error",
+            title: `Could not stop ${task.title}`,
+            description: String(squashAtomCommandFailure(result)),
+          });
+        } else {
+          toastManager.add({ type: "info", title: `Stopped ${task.title}` });
+        }
+      } finally {
+        setStoppingTaskId(null);
+      }
+    },
+    [environmentId, threadId, interruptTurnMutation, stoppingTaskId],
+  );
 
   const handleStopTerminal = useCallback(
     async (target: { threadId: string; terminalId: string }, title: string) => {
@@ -526,11 +603,13 @@ const BackgroundServicesWidgetContent = memo(function BackgroundServicesWidgetCo
           if (!inProject(summary.cwd ?? "")) continue;
         }
         const isRunning = summary.hasRunningSubprocess;
+        const termTitle = summary.label || `Terminal (${summary.cwd || summary.terminalId})`;
         list.push({
           id: `term-${summary.terminalId}`,
-          title: summary.label || `Terminal (${summary.cwd || summary.terminalId})`,
+          title: termTitle,
           kind: "command",
           status: isRunning ? "running" : "completed",
+          persistent: !isRunning && isImportantBackgroundCommand(termTitle),
           terminalTarget: {
             threadId: summary.threadId,
             terminalId: summary.terminalId,
@@ -566,11 +645,11 @@ const BackgroundServicesWidgetContent = memo(function BackgroundServicesWidgetCo
     // C. Turn Items from Thread Projection — ONLY commands still RUNNING in the
     // background. Completed/failed commands are turn *history* (echo ..., build
     // logs, "Preparing workspace"), not live background services.
-    list.push(
-      ...collectRunningTurnItemTasks(
-        threadDetails?.projection?.turnItems as ReadonlyArray<BackgroundTurnItem> | undefined,
-      ),
-    );
+    const turnItems = threadDetails?.projection?.turnItems as
+      | ReadonlyArray<BackgroundTurnItem>
+      | undefined;
+    list.push(...collectRunningTurnItemTasks(turnItems));
+    list.push(...collectImportantCompletedTurnItems(turnItems));
 
     return list;
   }, [
@@ -591,6 +670,13 @@ const BackgroundServicesWidgetContent = memo(function BackgroundServicesWidgetCo
 
   const runningBackgroundTasks = useMemo(
     () => visibleBackgroundTasks.filter((t) => t.status === "running").length,
+    [visibleBackgroundTasks],
+  );
+
+  // Finished-but-important commands (server start etc.) get their own muted
+  // count so the header shows two kinds: live services and kept history.
+  const keptBackgroundTasks = useMemo(
+    () => visibleBackgroundTasks.filter((t) => t.persistent && t.status !== "running").length,
     [visibleBackgroundTasks],
   );
 
@@ -627,17 +713,22 @@ const BackgroundServicesWidgetContent = memo(function BackgroundServicesWidgetCo
             <span className="text-xs font-medium text-foreground/85 group-hover/header:text-foreground transition-colors">
               Background Tasks
             </span>
-            <span
-              title={`${runningBackgroundTasks} running background service${runningBackgroundTasks === 1 ? "" : "s"}`}
-              className={cn(
-                "rounded-full px-1.5 py-0.5 text-[11px] font-mono leading-none",
-                runningBackgroundTasks > 0
-                  ? "bg-emerald-500/15 text-emerald-400"
-                  : "bg-muted/60 text-muted-foreground",
-              )}
-            >
-              {runningBackgroundTasks}
-            </span>
+            {runningBackgroundTasks > 0 ? (
+              <span
+                title={`${runningBackgroundTasks} running background service${runningBackgroundTasks === 1 ? "" : "s"}`}
+                className="rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[11px] font-mono leading-none text-emerald-400"
+              >
+                {runningBackgroundTasks}
+              </span>
+            ) : null}
+            {keptBackgroundTasks > 0 ? (
+              <span
+                title={`${keptBackgroundTasks} important finished command${keptBackgroundTasks === 1 ? "" : "s"} kept`}
+                className="rounded-full bg-muted/60 px-1.5 py-0.5 text-[11px] font-mono leading-none text-muted-foreground"
+              >
+                {keptBackgroundTasks}
+              </span>
+            ) : null}
           </div>
           <ChevronDownIcon
             className={cn(
@@ -665,43 +756,53 @@ const BackgroundServicesWidgetContent = memo(function BackgroundServicesWidgetCo
                     key={task.id}
                     className="flex h-7 items-center justify-between gap-2 px-2 rounded-md hover:bg-black/[0.035] dark:hover:bg-white/[0.08] transition-colors"
                   >
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <div className="relative flex items-center justify-center shrink-0">
-                        <TerminalBoxIcon className="size-3.5 text-foreground/80" />
-                        <span className="absolute -top-0.5 -right-0.5 size-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      </div>
+                    <div className="flex items-center gap-1 min-w-0 flex-1">
+                      <StatusIcon status={task.status} small />
                       <span
-                        className="text-xs text-foreground/85 font-normal truncate leading-normal"
+                        className={cn(
+                          "text-xs truncate leading-normal",
+                          task.status === "running"
+                            ? "text-foreground/85"
+                            : "text-muted-foreground",
+                        )}
                         title={task.title}
                       >
                         {task.title}
                       </span>
                     </div>
 
-                    {task.terminalTarget && canOperateTerminal ? (
-                      <Tooltip>
-                        <TooltipTrigger
-                          render={
-                            <button
-                              type="button"
-                              disabled={isTermBusy}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                void handleStopTerminal(task.terminalTarget!, task.title);
-                              }}
-                              className="size-5 shrink-0 rounded hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 flex items-center justify-center transition-colors"
-                              aria-label={`Stop ${task.title}`}
-                            >
-                              {isTermBusy ? (
-                                <Loader2Icon className="size-3 animate-spin text-rose-400" />
-                              ) : (
-                                <SquareIcon className="size-3 fill-current" />
-                              )}
-                            </button>
-                          }
+                    {task.status === "running" ? (
+                      task.terminalTarget && canOperateTerminal ? (
+                        <Tooltip>
+                          <TooltipTrigger
+                            render={
+                              <button
+                                type="button"
+                                disabled={isTermBusy}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void handleStopTerminal(task.terminalTarget!, task.title);
+                                }}
+                                className="size-5 shrink-0 rounded hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 flex items-center justify-center transition-colors"
+                                aria-label={`Stop ${task.title}`}
+                              >
+                                {isTermBusy ? (
+                                  <Loader2Icon className="size-3 animate-spin text-rose-400" />
+                                ) : (
+                                  <SquareIcon className="size-3 fill-current" />
+                                )}
+                              </button>
+                            }
+                          />
+                          <TooltipPopup side="left">Stop service</TooltipPopup>
+                        </Tooltip>
+                      ) : (
+                        <StopIconButton
+                          onClick={() => void handleStopTurnItem(task)}
+                          busy={stoppingTaskId === task.id}
+                          label={`Stop ${task.title}`}
                         />
-                        <TooltipPopup side="left">Stop service</TooltipPopup>
-                      </Tooltip>
+                      )
                     ) : null}
                   </div>
                 );

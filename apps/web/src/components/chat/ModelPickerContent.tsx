@@ -861,17 +861,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
       ),
     [visibleModels],
   );
-  const [modelListContentSize, setModelListContentSize] = useState(
-    () => filteredItemKeys.length * MODEL_LIST_ESTIMATED_ITEM_SIZE,
-  );
   const [searchHeight, setSearchHeight] = useState(0);
-  useLayoutEffect(
-    () => modelListRef.current?.getState().listen("totalSize", setModelListContentSize),
-    [],
-  );
-  // Fit the list to its rows plus the combobox list `py-1` and LegendList `py-1.5`.
-  const modelListHeight =
-    filteredItemKeys.length === 0 ? 0 : `calc(${modelListContentSize}px + var(--spacing) * 5)`;
   const updateModelListScrollFades = useCallback(() => {
     const scrollElement = modelListRef.current?.getScrollableNode();
     if (!(scrollElement instanceof HTMLElement)) {
@@ -1153,10 +1143,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
             </div>
 
             {/* Model list */}
-            <div
-              className="relative min-h-0 overflow-hidden pr-px"
-              style={{ height: modelListHeight }}
-            >
+            <div className="relative min-h-0 flex-1 overflow-hidden pr-px">
               <ComboboxListVirtualized>
                 <LegendList<string>
                   ref={modelListRef}

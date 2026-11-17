@@ -25,6 +25,7 @@ import { GLOBAL_AI_MODEL_LOGS, clearAiModelLogs } from "@t3tools/provider-core/s
 import { isDevProxiedPath } from "@t3tools/shared/devProxy";
 import { decodeOtlpTraceRecords } from "@t3tools/shared/observability";
 import * as Cause from "effect/Cause";
+import { bypassChatStream } from "../../../opencode-bypass-api/src/server/bypass/client.ts";
 import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -6502,48 +6503,43 @@ export const layerModelTestRoute = HttpRouter.add(
       );
     }
     const message = String(bodyJson?.message || "hy").trim() || "hy";
-    // Drive the SAME path the real chat uses. A direct bypassChatStream call
-    // hits the upstream free lane with the `opencode/` prefixed id, which
-    // upstream rejects as "Model is unavailable". Route through the local chat
-    // endpoint so test and real usage always agree.
-    try {
-      const port = Number(process.env.PORT || 13773);
-      const chatResult = yield* Effect.tryPromise(() =>
-        fetch(`http://127.0.0.1:${port}/api/super-agent/chat`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model,
-            instanceId: bodyJson?.instanceId ?? "opencodebypasssetup",
-            messages: [{ role: "user", content: message }],
-          }),
-          signal: AbortSignal.timeout(60_000),
-        }).then((r) => r.json().catch(() => ({}))),
-      );
-      const data = chatResult as any;
-      const ok = Boolean(data?.ok);
-      const replyText = String(data?.reply ?? data?.error ?? "No response");
-      const statusMatch = replyText.match(/\bHTTP\s+(\d{3})\b|\b(429|400|401|403|500)\b/);
+    // Call the model's OWN provider directly (OpenCode free-lane upstream),
+    // not the generic chat route which re-routes through OpenRouter. Strip the
+    // cosmetic `opencode/` prefix — upstream expects the bare model id.
+    const pureModel = model.replace(/^opencode\//i, "").trim() || "beam-free";
+    // Catch inside the promise so the Effect itself never fails — a failed
+    // Effect would skip statusCode via the outer catchCause handler.
+    const outcome = yield* Effect.promise(async () => {
+      let text = "";
+      try {
+        await bypassChatStream(
+          { model: pureModel, messages: [{ role: "user", content: message }], maxTokens: 512 },
+          (chunk: string) => { text += chunk; },
+        );
+        return { ok: true as const, text };
+      } catch (error: any) {
+        return { ok: false as const, error: String(error?.message || error) };
+      }
+    });
+    if (outcome.ok) {
       return HttpServerResponse.jsonUnsafe({
-        ok,
+        ok: true,
         model,
         instanceId: bodyJson?.instanceId ?? null,
-        statusCode: ok ? 200 : statusMatch ? Number(statusMatch[1] || statusMatch[2]) : 500,
-        response: replyText.slice(0, 2000),
-        testedAt: new Date().toISOString(),
-      });
-    } catch (error: any) {
-      const errorMessage = String(error?.message || error);
-      const statusMatch = errorMessage.match(/\bHTTP\s+(\d{3})\b/);
-      return HttpServerResponse.jsonUnsafe({
-        ok: false,
-        model,
-        instanceId: bodyJson?.instanceId ?? null,
-        statusCode: statusMatch ? Number(statusMatch[1]) : 500,
-        error: errorMessage.slice(0, 2000),
+        statusCode: 200,
+        response: outcome.text.trim().slice(0, 2000),
         testedAt: new Date().toISOString(),
       });
     }
+    const statusMatch = outcome.error.match(/\bHTTP\s+(\d{3})\b|\b(429|400|401|403|500)\b/);
+    return HttpServerResponse.jsonUnsafe({
+      ok: false,
+      model,
+      instanceId: bodyJson?.instanceId ?? null,
+      statusCode: statusMatch ? Number(statusMatch[1] || statusMatch[2]) : 500,
+      error: outcome.error.slice(0, 2000),
+      testedAt: new Date().toISOString(),
+    });
   }).pipe(
     Effect.catchCause((cause) =>
       Effect.succeed(HttpServerResponse.jsonUnsafe({ ok: false, error: Cause.pretty(cause) })),
