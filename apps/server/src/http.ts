@@ -6471,39 +6471,39 @@ export const layerModelTestRoute = HttpRouter.add(
       );
     }
     const message = String(bodyJson?.message || "hy").trim() || "hy";
-    let text = "";
-    // Use Effect.either so a failing promise becomes a value — a plain JS
-    // try/catch cannot catch an Effect failure raised by `yield*`.
-    const outcome = yield* Effect.promise(() =>
-      bypassChatStream(
-        {
-          model,
-          messages: [{ role: "user", content: message }],
-          maxTokens: 256,
-        },
-        (chunk: string) => {
-          text += chunk;
-        },
-      ),
-    ).pipe(Effect.either);
-    if (outcome._tag === "Right") {
+    // Catch inside the promise so the Effect itself never fails — returning a
+    // plain result object avoids depending on Effect.either API shape.
+    const outcome = yield* Effect.promise(async () => {
+      let text = "";
+      try {
+        await bypassChatStream(
+          { model, messages: [{ role: "user", content: message }], maxTokens: 256 },
+          (chunk: string) => {
+            text += chunk;
+          },
+        );
+        return { ok: true as const, response: text.trim().slice(0, 2000) };
+      } catch (error: any) {
+        return { ok: false as const, error: String(error?.message || error).slice(0, 2000) };
+      }
+    });
+    if (outcome.ok) {
       return HttpServerResponse.jsonUnsafe({
         ok: true,
         model,
         instanceId: bodyJson?.instanceId ?? null,
         statusCode: 200,
-        response: text.trim().slice(0, 2000),
+        response: outcome.response,
         testedAt: new Date().toISOString(),
       });
     }
-    const errorMessage = String((outcome.left as any)?.message || outcome.left);
-    const statusMatch = errorMessage.match(/\bHTTP\s+(\d{3})\b/);
+    const statusMatch = outcome.error.match(/\bHTTP\s+(\d{3})\b/);
     return HttpServerResponse.jsonUnsafe({
       ok: false,
       model,
       instanceId: bodyJson?.instanceId ?? null,
       statusCode: statusMatch ? Number(statusMatch[1]) : 500,
-      error: errorMessage.slice(0, 2000),
+      error: outcome.error,
       testedAt: new Date().toISOString(),
     });
   }).pipe(
