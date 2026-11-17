@@ -5,6 +5,8 @@ import {
   CheckIcon,
   CodeIcon,
   EyeIcon,
+  FlaskConicalIcon,
+  LoaderCircleIcon,
   StarIcon,
   WrenchIcon,
   ZapIcon,
@@ -21,6 +23,7 @@ import { Kbd } from "../ui/kbd";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { cn } from "~/lib/utils";
 import { modelPickerModelKey } from "./modelPickerKeys";
+import type { ModelTestResult } from "./useModelTest";
 import { ProviderInstanceIcon } from "./ProviderInstanceIcon";
 
 interface ModelCapabilityBadge {
@@ -119,6 +122,9 @@ export const ModelListRow = memo(function ModelListRow(props: {
   unavailable?: boolean;
   jumpLabel?: string | null;
   disabledReason?: string | null;
+  onTest?: () => void;
+  testResult?: ModelTestResult | undefined;
+  testing?: boolean | undefined;
   onToggleFavorite: () => void;
 }) {
   const providerLabel = props.model.subProvider
@@ -196,6 +202,23 @@ export const ModelListRow = memo(function ModelListRow(props: {
             );
           })}
         </div>
+        {props.testResult ? (
+          <div className="mt-1.5 flex h-4 items-center overflow-hidden rounded bg-muted/15 text-3xs font-mono">
+            <span
+              className={
+                props.testResult.ok
+                  ? "ml-1.5 size-1.5 shrink-0 rounded-full bg-emerald-500"
+                  : "ml-1.5 size-1.5 shrink-0 rounded-full bg-rose-500"
+              }
+            />
+            <div className="relative min-w-0 flex-1 overflow-hidden">
+              <span className="block w-max whitespace-nowrap text-muted-foreground/70 [animation:model-test-marquee_8s_linear_infinite]">
+                {props.testResult.statusCode}|{props.testResult.text} &nbsp;•&nbsp;{" "}
+                {props.testResult.statusCode}|{props.testResult.text} &nbsp;•&nbsp;
+              </span>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div className="flex shrink-0 items-center gap-1.5">
@@ -203,6 +226,35 @@ export const ModelListRow = memo(function ModelListRow(props: {
           <CheckIcon className="size-3.5" aria-hidden="true" />
         ) : null}
         {props.jumpLabel ? <Kbd>{props.jumpLabel}</Kbd> : null}
+        {props.onTest ? (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  size="icon-xs"
+                  variant="ghost-muted"
+                  className="-mr-0.5 shrink-0 text-sky-400/80 hover:text-sky-300"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    props.onTest?.();
+                  }}
+                  onKeyDown={(event) => event.stopPropagation()}
+                  disabled={Boolean(props.disabledReason) || Boolean(props.testing)}
+                  aria-label="Test this model"
+                >
+                  {props.testing ? (
+                    <LoaderCircleIcon className="size-3.5 animate-spin" />
+                  ) : (
+                    <FlaskConicalIcon className="size-3.5" />
+                  )}
+                </Button>
+              }
+            />
+            <TooltipPopup side="top" align="center">
+              {props.testing ? "Testing…" : "Test model (sends 'hy')"}
+            </TooltipPopup>
+          </Tooltip>
+        ) : null}
         <Tooltip>
           <TooltipTrigger
             render={

@@ -19,6 +19,7 @@ import {
   type CustomProvider,
 } from "~/lib/customProviders";
 import { ModelListRow } from "./ModelListRow";
+import { useModelTest } from "./useModelTest";
 import { ModelPickerSidebar } from "./ModelPickerSidebar";
 import { getProviderStatusMessage, hasProviderSetup } from "./ProviderStatusBanner";
 import {
@@ -227,6 +228,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
     model: props.model,
     options: modelOptionsByInstance.get(props.activeInstanceId) ?? [],
   });
+  const { testModel, getResult, isTesting } = useModelTest();
   const activeModelSlug =
     activeModel?.slug ?? (props.model === ANTIGRAVITY_DEFAULT_MODEL ? "" : props.model);
   const activeModelKey = activeModelSlug
@@ -1212,6 +1214,15 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
                         unavailable={model.isUnavailable === true}
                         jumpLabel={modelJumpLabelByKey.get(modelKey) ?? null}
                         disabledReason={disabledReason}
+                        onTest={() => {
+                          void testModel(
+                            modelPickerModelKey(model.instanceId, model.slug),
+                            model.instanceId,
+                            model.slug,
+                          );
+                        }}
+                        testResult={getResult(modelPickerModelKey(model.instanceId, model.slug))}
+                        testing={isTesting(modelPickerModelKey(model.instanceId, model.slug))}
                         onToggleFavorite={() => toggleFavorite(model.instanceId, model.slug)}
                       />
                     );

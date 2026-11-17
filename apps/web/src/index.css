@@ -2545,3 +2545,12 @@ code {
 .animate-tts-eq-3 {
   animation: tts-eq-bar-3 0.85s ease-in-out infinite;
 }
+
+@keyframes model-test-marquee {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}

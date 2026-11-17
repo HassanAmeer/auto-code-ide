@@ -48,6 +48,7 @@ import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
 import { OtlpTracer, OtlpSerialization } from "effect/observability";
 
 import * as ServerConfig from "./config.ts";
+import { bypassChatStream } from "../../../opencode-bypass-api/src/server/bypass/client.ts";
 import * as ServerBrowser from "./preview/ServerBrowser.ts";
 import {
   registerFallbackCustomProvider,
@@ -6439,6 +6440,71 @@ export const layerWebSearchRoute = HttpRouter.add(
       error:
         "No search results returned. Configure a Brave Search API key in Settings -> MCP for live high-precision 2026 web search.",
     });
+  }).pipe(
+    Effect.catchCause((cause) =>
+      Effect.succeed(HttpServerResponse.jsonUnsafe({ ok: false, error: Cause.pretty(cause) })),
+    ),
+  ),
+);
+
+/**
+ * POST /api/models/test — quick smoke test for a single model from the picker.
+ * Sends the default message ("hy") straight to the model's upstream (custom
+ * providers auto-routed via resolveCustomRoute) and returns the response text
+ * or a sanitized error. No chat thread is created.
+ */
+export const layerModelTestRoute = HttpRouter.add(
+  "POST",
+  "/api/models/test",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
+      model?: string;
+      instanceId?: string;
+      message?: string;
+    };
+    const model = String(bodyJson?.model || "").trim();
+    if (!model) {
+      return HttpServerResponse.jsonUnsafe(
+        { ok: false, error: "model is required" },
+        { status: 400 },
+      );
+    }
+    const message = String(bodyJson?.message || "hy").trim() || "hy";
+    try {
+      let text = "";
+      yield* Effect.promise(() =>
+        bypassChatStream(
+          {
+            model,
+            messages: [{ role: "user", content: message }],
+            maxTokens: 256,
+          },
+          (chunk: string) => {
+            text += chunk;
+          },
+        ),
+      );
+      return HttpServerResponse.jsonUnsafe({
+        ok: true,
+        model,
+        instanceId: bodyJson?.instanceId ?? null,
+        statusCode: 200,
+        response: text.trim().slice(0, 2000),
+        testedAt: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      const errorMessage = String(error?.message || error);
+      const statusMatch = errorMessage.match(/\bHTTP\s+(\d{3})\b/);
+      return HttpServerResponse.jsonUnsafe({
+        ok: false,
+        model,
+        instanceId: bodyJson?.instanceId ?? null,
+        statusCode: statusMatch ? Number(statusMatch[1]) : 500,
+        error: errorMessage.slice(0, 2000),
+        testedAt: new Date().toISOString(),
+      });
+    }
   }).pipe(
     Effect.catchCause((cause) =>
       Effect.succeed(HttpServerResponse.jsonUnsafe({ ok: false, error: Cause.pretty(cause) })),

@@ -679,6 +679,7 @@ const layerMakeRoutes = Layer.mergeAll(
     ServerHttp.layerCustomProviderDeleteRoute,
     ServerHttp.layerCustomProviderSyncRoute,
     ServerHttp.layerSuperAgentChatRoute,
+    ServerHttp.layerModelTestRoute,
     AntigravityConnect.layerAntigravityConnectRoute,
     ServerHttp.layerSessionLedgerGetRoute,
     ServerHttp.layerSessionLedgerAddDecisionRoute,
