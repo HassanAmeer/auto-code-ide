@@ -54,22 +54,19 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service;
-    const info = (definition: Definition) =>
-      Info.make({
-        name: definition.name,
-        description: definition.description,
-      });
     const state = State.create<Map<string, Definition>, Editor>({
       name: "command",
       initial: () => new Map(),
       editor: (editor) => ({
         add: (definition) => editor.set(definition.name, definition),
       }),
-      notify: State.changes(
-        (commands) => Array.from(commands.values(), info),
-        () => bus.publish(Command.Event.Updated, {}).pipe(Effect.asVoid),
-      ),
+      notify: () => bus.publish(Command.Event.Updated, {}).pipe(Effect.asVoid),
     });
+    const info = (definition: Definition) =>
+      Info.make({
+        name: definition.name,
+        description: definition.description,
+      });
 
     return Service.of({
       reload: state.reload,

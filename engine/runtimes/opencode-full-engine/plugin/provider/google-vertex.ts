@@ -37,8 +37,6 @@ function resolveLocation(options: Record<string, unknown>) {
 
 function vertexEndpoint(location: string) {
   if (location === "global") return "aiplatform.googleapis.com";
-  // Jurisdictional multi-regions use Regional Endpoint Platform domains.
-  if (location === "eu" || location === "us") return `aiplatform.${location}.rep.googleapis.com`;
   return `${location}-aiplatform.googleapis.com`;
 }
 

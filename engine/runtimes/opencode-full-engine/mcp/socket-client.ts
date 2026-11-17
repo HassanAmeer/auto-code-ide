@@ -70,8 +70,10 @@ export function make(socket: Socket): SocketTransport {
           }),
     close: () => {
       if (phase === "closed") return Promise.resolve();
+      phase = "closed";
+      pending.length = 0;
       const closed = Result.try(() => socket.close(1000));
-      finish();
+      transport.onclose?.();
       return Result.isFailure(closed) ? Promise.reject(closed.failure) : Promise.resolve();
     },
     deliver: (text) => {

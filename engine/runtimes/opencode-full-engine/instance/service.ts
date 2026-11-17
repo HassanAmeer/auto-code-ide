@@ -14,8 +14,6 @@ export interface Interface {
   ) => <A, E, R>(
     effect: Effect.Effect<A, E, R>,
   ) => Effect.Effect<A, E | Error, Exclude<R, Services>>;
-  /** Whether `provide` would reuse built or booting capabilities. Selectors without it are assumed live. */
-  readonly live?: (session: Session.Info) => Effect.Effect<boolean>;
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Instance") {}

@@ -2,77 +2,38 @@ export * as ConfigPolicyPlugin from "./policy.js";
 
 import { define } from "@opencode/plugin/effect/plugin";
 import { Effect, Stream } from "effect";
-import { Bus } from "../../bus.js";
 import { Config } from "../../config.js";
-import { Credential } from "../../credential.js";
 import { ManagedPolicy } from "../../managed-policy.js";
 import { State } from "../../state.js";
 import { Wildcard } from "../../util/wildcard.js";
-import { WebSearch } from "../../websearch.js";
-import { ConfigIntegration } from "../integration.js";
 import { ConfigEntryObserver } from "./entry-observer.js";
 
 export const Plugin = define({
   id: "opencode.config.policy",
   effect: Effect.fn(function* (ctx) {
     const config = yield* Config.Service;
-    const credentials = yield* Credential.Service;
-    const websearch = yield* WebSearch.Service;
-    const bus = yield* Bus.Service;
+    const managed = yield* ManagedPolicy.Service;
     const reload = State.batch(
-      Effect.all(
-        [ctx.provider.reload(), ctx.mcp.reload(), ctx.skill.reload(), websearch.reload()],
-        {
-          discard: true,
-        },
-      ),
+      Effect.all([ctx.provider.reload(), ctx.mcp.reload(), ctx.skill.reload()], { discard: true }),
     );
     const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, reload);
-    // Documents reverse so earlier-loaded policy wins: managed policy, then a Console config document, then user
-    // and project files.
-    const policies = () => ManagedPolicy.statements(loaded.entries);
-    // `integration.use` names the account behind each integration's active connection. Reading stored metadata
-    // never refreshes a credential.
-    const current = { accounts: ManagedPolicy.accounts(yield* credentials.all()) };
-    yield* bus.subscribe([Credential.Event.Updated, Credential.Event.Switched]).pipe(
-      Stream.runForEach(() =>
-        Effect.gen(function* () {
-          const next = ManagedPolicy.accounts(yield* credentials.all());
-          if (
-            next.size === current.accounts.size &&
-            Array.from(next).every(([id, account]) => current.accounts.get(id) === account)
-          )
-            return;
-          current.accounts = next;
-          yield* State.batch(
-            Effect.all([ctx.provider.reload(), websearch.reload()], { discard: true }),
-          );
-        }),
-      ),
+    yield* managed.changes().pipe(
+      Stream.runForEach(() => reload),
       Effect.forkScoped({ startImmediately: true }),
     );
-    const integrationDenied = (statements: ReturnType<typeof policies>, integrationID: string) =>
-      ManagedPolicy.decision(
-        statements,
-        "integration.use",
-        ManagedPolicy.integrationResource(integrationID, current.accounts.get(integrationID)),
-      ) === "deny";
+    // Authored documents reverse so user-global policy outranks repository policy; organization statements
+    // from the connected Console follow every authored one and have the final say.
+    const policies = () => ManagedPolicy.statements(loaded.entries, managed.current());
     const runSync = Effect.runSyncWith(yield* Effect.context());
     yield* ctx.provider.transform((providers) => {
-      const statements = policies();
-      // A provider a well-known origin defines belongs to that origin; others to their own integration.
-      const suppliers = ConfigIntegration.suppliers(loaded.entries);
+      const current = policies();
       const denied: string[] = [];
       for (const record of providers.list()) {
-        const provider =
-          ManagedPolicy.decision(statements, "provider.use", record.provider.id) === "deny" ||
-          integrationDenied(
-            statements,
-            suppliers.get(record.provider.id) ??
-              record.provider.integrationID ??
-              record.provider.id,
-          );
-        if (!provider) continue;
+        const policy = current.findLast(
+          (policy) =>
+            policy.action === "provider.use" && Wildcard.match(record.provider.id, policy.resource),
+        );
+        if (policy?.effect !== "deny") continue;
         providers.remove(record.provider.id);
         // Skip unconfigured catalog entries; deny-all policies would otherwise log the whole catalog.
         if (record.provider.activation === "enabled") denied.push(record.provider.id);
@@ -80,36 +41,26 @@ export const Plugin = define({
       if (denied.length)
         runSync(Effect.logDebug("providers denied by policy", { providers: denied }));
     });
-    // Every built-in web search provider shares its integration's ID.
-    yield* websearch.transform((editor) => {
-      const statements = policies();
-      for (const provider of editor.list()) {
-        if (
-          ManagedPolicy.decision(statements, "websearch.use", provider.id) === "deny" ||
-          integrationDenied(statements, provider.id)
-        )
-          editor.remove(provider.id);
-      }
-    });
     yield* ctx.mcp.transform((servers) => {
-      const statements = policies();
+      const current = policies();
       for (const [name] of servers.list()) {
-        if (ManagedPolicy.decision(statements, "mcp.use", name) === "deny") servers.remove(name);
+        if (ManagedPolicy.decision(current, "integration.use", `mcp:${name}`) === "deny")
+          servers.remove(name);
       }
     });
     yield* ctx.skill.transform((skills) => {
-      const statements = policies();
+      const current = policies();
       for (const skill of skills.list()) {
-        if (ManagedPolicy.decision(statements, "skill.use", skill.id) === "deny")
+        if (ManagedPolicy.decision(current, "integration.use", `skill:${skill.id}`) === "deny")
           skills.remove(skill.id);
       }
     });
     yield* ctx.permission.hook("evaluate", (event) =>
       Effect.sync(() => {
-        const statements = policies();
+        const current = policies();
         const denied = event.resources
           .map((resource) =>
-            statements.findLast(
+            current.findLast(
               (policy) =>
                 policy.action === "tool.use" &&
                 Wildcard.match(`${event.action}:${resource}`, policy.resource),

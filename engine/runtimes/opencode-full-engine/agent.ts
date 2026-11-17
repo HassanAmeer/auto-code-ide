@@ -50,24 +50,6 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service;
-    const selectable = (agent: Info | undefined) =>
-      agent && agent.mode !== "subagent" && !agent.hidden ? agent : undefined;
-    const selectedDefault = (data: Data) => {
-      const configured = data.default ? selectable(data.agents.get(data.default)) : undefined;
-      if (configured) return configured;
-      const build = selectable(data.agents.get(defaultID));
-      if (build) return build;
-      for (const agent of data.agents.values()) {
-        const fallback = selectable(agent);
-        if (fallback) return fallback;
-      }
-    };
-    const list = (data: Data) => {
-      const agents = Array.fromIterable(data.agents.values());
-      const selected = selectedDefault(data);
-      if (!selected) return agents;
-      return [selected, ...agents.filter((agent) => agent.id !== selected.id)];
-    };
     const state = State.create<Data, Editor>({
       name: "agent",
       initial: () => ({ agents: new Map() }),
@@ -87,8 +69,21 @@ const layer = Layer.effect(
           editor.agents.delete(id);
         },
       }),
-      notify: State.changes(list, () => bus.publish(Agent.Event.Updated, {}).pipe(Effect.asVoid)),
+      notify: () => bus.publish(Agent.Event.Updated, {}).pipe(Effect.asVoid),
     });
+    const selectable = (agent: Info | undefined) =>
+      agent && agent.mode !== "subagent" && !agent.hidden ? agent : undefined;
+    const selectedDefault = () => {
+      const data = state.get();
+      const configured = data.default ? selectable(data.agents.get(data.default)) : undefined;
+      if (configured) return configured;
+      const build = selectable(data.agents.get(defaultID));
+      if (build) return build;
+      for (const agent of data.agents.values()) {
+        const fallback = selectable(agent);
+        if (fallback) return fallback;
+      }
+    };
 
     return Service.of({
       transform: state.transform,
@@ -98,15 +93,18 @@ const layer = Layer.effect(
       }),
       resolve: Effect.fnUntraced(function* (id) {
         if (id !== undefined) return state.get().agents.get(ID.make(id));
-        return selectedDefault(state.get());
+        return selectedDefault();
       }),
       select: Effect.fn("Agent.select")(function* (id) {
         if (id !== undefined) return { id, info: state.get().agents.get(id) };
-        const info = selectedDefault(state.get());
+        const info = selectedDefault();
         return { id: info?.id ?? defaultID, info };
       }),
       list: Effect.fn("Agent.list")(function* () {
-        return list(state.get());
+        const agents = Array.fromIterable(state.get().agents.values());
+        const selected = selectedDefault();
+        if (!selected) return agents;
+        return [selected, ...agents.filter((agent) => agent.id !== selected.id)];
       }),
     });
   }),

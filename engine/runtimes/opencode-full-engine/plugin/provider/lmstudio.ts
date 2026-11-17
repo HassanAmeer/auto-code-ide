@@ -2,7 +2,7 @@ import { Effect, Schema } from "effect";
 import { createLocalProviderPlugin } from "./local.js";
 
 const RemoteModel = Schema.Struct({
-  type: Schema.String,
+  type: Schema.Literals(["llm", "embedding"]),
   key: Schema.String,
   display_name: Schema.String,
   architecture: Schema.NullOr(Schema.String).pipe(Schema.optional),
@@ -11,13 +11,11 @@ const RemoteModel = Schema.Struct({
       config: Schema.Struct({ context_length: Schema.Int }),
     }),
   ),
-  // Null for decision models whose context is unknown.
-  max_context_length: Schema.NullOr(Schema.Int),
+  max_context_length: Schema.Int,
   capabilities: Schema.Struct({
     vision: Schema.Boolean,
     trained_for_tool_use: Schema.Boolean,
   }).pipe(Schema.optional),
-  has_vision_adapter: Schema.Boolean.pipe(Schema.optional),
 });
 
 const Response = Schema.Struct({ models: Schema.Array(RemoteModel) });
@@ -32,18 +30,15 @@ export const make = createLocalProviderPlugin({
     Effect.gen(function* () {
       const response = yield* client.getJson("/api/v1/models", Response);
       return response.models
-        .filter(
-          (model) => (model.type === "llm" || model.type === "decision") && model.key.length > 0,
-        )
+        .filter((model) => model.type === "llm" && model.key.length > 0)
         .toSorted((a, b) => a.key.localeCompare(b.key));
     }),
   model: (item) => ({
     id: item.key,
     name: item.display_name || item.key,
     family: item.architecture,
-    type: item.type === "decision" ? "decision" : "chat",
     tools: item.capabilities?.trained_for_tool_use,
-    vision: item.capabilities?.vision ?? item.has_vision_adapter,
+    vision: item.capabilities?.vision,
     context:
       item.loaded_instances.length === 0
         ? item.max_context_length

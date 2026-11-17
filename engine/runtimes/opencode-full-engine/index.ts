@@ -1,7 +1,7 @@
 // @effect-diagnostics nodeBuiltinImport:off globalConsole:off globalConsoleInEffect:off globalDate:off globalDateInEffect:off globalRandomInEffect:off globalErrorInEffectFailure:off preferSchemaOverJson:off globalFetchInEffect:off anyUnknownInErrorContext:off globalFetch:off globalTimers:off
 /**
  * OpenCode Full Standalone Engine
- * Complete standalone runtime extracted from SST OpenCode core (v2.3.0).
+ * Complete standalone runtime extracted from SST OpenCode core.
  * Contains:
  * - 14 Embedded Tools (read, write, edit, patch, shell, grep, glob, subagent, webfetch, websearch, todo, question, file-diff, mcp-resource)
  * - AST Line/Hunk Diff Engine & Precision Search/Replace
@@ -17,7 +17,7 @@ import * as NodeChildProcess from "node:child_process";
 import { bypassChatStream } from "../../../opencode-bypass-api/src/server/bypass/client.ts";
 
 export const ENGINE_NAME = "OpenCode Full Engine";
-export const ENGINE_VERSION = "2.3.0-embedded";
+export const ENGINE_VERSION = "2.1.4-embedded";
 export const IS_STANDALONE = true;
 
 export interface EngineCapabilities {
@@ -814,7 +814,6 @@ export async function runEngineSelfTest(): Promise<{
     diffEngine: "pass" | "fail";
     grepGlob: "pass" | "fail";
     shellExecution: "pass" | "fail";
-    subagentOrchestration: "pass" | "fail";
   };
   toolsVerified: string[];
   details: string;
@@ -866,31 +865,6 @@ export async function runEngineSelfTest(): Promise<{
       throw new Error("Session memory failed to persist messages");
     }
 
-    // 7. Native subagent orchestration (session + depth + parentID chain)
-    const previousDepth = process.env.OPENCODE_SUBAGENT_DEPTH;
-    process.env.OPENCODE_SUBAGENT_DEPTH = "2";
-    try {
-      const rootSubagent = openSubagentSession({
-        prompt: "self-test root",
-        agent: "build",
-        description: "self-test",
-      });
-      const childSubagent = openSubagentSession({
-        prompt: "self-test child",
-        agent: "build",
-        description: "self-test child",
-        parentID: rootSubagent.id,
-      });
-      if (getSubagentDepth(childSubagent.id) !== 2) {
-        throw new Error("Subagent parentID depth accounting failed");
-      }
-      SUBAGENT_SESSIONS.delete(childSubagent.id);
-      SUBAGENT_SESSIONS.delete(rootSubagent.id);
-    } finally {
-      if (previousDepth === undefined) delete process.env.OPENCODE_SUBAGENT_DEPTH;
-      else process.env.OPENCODE_SUBAGENT_DEPTH = previousDepth;
-    }
-
     // Cleanup temp file
     NodeFS.unlinkSync(testFile);
 
@@ -905,7 +879,6 @@ export async function runEngineSelfTest(): Promise<{
         diffEngine: "pass",
         grepGlob: "pass",
         shellExecution: "pass",
-        subagentOrchestration: "pass",
       },
       toolsVerified: [...ATTACHED_TOOLS],
       details: `All 14 engine tools and 7 subsystems verified in ${Date.now() - start}ms.`,
@@ -927,7 +900,6 @@ export async function runEngineSelfTest(): Promise<{
         diffEngine: "fail",
         grepGlob: "fail",
         shellExecution: "fail",
-        subagentOrchestration: "fail",
       },
       toolsVerified: [],
       details: err?.message || String(err),

@@ -1,8 +1,7 @@
 export * as ModalModels from "./models.js";
 
 import { Money } from "@opencode/schema/money";
-import { Effect, Option, Schema } from "effect";
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
+import { Option, Schema } from "effect";
 import { Model } from "../model.js";
 import { Provider } from "../provider.js";
 
@@ -43,42 +42,33 @@ const RemoteModel = Schema.Struct({
 });
 
 const Response = Schema.Struct({ data: Schema.Array(Schema.Unknown) });
+const decodeResponse = Schema.decodeUnknownSync(Response);
 const decodeModel = Schema.decodeUnknownOption(RemoteModel);
 
 type RemoteModel = typeof RemoteModel.Type;
 
-export function get(
-  http: HttpClient.HttpClient,
-  baseURL: string,
-  apiKey: string,
-  existing: readonly Model.Info[],
-) {
-  return load(http, baseURL, apiKey).pipe(
-    Effect.map((remote) => derive(baseURL, remote, existing)),
-  );
+export async function get(baseURL: string, apiKey: string, existing: readonly Model.Info[]) {
+  return derive(baseURL, await load(baseURL, apiKey), existing);
 }
 
 export type Snapshot = readonly RemoteModel[];
 
-export const load = Effect.fn("ModalModels.load")(function* (
-  http: HttpClient.HttpClient,
-  baseURL: string,
-  apiKey: string,
-) {
-  const response = yield* HttpClient.filterStatusOk(http)
-    .execute(
-      HttpClientRequest.get(`${baseURL.replace(/\/+$/, "")}/models`).pipe(
-        HttpClientRequest.bearerToken(apiKey),
-      ),
-    )
-    .pipe(Effect.flatMap(HttpClientResponse.schemaBodyJson(Response)), Effect.timeout("3 seconds"));
+export async function load(baseURL: string, apiKey: string): Promise<Snapshot> {
+  const response = await fetch(`${baseURL.replace(/\/+$/, "")}/models`, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+    signal: AbortSignal.timeout(3_000),
+  });
+  if (!response.ok) throw new Error(`Failed to fetch Modal models: ${response.status}`);
+
   // Decode each item tolerantly so one malformed entry cannot discard the
   // whole inventory. A malformed envelope still fails the fetch.
-  return response.data.flatMap((raw) => {
+  return decodeResponse(await response.json()).data.flatMap((raw) => {
     const model = Option.getOrUndefined(decodeModel(raw));
     return model ? [model] : [];
   });
-});
+}
 
 /** Combine remote facts with source templates, never a previously transformed model result. */
 export function derive(baseURL: string, remote: Snapshot, existing: readonly Model.Info[]) {

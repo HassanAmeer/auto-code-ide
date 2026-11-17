@@ -4,10 +4,8 @@ import {
   ReasoningEfforts,
   ToolCallPart,
   ToolResultPart,
-  type AssistantMessage,
-  type MediaPart,
+  type ContentPart,
   type ProviderMetadata,
-  type TextPart,
 } from "@opencode/ai/effect";
 import type { Model } from "@opencode/schema/model";
 import { Option, Schema } from "effect";
@@ -19,10 +17,11 @@ import type { FileAttachment } from "@opencode/schema/prompt";
 
 const imageMimes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
 
-const media = (file: FileAttachment): MediaPart => ({
+const media = (file: FileAttachment): ContentPart => ({
   type: "media",
   media: Media.base64(file.data, file.mime),
   filename: file.name,
+  metadata: file.description === undefined ? undefined : { description: file.description },
 });
 
 const attachmentLocation = (file: FileAttachment) => {
@@ -36,7 +35,7 @@ const attachmentLocation = (file: FileAttachment) => {
   }
 };
 
-const textAttachment = (file: FileAttachment): TextPart => ({
+const textAttachment = (file: FileAttachment): ContentPart => ({
   type: "text",
   text: `\n\n${[
     `Attached file: ${file.name ?? (file.source.type === "uri" ? file.source.uri : "inline attachment")}`,
@@ -46,9 +45,16 @@ const textAttachment = (file: FileAttachment): TextPart => ({
   ]
     .filter((line): line is string => line !== undefined)
     .join("\n")}`,
+  metadata: {
+    attachment: {
+      source: file.source,
+      name: file.name,
+      description: file.description,
+    },
+  },
 });
 
-const directoryAttachment = (file: FileAttachment): TextPart => ({
+const directoryAttachment = (file: FileAttachment): ContentPart => ({
   type: "text",
   text: `\n\n${[
     `Attached directory: ${attachmentLocation(file) ?? file.name ?? (file.source.type === "uri" ? file.source.uri : "directory")}`,
@@ -58,9 +64,16 @@ const directoryAttachment = (file: FileAttachment): TextPart => ({
   ]
     .filter((line): line is string => line !== undefined)
     .join("\n")}`,
+  metadata: {
+    attachment: {
+      source: file.source,
+      name: file.name,
+      description: file.description,
+    },
+  },
 });
 
-const attachmentContent = (file: FileAttachment): Array<TextPart | MediaPart> => {
+const attachmentContent = (file: FileAttachment): ContentPart[] => {
   if (file.mime === "text/plain") return [textAttachment(file)];
   if (file.mime === "application/x-directory") return [directoryAttachment(file)];
   if (imageMimes.has(file.mime) || file.mime === "application/pdf") {
@@ -113,7 +126,7 @@ const toolInput = (tool: SessionMessage.AssistantTool) =>
 const toolCall = (
   tool: SessionMessage.AssistantTool,
   providerMetadata: ProviderMetadata | undefined,
-): ToolCallPart =>
+): ContentPart =>
   ToolCallPart.make({
     id: tool.id,
     name: tool.name,
@@ -153,10 +166,6 @@ const toolResult = (
   }
 };
 
-// Sessions migrated from V1 never recorded `time.ran`, so a completed call also counts as run.
-const ranTool = (item: SessionMessage.AssistantContent) =>
-  item.type === "tool" && (item.time.ran !== undefined || item.state.status === "completed");
-
 const assistant = (
   message: SessionMessage.Assistant,
   model: Model.Ref,
@@ -164,55 +173,27 @@ const assistant = (
 ) => {
   const sameProvider = message.model.providerID === model.providerID;
   const sameModel = sameProvider && message.model.id === model.id;
-  // A failed stream is retried from what had already happened: the local calls that ran and everything
-  // before them. Cutting after a local call's result keeps the retried request from ending on an assistant
-  // reply; hosted calls after it are provider-side reads, so the retry can redo them.
-  const kept =
-    message.error === undefined || message.error.type === "aborted"
-      ? message.content
-      : message.content.slice(
-          0,
-          message.content.findLastIndex(
-            (item) => item.type === "tool" && item.executed !== true && ranTool(item),
-          ) + 1,
-        );
-  // A stream cut by Esc, a crash or a failure may end mid-block, so its last block's provider state is not
-  // replayed, and reasoning is only replayed once the model moved on to output. Calls it cut off before
-  // they ran are dropped; input errors stay so the model can reissue the call.
-  const cut = message.error !== undefined || message.finish === undefined;
-  const tail = cut ? message.content.at(-1) : undefined;
-  const items = cut
-    ? kept.filter(
-        (item) =>
-          item.type !== "tool" ||
-          ranTool(item) ||
-          (item.state.status === "error" && item.state.error.type.startsWith("tool.input")),
-      )
-    : kept;
-  const content = items.flatMap((item, index): Array<AssistantMessage["content"][number]> => {
+  const reuseProviderMetadata = sameModel && message.error === undefined;
+  const reasoningInterrupted = message.content.some(
+    (item) =>
+      item.type === "reasoning" && item.time !== undefined && item.time.completed === undefined,
+  );
+  const content = message.content.flatMap((item): ContentPart[] => {
     if (item.type === "text")
       return [
         {
           type: "text",
           text: item.text,
-          providerMetadata:
-            sameModel && item !== tail
-              ? providerMetadata(providerMetadataKey, item.native)
-              : undefined,
+          // Text can carry provider-bound state (e.g. Gemini thought signatures),
+          // which is only replayable against the model that produced it.
+          providerMetadata: reuseProviderMetadata
+            ? providerMetadata(providerMetadataKey, item.native)
+            : undefined,
         },
       ];
     // Let the destination adapter handle readable reasoning after a model/provider switch.
-    if (item.type === "reasoning") {
-      if (
-        cut &&
-        !items
-          .slice(index + 1)
-          .some(
-            (after) => after.type === "tool" || (after.type === "text" && after.text.trim() !== ""),
-          )
-      )
-        return [];
-      return sameModel
+    if (item.type === "reasoning")
+      return reuseProviderMetadata && !reasoningInterrupted
         ? [
             {
               type: "reasoning",
@@ -221,15 +202,24 @@ const assistant = (
             },
           ]
         : item.text.length > 0
-          ? [{ type: "reasoning", text: item.text }]
+          ? [
+              {
+                type: message.error === undefined && !reasoningInterrupted ? "reasoning" : "text",
+                text: item.text,
+              },
+            ]
           : [];
-    }
     // Call-side metadata is model-scoped proof of generation (Gemini thought
     // signatures, OpenAI encrypted reasoning): only the producing model may
     // replay it.
+    const reuseToolProviderMetadata =
+      reuseProviderMetadata ||
+      (sameModel &&
+        item.executed === true &&
+        (item.state.status === "completed" || item.state.status === "error"));
     const call = toolCall(
       item,
-      sameModel ? providerMetadata(providerMetadataKey, item.native) : undefined,
+      reuseToolProviderMetadata ? providerMetadata(providerMetadataKey, item.native) : undefined,
     );
     if (item.executed !== true) return [call];
     // Hosted tools (e.g. google_search) run inside the provider, so their
@@ -242,25 +232,36 @@ const assistant = (
     return result ? [call, result] : [call];
   });
   const meaningful = content.filter((part) => {
-    if (part.type === "text") return cut ? part.text.trim() !== "" : part.text !== "";
+    if (part.type === "text") return part.text !== "";
     if (part.type !== "reasoning") return true;
     return (
       part.text !== "" ||
       (part.providerMetadata !== undefined && Object.keys(part.providerMetadata).length > 0)
     );
   });
-  const results = items
+  const results = message.content
     .filter(
       (item): item is SessionMessage.AssistantTool =>
         item.type === "tool" && item.executed !== true,
     )
     .map((item) =>
-      toolResult(item, sameModel ? providerMetadata(providerMetadataKey, item.native) : undefined),
+      toolResult(
+        item,
+        reuseProviderMetadata ? providerMetadata(providerMetadataKey, item.native) : undefined,
+      ),
     )
     .filter((message) => message !== undefined)
     .map(Message.tool);
   if (meaningful.length === 0) return results;
-  return [Message.make({ id: message.id, role: "assistant", content: meaningful }), ...results];
+  return [
+    Message.make({
+      id: message.id,
+      role: "assistant",
+      content: meaningful,
+      metadata: message.metadata,
+    }),
+    ...results,
+  ];
 };
 
 const EFFORT_VARIANTS = new Set<string>(ReasoningEfforts);
@@ -298,6 +299,7 @@ function toLLMMessage(
           id: message.id,
           role: "user",
           content: `The working directory has been changed to ${message.location.directory}.`,
+          metadata: message.metadata,
         }),
       ];
     case "user":
@@ -314,12 +316,23 @@ function toLLMMessage(
           id: message.id,
           role: "user",
           content,
+          metadata: {
+            ...message.metadata,
+            ...(message.agents?.length ? { agents: message.agents } : {}),
+          },
         }),
       ];
     case "synthetic":
       return [Message.make({ id: message.id, role: "user", content: message.text })];
     case "skill":
-      return [Message.make({ id: message.id, role: "user", content: message.text })];
+      return [
+        Message.make({
+          id: message.id,
+          role: "user",
+          content: message.text,
+          metadata: message.metadata,
+        }),
+      ];
     case "system":
       return [Message.system(message.text)];
     case "shell":
@@ -330,6 +343,7 @@ function toLLMMessage(
           id: message.id,
           role: "user",
           content: `The following shell command was executed by the user:\n\nCommand:\n${message.command}\n\nOutput:\n${message.output?.output ?? ""}`,
+          metadata: message.metadata,
         }),
       ];
     case "assistant":
@@ -352,6 +366,7 @@ function toLLMMessage(
             ...(kept ? ["", `<recent-context>\n${kept}\n</recent-context>`] : []),
             "</conversation-checkpoint>",
           ].join("\n"),
+          metadata: message.metadata,
         }),
       ];
     }

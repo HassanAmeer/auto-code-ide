@@ -6,9 +6,7 @@ import type { SessionHooks } from "@opencode/plugin/effect/session";
 import { Model } from "@opencode/schema/model";
 import { AbsolutePath } from "@opencode/schema/schema";
 import { Session } from "@opencode/schema/session";
-import { FSUtil } from "@opencode/util/fs-util";
 import { Effect, Schema } from "effect";
-import { toolFailure } from "../runtime.js";
 import { FileAccess } from "../../file-access.js";
 import { Git } from "../../git.js";
 import { Permission } from "../../permission.js";
@@ -57,13 +55,6 @@ export const ModelsInput = Schema.Struct({
   }),
   provider: Schema.optionalKey(Schema.String).annotate({
     description: "Provider ID or name to filter by. Try your own provider first.",
-  }),
-  type: Schema.optionalKey(Schema.Literals(["chat", "image"])).annotate({
-    description: [
-      'Which kind of model to list. Defaults to "chat".',
-      '"chat": a language model (LLM). Powers sessions, agents and subagents, and can call tools.',
-      '"image": generates or edits images from a prompt. It can\'t chat or call tools.',
-    ].join("\n"),
   }),
   all: Schema.optionalKey(Schema.Boolean).annotate({
     description:
@@ -163,26 +154,14 @@ export const Plugin = {
           execute: (input, context) =>
             Effect.gen(function* () {
               const sessionID = input.sessionID ?? context.sessionID;
-              const session = yield* ctx.session.get({ sessionID });
-              const directory = AbsolutePath.make(
-                FileAccess.resolvePath(session.location.directory, input.directory.trim()),
-              );
-              // The destination becomes the session's internal directory, so leaving the project
-              // needs the same approval as reaching outside it. The project's own worktrees don't.
-              const target = yield* access.resolve({ path: directory, kind: "directory" });
-              const worktrees = target.externalDirectory
-                ? yield* ctx.worktree.list({ projectID: ctx.location.project.id })
-                : [];
-              if (!worktrees.some((worktree) => FSUtil.contains(worktree.directory, directory)))
-                yield* access.authorizeExternal([target], context);
               yield* ctx.session.move({
                 sessionID,
-                directory,
+                directory: input.directory,
                 delivery: "steer",
               });
               return {
-                output: { sessionID, directory },
-                content: `Moved session ${sessionID} to ${directory}.`,
+                output: { sessionID, directory: input.directory },
+                content: `Moved session ${sessionID} to ${input.directory}.`,
               };
             }).pipe(
               Effect.mapError(
@@ -241,7 +220,9 @@ export const Plugin = {
                 action: "edit",
                 resources: [target.resource],
                 save: ["*"],
-                ...Permission.invocation(context),
+                sessionID: context.sessionID,
+                agent: context.agent,
+                source: { type: "tool", messageID: context.messageID, id: context.id },
               });
               yield* ctx.worktree
                 .remove({
@@ -258,12 +239,21 @@ export const Plugin = {
                 output: { directory: target.absolute, removed: true },
                 content: `Removed worktree ${target.absolute}.`,
               };
-            }).pipe(Effect.mapError(toolFailure(`Unable to remove worktree ${input.directory}`))),
+            }).pipe(
+              Effect.mapError((error) =>
+                error instanceof ToolFailure
+                  ? error
+                  : new ToolFailure({
+                      message: `Unable to remove worktree ${input.directory}`,
+                      error,
+                    }),
+              ),
+            ),
         });
         draft.add({
           name: "models",
           description:
-            "Search the models available to use. Use this to turn a model name the user mentions into an exact reference for a tool that takes a model. Check your own provider first.",
+            "Search the models available to use. Use this to turn a model name the user mentions into an exact reference before running a subagent on it. Check your own provider first.",
           input: ModelsInput,
           output: ModelsOutput,
           options: { namespace: "opencode", codemode: true },
@@ -278,7 +268,7 @@ export const Plugin = {
                 (yield* ctx.provider.list()).data.map((provider) => [provider.id, provider.name]),
               );
               const provider = input.provider?.toLowerCase();
-              const matching = (yield* ctx.model.list({ types: [input.type ?? "chat"] })).data
+              const matching = (yield* ctx.model.list()).data
                 .filter(
                   (model) =>
                     provider === undefined ||

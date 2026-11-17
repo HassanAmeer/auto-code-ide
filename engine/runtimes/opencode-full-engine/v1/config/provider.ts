@@ -41,9 +41,9 @@ export const Model = Schema.Struct({
   ),
   limit: Schema.optional(
     Schema.Struct({
-      context: Schema.optional(Schema.Finite),
+      context: Schema.Finite,
       input: Schema.optional(Schema.Finite),
-      output: Schema.optional(Schema.Finite),
+      output: Schema.Finite,
     }),
   ),
   modalities: Schema.optional(

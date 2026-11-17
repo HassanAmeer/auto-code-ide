@@ -4,11 +4,10 @@ import { define } from "@opencode/plugin/effect/plugin";
 import { Document, Info, type Entry } from "@opencode/schema/config";
 import { ConfigAgent } from "@opencode/schema/config/agent";
 import path from "path";
-import { Effect, Result, SchemaIssue, SchemaParser } from "effect";
+import { Effect, Option, PubSub, Schema, Stream } from "effect";
 import { Agent } from "../../agent.js";
 import { Config } from "../../config.js";
 import { ConfigMarkdown } from "../markdown.js";
-import { ConfigEntryObserver } from "./entry-observer.js";
 import { FSUtil } from "@opencode/util/fs-util";
 import { ConfigAgentV1 } from "../../v1/config/agent.js";
 import { ConfigMigrateV1 } from "../../v1/config/migrate.js";
@@ -25,9 +24,8 @@ const legacySources = [
 ] as const;
 // Keep in sync with the legacySources patterns and the name-strip regex in decode.
 const sourceDirectories = ["agent", "agents", "mode", "modes"] as const;
-const decodeAgent = SchemaParser.decodeUnknownResult(ConfigAgent.Info);
-const decodeLegacyAgent = SchemaParser.decodeUnknownResult(ConfigAgentV1.Info);
-const formatIssue = SchemaIssue.makeFormatterDefault();
+const decodeAgent = Schema.decodeUnknownOption(ConfigAgent.Info);
+const decodeLegacyAgent = Schema.decodeUnknownOption(ConfigAgentV1.Info);
 type PathAction =
   | FileAccess.ExternalDirectoryAuthorization["action"]
   | typeof ReadTool.name
@@ -65,13 +63,37 @@ export const Plugin = define({
         Effect.map((documents) => documents.flat()),
       );
     });
-    const loaded = yield* ConfigEntryObserver.observeSources({
-      config,
-      event: ctx.event,
-      directories: sourceDirectories,
-      load,
-      reload: ctx.agent.reload(),
-    });
+    const loaded = { documents: [] as Document[] };
+    const reload = load().pipe(
+      Effect.tap((documents) => Effect.sync(() => (loaded.documents = documents))),
+      Effect.andThen(ctx.agent.reload()),
+    );
+    // One trigger feed serializes reloads and shares one debounce window;
+    // subscribing before the initial scan means updates racing the scan still
+    // trigger a rebuild. Each source is subscribed eagerly on its own fiber
+    // (Stream.merge and Stream.debounce both open upstream a fiber hop later)
+    // so no update slips through while the debounce starts its pull.
+    const changes = yield* PubSub.sliding<void>(1);
+    const notify = () => PubSub.publish(changes, undefined);
+    yield* config.changes().pipe(
+      Stream.filterEffect((update) =>
+        Effect.map(config.entries(), (entries) => isAgentSource(entries, update.path)),
+      ),
+      Stream.runForEach(notify),
+      Effect.forkScoped({ startImmediately: true }),
+    );
+    yield* ctx.event.subscribe().pipe(
+      Stream.filter((event) => event.type === "config.updated"),
+      Stream.runForEach(notify),
+      Effect.forkScoped({ startImmediately: true }),
+    );
+    const updates = yield* PubSub.subscribe(changes);
+    yield* Stream.fromSubscription(updates).pipe(
+      Stream.debounce("100 millis"),
+      Stream.runForEach(() => reload),
+      Effect.forkScoped({ startImmediately: true }),
+    );
+    loaded.documents = yield* load();
     yield* ctx.agent.transform((editor) => {
       const permissions = expandPermissions(
         loaded.documents.flatMap((document) => document.info.permissions ?? []),
@@ -120,6 +142,16 @@ export const Plugin = define({
   }),
 });
 
+// Matches anything at or under <root>/{agent,agents,mode,modes}. No file-suffix
+// check: directory-level events such as renames carry no per-file paths.
+function isAgentSource(entries: Entry[], file: string) {
+  return entries.some(
+    (entry) =>
+      entry.type === "directory" &&
+      sourceDirectories.some((name) => FSUtil.contains(path.join(entry.path, name), file)),
+  );
+}
+
 function expandPermissions(rules: Permission.Ruleset, home: string): Permission.Ruleset {
   // Expand only resources tools resolve as filesystem paths. Bash resources are raw shell text:
   // rewriting `$HOME/private/**` would miss `$HOME/private/key`, and safe expansion needs shell-aware parsing.
@@ -147,13 +179,7 @@ function expandHome(resource: string, home: string) {
 function discover(fs: FSUtil.Interface, directory: string) {
   return Effect.forEach(legacySources, (source) =>
     fs
-      .scan(source.pattern, {
-        cwd: directory,
-        absolute: true,
-        dot: true,
-        symlink: true,
-        ignore: FSUtil.ignoreGlobs,
-      })
+      .scan(source.pattern, { cwd: directory, absolute: true, dot: true, symlink: true })
       .pipe(
         Effect.map((files) =>
           files.toSorted().map((filepath) => ({ directory, filepath, primary: source.primary })),
@@ -170,10 +196,7 @@ const decode = Effect.fnUntraced(function* (
   content: string,
 ) {
   const markdown = ConfigMarkdown.parseOption(content);
-  if (!markdown) {
-    yield* Effect.logWarning("agent file skipped", { filepath: file.filepath, reason: "markdown" });
-    return;
-  }
+  if (!markdown) return;
   const name = path
     .relative(file.directory, file.filepath)
     .replaceAll("\\", "/")
@@ -197,21 +220,15 @@ const decode = Effect.fnUntraced(function* (
     /^[^#]+$/.test(markdown.data.variant)
       ? { ...markdown.data, model: `${markdown.data.model}#${markdown.data.variant}` }
       : markdown.data;
-  const decoded = legacy
-    ? Result.map(
-        decodeLegacyAgent({ name, ...markdown.data, prompt: body }, { errors: "all" }),
-        ConfigMigrateV1.migrateAgent,
+  const agent = legacy
+    ? Option.getOrUndefined(
+        Option.map(
+          decodeLegacyAgent({ name, ...markdown.data, prompt: body }, { errors: "all" }),
+          ConfigMigrateV1.migrateAgent,
+        ),
       )
-    : decodeAgent({ ...data, system: body }, { errors: "all" });
-  if (Result.isFailure(decoded)) {
-    yield* Effect.logWarning("agent file skipped", {
-      filepath: file.filepath,
-      reason: "frontmatter",
-      issue: formatIssue(decoded.failure),
-    });
-    return;
-  }
-  const agent = decoded.success;
+    : Option.getOrUndefined(decodeAgent({ ...data, system: body }, { errors: "all" }));
+  if (!agent) return;
   const info = Info.make({
     agents: { [name]: file.primary ? ConfigAgent.Info.make({ ...agent, mode: "primary" }) : agent },
   });

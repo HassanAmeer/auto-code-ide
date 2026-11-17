@@ -1,9 +1,10 @@
-import { Context, Effect, Exit, Layer, Semaphore, Stream } from "effect";
+import { Context, Effect, Exit, Fiber, Layer, Scope, Semaphore } from "effect";
 import { Reactivity } from "effect/reactivity";
 import { SqlClient, Statement } from "effect/sql";
 import type { Connection } from "effect/sql/SqlConnection";
 import { classifySqliteError, SqlError, UnknownError } from "effect/sql/SqlError";
 import type { NativeTransactionSqlClient } from "./drizzle/effect-sqlite/session.js";
+import { Sqlite } from "./sqlite.js";
 
 const ATTR_DB_SYSTEM_NAME = "db.system.name";
 
@@ -127,7 +128,7 @@ const makeWithTransaction =
 
 const make = (options: Config) =>
   Effect.gen(function* () {
-    const native = options.storage;
+    const native = (yield* Sqlite.Native) as DurableObjectStorage;
 
     const compiler = Statement.makeCompilerSqlite(options.transformQueryNames);
     const transformRows = options.transformResultNames
@@ -177,22 +178,20 @@ const make = (options: Config) =>
           }),
       });
 
-    const connection: Connection = {
-      execute: (query, params, transformRows) =>
-        transformRows ? Effect.map(run(query, params), transformRows) : run(query, params),
-      executeRaw: (query, params) => run(query, params),
-      executeValues: (query, params) => runValues(query, params),
-      executeValuesUnprepared: (query, params) => runValues(query, params),
-      executeUnprepared: (query, params, transformRows) =>
-        transformRows ? Effect.map(run(query, params), transformRows) : run(query, params),
-      executeStream: () => Stream.die("executeStream not implemented"),
-    };
+    const connection = Sqlite.makeConnection(run, runValues, {});
 
     const semaphore = yield* Semaphore.make(1);
     const acquirer = semaphore.withPermits(1)(Effect.succeed(connection));
-    const transactionAcquirer = Effect.uninterruptibleMask((restore) =>
-      Effect.as(restore(semaphore.takeScoped(1)), connection),
-    );
+    const transactionAcquirer = Effect.uninterruptibleMask((restore) => {
+      const fiber = Fiber.getCurrent()!;
+      const scope = Context.getUnsafe(fiber.context, Scope.Scope);
+      return Effect.as(
+        Effect.tap(restore(semaphore.take(1)), () =>
+          Scope.addFinalizer(scope, semaphore.release(1)),
+        ),
+        connection,
+      );
+    });
 
     const client = Object.assign(
       (yield* SqlClient.make({
@@ -200,7 +199,6 @@ const make = (options: Config) =>
         compiler,
         transactionAcquirer,
         transactionService: WorkerdTransaction,
-        driver: "sqlite-do",
         spanAttributes: [
           ...(options.spanAttributes ? Object.entries(options.spanAttributes) : []),
           [ATTR_DB_SYSTEM_NAME, "sqlite"],
@@ -222,14 +220,21 @@ const make = (options: Config) =>
 
 // Defends against the shared path-based Database.layer, which passes a
 // filename instead of storage when resolved under the workerd condition.
-export const sqliteLayer = (config: Config): Layer.Layer<SqlClient.SqlClient> =>
+const nativeLayer = (config: Config) =>
   config.storage
-    ? Layer.effect(SqlClient.SqlClient, make(config)).pipe(Layer.provide(Reactivity.layer))
+    ? Layer.succeed(Sqlite.Native, config.storage)
     : Layer.effect(
-        SqlClient.SqlClient,
+        Sqlite.Native,
         Effect.die(
-          new Error(
-            "workerd sqlite cannot open a database from a path; use Database.layerFromClient.pipe(Layer.provide(sqliteLayer({ storage })))",
-          ),
+          "workerd sqlite cannot open a database from a path; use Database.layerFromClient.pipe(Layer.provide(sqliteLayer({ storage })))",
         ),
       );
+
+const clientLayer = (config: Config) => Layer.effect(SqlClient.SqlClient, make(config));
+
+export const sqliteLayer = (config: Config) => {
+  const native = nativeLayer(config);
+  return Layer.merge(native, clientLayer(config).pipe(Layer.provide(native))).pipe(
+    Layer.provide(Reactivity.layer),
+  );
+};

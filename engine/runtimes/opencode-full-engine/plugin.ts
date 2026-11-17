@@ -1,8 +1,6 @@
 export * as Plugin from "./plugin.js";
-export { Event, GuiBundle, ID, Info, Source, State } from "@opencode/schema/plugin";
+export { Event, ID, Info, Source, State } from "@opencode/schema/plugin";
 
-import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 import { Plugin } from "@opencode/schema/plugin";
 import { Node } from "@opencode/util/effect/app-node";
 import { LayerNode } from "@opencode/util/effect/layer-node";
@@ -21,22 +19,18 @@ import {
   Semaphore,
 } from "effect";
 import { Bus } from "./bus.js";
+import { KV } from "./kv.js";
 import { PluginHost } from "./plugin/host.js";
 import { type Failure, type Generation, Service } from "./plugin/service.js";
 import { State } from "./state.js";
 
-export {
-  awaitActivation,
-  type Failure,
-  type Generation,
-  type Interface,
-  Service,
-} from "./plugin/service.js";
+export { awaitActivation, type Generation, type Interface, Service } from "./plugin/service.js";
 
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service;
+    const kv = yield* KV.Service;
     const scope = yield* Scope.make();
     // One slot per requested definition in activation order, including ones whose setup failed, so
     // the prefix diff below stays index-aligned and a failed revision is not retried until it changes.
@@ -58,29 +52,10 @@ const layer = Layer.effect(
     const pendingFailures = yield* Queue.unbounded<PendingFailure>();
     let discovered: readonly Failure[] = [];
     let inventory: Plugin.Info[] = [];
-    const snapshot = () => [...Array.from(active.values()).map(slotInfo), ...discovered];
-    // A changed `./gui-experimental` bundle alone restarts nothing; its revision is part of what changes, so the event
-    // tells the app to reload it.
-    const publish = State.changes(
-      (items: readonly Plugin.Info[]) => [
-        items,
-        Array.from(active.values(), (entry) => entry.plugin.gui?.revision),
-      ],
-      () => bus.publish(Plugin.Event.Updated, {}).pipe(Effect.asVoid),
-    );
     const list = Effect.fn("Plugin.list")(function* () {
       return inventory;
     });
-    const gui = Effect.fn("Plugin.gui")(function* (id: Plugin.ID) {
-      const gui = active.get(id)?.plugin.gui;
-      if (!gui) return undefined;
-      // A plugin that resolved a `./gui-experimental` file but cannot read it now is a server fault, not a missing
-      // bundle.
-      const code = yield* Effect.promise(() => readFile(fileURLToPath(gui.file), "utf8"));
-      return { code, revision: gui.revision, options: gui.options } satisfies Plugin.GuiBundle;
-    });
-    const hostContext =
-      yield* Effect.context<Effect.Services<ReturnType<typeof PluginHost.make>>>();
+    const host = yield* PluginHost.make({ list });
     const load = Effect.fnUntraced(function* (plugin: Generation) {
       const activation: Activation = { plugin, scope: yield* Scope.fork(scope) };
       const inherit = yield* State.inherit();
@@ -98,10 +73,9 @@ const layer = Layer.effect(
           release: holdUnsafe(),
         });
       });
-      const host = yield* PluginHost.make({ list }, plugin.id).pipe(
-        Effect.provideContext(hostContext),
-      );
-      const exit = yield* Effect.suspend(() => plugin.effect(host)).pipe(
+      const exit = yield* Effect.suspend(() =>
+        plugin.effect({ ...host, storage: PluginHost.storage(kv, plugin.id) }),
+      ).pipe(
         grouped,
         inherit,
         Effect.updateContext((context: Context.Context<never>) =>
@@ -162,8 +136,10 @@ const layer = Layer.effect(
                 if (entry) active.set(definition.id, { ...entry, plugin: definition });
               }
               if (prefix === definitions.length && active.size === definitions.length) {
-                inventory = snapshot();
-                yield* publish(inventory);
+                const nextInventory = [...Array.from(active.values()).map(slotInfo), ...failures];
+                if (JSON.stringify(inventory) === JSON.stringify(nextInventory)) return;
+                inventory = nextInventory;
+                yield* bus.publish(Plugin.Event.Updated, {});
                 return;
               }
 
@@ -176,17 +152,8 @@ const layer = Layer.effect(
                     ([id, slot]) =>
                       Effect.gen(function* () {
                         active.delete(id);
-                        if (!slot.activation || slot.activation.failure) return;
-                        // Later plugins, including the config agents and commands, are already closed. A failing
-                        // finalizer must not abort the swap, or they stay unregistered until the next reload.
-                        yield* Scope.close(slot.activation.scope, Exit.void).pipe(
-                          Effect.catchCause((cause) =>
-                            Effect.logError("failed to clean up plugin", {
-                              "plugin.id": id,
-                              cause,
-                            }),
-                          ),
-                        );
+                        if (slot.activation && !slot.activation.failure)
+                          yield* Scope.close(slot.activation.scope, Exit.void);
                       }),
                     { discard: true },
                   );
@@ -223,10 +190,10 @@ const layer = Layer.effect(
                     });
                   }
 
-                  inventory = snapshot();
+                  inventory = [...Array.from(active.values()).map(slotInfo), ...failures];
                 }),
               );
-              yield* publish(inventory);
+              yield* bus.publish(Plugin.Event.Updated, {});
             }),
           ),
         (release) => release,
@@ -247,9 +214,9 @@ const layer = Layer.effect(
               if (closed) return;
               // Failure is already recorded on its exact activation, so an old queued item
               // cannot disable a replacement and teardown need not wait for this worker.
-              inventory = snapshot();
+              inventory = [...Array.from(active.values()).map(slotInfo), ...discovered];
               const refreshed = yield* State.batch(item.refresh).pipe(Effect.exit);
-              yield* publish(inventory);
+              yield* bus.publish(Plugin.Event.Updated, {});
               if (Exit.isFailure(refreshed))
                 yield* Effect.logWarning("failed to refresh state after disabling plugin", {
                   "plugin.id": item.plugin.id,
@@ -307,7 +274,6 @@ const layer = Layer.effect(
       awaitActivation: ready.await,
       hold,
       list,
-      gui,
     });
   }),
 );
@@ -344,8 +310,7 @@ function slotInfo(slot: Slot): Plugin.Info {
     id: slot.plugin.id,
     source: slot.plugin.source ?? { type: "builtin" },
     state: failure === undefined ? { status: "active" } : { status: "failed", ...failure },
-    // Built-in and SDK plugins are server parts; a package lists its own parts.
-    features: slot.plugin.features ?? { server: true },
+    features: { server: true, ...slot.plugin.features },
   };
 }
 

@@ -51,7 +51,9 @@ export const Plugin = {
                 resources: [input.query],
                 save: ["*"],
                 metadata: input,
-                ...Permission.invocation(context),
+                sessionID: context.sessionID,
+                agent: context.agent,
+                source: { type: "tool", messageID: context.messageID, id: context.id },
               });
               const search = (providerID?: WebSearch.ID) =>
                 websearch.query(
@@ -189,8 +191,7 @@ export const Plugin = {
           Effect.as(false),
           Effect.catchTag("WebSearch.Disabled", () => Effect.succeed(true)),
         );
-        // Policy can remove every provider, and the model shouldn't be offered a tool that can't search.
-        if (disabled || (yield* websearch.providers()).length === 0) delete event.tools[name];
+        if (disabled) delete event.tools[name];
       });
     yield* ctx.session.hook("context", hook);
     yield* ctx.session.hook("compaction", hook);

@@ -9,13 +9,15 @@ export interface Info {
   readonly channel: string;
 }
 
-export class Service extends Context.Service<Service, Info>()("@opencode/App") {}
+export const Metadata = Context.Reference<Info>("@opencode/App", {
+  defaultValue: () => make(),
+});
 
 export function make(input: Partial<Info> = {}): Info {
   return {
-    name: input.name ?? "opencode",
-    version: input.version ?? "unknown",
-    channel: input.channel ?? "unknown",
+    name: input.name ?? "cli",
+    version: input.version ?? "2.1.4",
+    channel: input.channel ?? "latest",
   };
 }
 
@@ -23,9 +25,9 @@ export function useragent(app: Info) {
   return `opencode/${app.channel}/${app.version}/${app.name}`;
 }
 
-export const layer = (input?: Partial<Info>) => Layer.succeed(Service, make(input));
+export const layer = (input?: Partial<Info>) => Layer.succeed(Metadata, make(input));
 
 export const configured = (input?: Partial<Info>) =>
-  makeGlobalNode({ service: Service, layer: layer(input), deps: [] });
+  makeGlobalNode({ service: Metadata, layer: layer(input), deps: [] });
 
 export const node = configured();

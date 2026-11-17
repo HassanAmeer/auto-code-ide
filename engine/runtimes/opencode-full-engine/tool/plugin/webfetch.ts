@@ -4,9 +4,8 @@ import type { Context } from "@opencode/plugin/effect/plugin";
 import { ToolFailure } from "@opencode/ai/effect";
 import { Duration, Effect, Schema } from "effect";
 import {
-  FetchHttpClient,
   HttpClient,
-  HttpClientError,
+  type HttpClientError,
   HttpClientRequest,
   HttpClientResponse,
 } from "effect/http";
@@ -68,9 +67,8 @@ const headers = (format: Format, userAgent: string) => ({
 const openCodeUserAgent =
   "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; OpenCode-User/1.0; +https://opencode.ai";
 
-const isCloudflareChallenge = (error: unknown) => {
-  if (!HttpClientError.isHttpClientError(error) || error.reason._tag !== "StatusCodeError")
-    return false;
+const isCloudflareChallenge = (error: HttpClientError.HttpClientError) => {
+  if (error.reason._tag !== "StatusCodeError") return false;
   const response = error.reason.response;
   return response.status === 403 && response.headers["cf-mitigated"] === "challenge";
 };
@@ -81,45 +79,17 @@ const request = (url: string, format: Format, userAgent = openCodeUserAgent) =>
 const assertHttpUrl = (url: URL) => {
   if (url.protocol !== "http:" && url.protocol !== "https:")
     throw new Error("URL must use http:// or https://");
-  // Rules match the URL, so `https://user@evil.com` would slip past a rule for `https://evil.com/*`.
-  if (url.username || url.password) throw new Error("URL must not include credentials");
 };
 
-export const MAX_REDIRECTS = 10;
-const redirectStatuses = new Set([301, 302, 303, 307, 308]);
-
-// Follows redirects here instead of in fetch so each new URL is checked against the permission rules first.
 const execute = (
   http: HttpClient.HttpClient,
-  check: (url: string) => Effect.Effect<void, Error>,
   url: string,
   format: Format,
   userAgent = openCodeUserAgent,
-  redirects = 0,
-): Effect.Effect<HttpClientResponse.HttpClientResponse, Error> =>
-  http.execute(request(url, format, userAgent)).pipe(
-    Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }),
-    Effect.flatMap((response) => {
-      const location = response.headers.location;
-      if (!redirectStatuses.has(response.status) || !location)
-        return HttpClientResponse.filterStatusOk(response);
-      if (redirects >= MAX_REDIRECTS)
-        return Effect.fail(new Error(`Too many redirects (more than ${MAX_REDIRECTS})`));
-      return Effect.gen(function* () {
-        const next = yield* Effect.try({
-          try: () => {
-            const target = new URL(location, url);
-            assertHttpUrl(target);
-            target.hash = "";
-            return target.href;
-          },
-          catch: (error) => (error instanceof Error ? error : new Error(String(error))),
-        });
-        yield* check(next);
-        return yield* execute(http, check, next, format, userAgent, redirects + 1);
-      });
-    }),
-  );
+) =>
+  http
+    .execute(request(url, format, userAgent))
+    .pipe(Effect.flatMap(HttpClientResponse.filterStatusOk));
 
 const collectBody = (response: HttpClientResponse.HttpClientResponse) =>
   collectBoundedResponseBody(
@@ -154,33 +124,25 @@ export const Plugin = {
           output: Output,
           execute: (input, context) =>
             Effect.gen(function* () {
-              // Rules match the URL as written. The fragment is never sent, and would keep a rule for the exact
-              // URL from matching.
-              const url = input.url.split("#")[0];
               yield* Effect.try({
-                try: () => assertHttpUrl(new URL(url)),
+                try: () => assertHttpUrl(new URL(input.url)),
                 catch: (error) => error,
               });
 
               yield* permission.assert({
                 action: name,
-                resources: [url],
+                resources: [input.url],
                 save: ["*"],
                 metadata: input,
-                ...Permission.invocation(context),
+                sessionID: context.sessionID,
+                agent: context.agent,
+                source: { type: "tool", messageID: context.messageID, id: context.id },
               });
 
               const { body, contentType } = yield* Effect.gen(function* () {
-                const check = (next: string) =>
-                  permission.assertNotDenied({
-                    action: name,
-                    resources: [next],
-                    metadata: { ...input, url: next },
-                    ...Permission.invocation(context),
-                  });
-                const response = yield* execute(http, check, url, input.format).pipe(
+                const response = yield* execute(http, input.url, input.format).pipe(
                   Effect.catchIf(isCloudflareChallenge, () =>
-                    execute(http, check, url, input.format, "opencode"),
+                    execute(http, input.url, input.format, "opencode"),
                   ),
                 );
                 const contentType = response.headers["content-type"] || "";

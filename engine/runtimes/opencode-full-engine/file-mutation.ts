@@ -28,10 +28,6 @@ export interface WriteResult {
   readonly existed: boolean;
 }
 
-export interface TextWriteResult extends WriteResult {
-  readonly bom: boolean;
-}
-
 export interface Interface {
   /** Serialize a complete read/prepare/write mutation transaction by resolved path. */
   readonly withLock: (
@@ -41,7 +37,7 @@ export interface Interface {
   /** Write text while retaining an existing UTF-8 BOM and emitting at most one BOM. */
   readonly writeTextPreservingBom: (
     input: TextWriteInput,
-  ) => Effect.Effect<TextWriteResult, Environment.WrongKind | Environment.Failed>;
+  ) => Effect.Effect<WriteResult, Environment.WrongKind | Environment.Failed>;
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/FileMutation") {}
@@ -51,16 +47,6 @@ export const readText = Effect.fn("FileMutation.readText")(function* (
   target: string,
 ) {
   return Bom.decodeBytes((yield* files.read(target)).bytes);
-});
-
-export const readOptionalText = Effect.fn("FileMutation.readOptionalText")(function* (
-  files: Files,
-  target: string,
-) {
-  const result = yield* files
-    .read(target)
-    .pipe(Effect.catchTag("Environment.NotFound", () => Effect.undefined));
-  return result ? Bom.decodeBytes(result.bytes) : undefined;
 });
 
 export const syncTextBom = Effect.fn("FileMutation.syncTextBom")(function* (
@@ -130,12 +116,13 @@ const layer = Layer.effect(
                 Effect.map((result) => result.bytes),
                 Effect.catchTag("Environment.NotFound", () => Effect.undefined),
               );
-            const bom = Boolean(current && Bom.has(current)) || next.bom;
             yield* environment.files.write(
               input.target.absolute,
-              new TextEncoder().encode(Bom.join(next.text, bom)),
+              new TextEncoder().encode(
+                Bom.join(next.text, Boolean(current && Bom.has(current)) || next.bom),
+              ),
             );
-            return { ...writeResult(input.target, current !== undefined), bom };
+            return writeResult(input.target, current !== undefined);
           }),
         ),
     );

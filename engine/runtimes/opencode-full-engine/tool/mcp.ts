@@ -24,22 +24,18 @@ import { Permission } from "../permission.js";
 import { Tool } from "../tool.js";
 import { ToolOutput } from "../tool-output.js";
 import { ReadToolFileSystem } from "./read-filesystem.js";
-import { effectiveName, normalizedName } from "./runtime.js";
 
 const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown));
 
 /**
  * Registry namespace and permission action names for MCP tools.
  */
-export const namespace = (server: string) => normalizedName({ name: server });
+export const namespace = (server: string) => server.replace(/[^a-zA-Z0-9_-]/g, "_");
 export const name = (server: string, tool: string) =>
-  effectiveName({ name: tool, options: { namespace: namespace(server) } });
+  `${namespace(server)}_${tool.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
 
 export interface Interface {
-  /**
-   * Wait for the initial MCP tool registration, give servers still connecting a bounded chance to
-   * finish, then bring the registry up to date without waiting for the debounced reload.
-   */
+  /** Wait for the initial MCP tool registration to settle. */
   readonly flush: Effect.Effect<void>;
 }
 
@@ -67,7 +63,10 @@ export const layer = Layer.effect(
                 name: tool.name,
                 options: { namespace: namespace(tool.server), codemode: tool.codemode !== false },
                 description: tool.description ?? "",
-                input: tool.inputSchema as JsonSchema.JsonSchema,
+                input: (tool.inputSchema ?? {
+                  type: "object",
+                  properties: {},
+                }) as JsonSchema.JsonSchema,
                 output: (tool.outputSchema ?? {}) as JsonSchema.JsonSchema,
                 execute: (input, context) =>
                   Effect.gen(function* () {
@@ -76,7 +75,13 @@ export const layer = Layer.effect(
                       resources: ["*"],
                       save: ["*"],
                       metadata: { input: input ?? {} },
-                      ...Permission.invocation(context),
+                      sessionID: context.sessionID,
+                      agent: context.agent,
+                      source: {
+                        type: "tool",
+                        messageID: context.messageID,
+                        id: context.id,
+                      },
                     });
                     const result = yield* mcp
                       .callTool({
@@ -125,17 +130,13 @@ export const layer = Layer.effect(
                       ...(content.length === 0 ? {} : { content }),
                     };
                   }).pipe(
-                    Effect.mapError((error) => {
-                      if (error instanceof ToolFailure) return error;
-                      if (error instanceof Permission.BlockedError)
-                        return new ToolFailure({ message: error.message, error });
-                      if (error instanceof Permission.CorrectedError)
-                        return new ToolFailure({ message: error.feedback, error });
-                      return new ToolFailure({
-                        message: `Unable to execute ${name(tool.server, tool.name)}`,
-                        error,
-                      });
-                    }),
+                    Effect.mapError((error) =>
+                      error instanceof ToolFailure
+                        ? error
+                        : new ToolFailure({
+                            message: `Unable to execute ${name(tool.server, tool.name)}`,
+                          }),
+                    ),
                   ),
               });
             }
@@ -163,19 +164,7 @@ export const layer = Layer.effect(
       Stream.runForEach(() => reconcile),
       Effect.forkScoped({ startImmediately: true }),
     );
-    return Service.of({
-      flush: Effect.gen(function* () {
-        yield* Fiber.await(initial);
-        yield* mcp.awaitStartup();
-        // Each catalog refresh creates new tool objects, so identity shows whether the registry is behind.
-        const current = yield* mcp.tools();
-        if (
-          current.length !== discovered.length ||
-          current.some((tool, index) => tool !== discovered[index])
-        )
-          yield* reconcile;
-      }),
-    });
+    return Service.of({ flush: Effect.asVoid(Fiber.await(initial)) });
   }),
 );
 

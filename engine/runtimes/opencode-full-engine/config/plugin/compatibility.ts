@@ -20,8 +20,6 @@ export const Plugin = define({
     const changes = yield* PubSub.sliding<string>(1);
     const lock = Semaphore.makeUnsafe(1);
     const skills: Skill.Info[] = [];
-    const compatibility = () =>
-      config.compatibility ? config.compatibility() : Effect.succeed({ claude: [], agents: [] });
 
     const watch = Effect.fn("ConfigCompatibilityPlugin.watch")(function* (
       target: string,
@@ -45,7 +43,9 @@ export const Plugin = define({
     const refresh = Effect.fn("ConfigCompatibilityPlugin.refresh")(
       function* () {
         yield* FiberMap.clear(watches);
-        const roots = yield* compatibility();
+        const roots = config.compatibility
+          ? yield* config.compatibility()
+          : { claude: [], agents: [] };
         const directories = [...roots.claude, ...roots.agents].map((root) =>
           path.join(root, "skills"),
         );
@@ -78,10 +78,7 @@ export const Plugin = define({
       Effect.forkScoped({ startImmediately: true }),
     );
     yield* config.changes().pipe(
-      Stream.filterEffect((update) =>
-        Effect.map(compatibility(), (roots) => isCompatibilitySource(roots, update.path)),
-      ),
-      Stream.runForEach((update) => PubSub.publish(changes, update.path).pipe(Effect.asVoid)),
+      Stream.runForEach(() => reload),
       Effect.forkScoped({ startImmediately: true }),
     );
     yield* refresh();
@@ -90,15 +87,3 @@ export const Plugin = define({
     });
   }),
 });
-
-const sourceDirectories = [".claude", ".agents"] as const;
-
-function isCompatibilitySource(
-  roots: { readonly claude: readonly string[]; readonly agents: readonly string[] },
-  file: string,
-) {
-  return (
-    sourceDirectories.some((name) => path.basename(file) === name) ||
-    [...roots.claude, ...roots.agents].some((root) => FSUtil.contains(root, file))
-  );
-}

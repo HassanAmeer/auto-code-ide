@@ -2,22 +2,20 @@ import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect
 import type { Context } from "@opencode/plugin/effect/plugin";
 import { define } from "@opencode/plugin/effect/plugin";
 // import { Deferred, Duration, Effect, Option, Schema, Semaphore, Stream } from "effect"
-import { Deferred, Effect, Equal, Option, Schema, Semaphore } from "effect";
+import { Deferred, Effect, Option, Schema, Semaphore, Stream } from "effect";
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 import type { Server, ServerResponse } from "node:http";
 import { App } from "../../app.js";
 import { Credential } from "../../credential.js";
+import { Bus } from "../../bus.js";
 import { Integration } from "../../integration.js";
 // import { IntegrationConnection } from "../../integration/connection.js"
 import { Model } from "../../model.js";
 import { OauthCallbackPage } from "../../oauth/page.js";
-import { OauthRedirect } from "../../oauth/redirect.js";
 import { Provider } from "../../provider.js";
 import { SessionAffinity } from "../../session/affinity.js";
 import type { PluginInternal } from "../internal.js";
 import { configuredSettings } from "./configured.js";
-import { activeCredential } from "./credential-settings.js";
-import { ProviderRefresh } from "./refresh.js";
 
 // First-time sign-in registers a user-owned client; OpenAI returns its issued client ID on the callback.
 const registrationClientID = "dynamic_agent_client";
@@ -47,12 +45,9 @@ const fallbackModels = new Set([
   "gpt-6-sol-fast",
   "gpt-6.1-sol",
   "gpt-6.1-sol-fast",
-  "gpt-6.1-terra",
-  "gpt-6.1-terra-fast",
 ]);
 const nonRetryableSharingCodes = [
   "subscription_sharing_usage_limit_exceeded",
-  "subscription_sharing_workplace_individual_usage_limit_exceeded",
   "subscription_sharing_user_not_eligible",
   "subscription_sharing_unsupported_capability",
   "subscription_sharing_route_not_supported",
@@ -88,6 +83,7 @@ type RemoteModel = typeof RemoteModel.Type;
 const RemoteModels = Schema.Struct({ models: Schema.Array(RemoteModel) });
 const decodeCachedModels = Schema.decodeUnknownOption(Schema.Array(RemoteModel));
 
+// Credential metadata is merged into provider settings; these keys are not OpenAI request options.
 const decodeMetadata = Schema.decodeUnknownOption(
   Schema.Struct({
     clientID: Schema.String,
@@ -118,9 +114,8 @@ const signIn = (
         const state = randomValue();
         const nonce = randomValue();
         const savedID = savedClientID();
-        // `response` is the browser's pending callback request; a pasted redirect has none.
         const received = yield* Deferred.make<
-          { code: string; clientID?: string; response?: ServerResponse },
+          { code: string; clientID?: string; response: ServerResponse },
           Error
         >();
         // Lazy so runtimes without a loopback listener (workerd) never evaluate node:http.
@@ -174,7 +169,7 @@ const signIn = (
             const respond = (error?: string) =>
               Effect.sync(() =>
                 result.response
-                  ?.writeHead(error ? 400 : 200, { "Content-Type": "text/html" })
+                  .writeHead(error ? 400 : 200, { "Content-Type": "text/html" })
                   .end(
                     error
                       ? OauthCallbackPage.error(error, { provider: "ChatGPT" })
@@ -210,13 +205,8 @@ const signIn = (
               Effect.tapError((error) =>
                 respond(error instanceof Error ? error.message : "ChatGPT sign-in failed"),
               ),
-              Effect.onInterrupt(() => Effect.sync(() => result.response?.destroy())),
+              Effect.onInterrupt(() => Effect.sync(() => result.response.destroy())),
             );
-          }),
-          submit: OauthRedirect.submit({
-            state,
-            callback: received,
-            received: (code, params) => ({ code, clientID: params.get("client_id") ?? undefined }),
           }),
         };
       }),
@@ -240,6 +230,7 @@ function listen(server: Server) {
 export const ChatGPTPlugin = define({
   id: "opencode.provider.chatgpt",
   effect: Effect.fn(function* (ctx) {
+    const bus = yield* Bus.Service;
     const credentials = yield* Credential.Service;
     const loading = Semaphore.makeUnsafe(1);
     let chatgpt: Credential.OAuth | undefined;
@@ -248,17 +239,20 @@ export const ChatGPTPlugin = define({
 
     const load = Effect.fn("ChatGPTPlugin.load")(function* () {
       // const previous = IntegrationConnection.key(source)
-      const { connection, credential } = yield* activeCredential(ctx, integrationID);
+      const connection = yield* ctx.integration.connection.active(integrationID);
+      const credential = connection
+        ? yield* ctx.integration.connection
+            .resolve(connection)
+            .pipe(Effect.orElseSucceed(() => undefined))
+        : undefined;
       chatgpt =
         credential?.type === "oauth" && credential.methodID === methodID ? credential : undefined;
-      const previous = source;
       source = chatgpt ? connection : undefined;
       // if (previous !== IntegrationConnection.key(source)) {
       //   const metadata = Option.getOrUndefined(decodeMetadata(chatgpt?.metadata))
       //   const stored = metadata ? yield* ctx.storage.get(modelCacheKey(metadata.clientID)) : undefined
       //   available = Option.getOrUndefined(decodeCachedModels(stored))
       // }
-      return !Equal.equals(previous, source);
     });
 
     yield* ctx.integration.transform((editor) => {
@@ -399,10 +393,12 @@ export const ChatGPTPlugin = define({
     //     }),
     //   )
     // })
+    const reload = () => loading.withPermit(load().pipe(Effect.andThen(ctx.provider.reload())));
     // .pipe(Effect.andThen(refreshModels().pipe(Effect.forkScoped, Effect.asVoid)))
-    yield* ProviderRefresh.onSwitch(
-      integrationID,
-      loading.withPermit(ProviderRefresh.reloadIfChanged(load(), ctx.provider.reload())),
+    yield* bus.subscribe(Credential.Event.Switched).pipe(
+      Stream.filter((event) => event.data.integrationID === integrationID),
+      Stream.runForEach(reload),
+      Effect.forkScoped({ startImmediately: true }),
     );
     // yield* refreshModels().pipe(Effect.forkScoped)
     // yield* Effect.sleep(Duration.minutes(15)).pipe(Effect.andThen(refreshModels), Effect.forever, Effect.forkScoped)

@@ -11,7 +11,6 @@ import { FileAccess } from "../../file-access.js";
 import { Permission } from "../../permission.js";
 import { Ripgrep } from "../../ripgrep.js";
 import { RelativePath } from "../../schema.js";
-import { ToolSearch } from "../search.js";
 
 export const name = "grep";
 
@@ -82,6 +81,11 @@ export const Plugin = {
           output: Output,
           execute: (input, context) =>
             Effect.gen(function* () {
+              const source = {
+                type: "tool" as const,
+                messageID: context.messageID,
+                id: context.id,
+              };
               const target = yield* access.resolve({ path: input.path ?? "." });
               yield* access.authorizeExternal([target], context);
               yield* permission.assert({
@@ -96,38 +100,57 @@ export const Plugin = {
                   caseSensitive: input.caseSensitive,
                   limit: input.limit,
                 },
-                ...Permission.invocation(context),
+                sessionID: context.sessionID,
+                agent: context.agent,
+                source,
               });
               const root = target.absolute;
-              const type = yield* ToolSearch.pathType(environment.files, root, input.path ?? ".");
-              const cwd = type === "directory" ? root : path.dirname(root);
-              const result = yield* ToolSearch.bounded(
-                input.limit ?? FileSystem.DEFAULT_SEARCH_LIMIT,
-                (limit) =>
-                  ripgrep.grep({
-                    cwd,
-                    pattern: input.pattern,
-                    file: type === "file" ? path.basename(root) : undefined,
-                    include: input.include,
-                    literal: input.literal,
-                    caseSensitive: input.caseSensitive,
-                    limit,
-                  }),
-              );
-              return {
-                matches: result.items.map((match) =>
-                  FileSystem.Match.make({
-                    ...match,
-                    entry: FileSystem.Entry.make({
-                      ...match.entry,
-                      path: RelativePath.make(
-                        path.relative(location.directory, path.resolve(cwd, match.entry.path)),
-                      ),
+              const type = yield* Environment.typeFollowing(environment.files, root).pipe(
+                Effect.catchTag("Environment.NotFound", () =>
+                  Effect.fail(
+                    new ToolFailure({
+                      message: `Search path does not exist: ${input.path ?? "."}`,
                     }),
-                  }),
+                  ),
                 ),
-                truncated: result.truncated,
-              };
+              );
+              const cwd = type === "directory" ? root : path.dirname(root);
+              const limit = input.limit ?? FileSystem.DEFAULT_SEARCH_LIMIT;
+              const matches = yield* ripgrep
+                .grep({
+                  cwd,
+                  pattern: input.pattern,
+                  file: type === "file" ? path.basename(root) : undefined,
+                  include: input.include,
+                  literal: input.literal,
+                  caseSensitive: input.caseSensitive,
+                  limit: limit + 1,
+                })
+                .pipe(
+                  Effect.timeoutOrElse({
+                    duration: FileSystem.DEFAULT_SEARCH_TIMEOUT_MS,
+                    orElse: () =>
+                      Effect.fail(
+                        new ToolFailure({
+                          message: `Search timed out after ${FileSystem.DEFAULT_SEARCH_TIMEOUT_MS / 1_000} seconds. Consider using a more specific path or pattern.`,
+                        }),
+                      ),
+                  }),
+                  Effect.map((result) =>
+                    result.map((match) =>
+                      FileSystem.Match.make({
+                        ...match,
+                        entry: FileSystem.Entry.make({
+                          ...match.entry,
+                          path: RelativePath.make(
+                            path.relative(location.directory, path.resolve(cwd, match.entry.path)),
+                          ),
+                        }),
+                      }),
+                    ),
+                  ),
+                );
+              return { matches: matches.slice(0, limit), truncated: matches.length > limit };
             }).pipe(
               Effect.map((result) => ({
                 output: result.matches,
