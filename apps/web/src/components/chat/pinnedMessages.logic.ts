@@ -25,10 +25,11 @@ export function formatPinnedCount(index: number, total: number): string {
 
 /** Toggle a message id, preserving insertion order and removing duplicates. */
 export function togglePinnedMessage(ids: readonly string[], messageId: string): string[] {
+  const uniqueIds = [...new Set(ids.filter((candidate) => candidate.length > 0))];
   const id = messageId.trim();
-  if (id.length === 0) return [...ids];
-  if (ids.includes(id)) return ids.filter((candidate) => candidate !== id);
-  return [...ids, id];
+  if (id.length === 0) return uniqueIds;
+  if (uniqueIds.includes(id)) return uniqueIds.filter((candidate) => candidate !== id);
+  return [...uniqueIds, id];
 }
 
 export interface PinnableRow {

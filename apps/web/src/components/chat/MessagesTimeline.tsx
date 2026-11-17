@@ -3445,6 +3445,10 @@ function CupertinoTimelineErrorCard({
     const responsePayload = (responseBody || "").trim();
     const errorPayload = (rawError || "").trim();
     const primaryForJson = responsePayload || errorPayload;
+    // `trimmed` is the trimmed payload used by the status/message/model matchers
+    // below. It used to be a separate variable; keep it as an alias so those
+    // matchers cannot throw "trimmed is not defined" when an error card renders.
+    const trimmed = primaryForJson;
     let parsed: any = null;
     let isJson = false;
 

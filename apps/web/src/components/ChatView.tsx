@@ -11818,7 +11818,7 @@ export default function ChatView(props: ChatViewProps) {
       latestRun &&
       serverProjection?.messages.some(
         (msg) =>
-          msg.role === "assistant" && msg.runId === latestRun.id && (msg.content?.length ?? 0) > 0,
+          msg.role === "assistant" && msg.runId === latestRun.id && (msg.text?.length ?? 0) > 0,
       ),
     );
     if (hasSuccessfulAssistantMessage) {
