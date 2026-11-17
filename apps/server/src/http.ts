@@ -1514,7 +1514,11 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
       OPENCODE_FREE_MODELS.includes(model.toLowerCase());
 
     const result = yield* Effect.promise(async () => {
-      if (isOpenCode) {
+      // With the embedded standalone engine there is NO daemon on 4099 — the
+      // bypass driver talks to the upstream directly. Skip the daemon path so
+      // we never waste a turn on ECONNREFUSED + a stale OpenRouter fallback.
+      const skipOpenCodeDaemon = activeCoreEngine === "opencode-full-engine";
+      if (isOpenCode && !skipOpenCodeDaemon) {
         // Run turn via OpenCode Local Runtime
         let port = 4099;
         let pid: number | undefined;
