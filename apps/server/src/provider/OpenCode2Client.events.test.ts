@@ -2,7 +2,6 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
-import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
@@ -12,25 +11,35 @@ import { describe } from "vite-plus/test";
 
 import * as OpenCode2Client from "@t3tools/provider-opencode/server/v2/OpenCode2Client";
 
-const RECORDING = new URL(
-  "../orchestration-v2/testkit/fixtures/opencode2_simple/opencode_transcript.ndjson",
-  import.meta.url,
-);
-const Entry = Schema.Struct({ type: Schema.String, frame: Schema.optional(Schema.Unknown) });
-const decodeEntry = Schema.decodeUnknownSync(Schema.fromJsonString(Entry));
 const encodeJson = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
+
+/**
+ * A minimal recorded turn. The old test read a large ndjson fixture that was
+ * deleted from the repo, which made these tests fail with ENOENT. Keeping the
+ * recording inline preserves the intent — a newer server sends an unknown
+ * event and an extra field on a known one — without a missing file.
+ */
+const RECORDED_EVENTS: ReadonlyArray<Record<string, unknown>> = [
+  { id: "evt_conn", type: "server.connected", data: {} },
+  {
+    id: "evt_start",
+    created: 1,
+    type: "session.execution.started",
+    durable: { aggregateID: "ses_x", seq: 1, version: 1 },
+    data: { sessionID: "ses_x" },
+  },
+  {
+    id: "evt_done",
+    created: 2,
+    type: "session.execution.succeeded",
+    durable: { aggregateID: "ses_x", seq: 2, version: 1 },
+    data: { sessionID: "ses_x" },
+  },
+];
 
 /** The recorded `simple` turn's events, as a newer server would send them. */
 const newerServerStream = Effect.gen(function* () {
-  const fs = yield* FileSystem.FileSystem;
-  const recorded = (yield* fs.readFileString(RECORDING.pathname))
-    .split("\n")
-    .filter((line) => line.length > 0)
-    .map((line) => decodeEntry(line))
-    .flatMap((entry) => {
-      const frame = entry.frame as { readonly type?: string; readonly event?: unknown } | undefined;
-      return frame?.type === "sdk.event" ? [frame.event as Record<string, unknown>] : [];
-    });
+  const recorded = RECORDED_EVENTS;
   const executionStarted = recorded.findIndex(
     (event) => event.type === "session.execution.started",
   );

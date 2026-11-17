@@ -2625,7 +2625,7 @@
       "name": "td",
       "options": {
         "baseURL": "https://api.tokendeal.cloud/api/v1",
-        "apiKey": "sk-25e0dac795eaccbf-73f95b-ca3e8a5d"
+        "apiKey": "{env:TOKENDEAL_API_KEY}"
       },
       "models": {
         "auto": {
@@ -2734,7 +2734,7 @@
       "name": "td",
       "options": {
         "baseURL": "https://api.tokendeal.cloud/api/v1",
-        "apiKey": "sk-25e0dac795eaccbf-73f95b-ca3e8a5d"
+        "apiKey": "{env:TOKENDEAL_API_KEY}"
       },
       "models": {
         "auto": {
@@ -2843,7 +2843,7 @@
       "name": "oxionai",
       "options": {
         "baseURL": "https://oxionai.com/v1",
-        "apiKey": "cc_GmMu9es8IMzkfPwSgudtL8ZZGaSLSAyM8lPWBya8XuUJOakj"
+        "apiKey": "{env:CUSTOM_CC_API_KEY}"
       },
       "models": {
         "claude-opus-5.5": {
@@ -2952,7 +2952,7 @@
       "name": "oxionai",
       "options": {
         "baseURL": "https://oxionai.com/v1",
-        "apiKey": "cc_GmMu9es8IMzkfPwSgudtL8ZZGaSLSAyM8lPWBya8XuUJOakj"
+        "apiKey": "{env:CUSTOM_CC_API_KEY}"
       },
       "models": {
         "claude-opus-5.5": {
@@ -3061,7 +3061,7 @@
       "name": "wus",
       "options": {
         "baseURL": "https://wusrouter.com/v1",
-        "apiKey": "sk-ws-0062bf47f2e6f4650f7ff308343a83288330c3f4f040e3aacf663a9b883a8452"
+        "apiKey": "{env:WEBSHARE_API_KEY}"
       },
       "models": {
         "wusrouter/qwen3.8-flash:free": {
@@ -3272,7 +3272,7 @@
       "name": "wus",
       "options": {
         "baseURL": "https://wusrouter.com/v1",
-        "apiKey": "sk-ws-0062bf47f2e6f4650f7ff308343a83288330c3f4f040e3aacf663a9b883a8452"
+        "apiKey": "{env:WEBSHARE_API_KEY}"
       },
       "models": {
         "wusrouter/qwen3.8-flash:free": {
@@ -3509,7 +3509,7 @@
       "name": "respan",
       "options": {
         "baseURL": "https://gateway.respan.ai/v1",
-        "apiKey": "f9E7Vs6P.1rT82a2aNuRXYswMyom6vCeS4k9s1WRc"
+        "apiKey": "{env:CUSTOM_F9_API_KEY}"
       },
       "models": {
         "respan/gemini-4-carbon:free": {
@@ -3522,7 +3522,7 @@
       "name": "respan",
       "options": {
         "baseURL": "https://gateway.respan.ai/v1",
-        "apiKey": "f9E7Vs6P.1rT82a2aNuRXYswMyom6vCeS4k9s1WRc"
+        "apiKey": "{env:CUSTOM_F9_API_KEY}"
       },
       "models": {
         "respan/gemini-4-carbon:free": {
@@ -5845,7 +5845,7 @@
       "name": "numes",
       "options": {
         "baseURL": "https://api.numes.ai/api/v1",
-        "apiKey": "sk-numes-v1-715ed5b85db3fe6a276ff0287e5d4927ad779fd427871b6537a7216548e5d5b9"
+        "apiKey": "{env:NUMES_API_KEY}"
       },
       "models": {
         "anthropic/claude-fable-5": {
@@ -6320,7 +6320,7 @@
       "name": "numes",
       "options": {
         "baseURL": "https://api.numes.ai/api/v1",
-        "apiKey": "sk-numes-v1-715ed5b85db3fe6a276ff0287e5d4927ad779fd427871b6537a7216548e5d5b9"
+        "apiKey": "{env:NUMES_API_KEY}"
       },
       "models": {
         "anthropic/claude-fable-5": {
@@ -6795,7 +6795,7 @@
       "name": "coarena",
       "options": {
         "baseURL": "https://coarena.ai/api/v1",
-        "apiKey": "coa_9a185212cb1f6aa2c26e0a44371d13b4"
+        "apiKey": "{env:COA_API_KEY}"
       },
       "models": {
         "claude-fable-5": {
@@ -6871,7 +6871,7 @@
       "name": "coarena",
       "options": {
         "baseURL": "https://coarena.ai/api/v1",
-        "apiKey": "coa_9a185212cb1f6aa2c26e0a44371d13b4"
+        "apiKey": "{env:COA_API_KEY}"
       },
       "models": {
         "claude-fable-5": {
@@ -6947,7 +6947,7 @@
       "name": "100milionseek",
       "options": {
         "baseURL": "https://100milionseek.top/v1",
-        "apiKey": "hms-wesqcWO6N_Rlr45kkCKHu9chx_irZB-0NA87KE35kRo"
+        "apiKey": "{env:HMS_API_KEY}"
       },
       "models": {
         "deepseek-v4.1-flash-free": {
@@ -6963,7 +6963,7 @@
       "name": "100milionseek",
       "options": {
         "baseURL": "https://100milionseek.top/v1",
-        "apiKey": "hms-wesqcWO6N_Rlr45kkCKHu9chx_irZB-0NA87KE35kRo"
+        "apiKey": "{env:HMS_API_KEY}"
       },
       "models": {
         "deepseek-v4.1-flash-free": {
@@ -6979,7 +6979,7 @@
       "name": "howtofix",
       "options": {
         "baseURL": "https://api.howtofix.id/v1",
-        "apiKey": "sk-7HwzQOcnHsVrddl65yhjY2MGzXDWOzdzzro1MweyI8azD67z"
+        "apiKey": "{env:CUSTOM_SK7_API_KEY}"
       },
       "models": {
         "big-pickle": {
@@ -7025,7 +7025,7 @@
       "name": "howtofix",
       "options": {
         "baseURL": "https://api.howtofix.id/v1",
-        "apiKey": "sk-7HwzQOcnHsVrddl65yhjY2MGzXDWOzdzzro1MweyI8azD67z"
+        "apiKey": "{env:CUSTOM_SK7_API_KEY}"
       },
       "models": {
         "big-pickle": {
@@ -7071,7 +7071,7 @@
       "name": "xingchiapi",
       "options": {
         "baseURL": "https://api.xingchiapi.com",
-        "apiKey": "sk-adb1d40db7a9e5009a3ab98f784829236b196edfa819c56ba627d6cd568d1645"
+        "apiKey": "{env:CUSTOM_SKA_API_KEY}"
       },
       "models": {
         "gpt-6-astra": {
@@ -7087,7 +7087,7 @@
       "name": "xingchiapi",
       "options": {
         "baseURL": "https://api.xingchiapi.com",
-        "apiKey": "sk-adb1d40db7a9e5009a3ab98f784829236b196edfa819c56ba627d6cd568d1645"
+        "apiKey": "{env:CUSTOM_SKA_API_KEY}"
       },
       "models": {
         "gpt-6-astra": {
@@ -7103,7 +7103,7 @@
       "name": "zro",
       "options": {
         "baseURL": "https://zro.moonmath.ai/v1",
-        "apiKey": "sk-gs0mDsK_dQEEdkVo3PRy-w"
+        "apiKey": "{env:CUSTOM_GS_API_KEY}"
       },
       "models": {
         "deepseek-v4-flash-0731": {
@@ -7125,7 +7125,7 @@
       "name": "zro",
       "options": {
         "baseURL": "https://zro.moonmath.ai/v1",
-        "apiKey": "sk-gs0mDsK_dQEEdkVo3PRy-w"
+        "apiKey": "{env:CUSTOM_GS_API_KEY}"
       },
       "models": {
         "deepseek-v4-flash-0731": {
