@@ -31,7 +31,6 @@ import {
 import { buildModelPickerSearchText, scoreModelPickerSearch } from "./modelPickerSearch";
 import {
   Combobox,
-  ComboboxEmpty,
   ComboboxSearchInput,
   ComboboxItem,
   ComboboxListVirtualized,
@@ -1142,8 +1141,24 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
               </button>
             </div>
 
-            {/* Model list */}
+            {/* Model list — always fills the remaining height. The empty
+                state is centred INSIDE it so it never steals a band. */}
             <div className="relative min-h-0 flex-1 overflow-hidden pr-px">
+              {filteredItemKeys.length === 0 ? (
+                <div className="absolute inset-0 flex items-center justify-center px-3 text-center text-xs text-muted-foreground">
+                  {selectedInstanceId === "favorites" ? (
+                    <div className="flex flex-col items-center gap-1.5">
+                      <StarIcon className="size-5 text-muted-foreground/60" />
+                      <span>No favorite models yet</span>
+                      <span className="text-3xs text-muted-foreground/60">
+                        Star (⭐) any model in the list to quickly access it here.
+                      </span>
+                    </div>
+                  ) : (
+                    "No models found"
+                  )}
+                </div>
+              ) : null}
               <ComboboxListVirtualized>
                 <LegendList<string>
                   ref={modelListRef}
@@ -1259,21 +1274,12 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
                   </div>
                 ))}
               </div>
-            ) : (
-              <ComboboxEmpty className="empty:h-0 py-6 text-center text-xs text-muted-foreground">
-                {selectedInstanceId === "favorites" ? (
-                  <div className="flex flex-col items-center gap-1.5 px-4">
-                    <StarIcon className="size-5 text-muted-foreground/60" />
-                    <span>No favorite models yet</span>
-                    <span className="text-3xs text-muted-foreground/60">
-                      Star (⭐) any model in the list to quickly access it here.
-                    </span>
-                  </div>
-                ) : (
-                  "No models found"
-                )}
-              </ComboboxEmpty>
-            )}
+            ) : null}
+            {/* Base UI's Combobox.Empty was removed: with a virtualized
+                LegendList its collection looks empty to Base UI, so the Empty
+                wrapper was ALWAYS rendered and its `py-6` padding stole a 48px
+                band under the last row. The empty state now lives inside the
+                list wrapper above, which keeps its full height. */}
             {updateRequiredNotices.map(({ instanceId, notice }) => (
               <p
                 key={instanceId}
