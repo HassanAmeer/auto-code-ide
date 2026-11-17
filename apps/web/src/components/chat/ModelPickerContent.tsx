@@ -579,34 +579,13 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
 
   const isLocked = props.lockedProvider !== null;
   const isSearching = searchQuery.trim().length > 0;
-  const lockedDisabledInstanceIds = useMemo(() => {
-    if (!isLocked) {
-      return undefined;
-    }
-    const disabled = new Set<ProviderInstanceId>();
-    for (const entry of instanceEntries) {
-      if (!matchesLockedProvider(entry)) {
-        disabled.add(entry.instanceId);
-      }
-    }
-    return disabled;
-  }, [instanceEntries, isLocked, matchesLockedProvider]);
-  const sidebarInstanceEntries = useMemo(() => {
-    const enabledEntries = instanceEntries.filter(isProviderInstancePickerVisible);
-    if (!isLocked) {
-      return enabledEntries;
-    }
-    const available: ProviderInstanceEntry[] = [];
-    const disabled: ProviderInstanceEntry[] = [];
-    for (const entry of enabledEntries) {
-      if (matchesLockedProvider(entry)) {
-        available.push(entry);
-      } else {
-        disabled.push(entry);
-      }
-    }
-    return [...available, ...disabled];
-  }, [instanceEntries, isLocked, matchesLockedProvider]);
+  // Providers stay enabled and selectable at all times. A failed model/error
+  // card must never grey out or disable another provider in the picker.
+  const lockedDisabledInstanceIds: ReadonlySet<ProviderInstanceId> | undefined = undefined;
+  const sidebarInstanceEntries = useMemo(
+    () => instanceEntries.filter(isProviderInstancePickerVisible),
+    [instanceEntries],
+  );
   const showSidebar = sidebarInstanceEntries.length > 0;
   const instanceOrder = useMemo(
     () => instanceEntries.map((entry) => entry.instanceId),
@@ -620,9 +599,6 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
     const effectiveInstanceId =
       selectedInstanceId || props.activeInstanceId || instanceEntries[0]?.instanceId;
 
-    if (props.lockedProvider !== null) {
-      result = result.filter((m) => matchesLockedProvider(m));
-    }
     if (effectiveInstanceId === "favorites") {
       result = result.filter((m) => favoritesSet.has(providerModelKey(m.instanceId, m.slug)));
     } else if (effectiveInstanceId) {

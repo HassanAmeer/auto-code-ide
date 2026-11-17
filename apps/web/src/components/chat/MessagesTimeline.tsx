@@ -3439,6 +3439,7 @@ function CupertinoTimelineErrorCard({
     exactStatusCode,
     exactErrorTitle,
     exactMessage,
+    statusLine,
     displayModel,
     fullModelName,
   } = useMemo(() => {
@@ -3574,6 +3575,10 @@ function CupertinoTimelineErrorCard({
       }
     }
 
+    // Approved card design: "429 Too Many Requests: Free usage limit reached".
+    const statusLine =
+      code && title && !/^error$/i.test(title) ? `${code} ${title}: ${message}` : message;
+
     return {
       exactJson: isJson ? parsed : null,
       rawResponseText: responsePayload || errorPayload,
@@ -3581,12 +3586,13 @@ function CupertinoTimelineErrorCard({
       exactStatusCode: code,
       exactErrorTitle: title,
       exactMessage: message,
+      statusLine,
       displayModel: truncateModelName(model),
       fullModelName: model,
     };
   }, [rawError, responseBody, explicitStatusCode, errorType, explicitModel, isWarning]);
 
-  const [viewMode, setViewMode] = useState<"response" | "raw">("response");
+  const [viewMode, setViewMode] = useState<"details" | "payload">("details");
 
   const formattedResponseString = useMemo(() => {
     if (exactJson) {
@@ -3601,7 +3607,7 @@ function CupertinoTimelineErrorCard({
 
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation();
-    navigator.clipboard?.writeText(viewMode === "response" ? formattedResponseString : rawError);
+    navigator.clipboard?.writeText(viewMode === "payload" ? formattedResponseString : rawError);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -3637,36 +3643,21 @@ function CupertinoTimelineErrorCard({
         onClick={() => setExpanded((v) => !v)}
       >
         <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
-          <CircleAlertIcon
-            className={cn(
-              "size-3.5 shrink-0",
-              isWarning ? "text-amber-500/80" : "text-red-500 dark:text-red-400",
-            )}
-          />
+          {/* Approved design: red "Error:" label followed by the selected model. */}
           <span
             className={cn(
-              "shrink-0 font-mono text-xs font-bold px-1.5 py-0.5 rounded border leading-none",
-              isWarning
-                ? "bg-amber-500/10 border-amber-500/20 text-amber-500 dark:text-amber-400"
-                : "bg-red-500/15 border-red-500/30 text-red-500 dark:text-red-400",
+              "shrink-0 text-xs font-bold",
+              isWarning ? "text-amber-500" : "text-red-500 dark:text-red-400",
             )}
           >
-            {displayStatusCode}
+            Error:
           </span>
-          <span className="text-zinc-500 dark:text-zinc-400 font-mono text-xs font-bold shrink-0">
-            :
+          <span
+            className="shrink-0 font-mono text-xs font-semibold text-zinc-100 dark:text-zinc-200 truncate"
+            title={fullModelName || displayModel || undefined}
+          >
+            {fullModelName || displayModel || "unknown model"}
           </span>
-          <span className="shrink-0 font-semibold text-xs text-zinc-100 dark:text-zinc-200 truncate">
-            {exactErrorTitle}
-          </span>
-          {displayModel ? (
-            <span
-              className="shrink-0 font-mono text-[10px] px-1 py-0.2 rounded bg-muted/40 border border-border/30 text-muted-foreground/75 truncate max-w-[130px]"
-              title={fullModelName || displayModel}
-            >
-              {displayModel}
-            </span>
-          ) : null}
         </div>
 
         {/* Right side controls: Timestamp & Arrow Button */}
@@ -3721,9 +3712,9 @@ function CupertinoTimelineErrorCard({
       >
         <p
           className="text-[11px] text-muted-foreground/75 truncate font-normal ps-5 select-text"
-          title={exactMessage}
+          title={statusLine}
         >
-          {exactMessage}
+          {statusLine}
         </p>
       </div>
 
@@ -3811,46 +3802,84 @@ function CupertinoTimelineErrorCard({
               </span>
             </div>
 
-            {/* Toggle button between Exact Response and Raw Error */}
+            {/* Approved design: two tabs — Full Details & Payload (raw JSON) */}
             <div className="flex items-center rounded border border-border/50 bg-background/60 p-0.5 text-[10px] font-mono">
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setViewMode("response");
+                  setViewMode("details");
                 }}
                 className={cn(
                   "px-2 py-0.5 rounded transition-colors cursor-pointer flex items-center gap-1",
-                  viewMode === "response"
+                  viewMode === "details"
                     ? "bg-muted text-foreground font-semibold shadow-xs"
                     : "text-muted-foreground hover:text-foreground",
                 )}
-                title="Show exact response payload"
+                title="Show full error details"
               >
-                <span className="text-[9px] opacity-80">{`{ }`}</span>
-                <span>Response</span>
+                <span>📋 Full Details</span>
               </button>
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setViewMode("raw");
+                  setViewMode("payload");
                 }}
                 className={cn(
-                  "px-2 py-0.5 rounded transition-colors cursor-pointer",
-                  viewMode === "raw"
+                  "px-2 py-0.5 rounded transition-colors cursor-pointer flex items-center gap-1",
+                  viewMode === "payload"
                     ? "bg-muted text-foreground font-semibold shadow-xs"
                     : "text-muted-foreground hover:text-foreground",
                 )}
-                title="Show raw error text"
+                title="Show exact upstream JSON response"
               >
-                Raw Error
+                <span className="text-[9px] opacity-80">{`{ }`}</span>
+                <span>Payload (raw JSON)</span>
               </button>
             </div>
           </div>
 
-          {/* Body: Response (Exact Formatted Response) or Raw Error */}
-          {viewMode === "response" ? (
+          {/* Body: Full Details (rows) or Payload (exact upstream JSON) */}
+          {viewMode === "details" ? (
+            <div className="relative group/err-details space-y-1">
+              <div className="grid grid-cols-[110px_1fr] gap-x-2 gap-y-0.5 text-[11px] leading-relaxed">
+                <span className="text-muted-foreground/70">Model</span>
+                <span
+                  className="font-mono text-foreground/90 truncate"
+                  title={fullModelName || undefined}
+                >
+                  {fullModelName || displayModel || "—"}
+                </span>
+                <span className="text-muted-foreground/70">Status</span>
+                <span className={cn("font-mono", isWarning ? "text-amber-400" : "text-red-400")}>
+                  {displayStatusCode}
+                  {exactErrorTitle ? ` · ${exactErrorTitle}` : ""}
+                </span>
+                <span className="text-muted-foreground/70">Category</span>
+                <span className="font-mono text-muted-foreground/90">
+                  {errorType || "provider_error"}
+                </span>
+                {timestamp ? (
+                  <>
+                    <span className="text-muted-foreground/70">Time</span>
+                    <span className="font-mono text-muted-foreground/90">{timestamp}</span>
+                  </>
+                ) : null}
+              </div>
+              <div className="text-[11px] leading-relaxed text-muted-foreground/90 font-mono bg-muted/30 dark:bg-muted/15 p-2 rounded border border-border/25 whitespace-pre-wrap break-all max-h-48 overflow-y-auto">
+                {exactMessage}
+              </div>
+              <button
+                type="button"
+                onClick={handleCopy}
+                className="absolute top-1 right-1 opacity-0 group-hover/err-details:opacity-100 transition-opacity px-1 py-0.5 rounded bg-background/90 border border-border/50 text-[10px] text-muted-foreground hover:text-foreground cursor-pointer shadow-xs"
+                title="Copy error details"
+              >
+                {copied ? "Copied" : "Copy Details"}
+              </button>
+            </div>
+          ) : (
             <div className="relative group/err-json">
               <pre className="text-[11px] leading-relaxed text-sky-300 dark:text-sky-200 font-mono bg-zinc-950/80 p-2.5 rounded border border-border/35 whitespace-pre-wrap break-all max-h-56 overflow-y-auto">
                 <code>{formattedResponseString}</code>
@@ -3862,20 +3891,6 @@ function CupertinoTimelineErrorCard({
                 title="Copy exact response"
               >
                 {copied ? "Copied" : "Copy Response"}
-              </button>
-            </div>
-          ) : (
-            <div className="relative group/err-details">
-              <div className="text-[11px] leading-relaxed text-muted-foreground font-mono bg-muted/30 dark:bg-muted/15 p-2 rounded border border-border/25 whitespace-pre-wrap break-all max-h-48 overflow-y-auto">
-                {rawError}
-              </div>
-              <button
-                type="button"
-                onClick={handleCopy}
-                className="absolute top-1 right-1 opacity-0 group-hover/err-details:opacity-100 transition-opacity px-1.5 py-0.5 rounded bg-background/90 border border-border/50 text-[10px] text-muted-foreground hover:text-foreground cursor-pointer shadow-xs"
-                title="Copy raw error"
-              >
-                {copied ? "Copied" : "Copy Error"}
               </button>
             </div>
           )}

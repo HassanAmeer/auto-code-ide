@@ -20,6 +20,7 @@ import { useTerminalStore, terminalStore } from "./terminal/terminalStore";
 import { isTerminalThreadId, useTerminalThreadIds } from "./terminal/terminalThreadRegistry";
 import { toastManager } from "../ui/toast";
 import { cn } from "../../lib/utils";
+import { PinnedMessagesNav } from "./PinnedMessagesNav";
 
 export interface PanelLayoutControlsProps {
   activeThreadId?: string | null | undefined;
@@ -44,6 +45,8 @@ export interface PanelLayoutControlsProps {
   isServerThread?: boolean;
   onForkCurrentThread?: (() => void) | undefined;
   onExportCurrentThread?: ((format: "json" | "markdown") => void) | undefined;
+  /** Scoped thread key for the pinned-response navigation beside Export. */
+  pinnedThreadKey?: string | undefined;
 }
 
 export const PanelLayoutControls = memo(function PanelLayoutControls({
@@ -68,6 +71,7 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
   isServerThread = false,
   onForkCurrentThread,
   onExportCurrentThread,
+  pinnedThreadKey,
 }: PanelLayoutControlsProps) {
   const terminalState = useTerminalStore();
   const terminalThreadIds = useTerminalThreadIds();
@@ -233,6 +237,11 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
           </MenuPopup>
         </Menu>
       )}
+
+      {/* Pinned responses — directly beside the Export button */}
+      {pinnedThreadKey ? (
+        <PinnedMessagesNav threadKey={pinnedThreadKey} className="ml-0.5" />
+      ) : null}
 
       {/* Thread details toggle */}
       {showThreadPanelControl

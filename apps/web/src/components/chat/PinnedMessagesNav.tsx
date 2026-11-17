@@ -12,8 +12,10 @@ interface PinnedMessagesNavProps {
 }
 
 /**
- * Compact up / pin-count / down control for jumping between pinned assistant
- * responses. Rendered in the chat header; hidden until something is pinned.
+ * Compact up / pin / down control for jumping between pinned assistant
+ * responses. Sits next to the Export button in the header with no background
+ * or outline; the count is plain text on the right. Hidden until something is
+ * pinned.
  */
 export const PinnedMessagesNav = memo(function PinnedMessagesNav({
   threadKey,
@@ -28,10 +30,7 @@ export const PinnedMessagesNav = memo(function PinnedMessagesNav({
 
   return (
     <div
-      className={cn(
-        "flex shrink-0 items-center gap-0.5 rounded-md border border-border/70 bg-muted/40 px-0.5 py-0.5",
-        className,
-      )}
+      className={cn("flex shrink-0 items-center gap-0.5", className)}
       data-pinned-nav
       data-pinned-count={total}
     >
@@ -47,17 +46,14 @@ export const PinnedMessagesNav = memo(function PinnedMessagesNav({
             />
           }
         >
-          <ChevronUpIcon className="size-3" />
+          <ChevronUpIcon className="size-3.5" />
         </TooltipTrigger>
         <TooltipPopup side="bottom">Previous pinned response</TooltipPopup>
       </Tooltip>
 
-      <div className="relative flex size-5 items-center justify-center" aria-hidden>
-        <PinIcon className="size-3 fill-current text-primary" />
-        <span className="absolute -top-1 right-0 rounded-full bg-primary px-1 text-[8px] font-semibold leading-tight text-primary-foreground tabular-nums">
-          {formatPinnedCount(nav.activeIndex, total)}
-        </span>
-      </div>
+      <span className="flex size-4 items-center justify-center text-muted-foreground" aria-hidden>
+        <PinIcon className="size-3.5 fill-current" />
+      </span>
 
       <Tooltip>
         <TooltipTrigger
@@ -71,10 +67,14 @@ export const PinnedMessagesNav = memo(function PinnedMessagesNav({
             />
           }
         >
-          <ChevronDownIcon className="size-3" />
+          <ChevronDownIcon className="size-3.5" />
         </TooltipTrigger>
         <TooltipPopup side="bottom">Next pinned response</TooltipPopup>
       </Tooltip>
+
+      <span className="ml-1 text-xs tabular-nums text-muted-foreground" aria-live="polite">
+        {formatPinnedCount(nav.activeIndex, total)}
+      </span>
     </div>
   );
 });
