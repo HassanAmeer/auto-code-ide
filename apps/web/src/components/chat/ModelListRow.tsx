@@ -168,7 +168,7 @@ export const ModelListRow = memo(function ModelListRow(props: {
           ) : null}
         </div>
         {props.showProvider && (
-          <div className="mt-1 flex items-start gap-1.5">
+          <div className="mt-0.5 flex items-start gap-1.5">
             <ProviderInstanceIcon
               driverKind={props.driverKind}
               displayName={props.providerDisplayName}
@@ -183,7 +183,7 @@ export const ModelListRow = memo(function ModelListRow(props: {
           </div>
         )}
         {/* Model capabilities badges with tooltip */}
-        <div className="mt-1.5 flex items-center gap-1 text-muted-foreground/60">
+        <div className="mt-1 flex items-center gap-1 text-muted-foreground/60">
           {resolveModelCapabilities(props.model.slug).map((cap) => {
             const Icon = cap.icon;
             return (
@@ -203,18 +203,20 @@ export const ModelListRow = memo(function ModelListRow(props: {
           })}
         </div>
         {props.testResult ? (
-          <div className="mt-1.5 flex h-4 items-center overflow-hidden rounded bg-muted/15 text-3xs font-mono">
+          <div
+            className="mt-1 flex h-3.5 items-center overflow-hidden rounded bg-muted/15 text-3xs font-mono"
+            title={`${props.testResult.statusCode}|${props.testResult.text}`}
+          >
             <span
               className={
                 props.testResult.ok
-                  ? "ml-1.5 size-1.5 shrink-0 rounded-full bg-emerald-500"
-                  : "ml-1.5 size-1.5 shrink-0 rounded-full bg-rose-500"
+                  ? "ml-1 size-1 shrink-0 rounded-full bg-emerald-500"
+                  : "ml-1 size-1 shrink-0 rounded-full bg-rose-500"
               }
             />
             <div className="relative min-w-0 flex-1 overflow-hidden">
-              <span className="block w-max whitespace-nowrap text-muted-foreground/70 [animation:model-test-marquee_8s_linear_infinite]">
-                {props.testResult.statusCode}|{props.testResult.text} &nbsp;•&nbsp;{" "}
-                {props.testResult.statusCode}|{props.testResult.text} &nbsp;•&nbsp;
+              <span className="block w-max whitespace-nowrap text-muted-foreground/70 [animation:model-test-marquee_20s_linear_infinite]">
+                {props.testResult.statusCode}|{props.testResult.text}
               </span>
             </div>
           </div>

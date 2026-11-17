@@ -989,7 +989,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
     <TooltipProvider delay={0}>
       <div
         ref={pickerContentRef}
-        className="relative flex max-h-86.5 w-[calc(100vw-1.5rem)] max-w-96 flex-row overflow-hidden"
+        className="relative flex h-[min(88vh,44rem)] w-[calc(100vw-1.5rem)] max-w-96 flex-row overflow-hidden"
         // Hold the height from when the search started; results scroll instead of resizing.
         style={isSearching ? { height: searchHeight } : undefined}
         data-model-picker-content="true"
@@ -1146,10 +1146,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
             </div>
 
             {/* Model list */}
-            <div
-              className="relative min-h-0 overflow-hidden pr-px"
-              style={{ height: modelListHeight }}
-            >
+            <div className="relative min-h-0 flex-1 overflow-hidden pr-px">
               <ComboboxListVirtualized>
                 <LegendList<string>
                   ref={modelListRef}
