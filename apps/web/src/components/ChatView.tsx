@@ -4641,7 +4641,8 @@ export default function ChatView(props: ChatViewProps) {
             .filter((candidate) => {
               const environment = environmentById.get(candidate.environmentId);
               return (
-                environment?.connection.phase === "connected" &&
+                (environment?.connection.phase === "connected" ||
+                  environment?.connection.phase === "available") &&
                 (loadBalancingSettings.loadBalancingWeights[candidate.environmentId] ?? 50) > 0 &&
                 environment.serverConfig?.providers.some(
                   (provider) =>

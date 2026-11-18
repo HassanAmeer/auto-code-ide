@@ -99,7 +99,7 @@ export function deriveComposerEnvironmentState(
   }
   return {
     isConnecting: connection.phase === "connecting" || connection.phase === "reconnecting",
-    isUnavailable: connection.phase !== "connected",
+    isUnavailable: connection.phase !== "connected" && connection.phase !== "available",
   };
 }
 
