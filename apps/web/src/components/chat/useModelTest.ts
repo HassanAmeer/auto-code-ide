@@ -62,12 +62,11 @@ export function useModelTest() {
         clearTimeout(timeoutId);
       }
       const data = await res.json().catch(() => ({}));
-      // The backend returns the raw call result as-is: { ok, statusCode, text }.
       result = {
         ok: Boolean(data?.ok),
         statusCode: Number(data?.statusCode || (data?.ok ? 200 : 500)),
-        text: String(data?.text ?? "No response"),
-        testedAt: new Date().toISOString(),
+        text: String(data?.response || data?.error || "No response").slice(0, 2000),
+        testedAt: String(data?.testedAt || new Date().toISOString()),
       };
     } catch (error: any) {
       result = {
