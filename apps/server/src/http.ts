@@ -25,7 +25,6 @@ import { GLOBAL_AI_MODEL_LOGS, clearAiModelLogs } from "@t3tools/provider-core/s
 import { isDevProxiedPath } from "@t3tools/shared/devProxy";
 import { decodeOtlpTraceRecords } from "@t3tools/shared/observability";
 import * as Cause from "effect/Cause";
-import { bypassChatStream } from "../../../opencode-bypass-api/src/server/bypass/client.ts";
 import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -1290,6 +1289,314 @@ export const layerCustomProviderSyncRoute = HttpRouter.add(
   }),
 );
 
+/**
+ * The single model call shared by chat turns and the model picker's Test button.
+ *
+ * - OpenCode / bypass instances use the SAME transport as the chat provider
+ *   driver: a temporary session on the local `opencode serve`, with the reply
+ *   collected from its SSE event stream. Calling the free-lane upstream
+ *   directly (as the old Test route did) hits different limits/errors.
+ * - Custom providers use the SAME baseUrl/apiKey/headers resolution and fetch
+ *   as the chat route. No OpenRouter substitution, no model rewriting.
+ *
+ * Returns the raw upstream result: the real HTTP status and the full response
+ * text (error body or generated content), unchanged.
+ */
+interface SelectedModelCallResult {
+  readonly ok: boolean;
+  readonly statusCode: number;
+  readonly statusText: string;
+  readonly text: string;
+  readonly data: any;
+}
+
+async function callSelectedModelLikeChat(input: {
+  readonly dbPath: string | undefined;
+  readonly instanceId?: string;
+  readonly model: string;
+  readonly messages: ReadonlyArray<{ role: string; content: string }>;
+  readonly cwd?: string | undefined;
+}): Promise<SelectedModelCallResult> {
+  const { dbPath, model, messages } = input;
+  const instanceId = input.instanceId ?? "";
+  const isOpenCodeInstance =
+    instanceId === "opencodebypasssetup" ||
+    instanceId === "opencode" ||
+    model.toLowerCase().startsWith("opencode/") ||
+    [
+      "beam-free", "big-pickle", "chat-free", "code-free", "flint-40b-free",
+      "deepseek-v4.1-flash-free", "kimi-k3", "mimo-v2.6-flash-free", "iceman-free",
+    ].includes(model.toLowerCase());
+
+  if (isOpenCodeInstance) {
+    try {
+      let port: number | undefined;
+      let pid: number | undefined;
+      // The daemon picks a fresh port on every restart and its bookkeeping
+      // JSON can disappear, so discover it from the live process table — this
+      // is the same server the chat provider adapter connects to.
+      try {
+        for (const entry of NodeFS.readdirSync("/proc")) {
+          if (!/^\d+$/.test(entry)) continue;
+          const cmdPath = `/proc/${entry}/cmdline`;
+          if (!NodeFS.existsSync(cmdPath)) continue;
+          const cmd = NodeFS.readFileSync(cmdPath, "utf8").replace(/\0/g, " ").trim();
+          if (!/\bopencode\b.*\bserve\b/i.test(cmd)) continue;
+          const match = cmd.match(/--port[=\s]+(\d+)/);
+          if (match?.[1]) {
+            port = Number(match[1]);
+            pid = Number(entry);
+            break;
+          }
+        }
+      } catch {}
+      if (!port) {
+        const baseDir = dbPath ? NodePath.dirname(dbPath) : "/root/autojobs/data/userdata";
+        const serversDir = [
+          NodePath.join(baseDir, "opencode-servers"),
+          NodePath.join(baseDir, "userdata/opencode-servers"),
+          "/root/autojobs/data/userdata/opencode-servers",
+        ].find((dir) => NodeFS.existsSync(dir));
+        if (serversDir) {
+          const files = NodeFS.readdirSync(serversDir)
+            .filter((f) => f.endsWith(".json"))
+            .sort((a, b) => {
+              try {
+                return (
+                  NodeFS.statSync(NodePath.join(serversDir, b)).mtimeMs -
+                  NodeFS.statSync(NodePath.join(serversDir, a)).mtimeMs
+                );
+              } catch {
+                return 0;
+              }
+            });
+          const first = files[0];
+          if (first) {
+            const info = JSON.parse(NodeFS.readFileSync(NodePath.join(serversDir, first), "utf8"));
+            if (info.port) port = Number(info.port);
+            if (info.pid) pid = Number(info.pid);
+          }
+        }
+      }
+      if (!port) port = 4099;
+
+      let password =
+        process.env.OPENCODE_SERVER_PASSWORD || process.env.OPENCODE_PASSWORD || "autocode123";
+      if (pid && NodeFS.existsSync(`/proc/${pid}/environ`)) {
+        const env = NodeFS.readFileSync(`/proc/${pid}/environ`, "utf8");
+        const match = env.match(/OPENCODE_PASSWORD=([^\0]+)/);
+        if (match?.[1]) password = match[1];
+      }
+      const auth = `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`;
+      const base = `http://127.0.0.1:${port}/api`;
+      const bare = model.replace(/^opencode\//i, "").trim() || "beam-free";
+      const parsed = bare.includes("/") ? bare.split("/") : ["opencode", bare];
+
+      // Subscribe to the event stream BEFORE prompting, like the chat driver.
+      const eventController = new AbortController();
+      const eventResponse = await fetch(`${base}/event`, {
+        headers: { Authorization: auth },
+        signal: eventController.signal,
+      });
+      if (!eventResponse.ok || !eventResponse.body) {
+        throw new Error(`OpenCode event stream HTTP ${eventResponse.status}`);
+      }
+      let replyText = "";
+      let failure: string | null = null;
+      let sessionId: string | null = null;
+      const eventReader = eventResponse.body.getReader();
+      const decoder = new TextDecoder();
+      let eventBuffer = "";
+      const readEvents = (async () => {
+        while (true) {
+          const { done, value } = await eventReader.read();
+          if (done) break;
+          eventBuffer += decoder.decode(value, { stream: true });
+          let boundary: number;
+          while ((boundary = eventBuffer.indexOf("\n\n")) >= 0) {
+            const chunk = eventBuffer.slice(0, boundary);
+            eventBuffer = eventBuffer.slice(boundary + 2);
+            for (const line of chunk.split("\n")) {
+              if (!line.startsWith("data:")) continue;
+              try {
+                const event = JSON.parse(line.slice(5).trim());
+                const data = event?.data ?? {};
+                if (sessionId && data.sessionID !== sessionId) continue;
+                if (event.type === "session.text.ended") replyText += String(data.text ?? "");
+                if (event.type === "session.execution.failed") {
+                  failure = String(data.error?.message || data.error || "Generation failed");
+                }
+                if (
+                  event.type === "session.execution.succeeded" ||
+                  event.type === "session.execution.failed" ||
+                  event.type === "session.execution.interrupted"
+                ) {
+                  return;
+                }
+              } catch {
+                // ignore malformed SSE events
+              }
+            }
+          }
+        }
+      })();
+
+      const sessionRes = await fetch(`${base}/session`, {
+        method: "POST",
+        headers: { Authorization: auth, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: "Bot Code model test",
+          location: { directory: input.cwd ?? process.cwd() },
+          model: { providerID: parsed[0]!, id: parsed[1]! },
+        }),
+      });
+      const sessionJson = await sessionRes.json().catch(() => ({}));
+      sessionId = sessionJson?.id ?? sessionJson?.data?.id ?? null;
+      if (!sessionRes.ok || !sessionId) {
+        eventController.abort();
+        const raw = JSON.stringify(sessionJson);
+        return {
+          ok: false,
+          statusCode: sessionRes.status,
+          statusText: sessionRes.statusText,
+          text: raw,
+          data: sessionJson,
+        };
+      }
+
+      const promptRes = await fetch(`${base}/session/${sessionId}/prompt`, {
+        method: "POST",
+        headers: { Authorization: auth, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: messages.map((m) => m.content).filter(Boolean).join("\n") || "hy",
+        }),
+      });
+      if (!promptRes.ok) {
+        eventController.abort();
+        const raw = await promptRes.text();
+        return {
+          ok: false,
+          statusCode: promptRes.status,
+          statusText: promptRes.statusText,
+          text: raw,
+          data: { rawText: raw },
+        };
+      }
+
+      await Promise.race([
+        readEvents,
+        new Promise<void>((resolve) => setTimeout(resolve, 60_000)),
+      ]);
+      eventController.abort();
+      void fetch(`${base}/session/${sessionId}`, {
+        method: "DELETE",
+        headers: { Authorization: auth },
+      }).catch(() => {});
+
+      const ok = failure === null && replyText.trim().length > 0;
+      return {
+        ok,
+        statusCode: ok ? 200 : 500,
+        statusText: ok ? "OK" : "Upstream error",
+        text: ok ? replyText : failure || "No response from OpenCode.",
+        data: ok ? { choices: [{ message: { content: replyText } }] } : { error: failure },
+      };
+    } catch (error: any) {
+      return {
+        ok: false,
+        statusCode: 500,
+        statusText: "",
+        text: String(error?.message || error),
+        data: { error: String(error?.message || error) },
+      };
+    }
+  }
+
+  // Custom provider path — exact same resolution/fetch as the chat route.
+  try {
+    const customProviders = listCustomProviders(dbPath);
+    let matchedProvider = customProviders.find(
+      (p: any) =>
+        p.id === instanceId ||
+        p.name === instanceId ||
+        String(p.id) === String(instanceId),
+    );
+    if (!matchedProvider) {
+      matchedProvider = customProviders.find(
+        (p: any) =>
+          Array.isArray(p.models) &&
+          p.models.some((m: any) => m.id === model || m.name === model),
+      );
+    }
+    let baseUrl = matchedProvider?.baseUrl;
+    let apiKey = matchedProvider?.apiKey;
+    const customHeaders: Array<{ key: string; value: string }> = Array.isArray(
+      matchedProvider?.headers,
+    )
+      ? [...matchedProvider.headers]
+      : [];
+    if (!baseUrl) {
+      throw new Error(`No provider configured for instance '${instanceId || model}'.`);
+    }
+    const rawBase = String(baseUrl).replace(/\/+$/, "");
+    const chatUrl = rawBase.endsWith("/chat/completions")
+      ? rawBase
+      : rawBase.endsWith("/v1") || rawBase.includes("/v1/")
+        ? `${rawBase}/chat/completions`
+        : `${rawBase}/v1/chat/completions`;
+    const reqHeaders: Record<string, string> = {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      "User-Agent": "AutoCode-SuperAgent/1.0",
+    };
+    if (apiKey) {
+      reqHeaders.Authorization = `Bearer ${String(apiKey).trim()}`;
+      reqHeaders["x-api-key"] = String(apiKey).trim();
+    }
+    for (const h of customHeaders) {
+      if (h?.key?.trim()) reqHeaders[h.key.trim()] = String(h.value ?? "").trim();
+    }
+    const response = await fetch(chatUrl, {
+      method: "POST",
+      headers: reqHeaders,
+      body: JSON.stringify({
+        model,
+        messages,
+        temperature: 0.7,
+        max_tokens: 1500,
+      }),
+      signal: AbortSignal.timeout(60_000),
+    });
+    const rawText = await response.text();
+    let data: any;
+    try {
+      data = JSON.parse(rawText);
+    } catch {
+      data = { rawText };
+    }
+    const content =
+      data?.choices?.[0]?.message?.content ||
+      data?.choices?.[0]?.text ||
+      data?.candidates?.[0]?.content?.parts?.[0]?.text ||
+      "";
+    return {
+      ok: response.ok && content.length > 0,
+      statusCode: response.status,
+      statusText: response.statusText,
+      text: response.ok ? content || rawText : rawText,
+      data,
+    };
+  } catch (error: any) {
+    return {
+      ok: false,
+      statusCode: 500,
+      statusText: "",
+      text: String(error?.message || error),
+      data: { error: String(error?.message || error) },
+    };
+  }
+}
+
 export const layerSuperAgentChatRoute = HttpRouter.add(
   "POST",
   "/api/super-agent/chat",
@@ -1502,9 +1809,12 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
       "deepseek-v4.1-flash-free",
       "glm-5.3-flash-free",
       "kimi-k2.5-free",
+      "kimi-k3",
       "minimax-01-free",
       "chat-free",
       "code-free",
+      "mimo-v2.6-flash-free",
+      "iceman-free",
     ];
 
     const activeCoreEngine = String(appSettings?.active_core_engine || "opencode-full-engine");
@@ -2148,6 +2458,35 @@ export const layerSuperAgentChatRoute = HttpRouter.add(
           }
         }
         console.warn(`[SuperAgent] Falling back to standard provider...`);
+      } else if (isOpenCode && skipOpenCodeDaemon) {
+        // opencode-full-engine active hai — no daemon on 4099.
+        // Route directly through bypass free lane.
+        try {
+          const { bypassChat } = await import("@t3tools/provider-opencodebypasssetup/server");
+          const pureModel = model.replace(/^opencode\//i, "").trim() || "beam-free";
+          const systemMsg = messages.find((m: any) => m.role === "system")?.content;
+          const userMsgs = messages.filter((m: any) => m.role !== "system");
+          const bypassMessages: Array<{ role: "system" | "user" | "assistant"; content: string }> =
+            [
+              ...(systemMsg ? [{ role: "system" as const, content: systemMsg }] : []),
+              ...userMsgs.slice(-8).map((m: any) => ({
+                role: (m.role === "assistant" ? "assistant" : "user") as "user" | "assistant",
+                content: String(m.content || ""),
+              })),
+            ];
+          const res = await bypassChat({ model: pureModel, messages: bypassMessages });
+          return { ok: true, reply: res.content, model: pureModel, toolCalls: [], reasoning: "" };
+        } catch (bypassErr: any) {
+          const errMsg = bypassErr?.message || String(bypassErr);
+          const is429 = /429|rate.?limit|quota|limit.?full|FreeUsage/i.test(errMsg);
+          return {
+            ok: false,
+            error: is429
+              ? `OpenCode free model '${model.replace(/^opencode\//i, "").trim()}' ki quota limit full hai. Doosra model chunein.`
+              : errMsg,
+            code: is429 ? "RESOURCE_PRESSURE" : "MODEL_ERROR",
+          };
+        }
       }
 
       // Custom Provider or OpenRouter fallback
@@ -6481,14 +6820,16 @@ export const layerWebSearchRoute = HttpRouter.add(
 
 /**
  * POST /api/models/test — quick smoke test for a single model from the picker.
- * Sends the default message ("hy") straight to the model's upstream (custom
- * providers auto-routed via resolveCustomRoute) and returns the response text
- * or a sanitized error. No chat thread is created.
+ * Uses the EXACT same provider call as a chat turn (callSelectedModelLikeChat):
+ * the local OpenCode session transport for EVP models, and the configured
+ * custom-provider fetch for custom instances. Returns the raw backend result
+ * unchanged: { ok, statusCode, text }.
  */
 export const layerModelTestRoute = HttpRouter.add(
   "POST",
   "/api/models/test",
   Effect.gen(function* () {
+    const config = yield* ServerConfig.ServerConfig;
     const request = yield* HttpServerRequest.HttpServerRequest;
     const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
       model?: string;
@@ -6498,51 +6839,30 @@ export const layerModelTestRoute = HttpRouter.add(
     const model = String(bodyJson?.model || "").trim();
     if (!model) {
       return HttpServerResponse.jsonUnsafe(
-        { ok: false, error: "model is required" },
+        { ok: false, statusCode: 400, text: "model is required" },
         { status: 400 },
       );
     }
     const message = String(bodyJson?.message || "hy").trim() || "hy";
-    // Call the model's OWN provider directly (OpenCode free-lane upstream),
-    // not the generic chat route which re-routes through OpenRouter. Strip the
-    // cosmetic `opencode/` prefix — upstream expects the bare model id.
-    const pureModel = model.replace(/^opencode\//i, "").trim() || "beam-free";
-    // Catch inside the promise so the Effect itself never fails — a failed
-    // Effect would skip statusCode via the outer catchCause handler.
-    const outcome = yield* Effect.promise(async () => {
-      let text = "";
-      try {
-        await bypassChatStream(
-          { model: pureModel, messages: [{ role: "user", content: message }], maxTokens: 512 },
-          (chunk: string) => { text += chunk; },
-        );
-        return { ok: true as const, text };
-      } catch (error: any) {
-        return { ok: false as const, error: String(error?.message || error) };
-      }
-    });
-    if (outcome.ok) {
-      return HttpServerResponse.jsonUnsafe({
-        ok: true,
+    const result = yield* Effect.promise(() =>
+      callSelectedModelLikeChat({
+        dbPath: config.dbPath,
+        instanceId: String(bodyJson?.instanceId ?? ""),
         model,
-        instanceId: bodyJson?.instanceId ?? null,
-        statusCode: 200,
-        response: outcome.text.trim().slice(0, 2000),
-        testedAt: new Date().toISOString(),
-      });
-    }
-    const statusMatch = outcome.error.match(/\bHTTP\s+(\d{3})\b|\b(429|400|401|403|500)\b/);
+        messages: [{ role: "user", content: message }],
+        cwd: process.cwd(),
+      }),
+    );
     return HttpServerResponse.jsonUnsafe({
-      ok: false,
-      model,
-      instanceId: bodyJson?.instanceId ?? null,
-      statusCode: statusMatch ? Number(statusMatch[1] || statusMatch[2]) : 500,
-      error: outcome.error.slice(0, 2000),
-      testedAt: new Date().toISOString(),
+      ok: result.ok,
+      statusCode: result.statusCode,
+      text: result.text,
     });
   }).pipe(
     Effect.catchCause((cause) =>
-      Effect.succeed(HttpServerResponse.jsonUnsafe({ ok: false, error: Cause.pretty(cause) })),
+      Effect.succeed(
+        HttpServerResponse.jsonUnsafe({ ok: false, statusCode: 500, text: Cause.pretty(cause) }),
+      ),
     ),
   ),
 );
