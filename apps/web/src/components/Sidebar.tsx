@@ -161,6 +161,7 @@ import {
 import {
   readThreadShell,
   useAllEnvironmentProjectSnapshotsReady,
+  useAllEnvironmentShellsBootstrapped,
   useProjects,
   useThreadShells,
 } from "../state/entities";
@@ -2385,6 +2386,7 @@ const SidebarSearchResultRow = memo(function SidebarSearchResultRow(props: {
 
 export default function Sidebar() {
   const projects = useProjects();
+  const allShellsBootstrapped = useAllEnvironmentShellsBootstrapped();
   const projectOrder = useUiStateStore((store) => store.projectOrder);
   const threads = useThreadShells();
   const router = useRouter();
@@ -5819,7 +5821,13 @@ export default function Sidebar() {
             settledThreads.length ===
             0 ? (
             <div className="flex flex-col items-center gap-2 px-2 py-4 text-center text-xs text-muted-foreground/60">
-              {projects.length === 0 ? (
+              {projects.length === 0 && !allShellsBootstrapped ? (
+                <div className="flex flex-col items-center gap-2 w-full px-1 py-3">
+                  <span className="text-muted-foreground/80 font-medium animate-pulse">
+                    Loading projects...
+                  </span>
+                </div>
+              ) : projects.length === 0 ? (
                 <div className="flex flex-col items-center gap-2.5 w-full px-1">
                   <span className="text-muted-foreground/80 font-medium">No projects yet</span>
                   <div className="flex flex-col gap-1.5 w-full">
