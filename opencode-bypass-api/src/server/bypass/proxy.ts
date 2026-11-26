@@ -336,13 +336,6 @@ export async function rotateWarpIp(): Promise<{
   ensurePrivoxyWarpBridge();
   const oldIp = await getWarpProxyIp();
 
-  // Invalidate stale proxy/dispatcher cache immediately so next request gets new IP
-  _proxyAvailable = null;
-  if (_cachedDispatcher) {
-    try { (_cachedDispatcher as any).destroy?.(); } catch {}
-    _cachedDispatcher = null;
-  }
-
   const candidateScriptPaths = [
     NodePath.join(process.cwd(), "opencode-bypass-api", "bypass-vps-ip", "rotate.sh"),
     "/root/autojobs/opencode-bypass-api/bypass-vps-ip/rotate.sh",

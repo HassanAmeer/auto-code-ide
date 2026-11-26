@@ -168,20 +168,8 @@ const OpenCodeBypassCapabilitiesV2 = {
   },
 } satisfies OrchestrationV2ProviderCapabilities;
 
-/** Fallback free models strictly adhering to ServerProviderModel — synced with live opencode.ai/inference/v1/models */
+/** Fallback free models strictly adhering to ServerProviderModel */
 export const FALLBACK_FREE_MODELS: ReadonlyArray<ServerProviderModel> = [
-  {
-    slug: "beam-free",
-    name: "Beam (Free)",
-    isCustom: false,
-    capabilities: null,
-  },
-  {
-    slug: "big-pickle",
-    name: "Big Pickle (Free)",
-    isCustom: false,
-    capabilities: null,
-  },
   {
     slug: "deepseek-v4.1-flash-free",
     name: "DeepSeek V4.1 Flash (Free)",
@@ -195,14 +183,14 @@ export const FALLBACK_FREE_MODELS: ReadonlyArray<ServerProviderModel> = [
     capabilities: null,
   },
   {
-    slug: "flint-40b-free",
-    name: "Flint 40B (Free)",
+    slug: "glm-5.3-flash-free",
+    name: "GLM 5.3 Flash (Free)",
     isCustom: false,
     capabilities: null,
   },
   {
-    slug: "mimo-v2.6-flash-free",
-    name: "Mimo V2.6 Flash (Free)",
+    slug: "minimax-m3.1-flash-free",
+    name: "MiniMax M3.1 Flash (Free)",
     isCustom: false,
     capabilities: null,
   },

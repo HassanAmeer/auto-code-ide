@@ -19,14 +19,12 @@ import { fetch as undiciFetch } from "undici";
 
 export const OPENCODE_BYPASS_ENABLED: boolean = process.env.OPENCODE_BYPASS_ENABLED !== "false";
 
-/** Free lane me default models — synced with live opencode.ai/inference/v1/models */
+/** Free lane me default models */
 export const FREE_MODELS = [
-  "beam-free",
-  "big-pickle",
   "deepseek-v4.1-flash-free",
   "kimi-k3",
-  "flint-40b-free",
-  "mimo-v2.6-flash-free",
+  "glm-5.3-flash-free",
+  "minimax-m3.1-flash-free",
 ] as const;
 
 export interface BypassChatMessage {
@@ -117,12 +115,6 @@ export async function bypassChatStream(
     headers.authorization = `Bearer ${customRoute.apiKey}`;
     for (const [k, v] of Object.entries(customRoute.headers)) headers[k] = v;
   }
-
-  // FIX: Strip "opencode/" prefix for free lane (upstream returns 400 on prefixed slugs).
-  // Only strip when routing to free lane; custom providers may have "/" in their slugs.
-  const resolvedModel = customRoute
-    ? options.model
-    : options.model.replace(/^opencode\//i, "").trim() || "beam-free";
   const { tools, placeholderNote } = injectFingerprintTools([]);
 
   const messages = [...options.messages];
@@ -142,7 +134,7 @@ export async function bypassChatStream(
   }
 
   const body = {
-    model: customRoute ? customRoute.model : resolvedModel,
+    model: customRoute ? customRoute.model : options.model,
     max_tokens: options.maxTokens ?? 8192,
     messages,
     stream: true,
@@ -232,27 +224,14 @@ export async function bypassChatStream(
       if (!options._isRetry) {
         try {
           const { rotateAllIpRotation } = await import("./ipRotationState.ts");
-          const { isWarpProxyAvailable } = await import("./proxy.ts");
-          const rotateResult = await rotateAllIpRotation();
-          const warpUp = await isWarpProxyAvailable(true);
-          // Only retry if WARP up and IP actually changed — avoid looping on same blocked IP
-          if (warpUp && rotateResult.newIp && rotateResult.newIp !== rotateResult.oldIp) {
-            console.log(`[opencode-bypass] 429 HTTP → IP rotated ${rotateResult.oldIp} → ${rotateResult.newIp}, retrying...`);
-            return await bypassChatStream({ ...options, _isRetry: true }, onChunk, onDone);
-          }
-          if (!warpUp) {
-            throw new Error(
-              `[opencode-bypass] WARP/Privoxy nahi chal raha. IP rotation se limit reset nahi ho sakti — doosra model chunein ya WARP start karein.`,
-            );
-          }
-          console.warn("[opencode-bypass] 429: IP same raha rotation ke baad, retry skip.");
-        } catch (retryErr: any) {
-          if (retryErr?.message?.startsWith("[opencode-bypass]")) throw retryErr;
+          await rotateAllIpRotation();
+          return await bypassChatStream({ ...options, _isRetry: true }, onChunk, onDone);
+        } catch (retryErr) {
           console.warn("[opencode-bypass] Auto-retry on 429 encountered error:", retryErr);
         }
       }
       throw new Error(
-        `[opencode-bypass] HTTP 429 Rate Limit Exceeded (Limit Full)${resetInfo}: Model '${resolvedModel}' ki free limit/quota full ho chuki hai.\n\nUpstream Raw Response:\n${errorDetail}`,
+        `[opencode-bypass] HTTP 429 Rate Limit Exceeded (Limit Full)${resetInfo}: Model '${options.model}' ki free limit/quota full ho chuki hai.\n\nUpstream Raw Response:\n${errorDetail}`,
       );
     }
     if (res.status === 502 || res.status === 503 || res.status === 504) {
@@ -306,20 +285,6 @@ export async function bypassChatStream(
               const errObj = chunk.error;
               const errMsg = errObj?.message || JSON.stringify(errObj);
               const errCode = errObj?.code || errObj?.type || "429";
-              // SSE-stream 429/rate-limit: rotate and retry if no content emitted yet
-              const isRateLimit = /429|FreeUsage|rate.?limit|quota|limit.?full|too.?many/i.test(errMsg + errCode);
-              if (isRateLimit && !hasReceivedAnyChunk && !options._isRetry) {
-                if (timer) clearTimeout(timer);
-                try {
-                  const { rotateAllIpRotation } = await import("./ipRotationState.ts");
-                  const { isWarpProxyAvailable } = await import("./proxy.ts");
-                  const rotateResult = await rotateAllIpRotation();
-                  const warpUp = await isWarpProxyAvailable(true);
-                  if (warpUp && rotateResult.newIp && rotateResult.newIp !== rotateResult.oldIp) {
-                    return await bypassChatStream({ ...options, _isRetry: true }, onChunk, onDone);
-                  }
-                } catch {}
-              }
               throw new Error(
                 `[opencode-bypass] HTTP ${errCode} (Limit Full / Stream Error): ${errMsg}`,
               );
@@ -365,20 +330,6 @@ export async function bypassChatStream(
               const errObj = parsed.error;
               const errMsg = errObj?.message || JSON.stringify(errObj);
               const errCode = errObj?.code || errObj?.type || "429";
-              // SSE-stream 429/rate-limit: rotate and retry if no content emitted yet
-              const isRateLimit = /429|FreeUsage|rate.?limit|quota|limit.?full|too.?many/i.test(errMsg + errCode);
-              if (isRateLimit && !hasReceivedAnyChunk && !options._isRetry) {
-                if (timer) clearTimeout(timer);
-                try {
-                  const { rotateAllIpRotation } = await import("./ipRotationState.ts");
-                  const { isWarpProxyAvailable } = await import("./proxy.ts");
-                  const rotateResult = await rotateAllIpRotation();
-                  const warpUp = await isWarpProxyAvailable(true);
-                  if (warpUp && rotateResult.newIp && rotateResult.newIp !== rotateResult.oldIp) {
-                    return await bypassChatStream({ ...options, _isRetry: true }, onChunk, onDone);
-                  }
-                } catch {}
-              }
               throw new Error(
                 `[opencode-bypass] HTTP ${errCode} (Limit Full / Stream Error): ${errMsg}`,
               );
