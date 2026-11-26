@@ -1654,27 +1654,6 @@ function LegacyFeaturesSection() {
 }
 
 export function GeneralSettingsPanel() {
-  type CoreEngineType = "opencode-full-engine" | "opencode-adapter" | "others";
-
-  const [selectedCoreEngine, setSelectedCoreEngine] = useState<CoreEngineType>(() => {
-    if (typeof window !== "undefined") {
-      const saved =
-        window.localStorage.getItem("autocode_selected_core_engine") ||
-        window.localStorage.getItem("utocode_selected_core_engine") ||
-        window.localStorage.getItem("t3_selected_core_engine");
-      if (saved === "opencode-full-engine" || saved === "opencode-adapter" || saved === "others") {
-        return saved;
-      }
-    }
-    return "opencode-full-engine";
-  });
-
-  const engineDisplayNames: Record<CoreEngineType, string> = {
-    "opencode-full-engine": "OpenCode Full Engine",
-    "opencode-adapter": "OpenCode Adapter",
-    others: "Other ACP Connector (Claude, Codex, Gemini...)",
-  };
-
   const [testingEngine, setTestingEngine] = useState(false);
   const handleTestEngine = async () => {
     setTestingEngine(true);
@@ -1704,29 +1683,6 @@ export function GeneralSettingsPanel() {
     } finally {
       setTestingEngine(false);
     }
-  };
-
-  const handleSelectEngine = (type: CoreEngineType) => {
-    setSelectedCoreEngine(type);
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem("autocode_selected_core_engine", type);
-      window.localStorage.setItem("utocode_selected_core_engine", type);
-      window.localStorage.removeItem("t3_selected_core_engine");
-      window.dispatchEvent(
-        new CustomEvent("autocode:core-engine-changed", { detail: { engine: type } }),
-      );
-      window.dispatchEvent(new CustomEvent("t3:core-engine-changed", { detail: { engine: type } }));
-      fetch("/api/engine/switch", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ engine: type }),
-      }).catch(() => {});
-    }
-    toastManager.add({
-      type: "success",
-      title: "Core Engine Switched",
-      description: `Shifted core engine to: ${engineDisplayNames[type]}`,
-    });
   };
 
   const [autoRetrySettings, updateAutoRetrySettings] = useAutoRetrySettings();
@@ -1822,77 +1778,33 @@ export function GeneralSettingsPanel() {
 
   return (
     <SettingsPageContainer>
-      {/* Cupertino Style Core Engine Switcher List Tile */}
+      {/* Cupertino Style Core Engine Card */}
       <div className="rounded-2xl border border-border/50 bg-card/60 p-4 shadow-sm backdrop-blur-md mb-6">
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <div className="text-sm font-medium text-muted-foreground flex items-center gap-1.5">
-                <span>Switch:</span>
-                <span className="text-muted-foreground font-semibold">
-                  {engineDisplayNames[selectedCoreEngine]}
-                </span>
+              <div className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                <span>OpenCode Full Engine</span>
               </div>
-              <p className="text-[11px] text-muted-foreground/70">Shift core engine</p>
+              <p className="text-[11px] text-muted-foreground/70">
+                Mode: Embedded Standalone (Zero External Dependencies)
+              </p>
             </div>
-            <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[11px] font-mono text-emerald-500">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              Active
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[11px] font-mono text-emerald-500">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Active
+              </div>
+              <button
+                type="button"
+                disabled={testingEngine}
+                onClick={handleTestEngine}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium rounded-md bg-secondary hover:bg-secondary/80 text-secondary-foreground transition-all disabled:opacity-50"
+              >
+                <SparklesIcon className="w-3 h-3 text-amber-400" />
+                <span>{testingEngine ? "Testing Engine..." : "Test Engine"}</span>
+              </button>
             </div>
-          </div>
-
-          {/* 3-Step Horizontal Row Buttons */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 p-1 rounded-xl bg-muted/40 border border-border/40">
-            <button
-              type="button"
-              onClick={() => handleSelectEngine("opencode-full-engine")}
-              className={`flex items-center justify-center px-3 py-2 text-xs font-medium rounded-lg transition-all ${
-                selectedCoreEngine === "opencode-full-engine"
-                  ? "bg-background text-foreground shadow-sm border border-border/60"
-                  : "text-muted-foreground hover:text-foreground hover:bg-background/40"
-              }`}
-            >
-              <span>OpenCode Full Engine</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleSelectEngine("opencode-adapter")}
-              className={`flex items-center justify-center px-3 py-2 text-xs font-medium rounded-lg transition-all ${
-                selectedCoreEngine === "opencode-adapter"
-                  ? "bg-background text-foreground shadow-sm border border-border/60"
-                  : "text-muted-foreground hover:text-foreground hover:bg-background/40"
-              }`}
-            >
-              <span>OpenCode Adapter</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleSelectEngine("others")}
-              className={`flex items-center justify-center px-3 py-2 text-xs font-medium rounded-lg transition-all ${
-                selectedCoreEngine === "others"
-                  ? "bg-background text-foreground shadow-sm border border-border/60"
-                  : "text-muted-foreground hover:text-foreground hover:bg-background/40"
-              }`}
-            >
-              <span className="truncate">Other ACP Connector (Claude, Codex, Gemini...)</span>
-            </button>
-          </div>
-
-          <div className="flex items-center justify-between pt-1 border-t border-border/30">
-            <span className="text-[11px] text-muted-foreground">
-              Mode: Embedded Standalone (Zero External Dependencies)
-            </span>
-            <button
-              type="button"
-              disabled={testingEngine}
-              onClick={handleTestEngine}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium rounded-md bg-secondary hover:bg-secondary/80 text-secondary-foreground transition-all disabled:opacity-50"
-            >
-              <SparklesIcon className="w-3 h-3 text-amber-400" />
-              <span>{testingEngine ? "Testing Engine..." : "Test Engine"}</span>
-            </button>
           </div>
         </div>
       </div>

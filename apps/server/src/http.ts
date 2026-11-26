@@ -1324,8 +1324,15 @@ async function callSelectedModelLikeChat(input: {
     instanceId === "opencode" ||
     model.toLowerCase().startsWith("opencode/") ||
     [
-      "beam-free", "big-pickle", "chat-free", "code-free", "flint-40b-free",
-      "deepseek-v4.1-flash-free", "kimi-k3", "mimo-v2.6-flash-free", "iceman-free",
+      "beam-free",
+      "big-pickle",
+      "chat-free",
+      "code-free",
+      "flint-40b-free",
+      "deepseek-v4.1-flash-free",
+      "kimi-k3",
+      "mimo-v2.6-flash-free",
+      "iceman-free",
     ].includes(model.toLowerCase());
 
   if (isOpenCodeInstance) {
@@ -1468,7 +1475,11 @@ async function callSelectedModelLikeChat(input: {
         method: "POST",
         headers: { Authorization: auth, "Content-Type": "application/json" },
         body: JSON.stringify({
-          text: messages.map((m) => m.content).filter(Boolean).join("\n") || "hy",
+          text:
+            messages
+              .map((m) => m.content)
+              .filter(Boolean)
+              .join("\n") || "hy",
         }),
       });
       if (!promptRes.ok) {
@@ -1483,10 +1494,7 @@ async function callSelectedModelLikeChat(input: {
         };
       }
 
-      await Promise.race([
-        readEvents,
-        new Promise<void>((resolve) => setTimeout(resolve, 60_000)),
-      ]);
+      await Promise.race([readEvents, new Promise<void>((resolve) => setTimeout(resolve, 60_000))]);
       eventController.abort();
       void fetch(`${base}/session/${sessionId}`, {
         method: "DELETE",
@@ -1517,15 +1525,12 @@ async function callSelectedModelLikeChat(input: {
     const customProviders = listCustomProviders(dbPath);
     let matchedProvider = customProviders.find(
       (p: any) =>
-        p.id === instanceId ||
-        p.name === instanceId ||
-        String(p.id) === String(instanceId),
+        p.id === instanceId || p.name === instanceId || String(p.id) === String(instanceId),
     );
     if (!matchedProvider) {
       matchedProvider = customProviders.find(
         (p: any) =>
-          Array.isArray(p.models) &&
-          p.models.some((m: any) => m.id === model || m.name === model),
+          Array.isArray(p.models) && p.models.some((m: any) => m.id === model || m.name === model),
       );
     }
     let baseUrl = matchedProvider?.baseUrl;
@@ -4310,7 +4315,7 @@ export const layerEngineStatusRoute = HttpRouter.add(
   Effect.gen(function* () {
     const config = yield* ServerConfig.ServerConfig;
     const settings = getAllAppSettings(config.dbPath);
-    const activeEngine = settings?.active_core_engine || "opencode-full-engine";
+    const activeEngine = "opencode-full-engine";
     const externalCliPath = "/usr/local/bin/opencode";
     const externalCliFound = NodeFS.existsSync(externalCliPath);
 
@@ -4365,7 +4370,7 @@ export const layerEngineSwitchRoute = HttpRouter.add(
     const bodyJson = (yield* request.json.pipe(Effect.orElseSucceed(() => ({}) as any))) as {
       engine?: string;
     };
-    const targetEngine = bodyJson?.engine || "opencode-full-engine";
+    const targetEngine = "opencode-full-engine";
     setAppSetting(config.dbPath, "active_core_engine", targetEngine);
 
     return HttpServerResponse.jsonUnsafe({

@@ -2180,12 +2180,7 @@ export function SuperCallAssistantView() {
                         {
                           id: "opencode-full-engine",
                           label: "⚡ OpenCode Full Engine",
-                          desc: "100% in-process standalone runtime. No port/daemon. Recommended.",
-                        },
-                        {
-                          id: "opencode-adapter",
-                          label: "🔌 OpenCode Adapter (External CLI)",
-                          desc: "External CLI daemon par port auto-discovery ke saath.",
+                          desc: "100% in-process standalone runtime. No port/daemon.",
                         },
                       ].map((engine) => {
                         const isActive = activeEngine === engine.id;
