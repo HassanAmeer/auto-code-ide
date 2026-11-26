@@ -108,7 +108,7 @@ describe("composer draft recovery after send failure", () => {
 });
 
 describe("composer environment connection state", () => {
-  it("blocks sending while the environment is reconnecting", () => {
+  it("keeps sending available while the environment is reconnecting", () => {
     expect(
       deriveComposerEnvironmentState({
         phase: "reconnecting",
@@ -117,7 +117,7 @@ describe("composer environment connection state", () => {
       }),
     ).toEqual({
       isConnecting: true,
-      isUnavailable: true,
+      isUnavailable: false,
     });
   });
 
