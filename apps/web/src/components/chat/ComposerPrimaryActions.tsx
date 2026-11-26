@@ -349,18 +349,17 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
           : isRunning
             ? "Steer message"
             : "Submit message";
-  const submitStatus = isEnvironmentUnavailable
+  const environmentBlocked = isEnvironmentUnavailable && !isConnecting;
+  const submitStatus = environmentBlocked
     ? "Environment disconnected"
     : (sendDisabledReason ??
-      (isConnecting
-        ? "Connecting"
-        : isPreparingWorktree
-          ? "Preparing worktree"
-          : isSendBusy
-            ? isEditingQueuedMessage
-              ? "Updating queued message"
-              : "Submitting message"
-            : null));
+      (isPreparingWorktree
+        ? "Preparing worktree"
+        : isSendBusy
+          ? isEditingQueuedMessage
+            ? "Updating queued message"
+            : "Submitting message"
+          : null));
   const submitTooltip =
     submitStatus ??
     (compactsBeforeSend
@@ -392,11 +391,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
       {...pointerFocusProps}
       onClick={handleSendClick}
       disabled={
-        isSendBusy ||
-        isSendDisabled ||
-        isConnecting ||
-        isEnvironmentUnavailable ||
-        (!hasSendableContent && !showResume)
+        isSendBusy || isSendDisabled || environmentBlocked || (!hasSendableContent && !showResume)
       }
       aria-label={submitStatus ?? submitLabel}
     >
@@ -405,7 +400,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
           <StageBackdropButtonArt variant={stageBackdropVariant} />
         </span>
       ) : null}
-      {isConnecting || isSendBusy ? (
+      {isSendBusy ? (
         <Spinner size="sm" aria-hidden="true" />
       ) : showResume ? (
         <PlayIcon className="size-4 fill-current" aria-hidden="true" />
@@ -445,15 +440,11 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
       {...pointerFocusProps}
       onClick={handleSendClick}
       disabled={
-        isSendBusy ||
-        isSendDisabled ||
-        isConnecting ||
-        isEnvironmentUnavailable ||
-        (!hasSendableContent && !showResume)
+        isSendBusy || isSendDisabled || environmentBlocked || (!hasSendableContent && !showResume)
       }
       aria-label={submitStatus ?? submitLabel}
     >
-      {isConnecting || isSendBusy ? (
+      {isSendBusy ? (
         <Spinner size="sm" aria-hidden="true" />
       ) : showResume ? (
         <PlayIcon className="size-4 fill-current" aria-hidden="true" />

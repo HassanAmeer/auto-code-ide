@@ -3173,7 +3173,9 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (
       });
     const readModelsOnce = (cwd: string | null | undefined) =>
       contextWindows.has(directoryOf(cwd)) ? Effect.void : readModels(directoryOf(cwd));
-    yield* readModels(session.cwd);
+    // Populate context windows in the background so cold plugin activation
+    // does not stall openSession (and leave the thread stuck in "Connecting").
+    yield* Effect.forkScoped(readModels(session.cwd));
 
     // Each agent's own path allows, by the directory they were listed for.
     const agentRules = new Map<string, ReadonlyMap<string, ReadonlyArray<Rule>>>();

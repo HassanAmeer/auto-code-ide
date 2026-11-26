@@ -696,9 +696,9 @@ describe("hasServerAcknowledgedLocalDispatch", () => {
     ).toBe(true);
   });
 
-  it("holds a first send while the thread shell still reports a preparing run", () => {
-    // The draft had no run. The server thread's shell shows the new run before
-    // the detail projection behind `phase` loads.
+  it("acknowledges a first send once the thread shell reports a preparing run", () => {
+    // Once the server creates the preparing run, clear local dispatch so the
+    // send button does not stay stuck on a loading spinner.
     const localDispatch = createLocalDispatchSnapshot(makeThread());
     const preparingRun = {
       ...completedTurn,
@@ -717,7 +717,7 @@ describe("hasServerAcknowledgedLocalDispatch", () => {
         hasPendingUserInput: false,
         threadError: null,
       }),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("waits for the matching running turn before acknowledging", () => {

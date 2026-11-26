@@ -1260,13 +1260,6 @@ export function hasServerAcknowledgedLocalDispatch(input: {
   if (input.hasPendingApproval || input.hasPendingUserInput || Boolean(input.threadError)) {
     return true;
   }
-  // The thread shell can report a preparing or starting run before the detail
-  // projection behind `phase` loads, so either source still connecting holds
-  // the send.
-  if (input.phase === "connecting" || derivePhase(input.runtime ?? null) === "connecting") {
-    return false;
-  }
-
   const latestRun = input.latestRun ?? null;
   const runtime = input.runtime ?? null;
   const latestUserMessageChanged =
@@ -1276,6 +1269,13 @@ export function hasServerAcknowledgedLocalDispatch(input: {
     input.localDispatch.latestRunRequestedAt !== (latestRun?.requestedAt ?? null) ||
     input.localDispatch.latestRunStartedAt !== (latestRun?.startedAt ?? null) ||
     input.localDispatch.latestRunCompletedAt !== (latestRun?.completedAt ?? null);
+
+  // Even while the provider runtime is still in "connecting" (preparing/starting),
+  // once the server has recorded the new user message or run, clear local dispatch
+  // so the send button does not stay stuck on a spinner.
+  if (input.phase === "connecting" || derivePhase(input.runtime ?? null) === "connecting") {
+    return latestUserMessageChanged || latestRunChanged;
+  }
 
   if (input.phase === "running") {
     if (latestUserMessageChanged) {

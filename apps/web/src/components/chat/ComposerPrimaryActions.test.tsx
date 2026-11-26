@@ -88,11 +88,11 @@ describe("ComposerPrimaryActions", () => {
     expect(markup).toContain('aria-label="Sending feedback"');
   });
 
-  it("disables sending while the environment is reconnecting", () => {
-    const markup = renderSendButton(null, { isConnecting: true });
+  it("keeps sending enabled while the environment is reconnecting", () => {
+    const markup = renderSendButton(null, { isConnecting: true, isEnvironmentUnavailable: true });
 
-    expect(markup).toMatch(/<button[^>]*disabled=""[^>]*aria-label="Connecting"/);
-    expect(markup).toContain('aria-label="Connecting"');
+    expect(markup).toMatch(/<button[^>]*type="submit"[^>]*aria-label="Submit message"/);
+    expect(markup).not.toMatch(/<button[^>]*type="submit"[^>]*disabled=""/);
   });
 
   it("disables sending while the environment is offline", () => {
