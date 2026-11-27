@@ -23,31 +23,33 @@
 
         <section class="card">
           <div class="card-head">
-            <h2>💬 Live Model Test</h2>
-            <span class="hint">Koi bhi model chuno, message bhejo, response dekho</span>
+            <h2>💬 Chat</h2>
+            <span class="hint">429 aaye to auto IP + session reset karke dobara try</span>
           </div>
           <div class="form-row">
             <label for="modelSelect">🤖 Model <span class="muted" id="modelSource"></span></label>
             <div class="row">
               <select id="modelSelect"></select>
               <button class="btn ghost" id="reloadModels" title="Live models dobara load karein">🔄</button>
+              <button class="btn ghost" id="clearChat" title="Nayi conversation">🧹</button>
             </div>
+          </div>
+          <div class="chat" id="chat">
+            <div class="chat-empty" id="chatEmpty">💬 Chat shuru karein — pehla message bhejein</div>
+          </div>
+          <div class="auto-banner" id="resetBanner" hidden></div>
+          <div class="result-top chat-meta">
+            <span class="badge" id="statusBadge">— status</span>
+            <span class="chips" id="usageChips"></span>
           </div>
           <div class="form-row">
             <label for="messageInput">✉️ Message</label>
             <div class="row">
-              <input id="messageInput" type="text" placeholder="Replies strictly with PONG" value="Reply strictly with: PONG" />
+              <input id="messageInput" type="text" placeholder="Apna message likhein…" />
               <button class="btn primary" id="sendBtn">➤ Send</button>
             </div>
           </div>
-          <div class="result" id="result">
-            <div class="result-top">
-              <span class="badge" id="statusBadge">— status</span>
-              <span class="chips" id="usageChips"></span>
-            </div>
-            <pre id="responseBox">Response yahan dikhega…</pre>
-            <div class="error" id="errorBox"></div>
-          </div>
+          <div class="error" id="errorBox"></div>
         </section>
 
         <section class="card">
@@ -63,11 +65,31 @@
         <div class="sheet-head">
           <h2>⚙️ Settings &amp; Mechanism</h2>
           <div class="head-actions">
+            <button class="icon-btn" id="infoBtn" title="Setup info aur connections">ⓘ</button>
+            <button class="icon-btn" id="checkBtn" title="Sab checks chalayein">✅</button>
             <button class="icon-btn" id="themeBtn" title="Theme badlein">🌙</button>
             <button class="icon-btn" id="collapseBtn" title="Sheet band karein">›</button>
           </div>
         </div>
         <div class="sheet-body">
+          <div class="info-panel" id="infoPanel" hidden>
+            <h3>🧩 Kya kya connected hai (oc setup)</h3>
+            <ol>
+              <li>🌐 Browser → <b>oc.tokendeal.cloud</b> (Cloudflare DNS + SSL cert)</li>
+              <li>🧭 nginx vhost → <b>127.0.0.1:8791</b></li>
+              <li>⚙️ systemd <b>opencode-limit-reset-bypass.service</b> → server.mjs</li>
+              <li>💬 UI → <b>/api/chat</b> (conversation + auto reset on 429)</li>
+              <li>🔑 Bypass headers (UA 2.1.4 + canonical <b>ses_...</b>) → <b>opencode.ai</b> free lane</li>
+              <li>🔌 Egress: Privoxy <b>8118</b> → WARP SOCKS <b>40000</b></li>
+              <li>♻️ 429 par IP + session rotate karke <b>ek baar retry</b></li>
+              <li>📦 State: <b>data/state.json</b> · theme + autoReset browser me</li>
+            </ol>
+            <p class="muted">⚠️ WARP/Privoxy system-level services hain. Free limit account-wide ho to rotation ke baad bhi 429 reh sakta hai. Koi API key, official CLI ya port 4099 nahi chahiye.</p>
+          </div>
+          <div class="check-panel" id="checkPanel" hidden>
+            <h3>✅ System check</h3>
+            <div id="checkList" class="check-list"><span class="muted">Check chalane ke liye ✅ dabayein</span></div>
+          </div>
           <div class="pill-grid">
             <div class="pill" id="pillLimit"><span>🚦</span><b>Limit</b><em>unknown</em></div>
             <div class="pill" id="pillWarp"><span>🛡️</span><b>WARP</b><em>checking…</em></div>
@@ -82,6 +104,17 @@
             </div>
             <label class="switch">
               <input type="checkbox" id="enabledToggle" checked />
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="switch-row">
+            <div>
+              <b>♻️ Auto reset on 429</b>
+              <div class="muted" id="autoResetHint">limit full par IP + session ghuma kar retry</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="autoResetToggle" checked />
               <span class="slider"></span>
             </label>
           </div>

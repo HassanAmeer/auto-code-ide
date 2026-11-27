@@ -21,7 +21,7 @@ Env overrides: `OLRB_PORT`, `OLRB_HOST`, `OLRB_PROXY`, `OLRB_UPSTREAM`.
 | `POST /api/reset` | WARP IP rotate + naya canonical session; pehle/bad ka IP aur session, changed flags, duration |
 | `POST /api/toggle` | `{ "enabled": false }` se reset mechanism disable/enable |
 | `GET /api/models` | upstream se live model list (free models pehle), fallback list agar upstream na mile |
-| `POST /api/chat` | `{ "model": "...", "message": "..." }` → real HTTP status code, usage aur response text |
+| `POST /api/chat` | Chat screen ka endpoint. `{ "model": "...", "messages": [{role,content}...], "autoReset": true }`. 429 milte hi IP + session rotate karke ek dafa auto-retry karta hai; real HTTP status, usage, `resetPerformed` aur response deta hai |
 
 ## UI
 

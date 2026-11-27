@@ -1,6 +1,7 @@
 const $ = (id) => document.getElementById(id);
 let latest = null;
 let busy = false;
+let chatMessages = [];
 
 function savedTheme() {
   const stored = localStorage.getItem("olrb-theme");
@@ -27,6 +28,36 @@ function toggleTheme() {
 }
 
 applyTheme(savedTheme());
+
+function addBubble(role, text, meta = "") {
+  const empty = $("chatEmpty");
+  if (empty) empty.remove();
+  const bubble = document.createElement("div");
+  bubble.className = `bubble ${role}`;
+  bubble.textContent = text || "(khali response)";
+  if (meta) {
+    const small = document.createElement("small");
+    small.textContent = meta;
+    bubble.appendChild(small);
+  }
+  $("chat").appendChild(bubble);
+  $("chat").scrollTop = $("chat").scrollHeight;
+}
+
+function startNewChat() {
+  chatMessages = [];
+  $("chat").textContent = "";
+  const empty = document.createElement("div");
+  empty.className = "chat-empty";
+  empty.id = "chatEmpty";
+  empty.textContent = "💬 Chat shuru karein — pehla message bhejein";
+  $("chat").appendChild(empty);
+  $("resetBanner").hidden = true;
+  $("statusBadge").textContent = "— status";
+  $("statusBadge").className = "badge";
+  $("usageChips").textContent = "";
+  $("errorBox").textContent = "";
+}
 
 async function api(path, options = {}) {
   const res = await fetch(path, {
@@ -178,21 +209,30 @@ async function send() {
   const btn = $("sendBtn");
   btn.disabled = true;
   btn.textContent = "…";
-  $("responseBox").textContent = "Upstream se jawab aa raha hai…";
+  $("messageInput").value = "";
   $("errorBox").textContent = "";
   $("statusBadge").textContent = "⏳ calling…";
   $("statusBadge").className = "badge";
   $("usageChips").textContent = "";
+  addBubble("user", message);
+  chatMessages.push({ role: "user", content: message });
   try {
     const result = await api("/api/chat", {
       method: "POST",
-      body: JSON.stringify({ model, message }),
+      body: JSON.stringify({
+        model,
+        messages: chatMessages,
+        autoReset: $("autoResetToggle").checked,
+      }),
     });
+    chatMessages.push({ role: "assistant", content: result.response || "(khali response)" });
+    chatMessages = chatMessages.slice(-20);
+    const usage = result.usage || {};
+    const meta = `HTTP ${result.statusCode}${usage.total_tokens ?? usage.totalTokens ? ` · ${usage.total_tokens ?? usage.totalTokens} tokens` : ""}`;
+    addBubble(result.ok ? "assistant" : "error", result.response || result.error || "(khali response)", meta);
     $("statusBadge").textContent = `HTTP ${result.statusCode}`;
     $("statusBadge").className = `badge ${result.ok ? "ok" : "full"}`;
-    $("responseBox").textContent = result.response || "(khali response — upriver ne text nahi bheja)";
     $("errorBox").textContent = result.error || "";
-    const usage = result.usage || {};
     const chips = [
       `in: ${usage.prompt_tokens ?? usage.promptTokens ?? "?"}`,
       `out: ${usage.completion_tokens ?? usage.completionTokens ?? "?"}`,
@@ -204,9 +244,18 @@ async function send() {
       chip.textContent = label;
       $("usageChips").appendChild(chip);
     }
+    if (result.resetPerformed) {
+      const r = result.resetPerformed;
+      const banner = $("resetBanner");
+      banner.hidden = false;
+      banner.textContent = `♻️ 429 limit mili — auto reset hua: IP ${r.oldIp} → ${r.newIp}, naya session ${r.newSession} aur dobara retry kiya (HTTP ${result.statusCode}).`;
+    } else {
+      $("resetBanner").hidden = true;
+    }
     $("limitBadge").textContent = result.statusCode === 429 ? "🚫 Limit FULL" : result.ok ? "✅ Limit OK" : `⚠️ HTTP ${result.statusCode}`;
-    toast(result.ok ? "✅ Model jawab de gaya" : `❌ HTTP ${result.statusCode}`);
+    toast(result.ok ? "✅ Jawab mil gaya" : `❌ HTTP ${result.statusCode}`);
   } catch (e) {
+    addBubble("error", e.message);
     $("statusBadge").textContent = "❌ error";
     $("errorBox").textContent = e.message;
     toast(`Chat error: ${e.message}`);
@@ -245,8 +294,57 @@ async function toggleEnabled() {
   await refresh();
 }
 
+async function runSystemCheck() {
+  const panel = $("checkPanel");
+  panel.hidden = false;
+  const list = $("checkList");
+  list.textContent = "";
+  const loading = document.createElement("span");
+  loading.className = "muted";
+  loading.textContent = "⏳ Sab checks chal rahe hain…";
+  list.appendChild(loading);
+  try {
+    const data = await api("/api/check");
+    list.textContent = "";
+    for (const item of data.checks) {
+      const row = document.createElement("div");
+      row.className = `check-row ${item.ok ? "pass" : "fail"}`;
+      const icon = document.createElement("span");
+      icon.className = "icon";
+      icon.textContent = item.ok ? "✅" : "❌";
+      const label = document.createElement("span");
+      label.textContent = item.label;
+      const detail = document.createElement("span");
+      detail.className = "detail";
+      detail.textContent = item.detail;
+      row.append(icon, label, detail);
+      list.appendChild(row);
+    }
+    const failed = data.checks.filter((c) => !c.ok).length;
+    toast(failed ? `⚠️ ${failed} check fail` : "✅ Sab checks pass");
+  } catch (e) {
+    list.textContent = "";
+    const err = document.createElement("span");
+    err.className = "muted";
+    err.textContent = `❌ Check error: ${e.message}`;
+    list.appendChild(err);
+    toast(`Check error: ${e.message}`);
+  }
+}
+
+$("infoBtn").addEventListener("click", () => {
+  const panel = $("infoPanel");
+  panel.hidden = !panel.hidden;
+});
+$("checkBtn").addEventListener("click", runSystemCheck);
 $("themeBtn").addEventListener("click", toggleTheme);
 $("themeBtnTop").addEventListener("click", toggleTheme);
+$("autoResetToggle").checked = localStorage.getItem("olrb-auto-reset") !== "false";
+$("autoResetToggle").addEventListener("change", () => {
+  localStorage.setItem("olrb-auto-reset", String($("autoResetToggle").checked));
+  toast($("autoResetToggle").checked ? "♻️ Auto reset on" : "⏸️ Auto reset off");
+});
+$("clearChat").addEventListener("click", startNewChat);
 $("sendBtn").addEventListener("click", send);
 $("messageInput").addEventListener("keydown", (e) => {
   if (e.key === "Enter") send();

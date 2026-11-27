@@ -259,13 +259,15 @@ function bypassHeaders(session, stream = true) {
   ];
 }
 
-async function testModel(model, message, session, onChild = null) {
+async function testModel(model, messages, session, onChild = null) {
   const useProxy = await proxyAvailable();
+  const systemNote =
+    "IMPORTANT: You are in direct conversational code generation mode. Do NOT invoke any tools (like `read` or `shell`). Instead, write and present the complete code, solution and explanations directly in your text response.";
   const body = JSON.stringify({
     model,
     max_tokens: 512,
     stream: true,
-    messages: [{ role: "user", content: message }],
+    messages: [{ role: "system", content: systemNote }, ...messages],
     tools: TOOLS.map((t) => ({ type: "function", function: t })),
   });
   const args = curlArgs(CHAT_URL, {
@@ -369,8 +371,7 @@ function readBody(req) {
   });
 }
 
-async function handleReset(res) {
-  if (!state.enabled) return json(res, { ok: false, error: "Reset mechanism disabled" }, 409);
+async function rotateAndReset() {
   const started = Date.now();
   const oldSession = state.session;
   const oldIp = await getEgressIp();
@@ -395,7 +396,60 @@ async function handleReset(res) {
   state.lastReset = record;
   pushHistory(record);
   saveState();
+  return record;
+}
+
+async function handleReset(res) {
+  if (!state.enabled) return json(res, { ok: false, error: "Reset mechanism disabled" }, 409);
+  const record = await rotateAndReset();
   return json(res, { ok: record.ok, ...record });
+}
+
+function certCheck() {
+  const r = spawnSync(
+    "openssl",
+    ["x509", "-in", "/etc/letsencrypt/live/oc.tokendeal.cloud/fullchain.pem", "-noout", "-enddate"],
+    { encoding: "utf8", timeout: 3000 },
+  );
+  const match = (r.stdout || "").match(/notAfter=(.+)/);
+  if (!match?.[1]) return { ok: false, detail: "cert nahi mila" };
+  const days = Math.floor((Date.parse(match[1].trim()) - Date.now()) / 86400000);
+  return { ok: days > 5, detail: `${days} din baqi` };
+}
+
+async function runChecks() {
+  const checks = [];
+  const add = (id, label, ok, detail) => checks.push({ id, label, ok: Boolean(ok), detail });
+  const [proxy, socksOpen, warp, ip] = await Promise.all([
+    proxyAvailable(),
+    portOpen("127.0.0.1", 40000),
+    Promise.resolve(warpStatus()),
+    getEgressIp(),
+  ]);
+  const nginxFile = "/etc/nginx/sites-enabled/oc.tokendeal.cloud";
+  let nginxOk = false;
+  try {
+    nginxOk = fs.readFileSync(nginxFile, "utf8").includes("127.0.0.1:8791");
+  } catch {}
+  add("server", "Node service /api check", true, "server.mjs jawab de raha hai");
+  add("nginx", "nginx vhost oc.tokendeal.cloud", nginxOk, nginxOk ? "→ 127.0.0.1:8791" : "vhost ya proxy missing");
+  const cert = certCheck();
+  add("cert", "SSL certificate", cert.ok, cert.detail);
+  add("proxy", "Privoxy HTTP 8118", proxy, proxy ? PROXY : "offline");
+  add("warp", "Cloudflare WARP", warp.connected, warp.text);
+  add("socks", "WARP SOCKS 40000", socksOpen, socksOpen ? "listening" : "band");
+  add("ip", "Egress IP", ip && ip !== "unknown", ip);
+  add("session", "Canonical session", isCanonical(state.session), state.session);
+  const upstream = await run(
+    "curl",
+    curlArgs(MODELS_URL, { headers: bypassHeaders(state.session, false), timeout: 12, proxy }),
+    { timeout: 15000 },
+  );
+  const upstreamStatus = splitStatus(upstream.out).status;
+  add("upstream", "opencode.ai free lane", upstreamStatus === 200, `HTTP ${upstreamStatus}`);
+  add("resetScript", "WARP rotate script", fs.existsSync(path.join(SCRIPTS, "warp-rotate.sh")), "scripts/warp-rotate.sh");
+  add("autoReset", "Reset mechanism", state.enabled, state.enabled ? "enabled" : "disabled");
+  return { ok: checks.every((c) => c.ok), checks };
 }
 
 const MIME = { ".html": "text/html", ".css": "text/css", ".js": "text/javascript", ".json": "application/json" };
@@ -403,6 +457,7 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
   try {
     if (url.pathname === "/api/status") return json(res, await statusPayload());
+    if (url.pathname === "/api/check") return json(res, await runChecks());
     if (url.pathname === "/api/models") return json(res, await loadModels());
     if (url.pathname === "/api/reset" && req.method === "POST") return await handleReset(res);
     if (url.pathname === "/api/toggle" && req.method === "POST") {
@@ -414,11 +469,27 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === "/api/chat" && req.method === "POST") {
       const body = await readBody(req);
       const model = String(body.model || "").trim();
-      const message = String(body.message || "").trim();
-      if (!model || !message) return json(res, { ok: false, error: "model and message are required" }, 400);
+      const rawMessages = Array.isArray(body.messages)
+        ? body.messages
+        : [{ role: "user", content: body.message }];
+      const messages = rawMessages
+        .slice(-20)
+        .map((m) => ({
+          role: ["user", "assistant", "system"].includes(m?.role) ? m.role : "user",
+          content: String(m?.content || "").slice(0, 8000),
+        }))
+        .filter((m) => m.content);
+      if (!model || !messages.length) {
+        return json(res, { ok: false, error: "model and message are required" }, 400);
+      }
       let child = null;
       req.on("aborted", () => child?.kill("SIGKILL"));
-      const result = await testModel(model, message, state.session, (c) => (child = c));
+      let result = await testModel(model, messages, state.session, (c) => (child = c));
+      let resetPerformed = null;
+      if (result.statusCode === 429 && state.enabled && body.autoReset !== false) {
+        resetPerformed = await rotateAndReset();
+        result = await testModel(model, messages, state.session, (c) => (child = c));
+      }
       const record = {
         type: "test",
         at: new Date().toISOString(),
@@ -426,11 +497,17 @@ const server = http.createServer(async (req, res) => {
         model,
         statusCode: result.statusCode,
         usage: result.usage,
+        autoReset: Boolean(resetPerformed),
       };
       state.lastTest = record;
       pushHistory(record);
       saveState();
-      return json(res, { ...result, session: state.session, at: new Date().toISOString() });
+      return json(res, {
+        ...result,
+        session: state.session,
+        resetPerformed,
+        at: new Date().toISOString(),
+      });
     }
 
     const rel = url.pathname === "/" ? "index.html" : url.pathname.replace(/^\/+/, "");

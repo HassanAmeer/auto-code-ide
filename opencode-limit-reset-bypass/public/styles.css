@@ -86,6 +86,15 @@ input:focus, select:focus { border-color: var(--accent); }
 .chip { background: var(--card-2); border: 1px solid var(--line); border-radius: 999px; padding: 3px 9px; font-size: 11px; color: var(--muted); }
 pre { margin: 0; white-space: pre-wrap; word-break: break-word; font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--code-fg); max-height: 300px; overflow: auto; }
 .error { color: var(--bad); font-size: 12px; margin-top: 8px; white-space: pre-wrap; }
+.chat { background: var(--panel-bg); border: 1px solid var(--line); border-radius: 12px; padding: 14px; height: 320px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+.chat-empty { color: var(--muted); font-size: 13px; margin: auto; }
+.bubble { max-width: 86%; border-radius: 12px; padding: 9px 12px; font-size: 13px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
+.bubble.user { align-self: flex-end; background: var(--accent); color: var(--accent-fg); border-bottom-right-radius: 4px; }
+.bubble.assistant { align-self: flex-start; background: var(--card-2); color: var(--fg); border-bottom-left-radius: 4px; }
+.bubble.error { align-self: flex-start; background: transparent; color: var(--bad); border: 1px solid var(--bad); }
+.bubble small { display: block; opacity: .75; font-size: 10px; margin-top: 4px; }
+.auto-banner { margin-top: 10px; border: 1px solid var(--warn); color: var(--warn); background: var(--card-2); border-radius: 10px; padding: 8px 12px; font-size: 12px; }
+.chat-meta { margin-top: 10px; }
 .log { display: flex; flex-direction: column; gap: 8px; max-height: 260px; overflow: auto; }
 .log-item { display: flex; gap: 10px; align-items: baseline; background: var(--input-bg); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; font-size: 12px; }
 .log-item time { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -100,6 +109,19 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; font: 13px/1.6 u
 .head-actions { display: flex; gap: 6px; }
 .icon-btn { background: transparent; color: var(--fg); border: 1px solid var(--line); border-radius: 8px; width: 30px; height: 30px; cursor: pointer; }
 .sheet-body { padding: 18px; }
+.info-panel, .check-panel { background: var(--card-2); border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 14px; }
+.info-panel h3, .check-panel h3 { margin: 0 0 8px; font-size: 13px; }
+.info-panel ol { margin: 0; padding-left: 18px; display: grid; gap: 5px; }
+.info-panel li { font-size: 11.5px; color: var(--muted); line-height: 1.45; }
+.info-panel li b { color: var(--fg); }
+.info-panel p { margin: 9px 0 0; font-size: 11px; line-height: 1.5; }
+.check-list { display: grid; gap: 4px; }
+.check-row { display: flex; gap: 8px; align-items: baseline; font-size: 11.5px; padding: 3px 0; border-bottom: 1px solid var(--line); }
+.check-row:last-child { border-bottom: 0; }
+.check-row .icon { width: 14px; flex: none; }
+.check-row.pass { color: var(--good); }
+.check-row.fail { color: var(--bad); }
+.check-row .detail { margin-left: auto; color: var(--muted); font-size: 10.5px; text-align: right; word-break: break-all; }
 .pill-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
 .pill { background: var(--card-2); border: 1px solid var(--line); border-radius: 12px; padding: 10px; display: grid; gap: 2px; }
 .pill span { font-size: 16px; }
