@@ -90,6 +90,7 @@
               <li>🔑 Bypass headers (UA 2.1.4 + canonical <b>ses_...</b>) → <b>opencode.ai</b> free lane</li>
               <li>🔌 Egress: Privoxy <b>8118</b> → WARP SOCKS <b>40000</b> · Start/Pause/Stop controls sheet me</li>
               <li>♻️ 429 par <b>WARP IP + canonical session</b> dono rotate karke ek baar retry — <b>bilkol bot jaisa flow</b></li>
+              <li>⏳ Phir bhi 429 ho to upstream ka <b>retry-after</b> padh kar message us waqt <b>auto-resume</b> karke bhej diya jata hai</li>
               <li>📦 State: <b>data/state.json</b> · theme + autoReset browser me</li>
             </ol>
             <p class="muted">⚠️ Ye bot ka exact flow hai. WARP/Privoxy system-level services hain, isliye IP rotation VPS ke doosre services ke egress ko bhi badal sakta hai. Session aur state isi oc folder me alag rehte hain.</p>
@@ -112,6 +113,17 @@
             </div>
             <label class="switch">
               <input type="checkbox" id="enabledToggle" checked />
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="switch-row">
+            <div>
+              <b>⏳ Auto-resume after reset</b>
+              <div class="muted" id="autoResumeHint">limit reset waqt mesage khud bhej dega</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="autoResumeToggle" checked />
               <span class="slider"></span>
             </label>
           </div>

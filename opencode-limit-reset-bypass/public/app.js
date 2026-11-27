@@ -2,6 +2,35 @@ const $ = (id) => document.getElementById(id);
 let latest = null;
 let busy = false;
 let chatMessages = [];
+let resumeTimer = null;
+
+function scheduleAutoResume(result) {
+  if (!result.resetAt || !$("autoResumeToggle").checked) return;
+  clearTimeout(resumeTimer);
+  const pending = {
+    model: $("modelSelect").value,
+    messages: chatMessages.slice(0, -1),
+    last: chatMessages.at(-1)?.content || "",
+    resetAt: result.resetAt,
+  };
+  localStorage.setItem("olrb-pending", JSON.stringify(pending));
+  const delay = Math.max(4000, Date.parse(result.resetAt) - Date.now() + 5000);
+  resumeTimer = setTimeout(() => runPending(), delay);
+}
+
+function runPending() {
+  const raw = localStorage.getItem("olrb-pending");
+  if (!raw) return;
+  try {
+    const p = JSON.parse(raw);
+    localStorage.removeItem("olrb-pending");
+    chatMessages = Array.isArray(p.messages) ? p.messages : [];
+    if (p.model) $("modelSelect").value = p.model;
+    $("messageInput").value = p.last || "";
+    toast("⏳ Limit reset ho gaya — auto-resume kar rahe hain");
+    send();
+  } catch {}
+}
 
 function savedTheme() {
   const stored = localStorage.getItem("olrb-theme");
@@ -308,6 +337,12 @@ async function send() {
     } else {
       banner.hidden = true;
     }
+    if (result.ok) {
+      localStorage.removeItem("olrb-pending");
+      clearTimeout(resumeTimer);
+    } else {
+      scheduleAutoResume(result);
+    }
     $("limitBadge").textContent = result.statusCode === 429 ? "🚫 Limit FULL" : result.ok ? "✅ Limit OK" : `⚠️ HTTP ${result.statusCode}`;
     toast(result.ok ? "✅ Jawab mil gaya" : `❌ HTTP ${result.statusCode}`);
   } catch (e) {
@@ -408,6 +443,19 @@ $("infoBtn").addEventListener("click", () => {
 $("checkBtn").addEventListener("click", runSystemCheck);
 $("themeBtn").addEventListener("click", toggleTheme);
 $("themeBtnTop").addEventListener("click", toggleTheme);
+$("autoResumeToggle").checked = localStorage.getItem("olrb-auto-resume") !== "false";
+$("autoResumeToggle").addEventListener("change", () => {
+  localStorage.setItem("olrb-auto-resume", String($("autoResumeToggle").checked));
+  toast($("autoResumeToggle").checked ? "⏳ Auto-resume on" : "⏸️ Auto-resume off");
+});
+const storedPending = localStorage.getItem("olrb-pending");
+if (storedPending && $("autoResumeToggle").checked) {
+  try {
+    const p = JSON.parse(storedPending);
+    const delay = Math.max(4000, Date.parse(p.resetAt) - Date.now() + 5000);
+    resumeTimer = setTimeout(runPending, delay);
+  } catch {}
+}
 $("autoResetToggle").checked = localStorage.getItem("olrb-auto-reset") !== "false";
 $("autoResetToggle").addEventListener("change", () => {
   localStorage.setItem("olrb-auto-reset", String($("autoResetToggle").checked));
