@@ -32,32 +32,6 @@ function runPending() {
   } catch {}
 }
 
-function savedTheme() {
-  const stored = localStorage.getItem("olrb-theme");
-  if (stored === "light" || stored === "dark") return stored;
-  return window.matchMedia?.("(prefers-color-scheme: light)").matches ? "light" : "dark";
-}
-
-function applyTheme(theme) {
-  document.documentElement.dataset.theme = theme;
-  const icon = theme === "dark" ? "☀️" : "🌙";
-  const title = theme === "dark" ? "Light mode par jayein" : "Dark mode par jayein";
-  for (const id of ["themeBtn", "themeBtnTop"]) {
-    const button = $(id);
-    if (!button) continue;
-    button.textContent = icon;
-    button.title = title;
-  }
-}
-
-function toggleTheme() {
-  const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
-  localStorage.setItem("olrb-theme", next);
-  applyTheme(next);
-}
-
-applyTheme(savedTheme());
-
 function addBubble(role, text, meta = "") {
   const empty = $("chatEmpty");
   if (empty) empty.remove();
@@ -441,8 +415,6 @@ $("infoBtn").addEventListener("click", () => {
   panel.hidden = !panel.hidden;
 });
 $("checkBtn").addEventListener("click", runSystemCheck);
-$("themeBtn").addEventListener("click", toggleTheme);
-$("themeBtnTop").addEventListener("click", toggleTheme);
 $("autoResumeToggle").checked = localStorage.getItem("olrb-auto-resume") !== "false";
 $("autoResumeToggle").addEventListener("change", () => {
   localStorage.setItem("olrb-auto-resume", String($("autoResumeToggle").checked));
@@ -489,7 +461,6 @@ $("openSheet").addEventListener("click", () => {
   $("sheet").classList.remove("closed");
   $("app").classList.remove("sheet-closed");
 });
-$("openBtn").addEventListener("click", () => window.open("https://github.com/HassanAmeer/auto-code-ide/tree/opencode-limit-reset-bypass/opencode-limit-reset-bypass", "_blank", "noopener"));
 
 refresh();
 loadModels();

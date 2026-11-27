@@ -20,28 +20,6 @@
   --switch-off: #3a4568;
   --shadow: rgba(0, 0, 0, .22);
 }
-:root[data-theme="light"] {
-  --bg: #f4f6fc;
-  --card: #ffffff;
-  --card-2: #eef1fa;
-  --line: #d8def0;
-  --fg: #16203a;
-  --muted: #63708e;
-  --accent: #4f5fd6;
-  --good: #0f9d70;
-  --bad: #d92d50;
-  --warn: #b47505;
-  --bg-glow: #dce3fb;
-  --card-end: #ffffff;
-  --input-bg: #f8faff;
-  --panel-bg: #f7f9ff;
-  --sheet-start: #ffffff;
-  --sheet-end: #f7f9ff;
-  --code-fg: #23305a;
-  --accent-fg: #ffffff;
-  --switch-off: #b9c2d8;
-  --shadow: rgba(30, 40, 80, .10);
-}
 * { box-sizing: border-box; }
 body {
   margin: 0;
