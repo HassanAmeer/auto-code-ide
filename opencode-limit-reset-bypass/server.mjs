@@ -4,10 +4,8 @@ import path from "node:path";
 import net from "node:net";
 import crypto from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
-import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
-const nodeRequire = createRequire(import.meta.url);
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(ROOT, "public");
@@ -322,123 +320,6 @@ async function loadModels() {
   return { models: FALLBACK_MODELS.map((id) => ({ id, name: id })), source: "fallback" };
 }
 
-const FAILOVER_ORDER = ["td", "OpenRouter", "wusrouter", "vpsm"];
-let freeRoutesCache = null;
-let freeRoutesAt = 0;
-
-function readFreeRoutes() {
-  if (freeRoutesCache && Date.now() - freeRoutesAt < 30_000) return freeRoutesCache;
-  let sqlite;
-  try {
-    sqlite = nodeRequire("node:sqlite");
-  } catch {
-    return [];
-  }
-  if (!sqlite?.DatabaseSync) return [];
-  const homes = [
-    process.env.AUTOCODE_HOME,
-    process.env.T3CODE_BASE_DIR,
-    process.env.T3CODE_HOME,
-    "/root/autojobs/data",
-    "/root/bot-autojobs/data",
-  ].filter((v) => typeof v === "string" && v.trim().length > 0);
-  for (const home of homes) {
-    for (const dbPath of [
-      path.join(home, "userdata", "statev2.sqlite"),
-      path.join(home, "statev2.sqlite"),
-    ]) {
-      if (!fs.existsSync(dbPath)) continue;
-      try {
-        const db = new sqlite.DatabaseSync(dbPath, { readOnly: true });
-        const rows = db
-          .prepare("SELECT name, base_url, api_key, headers, models, enabled FROM app_custom_providers")
-          .all();
-        db.close();
-        const routes = [];
-        for (const row of rows) {
-          if (!row.enabled || !row.base_url || !row.api_key) continue;
-          let models = [];
-          try {
-            const parsed = JSON.parse(row.models || "[]");
-            models = parsed
-              .map((m) => (typeof m === "string" ? m : m?.id))
-              .filter((m) => typeof m === "string" && m);
-          } catch {}
-          let headers = {};
-          try {
-            const parsed = JSON.parse(row.headers || "[]");
-            for (const h of parsed) {
-              if (h?.key && typeof h.value === "string") headers[h.key] = h.value;
-            }
-          } catch {}
-          const freeModels = models.filter((m) => /free/i.test(m));
-          if (!freeModels.length) continue;
-          routes.push({
-            name: String(row.name || ""),
-            baseUrl: String(row.base_url).replace(/\/+$/, ""),
-            apiKey: String(row.api_key),
-            headers,
-            freeModels,
-          });
-        }
-        freeRoutesCache = routes;
-        freeRoutesAt = Date.now();
-        return routes;
-      } catch {}
-    }
-  }
-  return [];
-}
-
-function freeRouteCandidates() {
-  const routes = readFreeRoutes();
-  const ordered = [
-    ...FAILOVER_ORDER.map((name) => routes.find((r) => r.name === name)).filter(Boolean),
-    ...routes.filter((r) => !FAILOVER_ORDER.includes(r.name)),
-  ];
-  return ordered
-    .filter((r) => r.freeModels.length)
-    .map((route) => ({ route, model: route.freeModels[0] }))
-    .slice(0, 4);
-}
-
-function pickFreeRoute() {
-  return freeRouteCandidates()[0] || null;
-}
-
-async function callFreeRoute(selection, messages) {
-  const useProxy = await proxyAvailable();
-  const headers = [
-    "content-type: application/json",
-    `authorization: Bearer ${selection.route.apiKey}`,
-    ...Object.entries(selection.route.headers).map(([k, v]) => `${k}: ${v}`),
-  ];
-  const args = curlArgs(`${selection.route.baseUrl}/chat/completions`, {
-    method: "POST",
-    headers,
-    timeout: 25,
-    proxy: useProxy,
-  });
-  args.splice(args.indexOf("-w"), 0, "--data-binary", "@-");
-  const body = JSON.stringify({ model: selection.model, messages, stream: false, max_tokens: 512 });
-  const r = await run("curl", args, { timeout: 30000, input: body });
-  const { body: raw, status } = splitStatus(r.out);
-  try {
-    const j = JSON.parse(raw);
-    const text = j?.choices?.[0]?.message?.content ?? j?.choices?.[0]?.text ?? "";
-    return {
-      ok: status === 200 && Boolean(text),
-      statusCode: status,
-      response: text,
-      usage: j?.usage || null,
-      error: j?.error?.message || "",
-      raw: raw.trim().slice(0, 2000),
-    };
-  } catch {
-    return { ok: false, statusCode: status, response: "", usage: null, error: raw.slice(0, 500) };
-  }
-}
-
 async function statusPayload() {
   const [ip, warp, proxy] = await Promise.all([getEgressIp(), Promise.resolve(warpStatus()), proxyAvailable()]);
   const limitState =
@@ -566,13 +447,6 @@ async function runChecks() {
   const upstreamStatus = splitStatus(upstream.out).status;
   add("upstream", "opencode.ai free lane", upstreamStatus === 200, `HTTP ${upstreamStatus}`);
   add("sessionGen", "Local session generator", isCanonical(mintSession()), "naya ses_... mint ho sakta hai");
-  const freeRoute = pickFreeRoute();
-  add(
-    "freeRoute",
-    "Free provider failover",
-    Boolean(freeRoute),
-    freeRoute ? `${freeRoute.route.name} → ${freeRoute.model}` : "koi free route configured nahi",
-  );
   add("autoReset", "Reset mechanism", state.enabled, state.enabled ? "enabled" : "disabled");
   return { ok: checks.every((c) => c.ok), checks };
 }
@@ -611,39 +485,18 @@ const server = http.createServer(async (req, res) => {
       req.on("aborted", () => child?.kill("SIGKILL"));
       let result = await testModel(model, messages, state.session, (c) => (child = c));
       let resetPerformed = null;
-      let failover = null;
-      let failoverError = null;
       if (result.statusCode === 429 && state.enabled && body.autoReset !== false) {
         resetPerformed = await resetSessionOnly();
         result = await testModel(model, messages, state.session, (c) => (child = c));
-        if (result.statusCode === 429) {
-          const candidates = freeRouteCandidates();
-          const errors = [];
-          for (const selection of candidates) {
-            const alt = await callFreeRoute(selection, messages);
-            if (alt.ok) {
-              failover = { provider: selection.route.name, model: selection.model };
-              result = { ...alt, done: true };
-              break;
-            }
-            errors.push(`${selection.route.name}: HTTP ${alt.statusCode}`.slice(0, 60));
-          }
-          failoverError = failover
-            ? null
-            : errors.length
-              ? errors.join(" | ").slice(0, 300)
-              : "Koi configured free provider route nahi mila";
-        }
       }
       const record = {
         type: "test",
         at: new Date().toISOString(),
         ok: result.ok,
-        model: failover?.model || model,
+        model,
         statusCode: result.statusCode,
         usage: result.usage,
         autoReset: Boolean(resetPerformed),
-        failover,
       };
       state.lastTest = record;
       pushHistory(record);
@@ -652,8 +505,6 @@ const server = http.createServer(async (req, res) => {
         ...result,
         session: state.session,
         resetPerformed,
-        failover,
-        failoverError,
         at: new Date().toISOString(),
       });
     }
