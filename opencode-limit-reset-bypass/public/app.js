@@ -332,6 +332,19 @@ async function runSystemCheck() {
   }
 }
 
+async function controlWarp(action) {
+  try {
+    const result = await api(`/api/warp/${action}`, { method: "POST" });
+    toast(result.ok ? `🛡️ WARP ${action} ho gaya` : `⚠️ WARP ${action} fail`);
+  } catch (e) {
+    toast(`WARP error: ${e.message}`);
+  }
+  await refresh();
+}
+
+$("warpStart").addEventListener("click", () => controlWarp("start"));
+$("warpPause").addEventListener("click", () => controlWarp("pause"));
+$("warpStop").addEventListener("click", () => controlWarp("stop"));
 $("infoBtn").addEventListener("click", () => {
   const panel = $("infoPanel");
   panel.hidden = !panel.hidden;

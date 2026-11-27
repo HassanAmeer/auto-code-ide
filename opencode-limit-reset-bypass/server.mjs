@@ -456,6 +456,14 @@ async function runChecks() {
     fs.existsSync(path.join(SCRIPTS, "warp-rotate.sh")),
     "scripts/warp-rotate.sh",
   );
+  add(
+    "warpControls",
+    "WARP start/pause/stop",
+    ["warp-start.sh", "warp-pause.sh", "warp-stop.sh"].every((f) =>
+      fs.existsSync(path.join(SCRIPTS, f)),
+    ),
+    "3 scripts",
+  );
   add("autoReset", "Reset mechanism", state.enabled, state.enabled ? "enabled" : "disabled");
   return { ok: checks.every((c) => c.ok), checks };
 }
@@ -468,6 +476,18 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === "/api/check") return json(res, await runChecks());
     if (url.pathname === "/api/models") return json(res, await loadModels());
     if (url.pathname === "/api/reset" && req.method === "POST") return await handleReset(res);
+    if (url.pathname.startsWith("/api/warp/") && req.method === "POST") {
+      const action = url.pathname.split("/").pop();
+      const scriptMap = {
+        start: "warp-start.sh",
+        pause: "warp-pause.sh",
+        stop: "warp-stop.sh",
+      };
+      const script = scriptMap[action];
+      if (!script) return json(res, { ok: false, error: "Unknown WARP action" }, 404);
+      const r = await run("bash", [path.join(SCRIPTS, script)], { timeout: 30000 });
+      return json(res, { ok: r.code === 0, action, output: r.out.trim().slice(0, 500) });
+    }
     if (url.pathname === "/api/toggle" && req.method === "POST") {
       const body = await readBody(req);
       state.enabled = body.enabled !== false;

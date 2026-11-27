@@ -80,7 +80,7 @@
               <li>⚙️ systemd <b>opencode-limit-reset-bypass.service</b> → server.mjs</li>
               <li>💬 UI → <b>/api/chat</b> (conversation + auto reset on 429)</li>
               <li>🔑 Bypass headers (UA 2.1.4 + canonical <b>ses_...</b>) → <b>opencode.ai</b> free lane</li>
-              <li>🔌 Egress: Privoxy <b>8118</b> → WARP SOCKS <b>40000</b></li>
+              <li>🔌 Egress: Privoxy <b>8118</b> → WARP SOCKS <b>40000</b> · Start/Pause/Stop controls sheet me</li>
               <li>♻️ 429 par <b>WARP IP + canonical session</b> dono rotate karke ek baar retry — <b>bilkol bot jaisa flow</b></li>
               <li>📦 State: <b>data/state.json</b> · theme + autoReset browser me</li>
             </ol>
@@ -133,6 +133,15 @@
             <div class="btn-pair">
               <button class="btn ghost" id="refreshBtn">🔄 Refresh</button>
               <button class="btn ghost" id="openBtn">📂 Folder</button>
+            </div>
+          </div>
+
+          <div class="warp-controls">
+            <h3>🛡️ Cloud WARP controls</h3>
+            <div class="btn-pair">
+              <button class="btn ghost" id="warpStart">▶ Start</button>
+              <button class="btn ghost" id="warpPause">⏸ Pause</button>
+              <button class="btn ghost" id="warpStop">⏹ Stop</button>
             </div>
           </div>
 

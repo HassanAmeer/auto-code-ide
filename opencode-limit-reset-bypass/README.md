@@ -21,7 +21,8 @@ Env overrides: `OLRB_PORT`, `OLRB_HOST`, `OLRB_PROXY`, `OLRB_UPSTREAM`.
 | `POST /api/reset` | Bot jaisa flow: WARP IP rotate + naya canonical session. Purana/naya IP aur session, `ipChanged`/`sessionChanged`, duration |
 | `POST /api/toggle` | `{ "enabled": false }` se reset mechanism disable/enable |
 | `GET /api/models` | upstream se live model list (free models pehle), fallback list agar upstream na mile |
-| `GET /api/check` | 12-point system check (nginx, cert, proxy, WARP status, upstream, session generator…) |
+| `POST /api/warp/{start\|pause\|stop}` | Cloudflare WARP controls (bot settings jaisa) |
+| `GET /api/check` | 13-point system check (nginx, cert, proxy, WARP status + controls, upstream, session generator…) |
 | `POST /api/chat` | Chat screen ka endpoint. `{ "model": "...", "messages": [{role,content}...], "autoReset": true }`. 429 milte hi WARP IP + session rotate karke ek dafa auto-retry (bot ka exact flow). Real HTTP status, usage, `resetPerformed` aur response deta hai |
 
 ## UI
