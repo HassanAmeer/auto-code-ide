@@ -23,7 +23,7 @@ Env overrides: `OLRB_PORT`, `OLRB_HOST`, `OLRB_PROXY`, `OLRB_UPSTREAM`.
 | `GET /api/models` | upstream se live model list (free models pehle), fallback list agar upstream na mile |
 | `POST /api/warp/{start\|pause\|stop}` | Cloudflare WARP controls (bot settings jaisa) |
 | `GET /api/check` | 13-point system check (nginx, cert, proxy, WARP status + controls, upstream, session generator…) |
-| `POST /api/chat` | Chat screen ka endpoint. `{ "model": "...", "messages": [{role,content}...], "autoReset": true }`. 429 milte hi WARP IP + session rotate karke ek dafa auto-retry (bot ka exact flow). Real HTTP status, usage, `resetPerformed` aur response deta hai |
+| `POST /api/chat` | Chat screen ka endpoint. `{ "model": "...", "messages": [{role,content}...], "autoReset": true }`. Bot ka exact flow: model configured custom upstream par route hota hai (modelRoute), warna opencode.ai free lane → 429 par WARP IP + session rotate + retry. Real HTTP status, usage, `route`, `resetPerformed` aur response deta hai |
 
 ## UI
 

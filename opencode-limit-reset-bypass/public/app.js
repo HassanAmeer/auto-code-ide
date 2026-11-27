@@ -163,7 +163,7 @@ function renderAiLogs(entries = []) {
     const tokens = usage
       ? `${usage.prompt_tokens ?? usage.promptTokens ?? "?"}/${usage.completion_tokens ?? usage.completionTokens ?? "?"}`
       : "?";
-    detail.textContent = `${entry.model || "model"} · HTTP ${entry.statusCode} · ${entry.durationMs ?? "?"}ms · tokens ${tokens} · ${entry.autoReset ? "♻️ reset " : ""}${entry.responseSnippet || ""}`;
+    detail.textContent = `${entry.route ? `⚡ ${entry.route.provider}/` : ""}${entry.model || "model"} · HTTP ${entry.statusCode} · ${entry.durationMs ?? "?"}ms · tokens ${tokens} · ${entry.autoReset ? "♻️ reset " : ""}${entry.responseSnippet || ""}`;
     row.append(time, badge, detail);
     box.appendChild(row);
   }
@@ -301,7 +301,10 @@ async function send() {
       $("usageChips").appendChild(chip);
     }
     const banner = $("resetBanner");
-    if (result.resetPerformed) {
+    if (result.route) {
+      banner.hidden = false;
+      banner.textContent = `⚡ Model ${result.route.model} apne configured upstream (${result.route.provider}) par bheja gaya — jawab mil gaya. Ye bot ka modelRoute flow hai.`;
+    } else if (result.resetPerformed) {
       const r = result.resetPerformed;
       banner.hidden = false;
       banner.textContent = `♻️ 429 limit mili — WARP IP ${r.oldIp} → ${r.newIp} aur session ${r.oldSession} → ${r.newSession} rotate kiya, dobara retry (HTTP ${result.statusCode}).`;

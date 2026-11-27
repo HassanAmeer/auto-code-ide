@@ -5,6 +5,7 @@ import net from "node:net";
 import crypto from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { resolveCustomRoute, customModelEntries } from "./customRoute.mjs";
 
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -315,6 +316,40 @@ async function testModel(model, messages, session, onChild = null) {
   };
 }
 
+async function callCustomRoute(route, messages) {
+  const useProxy = await proxyAvailable();
+  const headers = [
+    "content-type: application/json",
+    `authorization: Bearer ${route.apiKey}`,
+    ...Object.entries(route.headers).map(([k, v]) => `${k}: ${v}`),
+  ];
+  const args = curlArgs(`${route.baseUrl}/chat/completions`, {
+    method: "POST",
+    headers,
+    timeout: 45,
+    proxy: useProxy,
+  });
+  args.splice(args.indexOf("-w"), 0, "--data-binary", "@-");
+  const body = JSON.stringify({ model: route.model, messages, stream: false, max_tokens: 512 });
+  const r = await run("curl", args, { timeout: 50000, input: body });
+  const { body: raw, status } = splitStatus(r.out);
+  try {
+    const j = JSON.parse(raw);
+    const text = j?.choices?.[0]?.message?.content ?? j?.choices?.[0]?.text ?? "";
+    return {
+      ok: status === 200 && Boolean(text),
+      statusCode: status,
+      response: text,
+      usage: j?.usage || null,
+      error: j?.error?.message || "",
+      raw: raw.trim().slice(0, 4000),
+      done: true,
+    };
+  } catch {
+    return { ok: false, statusCode: status, response: "", usage: null, error: raw.slice(0, 500) };
+  }
+}
+
 async function loadModels() {
   const useProxy = await proxyAvailable();
   const r = await run("curl", curlArgs(MODELS_URL, { headers: bypassHeaders(state.session, false), timeout: 15, proxy: useProxy }), {
@@ -329,10 +364,23 @@ async function loadModels() {
       .filter((m) => m.id);
     if (models.length) {
       models.sort((a, b) => Number(b.id.includes("free")) - Number(a.id.includes("free")) || a.id.localeCompare(b.id));
-      return { models, source: "live" };
+      const extras = customModelEntries().map((m) => ({
+        id: m.id,
+        name: `${m.name} (${m.providerName})`,
+        providerName: m.providerName,
+      }));
+      return { models: [...models, ...extras], source: "live" };
     }
   } catch {}
-  return { models: FALLBACK_MODELS.map((id) => ({ id, name: id })), source: "fallback" };
+  const extras = customModelEntries().map((m) => ({
+    id: m.id,
+    name: `${m.name} (${m.providerName})`,
+    providerName: m.providerName,
+  }));
+  return {
+    models: [...FALLBACK_MODELS.map((id) => ({ id, name: id })), ...extras],
+    source: "fallback",
+  };
 }
 
 async function statusPayload() {
@@ -467,6 +515,8 @@ async function runChecks() {
   const upstreamStatus = splitStatus(upstream.out).status;
   add("upstream", "opencode.ai free lane", upstreamStatus === 200, `HTTP ${upstreamStatus}`);
   add("sessionGen", "Local session generator", isCanonical(mintSession()), "naya ses_... mint ho sakta hai");
+  const customCount = customModelEntries().length;
+  add("customRoutes", "Configured model routes", customCount > 0, `${customCount} models`);
   add(
     "resetScript",
     "WARP rotate script",
@@ -530,11 +580,19 @@ const server = http.createServer(async (req, res) => {
       }
       let child = null;
       req.on("aborted", () => child?.kill("SIGKILL"));
-      let result = await testModel(model, messages, state.session, (c) => (child = c));
+      const customRoute = resolveCustomRoute(model);
+      let routeInfo = null;
+      let result;
       let resetPerformed = null;
-      if (result.statusCode === 429 && state.enabled && body.autoReset !== false) {
-        resetPerformed = await rotateAndReset();
+      if (customRoute) {
+        routeInfo = { provider: customRoute.providerName, model: customRoute.model };
+        result = await callCustomRoute(customRoute, messages);
+      } else {
         result = await testModel(model, messages, state.session, (c) => (child = c));
+        if (result.statusCode === 429 && state.enabled && body.autoReset !== false) {
+          resetPerformed = await rotateAndReset();
+          result = await testModel(model, messages, state.session, (c) => (child = c));
+        }
       }
       const errorText = `${result.error || ""}`.toLowerCase();
       const errorKind = result.ok
@@ -553,6 +611,7 @@ const server = http.createServer(async (req, res) => {
         statusCode: result.statusCode,
         usage: result.usage,
         autoReset: Boolean(resetPerformed),
+        route: routeInfo,
         errorKind,
         retryAfterSeconds: result.retryAfterSeconds,
         resetAt: result.resetAt,
@@ -566,6 +625,7 @@ const server = http.createServer(async (req, res) => {
         ...result,
         session: state.session,
         resetPerformed,
+        route: routeInfo,
         errorKind,
         at: new Date().toISOString(),
       });
