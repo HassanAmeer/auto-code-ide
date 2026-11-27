@@ -18,11 +18,11 @@ Env overrides: `OLRB_PORT`, `OLRB_HOST`, `OLRB_PROXY`, `OLRB_UPSTREAM`.
 | Endpoint | Kya karta hai |
 | --- | --- |
 | `GET /api/status` | enabled/disabled, WARP connected/background, egress IP, session ID + validity, last reset/test, limit state, activity log |
-| `POST /api/reset` | **Sirf local canonical session** rotate karta hai (IP/WARP untouched). Purana/naya session, `isolated: true`, duration |
+| `POST /api/reset` | Bot jaisa flow: WARP IP rotate + naya canonical session. Purana/naya IP aur session, `ipChanged`/`sessionChanged`, duration |
 | `POST /api/toggle` | `{ "enabled": false }` se reset mechanism disable/enable |
 | `GET /api/models` | upstream se live model list (free models pehle), fallback list agar upstream na mile |
-| `GET /api/check` | 11-point system check (nginx, cert, proxy, WARP status, upstream, session generator…) |
-| `POST /api/chat` | Chat screen ka endpoint. `{ "model": "...", "messages": [{role,content}...], "autoReset": true }`. 429 milte hi **sirf local session** badal kar ek dafa auto-retry; WARP/IP ko touch nahi karta. Real HTTP status, usage, `resetPerformed` aur response deta hai |
+| `GET /api/check` | 12-point system check (nginx, cert, proxy, WARP status, upstream, session generator…) |
+| `POST /api/chat` | Chat screen ka endpoint. `{ "model": "...", "messages": [{role,content}...], "autoReset": true }`. 429 milte hi WARP IP + session rotate karke ek dafa auto-retry (bot ka exact flow). Real HTTP status, usage, `resetPerformed` aur response deta hai |
 
 ## UI
 
@@ -31,5 +31,5 @@ Sahi daftar (right sheet) me: status pills (limit state, session, IP, WARP, enab
 ## Notes
 
 - Bypass client official CLI ke fingerprint headers bhejta hai, lekin external CLI binary ya port 4099 use nahi karta.
-- **Isolation:** WARP/Privoxy system-level services hain — is setup ka reset unhe **rotate nahi** karta, sirf apna local session badalta hai. Isliye `bot.tokendeal.cloud` ya kisi aur site ke IP/session par koi asar nahi.
+- **Bot jaisa flow:** WARP/Privoxy system-level services hain, isliye IP rotation VPS ke dusre services ke egress ko bhi badal sakta hai. Session aur state isi oc folder me alag rehte hain.
 - State `data/state.json` me atomic write ke sath save hoti hai.

@@ -248,7 +248,7 @@ async function send() {
     if (result.resetPerformed) {
       const r = result.resetPerformed;
       banner.hidden = false;
-      banner.textContent = `♻️ 429 limit mili — sirf local session rotate hua (${r.oldSession} → ${r.newSession}), IP ${r.newIp} wahi raha, dobara retry kiya (HTTP ${result.statusCode}). Doosri sites par koi asar nahi.`;
+      banner.textContent = `♻️ 429 limit mili — WARP IP ${r.oldIp} → ${r.newIp} aur session ${r.oldSession} → ${r.newSession} rotate kiya, dobara retry (HTTP ${result.statusCode}).`;
     } else {
       banner.hidden = true;
     }
@@ -273,7 +273,7 @@ async function resetLimit() {
   btn.textContent = "♻️ Rotating…";
   try {
     const result = await api("/api/reset", { method: "POST" });
-    toast(result.ok ? "♻️ Naya local session — IP/WARP untouched" : "⚠️ Reset fail, details log me");
+    toast(result.ok ? "♻️ WARP IP + session rotate ho gaya" : "⚠️ Reset fail, details log me");
     await refresh();
   } catch (e) {
     toast(`Reset error: ${e.message}`);

@@ -24,7 +24,7 @@
         <section class="card">
           <div class="card-head">
             <h2>💬 Chat</h2>
-            <span class="hint">429 aaye to sirf local session badal kar dobara try — doosri sites safe</span>
+            <span class="hint">429 aaye to WARP IP + session rotate karke dobara try — bot jaisa flow</span>
           </div>
           <div class="form-row">
             <label for="modelSelect">🤖 Model <span class="muted" id="modelSource"></span></label>
@@ -80,11 +80,11 @@
               <li>⚙️ systemd <b>opencode-limit-reset-bypass.service</b> → server.mjs</li>
               <li>💬 UI → <b>/api/chat</b> (conversation + auto reset on 429)</li>
               <li>🔑 Bypass headers (UA 2.1.4 + canonical <b>ses_...</b>) → <b>opencode.ai</b> free lane</li>
-              <li>🔌 Egress: Privoxy <b>8118</b> → WARP SOCKS <b>40000</b> — <b>sirf status read</b>, rotate nahi</li>
-              <li>♻️ 429 par <b>sirf local session</b> badal kar ek baar retry — IP/WARP ko touch nahi</li>
+              <li>🔌 Egress: Privoxy <b>8118</b> → WARP SOCKS <b>40000</b></li>
+              <li>♻️ 429 par <b>WARP IP + canonical session</b> dono rotate karke ek baar retry — <b>bilkol bot jaisa flow</b></li>
               <li>📦 State: <b>data/state.json</b> · theme + autoReset browser me</li>
             </ol>
-            <p class="muted">✅ Poori tarah alag setup: session aur state isi folder me. WARP/Privoxy system-wide hain, isliye inhe rotate nahi kiya jata — <b>bot.tokendeal.cloud ya kisi doosri site par koi asar nahi</b>. Free provider keys sirf server me read hoti hain, UI me nahi dikti.</p>
+            <p class="muted">⚠️ Ye bot ka exact flow hai. WARP/Privoxy system-level services hain, isliye IP rotation VPS ke doosre services ke egress ko bhi badal sakta hai. Session aur state isi oc folder me alag rehte hain.</p>
           </div>
           <div class="check-panel" id="checkPanel" hidden>
             <h3>✅ System check</h3>
