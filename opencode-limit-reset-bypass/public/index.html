@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="ur">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OpenCode Limit Reset Bypass — Lab</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app" id="app">
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <h1>🧪 OpenCode Limit Reset Bypass</h1>
+            <p class="sub">Standalone testing lab · free-lane bypass + WARP IP/session rotation</p>
+          </div>
+          <div class="top-actions">
+            <span class="badge" id="limitBadge">⏳ Limit: unknown</span>
+            <span class="dot" id="liveDot" title="auto refresh"></span>
+          </div>
+        </header>
+
+        <section class="card">
+          <div class="card-head">
+            <h2>💬 Live Model Test</h2>
+            <span class="hint">Koi bhi model chuno, message bhejo, response dekho</span>
+          </div>
+          <div class="form-row">
+            <label for="modelSelect">🤖 Model <span class="muted" id="modelSource"></span></label>
+            <div class="row">
+              <select id="modelSelect"></select>
+              <button class="btn ghost" id="reloadModels" title="Live models dobara load karein">🔄</button>
+            </div>
+          </div>
+          <div class="form-row">
+            <label for="messageInput">✉️ Message</label>
+            <div class="row">
+              <input id="messageInput" type="text" placeholder="Replies strictly with PONG" value="Reply strictly with: PONG" />
+              <button class="btn primary" id="sendBtn">➤ Send</button>
+            </div>
+          </div>
+          <div class="result" id="result">
+            <div class="result-top">
+              <span class="badge" id="statusBadge">— status</span>
+              <span class="chips" id="usageChips"></span>
+            </div>
+            <pre id="responseBox">Response yahan dikhega…</pre>
+            <div class="error" id="errorBox"></div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <h2>📜 Activity Log</h2>
+            <span class="hint" id="logHint">reset + test events</span>
+          </div>
+          <div class="log" id="log"></div>
+        </section>
+      </main>
+
+      <aside class="sheet" id="sheet">
+        <div class="sheet-head">
+          <h2>⚙️ Settings &amp; Mechanism</h2>
+          <button class="icon-btn" id="collapseBtn" title="Sheet band karein">›</button>
+        </div>
+        <div class="sheet-body">
+          <div class="pill-grid">
+            <div class="pill" id="pillLimit"><span>🚦</span><b>Limit</b><em>unknown</em></div>
+            <div class="pill" id="pillWarp"><span>🛡️</span><b>WARP</b><em>checking…</em></div>
+            <div class="pill" id="pillBg"><span>🧵</span><b>Background</b><em>—</em></div>
+            <div class="pill" id="pillProxy"><span>🔌</span><b>Proxy 8118</b><em>—</em></div>
+          </div>
+
+          <div class="switch-row">
+            <div>
+              <b>🔘 Reset mechanism</b>
+              <div class="muted" id="enabledHint">enabled</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="enabledToggle" checked />
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="kv">
+            <div class="kv-row"><span>🔑 Session ID</span><span class="muted" id="sessionValid"></span><button class="copy" id="copySession">copy</button></div>
+            <code id="sessionText">—</code>
+            <div class="kv-row"><span>🌐 Egress IP</span></div>
+            <code id="ipText">—</code>
+            <div class="kv-row"><span>🕒 Last reset</span><span id="lastResetTime">—</span></div>
+            <div class="kv-row"><span>📊 Last status</span><span id="lastStatus">—</span></div>
+          </div>
+
+          <div class="btn-stack">
+            <button class="btn danger" id="resetBtn">♻️ Limit Reset</button>
+            <div class="btn-pair">
+              <button class="btn ghost" id="refreshBtn">🔄 Refresh</button>
+              <button class="btn ghost" id="openBtn">📂 Folder</button>
+            </div>
+          </div>
+
+          <div class="mechanism">
+            <h3>🧭 Mechanism</h3>
+            <ul id="mechanismList">
+              <li>⏳ Waiting for first event…</li>
+            </ul>
+          </div>
+        </div>
+      </aside>
+
+      <button class="sheet-opener" id="openSheet" title="Settings sheet kholein">⚙️</button>
+    </div>
+    <div class="toast" id="toast"></div>
+    <script src="/app.js"></script>
+  </body>
+</html>

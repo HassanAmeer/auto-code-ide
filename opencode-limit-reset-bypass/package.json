@@ -1,0 +1,10 @@
+{
+  "name": "opencode-limit-reset-bypass",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Standalone testing lab for OpenCode free-lane limit reset, session/IP rotation and live model smoke tests",
+  "scripts": {
+    "start": "node server.mjs"
+  }
+}
