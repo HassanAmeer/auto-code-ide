@@ -13,7 +13,7 @@
 
 import { buildBypassHeaders, injectFingerprintTools, UPSTREAM_BASE } from "./fingerprint.ts";
 import { mintSession } from "./session.ts";
-import { getBypassDispatcher } from "./proxy.ts";
+import { getBypassDispatcher, resetBypassDispatcher } from "./proxy.ts";
 import { resolveCustomRoute } from "./modelRoute.ts";
 import { fetch as undiciFetch } from "undici";
 
@@ -42,6 +42,7 @@ export interface BypassRequestOptions {
   maxTokens?: number | undefined;
   sessionId?: string | undefined;
   _isRetry?: boolean | undefined;
+  _retryCount?: number | undefined;
   /**
    * Cooperative cancellation from the caller (e.g. the Watchdog Stop button).
    * Aborting it cancels the in-flight upstream request immediately instead of
@@ -66,6 +67,9 @@ export interface BypassResponse {
 
 export function resolveChatEndpoint(baseUrl?: string): string {
   const base = (baseUrl || UPSTREAM_BASE || "https://opencode.ai").trim().replace(/\/+$/, "");
+  if (base === "https://opencode.ai/inference/v1") {
+    return "https://opencode.ai/inference/openai/v1/chat/completions";
+  }
   if (base.endsWith("/chat/completions")) {
     return base;
   }
@@ -96,6 +100,18 @@ export async function bypassChat(options: BypassRequestOptions): Promise<BypassR
   };
 }
 
+function isSocketConnectionError(err: any): boolean {
+  const code = err?.code || err?.cause?.code || "";
+  const msg = `${err?.message || ""} ${err?.cause?.message || ""}`;
+  return (
+    code === "UND_ERR_SOCKET" ||
+    code === "ECONNRESET" ||
+    msg.includes("UND_ERR_SOCKET") ||
+    msg.includes("other side closed") ||
+    msg.includes("ECONNRESET")
+  );
+}
+
 /**
  * OpenCode free lane se streaming chat completion lao (SSE).
  * Har chunk callback me milega.
@@ -105,6 +121,7 @@ export async function bypassChatStream(
   onChunk: (text: string, reasoning?: string) => void,
   onDone?: (sessionId: string) => void,
 ): Promise<void> {
+  const retryCount = options._retryCount ?? (options._isRetry ? 1 : 0);
   const sessionId = options.sessionId ?? mintSession();
   const headers = buildBypassHeaders(sessionId, { stream: true });
   // If the selected model belongs to a configured custom provider, route there
@@ -138,6 +155,7 @@ export async function bypassChatStream(
     max_tokens: options.maxTokens ?? 8192,
     messages,
     stream: true,
+    stream_options: { include_usage: true },
     tools: tools.map((t) => ({
       type: "function",
       function: {
@@ -205,6 +223,16 @@ export async function bypassChatStream(
         (controller.signal.reason as any)?.message || String(controller.signal.reason);
       throw new Error(abortReason);
     }
+    if (!hasReceivedAnyChunk && retryCount < 2 && isSocketConnectionError(fetchErr)) {
+      if (callerSignal) callerSignal.removeEventListener("abort", abortFromCaller);
+      resetBypassDispatcher();
+      const freshSessionId = mintSession();
+      return await bypassChatStream(
+        { ...options, sessionId: freshSessionId, _isRetry: true, _retryCount: retryCount + 1 },
+        onChunk,
+        onDone,
+      );
+    }
     throw fetchErr;
   }
 
@@ -221,17 +249,22 @@ export async function bypassChatStream(
     const resetInfo = retryAfter ? ` (Reset after: ${retryAfter}s)` : "";
 
     if (res.status === 429) {
-      if (!options._isRetry) {
+      // Session-only retry once; IP rotation is manual from Settings -> IP Rotation.
+      if (retryCount < 1) {
         try {
-          const { rotateAllIpRotation } = await import("./ipRotationState.ts");
-          await rotateAllIpRotation();
-          return await bypassChatStream({ ...options, _isRetry: true }, onChunk, onDone);
+          if (callerSignal) callerSignal.removeEventListener("abort", abortFromCaller);
+          const freshSessionId = mintSession();
+          return await bypassChatStream(
+            { ...options, sessionId: freshSessionId, _isRetry: true, _retryCount: retryCount + 1 },
+            onChunk,
+            onDone,
+          );
         } catch (retryErr) {
-          console.warn("[opencode-bypass] Auto-retry on 429 encountered error:", retryErr);
+          console.warn("[opencode-bypass] Session retry on 429 encountered error:", retryErr);
         }
       }
       throw new Error(
-        `[opencode-bypass] HTTP 429 Rate Limit Exceeded (Limit Full)${resetInfo}: Model '${options.model}' ki free limit/quota full ho chuki hai.\n\nUpstream Raw Response:\n${errorDetail}`,
+        `[opencode-bypass] HTTP 429 Rate Limit Exceeded (Limit Full)${resetInfo}: Model '${options.model}' ki free limit/quota full ho chuki hai. Settings -> IP Rotation se manually IP rotate karein ya doosra model chunein.\n\nUpstream Raw Response:\n${errorDetail}`,
       );
     }
     if (res.status === 502 || res.status === 503 || res.status === 504) {
@@ -357,6 +390,16 @@ export async function bypassChatStream(
       const abortReason =
         (controller.signal.reason as any)?.message || String(controller.signal.reason);
       throw new Error(abortReason);
+    }
+    if (!hasReceivedAnyChunk && retryCount < 2 && isSocketConnectionError(streamErr)) {
+      if (callerSignal) callerSignal.removeEventListener("abort", abortFromCaller);
+      resetBypassDispatcher();
+      const freshSessionId = mintSession();
+      return await bypassChatStream(
+        { ...options, sessionId: freshSessionId, _isRetry: true, _retryCount: retryCount + 1 },
+        onChunk,
+        onDone,
+      );
     }
     throw streamErr;
   } finally {

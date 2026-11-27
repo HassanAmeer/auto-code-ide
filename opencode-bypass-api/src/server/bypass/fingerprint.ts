@@ -21,7 +21,7 @@ import { mintSession, canonicalizeSession } from "./session.ts";
  * ⚠️  Is string me kuch bhi add/change mat karo — gate exact match karta hai.
  *     Major version 2+ hona zaroori hai; purana `opencode/1.x` 403 deta hai.
  */
-export const CLIENT_UA = "opencode/latest/2.1.4/cli";
+export const CLIENT_UA = "opencode/1.19.6 ai-sdk/provider-utils/4.0.23 runtime/bun/1.4.4";
 
 // @effect-diagnostics nodeBuiltinImport:off globalConsole:off globalConsoleInEffect:off globalDate:off globalDateInEffect:off globalRandomInEffect:off globalErrorInEffectFailure:off preferSchemaOverJson:off globalFetchInEffect:off anyUnknownInErrorContext:off globalFetch:off
 /**
@@ -102,6 +102,17 @@ export const FINGERPRINT_TOOLS = ["read", "shell"] as const;
  * Diye gaye existingSessionId ke sath bypass request headers banao.
  * Agar session nahi diya to naya mint hoga.
  */
+export function mintRequestId(): string {
+  const tsHex = Date.now().toString(16).padStart(12, "0");
+  const chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+  const randBytes = new Uint8Array(14);
+  crypto.getRandomValues(randBytes);
+  const rand = Array.from(randBytes)
+    .map((b) => chars[b % chars.length])
+    .join("");
+  return `msg_${tsHex}${rand}`;
+}
+
 export function buildBypassHeaders(
   existingSessionId?: string,
   options: { stream?: boolean } = {},
@@ -114,9 +125,8 @@ export function buildBypassHeaders(
     "user-agent": CLIENT_UA,
     "x-opencode-client": "cli",
     "x-opencode-session": session,
+    "x-opencode-request": mintRequestId(),
     "x-opencode-session-id": session,
-    "x-session-affinity": session,
-    "x-session-id": session,
     "x-opencode-project": "global",
     accept: options.stream ? "text/event-stream" : "*/*",
   };

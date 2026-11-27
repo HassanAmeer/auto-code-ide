@@ -9,11 +9,11 @@ export const OpenCodeBypassSetupSettings = makeProviderSettingsSchema(
       Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
     ),
     baseUrl: TrimmedString.pipe(
-      Schema.withDecodingDefault(Effect.succeed("https://opencode.ai/inference/v1")),
+      Schema.withDecodingDefault(Effect.succeed("https://opencode.ai/inference/openai/v1")),
       Schema.annotateKey({
         title: "Base URL",
         providerSettingsForm: {
-          placeholder: "https://opencode.ai/inference/v1",
+          placeholder: "https://opencode.ai/inference/openai/v1",
           clearWhenEmpty: "persist",
         },
       }),

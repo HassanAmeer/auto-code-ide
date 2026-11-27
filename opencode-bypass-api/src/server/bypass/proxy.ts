@@ -46,6 +46,20 @@ export async function isWarpProxyAvailable(forceCheck = false): Promise<boolean>
 }
 
 /**
+ * Close and clear the cached ProxyAgent dispatcher and reset proxy availability cache
+ */
+export function resetBypassDispatcher(): void {
+  if (_cachedDispatcher) {
+    try {
+      void _cachedDispatcher.close();
+    } catch {}
+    _cachedDispatcher = null;
+  }
+  _proxyAvailable = null;
+  _lastChecked = 0;
+}
+
+/**
  * Returns a ProxyAgent dispatcher if WARP proxy is running, else undefined
  */
 export async function getBypassDispatcher(): Promise<ProxyAgent | undefined> {
@@ -53,7 +67,7 @@ export async function getBypassDispatcher(): Promise<ProxyAgent | undefined> {
   if (!available) return undefined;
 
   if (!_cachedDispatcher) {
-    _cachedDispatcher = new ProxyAgent(DEFAULT_WARP_HTTP_PROXY);
+    _cachedDispatcher = new ProxyAgent({ uri: DEFAULT_WARP_HTTP_PROXY, allowH2: false });
   }
   return _cachedDispatcher;
 }
@@ -260,7 +274,7 @@ export async function startWarpBackground(): Promise<{
     });
     child.unref();
 
-    _proxyAvailable = null;
+    resetBypassDispatcher();
 
     return {
       ok: true,
@@ -286,7 +300,7 @@ export async function pauseWarp(): Promise<{
       encoding: "utf-8",
       timeout: 5000,
     });
-    _proxyAvailable = null;
+    resetBypassDispatcher();
     return {
       ok: true,
       message: "Cloudflare WARP proxy paused",
@@ -311,7 +325,7 @@ export async function stopWarp(): Promise<{
       "warp-cli --accept-tos disconnect >/dev/null 2>&1; systemctl stop privoxy >/dev/null 2>&1",
       { encoding: "utf-8", timeout: 7000 },
     );
-    _proxyAvailable = null;
+    resetBypassDispatcher();
     return {
       ok: true,
       message: "Cloudflare WARP proxy stopped completely",
@@ -372,6 +386,9 @@ export async function rotateWarpIp(): Promise<{
       };
     }
   }
+
+  // Reset cached dispatcher and availability after rotation
+  resetBypassDispatcher();
 
   // Get new IP
   let newIp = await getWarpProxyIp();

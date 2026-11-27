@@ -6106,15 +6106,18 @@ export const layerOpenCodeBypassSessionClearRoute = HttpRouter.add(
   "POST",
   "/api/opencode-bypass/session/clear",
   Effect.gen(function* () {
-    const { clearAndMintSession } = yield* Effect.promise(
+    const { rotateAllIpRotation } = yield* Effect.promise(
       () => import("@t3tools/provider-opencodebypasssetup/server"),
     );
-    const sessionInfo = clearAndMintSession();
+    const result = yield* Effect.promise(() => rotateAllIpRotation());
     return HttpServerResponse.jsonUnsafe({
       ok: true,
-      session: sessionInfo.session,
-      sessionValid: sessionInfo.sessionValid,
-      message: "Fresh canonical session minted",
+      session: result.session,
+      sessionValid: result.sessionValid,
+      oldIp: result.oldIp,
+      newIp: result.newIp,
+      rotatedAt: result.rotatedAt,
+      message: "Cloudflare WARP IP rotated and fresh canonical session minted",
     });
   }),
 );
@@ -6268,15 +6271,18 @@ export const layerIpRotationSessionClearRoute = HttpRouter.add(
   "POST",
   "/api/ip-rotation/session/clear",
   Effect.gen(function* () {
-    const { clearAndMintSession } = yield* Effect.promise(
+    const { rotateAllIpRotation } = yield* Effect.promise(
       () => import("@t3tools/provider-opencodebypasssetup/server"),
     );
-    const sessionInfo = clearAndMintSession();
+    const result = yield* Effect.promise(() => rotateAllIpRotation());
     return HttpServerResponse.jsonUnsafe({
       ok: true,
-      session: sessionInfo.session,
-      sessionValid: sessionInfo.sessionValid,
-      message: "Fresh canonical session minted",
+      session: result.session,
+      sessionValid: result.sessionValid,
+      oldIp: result.oldIp,
+      newIp: result.newIp,
+      rotatedAt: result.rotatedAt,
+      message: "Cloudflare WARP IP rotated and fresh canonical session minted",
     });
   }),
 );

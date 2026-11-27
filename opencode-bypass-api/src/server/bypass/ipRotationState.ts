@@ -18,6 +18,7 @@ import {
   pauseWarp,
   stopWarp,
   isWarpProxyAvailable,
+  resetBypassDispatcher,
 } from "./proxy.ts";
 import { checkActiveSession, clearAndMintSession } from "./session.ts";
 
@@ -109,9 +110,16 @@ export async function getIpRotationStatus() {
 
 export async function rotateAllIpRotation() {
   const store = loadStore();
-  const result = await rotateWarpIp();
+  let result = await rotateWarpIp();
+  if (result.newIp === result.oldIp) {
+    result = await rotateWarpIp();
+  }
+  resetBypassDispatcher();
   const now = Date.now();
   const sessionInfo = clearAndMintSession();
+  console.log(
+    `[ipRotation] Rotated IP (${result.oldIp} -> ${result.newIp}) + minted fresh session (${sessionInfo.session})`,
+  );
 
   store.lastIp = result.oldIp;
   store.currentIp = result.newIp;
