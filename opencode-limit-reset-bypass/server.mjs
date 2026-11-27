@@ -9,7 +9,6 @@ import { fileURLToPath } from "node:url";
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(ROOT, "public");
 const STATE_FILE = path.join(ROOT, "data", "state.json");
-const SCRIPTS = path.join(ROOT, "scripts");
 const PORT = Number(process.env.OLRB_PORT || 8791);
 const HOST = process.env.OLRB_HOST || "127.0.0.1";
 const UPSTREAM = (process.env.OLRB_UPSTREAM || "https://opencode.ai").replace(/\/+$/, "");
@@ -371,27 +370,26 @@ function readBody(req) {
   });
 }
 
-async function rotateAndReset() {
+async function resetSessionOnly() {
   const started = Date.now();
   const oldSession = state.session;
   const oldIp = await getEgressIp();
-  const rotate = await run("bash", [path.join(SCRIPTS, "warp-rotate.sh")], { timeout: 32000 });
-  const lines = rotate.out.split("\n").map((l) => l.trim()).filter(Boolean);
-  const newIp = lines.at(-1) || (await getEgressIp());
   const newSession = mintSession();
   state.session = newSession;
   const record = {
     type: "reset",
     at: new Date().toISOString(),
-    ok: rotate.code === 0,
+    ok: true,
     durationMs: Date.now() - started,
     oldIp,
-    newIp,
-    ipChanged: oldIp !== newIp,
+    newIp: oldIp,
+    ipChanged: false,
     oldSession,
     newSession,
     sessionChanged: oldSession !== newSession,
-    statusCode: rotate.code === 0 ? 200 : 500,
+    statusCode: 200,
+    mode: "session-only",
+    isolated: true,
   };
   state.lastReset = record;
   pushHistory(record);
@@ -401,7 +399,7 @@ async function rotateAndReset() {
 
 async function handleReset(res) {
   if (!state.enabled) return json(res, { ok: false, error: "Reset mechanism disabled" }, 409);
-  const record = await rotateAndReset();
+  const record = await resetSessionOnly();
   return json(res, { ok: record.ok, ...record });
 }
 
@@ -447,7 +445,7 @@ async function runChecks() {
   );
   const upstreamStatus = splitStatus(upstream.out).status;
   add("upstream", "opencode.ai free lane", upstreamStatus === 200, `HTTP ${upstreamStatus}`);
-  add("resetScript", "WARP rotate script", fs.existsSync(path.join(SCRIPTS, "warp-rotate.sh")), "scripts/warp-rotate.sh");
+  add("sessionGen", "Local session generator", isCanonical(mintSession()), "naya ses_... mint ho sakta hai");
   add("autoReset", "Reset mechanism", state.enabled, state.enabled ? "enabled" : "disabled");
   return { ok: checks.every((c) => c.ok), checks };
 }
@@ -487,7 +485,7 @@ const server = http.createServer(async (req, res) => {
       let result = await testModel(model, messages, state.session, (c) => (child = c));
       let resetPerformed = null;
       if (result.statusCode === 429 && state.enabled && body.autoReset !== false) {
-        resetPerformed = await rotateAndReset();
+        resetPerformed = await resetSessionOnly();
         result = await testModel(model, messages, state.session, (c) => (child = c));
       }
       const record = {
