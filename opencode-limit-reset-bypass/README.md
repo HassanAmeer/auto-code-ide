@@ -17,7 +17,7 @@ Env overrides: `OLRB_PORT`, `OLRB_HOST`, `OLRB_PROXY`, `OLRB_UPSTREAM`.
 
 | Endpoint | Kya karta hai |
 | --- | --- |
-| `GET /api/status` | enabled/disabled, WARP connected/background, egress IP, session ID + validity, last reset/test, limit state, activity log |
+| `GET /api/status` | enabled/disabled, WARP connected/background, egress IP, session ID + validity, last reset/test, limit state, activity log, `aiLogs` (model, HTTP status, `usage_limit`/`timeout`/`error` classification, tokens, response snippet) |
 | `POST /api/reset` | Bot jaisa flow: WARP IP rotate + naya canonical session. Purana/naya IP aur session, `ipChanged`/`sessionChanged`, duration |
 | `POST /api/toggle` | `{ "enabled": false }` se reset mechanism disable/enable |
 | `GET /api/models` | upstream se live model list (free models pehle), fallback list agar upstream na mile |

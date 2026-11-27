@@ -122,6 +122,36 @@ function renderLog(entries = []) {
   }
 }
 
+function renderAiLogs(entries = []) {
+  const box = $("aiLogs");
+  box.textContent = "";
+  if (!entries.length) {
+    const empty = document.createElement("div");
+    empty.className = "log-empty";
+    empty.textContent = "Abhi koi model call nahi — chat me message bhejein.";
+    box.appendChild(empty);
+    return;
+  }
+  const kindClass = { ok: "log-ok", usage_limit: "log-limit", timeout: "log-warn", error: "log-error" };
+  for (const entry of entries) {
+    const row = document.createElement("div");
+    row.className = "log-item";
+    const time = document.createElement("time");
+    time.textContent = timeAgo(entry.at);
+    const badge = document.createElement("span");
+    badge.className = `badge ${kindClass[entry.errorKind] || "log-error"}`;
+    badge.textContent = entry.errorKind || "error";
+    const detail = document.createElement("span");
+    const usage = entry.usage;
+    const tokens = usage
+      ? `${usage.prompt_tokens ?? usage.promptTokens ?? "?"}/${usage.completion_tokens ?? usage.completionTokens ?? "?"}`
+      : "?";
+    detail.textContent = `${entry.model || "model"} · HTTP ${entry.statusCode} · ${entry.durationMs ?? "?"}ms · tokens ${tokens} · ${entry.autoReset ? "♻️ reset " : ""}${entry.responseSnippet || ""}`;
+    row.append(time, badge, detail);
+    box.appendChild(row);
+  }
+}
+
 function renderMechanism(s) {
   const list = $("mechanismList");
   list.textContent = "";
@@ -136,6 +166,10 @@ function renderMechanism(s) {
   }
   if (test) {
     items.push([test.statusCode === 200 ? "✅" : "❌", `Model test status: ${test.statusCode}`]);
+    items.push([
+      test.errorKind === "ok" ? "✅" : "❌",
+      `Error kind: ${test.errorKind || "unknown"}`,
+    ]);
     const u = test.usage;
     items.push([
       u ? "✅" : "⚠️",
@@ -168,6 +202,7 @@ function renderStatus(s) {
   $("lastResetTime").textContent = s.lastReset ? timeAgo(s.lastReset.at) : "—";
   $("lastStatus").textContent = s.lastTest ? `HTTP ${s.lastTest.statusCode}` : "—";
   renderLog(s.history);
+  renderAiLogs(s.aiLogs);
   renderMechanism(s);
 }
 

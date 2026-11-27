@@ -337,6 +337,7 @@ async function statusPayload() {
     lastReset: state.lastReset,
     lastTest: state.lastTest,
     history: state.history.slice(0, 12),
+    aiLogs: state.history.filter((entry) => entry.type === "test").slice(0, 10),
   };
 }
 
@@ -495,6 +496,7 @@ const server = http.createServer(async (req, res) => {
       return json(res, { ok: true, enabled: state.enabled });
     }
     if (url.pathname === "/api/chat" && req.method === "POST") {
+      const started = Date.now();
       const body = await readBody(req);
       const model = String(body.model || "").trim();
       const rawMessages = Array.isArray(body.messages)
@@ -518,6 +520,15 @@ const server = http.createServer(async (req, res) => {
         resetPerformed = await rotateAndReset();
         result = await testModel(model, messages, state.session, (c) => (child = c));
       }
+      const errorText = `${result.error || ""}`.toLowerCase();
+      const errorKind = result.ok
+        ? "ok"
+        : result.statusCode === 429 ||
+            /429|rate limit|quota|limit full|too many requests|free usage limit/.test(errorText)
+          ? "usage_limit"
+          : result.statusCode === 408 || /timeout|stall|408/.test(errorText)
+            ? "timeout"
+            : "error";
       const record = {
         type: "test",
         at: new Date().toISOString(),
@@ -526,6 +537,9 @@ const server = http.createServer(async (req, res) => {
         statusCode: result.statusCode,
         usage: result.usage,
         autoReset: Boolean(resetPerformed),
+        errorKind,
+        durationMs: Date.now() - started,
+        responseSnippet: (result.response || result.error || "").slice(0, 200),
       };
       state.lastTest = record;
       pushHistory(record);
@@ -534,6 +548,7 @@ const server = http.createServer(async (req, res) => {
         ...result,
         session: state.session,
         resetPerformed,
+        errorKind,
         at: new Date().toISOString(),
       });
     }

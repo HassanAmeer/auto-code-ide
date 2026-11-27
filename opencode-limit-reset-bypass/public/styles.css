@@ -64,7 +64,9 @@ h2 { font-size: 16px; margin: 0; }
 .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--good); box-shadow: 0 0 0 4px rgba(52,211,153,.12); }
 .badge { display: inline-block; padding: 4px 10px; border-radius: 999px; background: var(--card-2); border: 1px solid var(--line); font-size: 12px; white-space: nowrap; }
 .badge.ok { color: var(--good); border-color: rgba(52,211,153,.45); }
-.badge.full, .badge.err { color: var(--bad); border-color: rgba(251,113,133,.45); }
+.badge.full, .badge.err, .badge.log-limit, .badge.log-error { color: var(--bad); border-color: rgba(251,113,133,.45); }
+.badge.log-ok { color: var(--good); border-color: rgba(52,211,153,.45); }
+.badge.log-warn { color: var(--warn); border-color: rgba(251,191,36,.45); }
 .card { background: linear-gradient(180deg, var(--card), var(--card-end)); border: 1px solid var(--line); border-radius: 16px; padding: 20px; margin-bottom: 18px; box-shadow: 0 12px 36px var(--shadow); }
 .card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 16px; }
 .form-row { margin-bottom: 14px; }
