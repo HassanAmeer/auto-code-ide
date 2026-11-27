@@ -2,6 +2,32 @@ const $ = (id) => document.getElementById(id);
 let latest = null;
 let busy = false;
 
+function savedTheme() {
+  const stored = localStorage.getItem("olrb-theme");
+  if (stored === "light" || stored === "dark") return stored;
+  return window.matchMedia?.("(prefers-color-scheme: light)").matches ? "light" : "dark";
+}
+
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  const icon = theme === "dark" ? "☀️" : "🌙";
+  const title = theme === "dark" ? "Light mode par jayein" : "Dark mode par jayein";
+  for (const id of ["themeBtn", "themeBtnTop"]) {
+    const button = $(id);
+    if (!button) continue;
+    button.textContent = icon;
+    button.title = title;
+  }
+}
+
+function toggleTheme() {
+  const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  localStorage.setItem("olrb-theme", next);
+  applyTheme(next);
+}
+
+applyTheme(savedTheme());
+
 async function api(path, options = {}) {
   const res = await fetch(path, {
     headers: { "content-type": "application/json" },
@@ -219,6 +245,8 @@ async function toggleEnabled() {
   await refresh();
 }
 
+$("themeBtn").addEventListener("click", toggleTheme);
+$("themeBtnTop").addEventListener("click", toggleTheme);
 $("sendBtn").addEventListener("click", send);
 $("messageInput").addEventListener("keydown", (e) => {
   if (e.key === "Enter") send();
