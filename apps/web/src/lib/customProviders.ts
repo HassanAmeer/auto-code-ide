@@ -161,6 +161,33 @@ export const DEFAULT_CUSTOM_PROVIDERS: CustomProvider[] = [
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   },
+  {
+    id: "custom_opencode_bypass",
+    name: "OpenCode Bypass",
+    baseUrl: "https://opencode.ai/inference/openai/v1",
+    format: "openai",
+    apiKey: "public",
+    headers: [
+      { key: "x-opencode-client", value: "cli" },
+      { key: "x-opencode-project", value: "global" },
+    ],
+    models: [
+      { id: "beam-free", name: "beam-free" },
+      { id: "hy4-flash-free", name: "hy4-flash-free" },
+      { id: "iceman-free", name: "iceman-free" },
+      { id: "deepseek-v4.1-flash-free", name: "deepseek-v4.1-flash-free" },
+      { id: "mimo-v2.6-flash-free", name: "mimo-v2.6-flash-free" },
+      { id: "flint-40b-free", name: "flint-40b-free" },
+      { id: "nemotron-3.5-super-vl-free", name: "nemotron-3.5-super-vl-free" },
+      { id: "jev-1.13-free", name: "jev-1.13-free" },
+      { id: "nemotron-3.5-lightning-free", name: "nemotron-3.5-lightning-free" },
+      { id: "seaglass-alpha-free", name: "seaglass-alpha-free" },
+      { id: "big-pickle", name: "big-pickle" },
+    ],
+    enabled: true,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  },
 ];
 
 export function getCustomProviders(): CustomProvider[] {
@@ -198,6 +225,17 @@ export function getCustomProviders(): CustomProvider[] {
     if (normalized.length === 0) {
       saveCustomProviders(DEFAULT_CUSTOM_PROVIDERS);
       return DEFAULT_CUSTOM_PROVIDERS;
+    }
+    const opencodeBypassDefault = DEFAULT_CUSTOM_PROVIDERS.find(
+      (p) => p.id === "custom_opencode_bypass",
+    );
+    if (
+      opencodeBypassDefault &&
+      normalized.some((p) => p.id === "custom_openrouter") &&
+      !normalized.some((p) => p.id === "custom_opencode_bypass")
+    ) {
+      normalized.push(opencodeBypassDefault);
+      needsRewrite = true;
     }
     if (needsRewrite) {
       try {

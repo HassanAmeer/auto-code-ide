@@ -1672,8 +1672,54 @@ ${userPrompt || "Continue generating from where you were interrupted"}`;
                   state: "pending",
                 });
 
-                const client = yield* HttpClient.HttpClient;
-                const rawResponse = yield* client.execute(request).pipe(
+                const isOpenCodeBypassCustom =
+                  String(instanceId) === "custom_opencode_bypass" ||
+                  chatUrl.includes("opencode.ai/inference");
+
+                const rawResponse = yield* (
+                  isOpenCodeBypassCustom
+                    ? Effect.tryPromise({
+                        try: async () => {
+                          const [
+                            { buildBypassHeaders, getBypassDispatcher, mintSession },
+                            { fetch: undiciFetch },
+                          ] = await Promise.all([
+                            import("@t3tools/provider-opencodebypasssetup/server"),
+                            import("undici"),
+                          ]);
+                          const bypassHeaders = buildBypassHeaders(mintSession(), { stream: true });
+                          if (config.headers && Array.isArray(config.headers)) {
+                            for (const h of config.headers) {
+                              if (h.key && h.key.trim().length > 0) {
+                                bypassHeaders[h.key.trim()] = h.value.trim();
+                              }
+                            }
+                          }
+                          const dispatcher = await getBypassDispatcher();
+                          const webRes = await undiciFetch(chatUrl, {
+                            method: "POST",
+                            headers: bypassHeaders,
+                            body: JSON.stringify({
+                              model: selectedModel,
+                              messages: conversationMessages,
+                              stream: true,
+                              stream_options: { include_usage: true },
+                            }),
+                            ...(dispatcher ? { dispatcher } : {}),
+                          });
+                          return HttpClientResponse.fromWeb(
+                            request,
+                            webRes as unknown as globalThis.Response,
+                          );
+                        },
+                        catch: (cause) =>
+                          new Error(cause instanceof Error ? cause.message : String(cause)),
+                      })
+                    : Effect.gen(function* () {
+                        const client = yield* HttpClient.HttpClient;
+                        return yield* client.execute(request);
+                      })
+                ).pipe(
                   Effect.timeoutOrElse({
                     duration: "60 seconds",
                     orElse: () =>
