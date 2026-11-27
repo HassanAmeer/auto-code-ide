@@ -116,7 +116,7 @@ function renderLog(entries = []) {
     detail.textContent =
       entry.type === "reset"
         ? `IP ${entry.oldIp} → ${entry.newIp} · session ${entry.sessionChanged ? "changed ✅" : "same"} · HTTP ${entry.statusCode}`
-        : `${entry.model || "model"} · HTTP ${entry.statusCode} · ${entry.ok ? "OK ✅" : "FAIL ❌"}`;
+        : `${entry.model || "model"} · HTTP ${entry.statusCode} · ${entry.ok ? "OK ✅" : "FAIL ❌"}${entry.failover ? ` · ⚡ ${entry.failover.provider}` : ""}`;
     row.append(time, tag, detail);
     box.appendChild(row);
   }
@@ -244,13 +244,16 @@ async function send() {
       chip.textContent = label;
       $("usageChips").appendChild(chip);
     }
-    if (result.resetPerformed) {
-      const r = result.resetPerformed;
-      const banner = $("resetBanner");
+    const banner = $("resetBanner");
+    if (result.failover) {
       banner.hidden = false;
-      banner.textContent = `♻️ 429 limit mili — sirf local session rotate hua (${r.oldSession} → ${r.newSession}), IP ${r.newIp} wahi raha, dobara retry kiya (HTTP ${result.statusCode}). Doosri sites par koi asar nahi.`;
+      banner.textContent = `⚡ OpenCode free limit full tha — local session rotate ke baad ${result.failover.provider} ke free model ${result.failover.model} par chala gaya aur jawab mil gaya. Doosri sites par koi asar nahi.`;
+    } else if (result.resetPerformed) {
+      const r = result.resetPerformed;
+      banner.hidden = false;
+      banner.textContent = `♻️ 429 limit mili — sirf local session rotate hua (${r.oldSession} → ${r.newSession}), IP ${r.newIp} wahi raha, dobara retry (HTTP ${result.statusCode}).${result.failoverError ? ` ⚠️ ${result.failoverError}` : ""}`;
     } else {
-      $("resetBanner").hidden = true;
+      banner.hidden = true;
     }
     $("limitBadge").textContent = result.statusCode === 429 ? "🚫 Limit FULL" : result.ok ? "✅ Limit OK" : `⚠️ HTTP ${result.statusCode}`;
     toast(result.ok ? "✅ Jawab mil gaya" : `❌ HTTP ${result.statusCode}`);

@@ -82,9 +82,10 @@
               <li>🔑 Bypass headers (UA 2.1.4 + canonical <b>ses_...</b>) → <b>opencode.ai</b> free lane</li>
               <li>🔌 Egress: Privoxy <b>8118</b> → WARP SOCKS <b>40000</b> — <b>sirf status read</b>, rotate nahi</li>
               <li>♻️ 429 par <b>sirf local session</b> badal kar ek baar retry — IP/WARP ko touch nahi</li>
+              <li>⚡ Abhi bhi 429 ho to configured <b>free provider</b> (td / OpenRouter / wusrouter) par auto-failover — chat chaloo rehti hai</li>
               <li>📦 State: <b>data/state.json</b> · theme + autoReset browser me</li>
             </ol>
-            <p class="muted">✅ Poori tarah alag setup: session aur state isi folder me. WARP/Privoxy system-wide hain, isliye inhe rotate nahi kiya jata — <b>bot.tokendeal.cloud ya kisi doosri site par koi asar nahi</b>. Koi API key, official CLI ya port 4099 nahi chahiye.</p>
+            <p class="muted">✅ Poori tarah alag setup: session aur state isi folder me. WARP/Privoxy system-wide hain, isliye inhe rotate nahi kiya jata — <b>bot.tokendeal.cloud ya kisi doosri site par koi asar nahi</b>. Free provider keys sirf server me read hoti hain, UI me nahi dikti.</p>
           </div>
           <div class="check-panel" id="checkPanel" hidden>
             <h3>✅ System check</h3>
