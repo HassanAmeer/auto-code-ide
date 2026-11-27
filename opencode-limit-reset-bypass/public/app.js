@@ -85,6 +85,23 @@ function timeAgo(iso) {
   return `${Math.floor(seconds / 3600)}h pehle`;
 }
 
+function updateCountdown() {
+  const el = $("resetCountdown");
+  if (!el || !latest?.limitResetAt) {
+    if (el) el.textContent = "—";
+    return;
+  }
+  const seconds = Math.max(0, Math.round((Date.parse(latest.limitResetAt) - Date.now()) / 1000));
+  if (!seconds) {
+    el.textContent = "ab reset ho sakta hai ♻️";
+    return;
+  }
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  el.textContent = `${h ? `${h}h ` : ""}${m}m ${s}s`;
+}
+
 function setPill(id, icon, label, value, tone = "") {
   const el = $(id);
   el.className = `pill ${tone}`.trim();
@@ -170,6 +187,9 @@ function renderMechanism(s) {
       test.errorKind === "ok" ? "✅" : "❌",
       `Error kind: ${test.errorKind || "unknown"}`,
     ]);
+    if (test.resetAt) {
+      items.push(["⏳", `Upstream reset after: ${((test.retryAfterSeconds || 0) / 3600).toFixed(1)}h — sheet me countdown dekhein`]);
+    }
     const u = test.usage;
     items.push([
       u ? "✅" : "⚠️",
@@ -201,6 +221,7 @@ function renderStatus(s) {
   $("ipText").textContent = s.ip || "—";
   $("lastResetTime").textContent = s.lastReset ? timeAgo(s.lastReset.at) : "—";
   $("lastStatus").textContent = s.lastTest ? `HTTP ${s.lastTest.statusCode}` : "—";
+  updateCountdown();
   renderLog(s.history);
   renderAiLogs(s.aiLogs);
   renderMechanism(s);
@@ -425,3 +446,4 @@ $("openBtn").addEventListener("click", () => window.open("https://github.com/Has
 refresh();
 loadModels();
 setInterval(refresh, 15000);
+setInterval(updateCountdown, 1000);

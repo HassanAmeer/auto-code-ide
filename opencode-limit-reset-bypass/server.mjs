@@ -277,9 +277,21 @@ async function testModel(model, messages, session, onChild = null) {
     timeout: 90,
     proxy: useProxy,
   });
-  args.splice(args.indexOf("-w"), 0, "--data-binary", "@-");
+  args.splice(args.indexOf("-w"), 0, "--data-binary", "@-", "-D", "-");
   const r = await run("curl", args, { timeout: 95000, input: body, onChild });
-  const { body: raw, status } = splitStatus(r.out);
+  const headerStart = r.out.indexOf("HTTP/2") >= 0 ? r.out.indexOf("HTTP/2") : r.out.indexOf("HTTP/");
+  let separator = headerStart >= 0 ? r.out.indexOf("\r\n\r\n", headerStart) : -1;
+  let separatorLength = 4;
+  if (separator < 0) {
+    separator = headerStart >= 0 ? r.out.indexOf("\n\n", headerStart) : -1;
+    separatorLength = 2;
+  }
+  const headerText = separator >= 0 ? r.out.slice(headerStart, separator) : "";
+  const wireBody = separator >= 0 ? r.out.slice(separator + separatorLength) : r.out;
+  const { body: raw, status } = splitStatus(wireBody);
+  const retryAfterMatch = headerText.match(/^retry-after:\s*(\d+)/im);
+  const retryAfterSeconds = retryAfterMatch ? Number(retryAfterMatch[1]) : null;
+  const resetAt = retryAfterSeconds ? new Date(Date.now() + retryAfterSeconds * 1000).toISOString() : null;
   const parsed = parseSse(raw);
   let detail = parsed.streamError || "";
   if (!detail && status !== 200) {
@@ -295,7 +307,9 @@ async function testModel(model, messages, session, onChild = null) {
     statusCode: status || (parsed.streamError ? 429 : 500),
     response: parsed.content || parsed.reasoning || "",
     usage: parsed.usage,
-    error: detail.slice(0, 2000),
+    error: `${detail}${retryAfterSeconds ? ` (Reset after: ${retryAfterSeconds}s)` : ""}`.slice(0, 2000),
+    retryAfterSeconds,
+    resetAt,
     raw: raw.trim().slice(0, 4000),
     done: parsed.done,
   };
@@ -335,6 +349,8 @@ async function statusPayload() {
     proxy: { available: proxy, endpoint: PROXY },
     warp: { ...warp, backgroundRunning: warp.backgroundRunning && proxy },
     lastReset: state.lastReset,
+    limitResetAt: state.lastTest?.resetAt || null,
+    limitRetryAfterSeconds: state.lastTest?.retryAfterSeconds || null,
     lastTest: state.lastTest,
     history: state.history.slice(0, 12),
     aiLogs: state.history.filter((entry) => entry.type === "test").slice(0, 10),
@@ -538,6 +554,8 @@ const server = http.createServer(async (req, res) => {
         usage: result.usage,
         autoReset: Boolean(resetPerformed),
         errorKind,
+        retryAfterSeconds: result.retryAfterSeconds,
+        resetAt: result.resetAt,
         durationMs: Date.now() - started,
         responseSnippet: (result.response || result.error || "").slice(0, 200),
       };
