@@ -31,6 +31,8 @@ const FALLBACK_MODELS = [
 
 let counter = 1;
 let state = loadState();
+const modelLimits = new Map();
+let modelsFetched = false;
 
 const TOOLS = [
   {
@@ -275,13 +277,23 @@ function isUsageLimitMessage(status, detail) {
   return /429|rate limit|quota|limit full|too many requests|free usage limit/i.test(String(detail || ""));
 }
 
-async function testModel(model, messages, session, onChild = null) {
+async function resolveMaxTokens(model, override = null) {
+  if (Number.isFinite(override) && override > 0) return Math.floor(override);
+  if (!modelLimits.has(model) && !modelsFetched) {
+    await loadModels();
+  }
+  const entry = modelLimits.get(model);
+  return entry?.output && entry.output > 0 ? entry.output : null;
+}
+
+async function testModel(model, messages, session, onChild = null, maxTokensOverride = null) {
   const useProxy = await proxyAvailable();
+  const maxTokens = await resolveMaxTokens(model, maxTokensOverride);
   const systemNote =
     "IMPORTANT: You are in direct conversational code generation mode. Do NOT invoke any tools (like `read` or `shell`). Instead, write and present the complete code, solution and explanations directly in your text response.";
   const body = JSON.stringify({
     model,
-    max_tokens: 8192,
+    ...(maxTokens ? { max_tokens: maxTokens } : {}),
     stream: true,
     messages: [{ role: "system", content: systemNote }, ...messages],
     tools: TOOLS.map((t) => ({ type: "function", function: t })),
@@ -349,8 +361,17 @@ async function loadModels() {
     const j = JSON.parse(body);
     const list = Array.isArray(j?.data) ? j.data : [];
     const models = list
-      .map((m) => ({ id: String(m.id || ""), name: String(m.name || m.id || "") }))
+      .map((m) => {
+        const id = String(m.id || "");
+        const output = Number(m?.limit?.output ?? m?.max_output_tokens ?? m?.max_tokens) || null;
+        const context = Number(m?.limit?.context ?? m?.context_length) || null;
+        if (id && (output || context)) {
+          modelLimits.set(id, { output, context });
+        }
+        return { id, name: String(m.name || m.id || ""), limit: m?.limit || null };
+      })
       .filter((m) => m.id);
+    modelsFetched = true;
     if (models.length) {
       models.sort((a, b) => Number(b.id.includes("free")) - Number(a.id.includes("free")) || a.id.localeCompare(b.id));
       return { models, source: "live" };
@@ -554,11 +575,12 @@ const server = http.createServer(async (req, res) => {
       }
       let child = null;
       req.on("aborted", () => child?.kill("SIGKILL"));
-      let result = await testModel(model, messages, state.session, (c) => (child = c));
+      const maxTokensOverride = Number(body.max_tokens) || null;
+      let result = await testModel(model, messages, state.session, (c) => (child = c), maxTokensOverride);
       let resetPerformed = null;
       if ((result.statusCode === 429 || result.isUsageLimit) && state.enabled && body.autoReset !== false) {
         resetPerformed = await rotateAndReset();
-        result = await testModel(model, messages, state.session, (c) => (child = c));
+        result = await testModel(model, messages, state.session, (c) => (child = c), maxTokensOverride);
       }
       const errorText = `${result.error || ""}`.toLowerCase();
       const errorKind = result.ok
