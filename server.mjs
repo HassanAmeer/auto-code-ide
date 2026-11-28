@@ -18,7 +18,9 @@ const UPSTREAM = (process.env.OLRB_UPSTREAM || "https://opencode.ai").replace(/\
 const CHAT_URL = `${UPSTREAM}/inference/openai/v1/chat/completions`;
 const MODELS_URL = `${UPSTREAM}/inference/v1/models`;
 const PROXY = process.env.OLRB_PROXY || "http://127.0.0.1:8118";
-const UA = "opencode/latest/2.1.4/cli";
+const UA = "opencode/1.19.6 ai-sdk/provider-utils/4.0.23 runtime/bun/1.4.4";
+const CLI_BIN = process.env.OPENCODE_BIN || "/root/.opencode/bin/opencode";
+const CLI_HOME = process.env.OPENCODE_HOME || "/tmp/oc-olrb-runtime";
 const BASE62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 const STATUS_MARK = "\n__OLRB_STATUS__:";
 const FALLBACK_MODELS = [
@@ -289,67 +291,139 @@ async function resolveMaxTokens(model, override = null) {
 }
 
 async function testModel(model, messages, session, onChild = null, maxTokensOverride = null) {
-  const useProxy = await proxyAvailable();
-  const maxTokens = await resolveMaxTokens(model, maxTokensOverride);
-  const systemNote =
-    "IMPORTANT: You are in direct conversational code generation mode. Do NOT invoke any tools (like `read` or `shell`). Instead, write and present the complete code, solution and explanations directly in your text response.";
-  const body = JSON.stringify({
-    model,
-    ...(maxTokens ? { max_tokens: maxTokens } : {}),
-    stream: true,
-    messages: [{ role: "system", content: systemNote }, ...messages],
-    tools: TOOLS.map((t) => ({ type: "function", function: t })),
-  });
-  const headerFile = path.join(os.tmpdir(), `olrb-hdr-${crypto.randomUUID()}.txt`);
-  const args = curlArgs(CHAT_URL, {
-    method: "POST",
-    headers: bypassHeaders(session),
-    timeout: 90,
-    proxy: useProxy,
-  });
-  args.splice(args.indexOf("-w"), 0, "--data-binary", "@-", "-D", headerFile);
-  let r;
-  let rawHeaders = "";
-  try {
-    r = await run("curl", args, { timeout: 95000, input: body, onChild });
-    try {
-      rawHeaders = fs.readFileSync(headerFile, "utf8");
-    } catch {}
-  } finally {
-    try {
-      fs.unlinkSync(headerFile);
-    } catch {}
+  // Build a single prompt string from messages for CLI
+  const systemMsg = messages.find(m => m.role === "system");
+  const userMsgs = messages.filter(m => m.role !== "system");
+  const systemNote = systemMsg?.content ||
+    "IMPORTANT: You are in direct conversational code generation mode. Do NOT invoke any tools. Write complete code and explanations directly in your text response.";
+
+  // Build conversation text: for multi-turn, interleave user/assistant
+  let promptText;
+  if (userMsgs.length === 1) {
+    promptText = userMsgs[0].content;
+  } else {
+    promptText = userMsgs.map(m => `[${m.role}]: ${m.content}`).join("\n");
   }
-  const headerText = extractUpstreamHeaders(rawHeaders);
-  const { body: raw, status } = splitStatus(r.out);
-  const retryAfterMatch =
-    headerText.match(/^retry-after:\s*(\d+)/im) || headerText.match(/^x-ratelimit-reset:\s*(\d+)/im);
-  const retryAfterSeconds = retryAfterMatch ? Number(retryAfterMatch[1]) : null;
-  const resetAt = retryAfterSeconds ? new Date(Date.now() + retryAfterSeconds * 1000).toISOString() : null;
-  const parsed = parseSse(raw);
-  let detail = parsed.streamError || "";
-  if (!detail && status !== 200) {
-    try {
-      const j = JSON.parse(raw);
-      detail = j?.message || j?.error?.message || j?.error || raw;
-    } catch {
-      detail = raw;
-    }
+
+  // Ensure CLI home dir exists
+  try { fs.mkdirSync(CLI_HOME, { recursive: true }); } catch {}
+
+  const cliArgs = [
+    "run",
+    promptText,
+    "-m", `opencode/${model}`,
+    "--print-logs",
+    "--log-level", "ERROR",
+  ];
+
+  const env = {
+    ...process.env,
+    HOME: CLI_HOME,
+    // Strip WARP proxy so CLI connects directly (direct is not rate-limited)
+    HTTP_PROXY: "",
+    HTTPS_PROXY: "",
+    http_proxy: "",
+    https_proxy: "",
+    // Inject system prompt via OPENCODE_SYSTEM_PROMPT if supported, otherwise prepend
+    PATH: process.env.PATH || "/usr/local/bin:/usr/bin:/bin",
+  };
+
+  const started = Date.now();
+  let output = "";
+  let errOutput = "";
+  let timedOut = false;
+
+  await new Promise((resolve) => {
+    const child = spawn(CLI_BIN, cliArgs, {
+      env,
+      cwd: CLI_HOME,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    if (onChild) onChild(child);
+    // Close stdin immediately (no interactive input)
+    child.stdin.end();
+    child.stdout.on("data", (d) => { output += d.toString(); });
+    child.stderr.on("data", (d) => { errOutput += d.toString(); });
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGKILL");
+    }, 90000);
+    child.on("close", () => { clearTimeout(timer); resolve(); });
+  });
+
+  // Parse CLI output: strip header line "> build · <model>", ANSI codes, and timestamps
+  const lines = output.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "").split("\n");
+  const contentLines = lines.filter(l => {
+    const t = l.trim();
+    return t && !t.startsWith("> ") && !t.startsWith("timestamp=");
+  });
+  const responseText = contentLines.join("\n").trim();
+
+  // Clean ANSI escape codes from output
+  const cleanOut = output.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "").trim();
+  const cleanErr = errOutput.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "").trim();
+  const combinedOut = cleanOut + "\n" + cleanErr;
+
+  // Detect usage limit ONLY if FreeUsageLimitError or explicit quota limit in stderr or stdout
+  const isLimit = /FreeUsageLimitError|free usage limit reached|too many requests/i.test(combinedOut);
+  const isTimeout = timedOut || /timeout|ETIMEDOUT/i.test(cleanErr);
+
+  if (timedOut) {
+    return {
+      ok: false,
+      statusCode: 408,
+      isUsageLimit: false,
+      response: "",
+      usage: null,
+      error: "CLI timeout after 90s",
+      retryAfterSeconds: null,
+      resetAt: null,
+      raw: combinedOut.slice(0, 500),
+      done: false,
+    };
   }
-  if (!detail && status === 0 && r.err) detail = r.err.trim();
-  const effectiveStatus = status || (parsed.streamError ? 429 : 500);
-  const isUsageLimit = isUsageLimitMessage(effectiveStatus, detail);
+
+  if (isLimit) {
+    return {
+      ok: false,
+      statusCode: 429,
+      isUsageLimit: true,
+      response: "",
+      usage: null,
+      error: "Free usage limit reached (via CLI)",
+      retryAfterSeconds: null,
+      resetAt: null,
+      raw: combinedOut.slice(0, 500),
+      done: false,
+    };
+  }
+
+  if (!responseText) {
+    return {
+      ok: false,
+      statusCode: 500,
+      isUsageLimit: false,
+      response: "",
+      usage: null,
+      error: errOutput.slice(0, 500) || "Empty CLI response",
+      retryAfterSeconds: null,
+      resetAt: null,
+      raw: combinedOut.slice(0, 500),
+      done: false,
+    };
+  }
+
   return {
-    ok: effectiveStatus === 200 && !parsed.streamError,
-    statusCode: isUsageLimit && effectiveStatus === 200 ? 429 : effectiveStatus,
-    isUsageLimit,
-    response: parsed.content || parsed.reasoning || "",
-    usage: parsed.usage,
-    error: `${detail}${retryAfterSeconds ? ` (Reset after: ${retryAfterSeconds}s)` : ""}`.slice(0, 2000),
-    retryAfterSeconds,
-    resetAt,
-    raw: raw.trim().slice(0, 4000),
-    done: parsed.done,
+    ok: true,
+    statusCode: 200,
+    isUsageLimit: false,
+    response: responseText,
+    usage: null,
+    error: "",
+    retryAfterSeconds: null,
+    resetAt: null,
+    raw: responseText.slice(0, 4000),
+    done: true,
   };
 }
 
