@@ -18,7 +18,6 @@ const UPSTREAM = (process.env.OLRB_UPSTREAM || "https://opencode.ai").replace(/\
 const CHAT_URL = `${UPSTREAM}/inference/openai/v1/chat/completions`;
 const MODELS_URL = `${UPSTREAM}/inference/v1/models`;
 const PROXY = process.env.OLRB_PROXY || "http://127.0.0.1:8118";
-const PROVIDER_ID = "ocproviderbypass";
 const UA = "opencode/1.19.6 ai-sdk/provider-utils/4.0.23 runtime/bun/1.4.4";
 const CLI_BIN = process.env.OPENCODE_BIN || "/root/.opencode/bin/opencode";
 const CLI_HOME = process.env.OPENCODE_HOME || "/tmp/oc-olrb-runtime";
@@ -313,8 +312,7 @@ async function testModel(model, messages, session, onChild = null, maxTokensOver
     "run",
     promptText,
     "-m", `opencode/${model}`,
-    "--print-logs",
-    "--log-level", "ERROR",
+    "--format", "json",
   ];
 
   const env = {
@@ -352,20 +350,40 @@ async function testModel(model, messages, session, onChild = null, maxTokensOver
     child.on("close", () => { clearTimeout(timer); resolve(); });
   });
 
-  // Parse CLI output: strip header line "> build · <model>", ANSI codes, and timestamps
-  const lines = output.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "").split("\n");
-  const contentLines = lines.filter(l => {
-    const t = l.trim();
-    return t && !t.startsWith("> ") && !t.startsWith("timestamp=");
-  });
-  const responseText = contentLines.join("\n").trim();
+  // Parse CLI JSON events
+  let responseText = "";
+  let extractedUsage = null;
+  const rawLines = output.split("\n");
+  for (const line of rawLines) {
+    if (!line.trim()) continue;
+    try {
+      const j = JSON.parse(line);
+      if (j.type === "text" && j.part?.text) responseText += j.part.text;
+      if (j.type === "step_finish" && j.part?.tokens) {
+        extractedUsage = {
+          prompt_tokens: j.part.tokens.input ?? 0,
+          completion_tokens: j.part.tokens.output ?? 0,
+          total_tokens: j.part.tokens.total ?? 0,
+          reasoning_tokens: j.part.tokens.reasoning ?? 0,
+        };
+      }
+    } catch {}
+  }
 
-  // Clean ANSI escape codes from output
+  // Fallback to plain text if JSON parse yielded nothing
+  if (!responseText) {
+    const lines = output.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "").split("\n");
+    const contentLines = lines.filter(l => {
+      const t = l.trim();
+      return t && !t.startsWith("> ") && !t.startsWith("timestamp=") && !t.startsWith("{");
+    });
+    responseText = contentLines.join("\n").trim();
+  }
+
   const cleanOut = output.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "").trim();
   const cleanErr = errOutput.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "").trim();
   const combinedOut = cleanOut + "\n" + cleanErr;
 
-  // Detect usage limit ONLY if FreeUsageLimitError or explicit quota limit in stderr or stdout
   const isLimit = /FreeUsageLimitError|free usage limit reached|too many requests/i.test(combinedOut);
   const isTimeout = timedOut || /timeout|ETIMEDOUT/i.test(cleanErr);
 
@@ -419,7 +437,7 @@ async function testModel(model, messages, session, onChild = null, maxTokensOver
     statusCode: 200,
     isUsageLimit: false,
     response: responseText,
-    usage: null,
+    usage: extractedUsage,
     error: "",
     retryAfterSeconds: null,
     resetAt: null,
@@ -520,7 +538,6 @@ async function rotateAndReset() {
   const newIp = lines.at(-1) || (await getEgressIp());
   const newSession = mintSession();
   state.session = newSession;
-  try { fs.rmSync(CLI_HOME, { recursive: true, force: true }); fs.mkdirSync(CLI_HOME, { recursive: true }); } catch {}
   const record = {
     type: "reset",
     at: new Date().toISOString(),
@@ -608,185 +625,10 @@ async function runChecks() {
   return { ok: checks.every((c) => c.ok), checks };
 }
 
-function openAiModelPayload(models, source) {
-  return {
-    object: "list",
-    provider: PROVIDER_ID,
-    source,
-    data: models.map((m) => ({
-      id: m.id,
-      object: "model",
-      created: Math.floor(Date.now() / 1000),
-      owned_by: PROVIDER_ID,
-      name: m.name || m.id,
-      limit: m.limit || null,
-    })),
-  };
-}
-
-function openAiError(res, message, code = 400, type = "invalid_request_error") {
-  return json(
-    res,
-    { error: { message: String(message), type, param: null, code } },
-    code,
-  );
-}
-
-function openAiCompletion(id, model, text, usage, resetPerformed) {
-  return {
-    id,
-    object: "chat.completion",
-    created: Math.floor(Date.now() / 1000),
-    model,
-    provider: PROVIDER_ID,
-    session: state.session,
-    resetPerformed: Boolean(resetPerformed),
-    choices: [
-      {
-        index: 0,
-        message: { role: "assistant", content: text },
-        finish_reason: "stop",
-      },
-    ],
-    usage: usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
-  };
-}
-
-function writeSseChunk(res, id, model, text, finished = false) {
-  const chunk = {
-    id,
-    object: "chat.completion.chunk",
-    created: Math.floor(Date.now() / 1000),
-    model,
-    choices: [
-      {
-        index: 0,
-        delta: finished ? {} : { role: "assistant", content: text },
-        finish_reason: finished ? "stop" : null,
-      },
-    ],
-  };
-  res.write(`data: ${JSON.stringify(chunk)}\n\n`);
-}
-
-async function handleOpenAiChat(req, res, body) {
-  const rawModel = String(body.model || "").trim();
-  const model = rawModel.startsWith(`${PROVIDER_ID}/`)
-    ? rawModel.slice(PROVIDER_ID.length + 1)
-    : rawModel;
-  const messages = (Array.isArray(body.messages) ? body.messages : [])
-    .slice(-20)
-    .map((m) => ({
-      role: ["user", "assistant", "system"].includes(m?.role) ? m.role : "user",
-      content: String(m?.content || "").slice(0, 8000),
-    }))
-    .filter((m) => m.content);
-  if (!model || !messages.length) {
-    return openAiError(res, "model and messages are required", 400);
-  }
-
-  const started = Date.now();
-  const stream = body.stream !== false;
-  const autoReset = body.auto_reset !== false && body.autoReset !== false;
-  const maxTokensOverride =
-    Number(body.max_tokens) || Number(body.max_completion_tokens) || null;
-  let child = null;
-  req.on("aborted", () => child?.kill("SIGKILL"));
-  const attempt = (name) =>
-    testModel(name, messages, state.session, (c) => (child = c), maxTokensOverride);
-
-  let result = await attempt(model);
-  let usedModel = model;
-  let resetPerformed = null;
-
-  if ((result.statusCode === 429 || result.isUsageLimit) && state.enabled && autoReset) {
-    resetPerformed = await rotateAndReset();
-    result = await attempt(model);
-  }
-  if ((result.statusCode === 429 || result.isUsageLimit) && autoReset) {
-    const { models } = await loadModels();
-    const candidates = models
-      .map((m) => String(m.id || ""))
-      .filter((id) => id.includes("free") && id !== model)
-      .slice(0, 3);
-    for (const alternative of candidates) {
-      const alt = await attempt(alternative);
-      if (alt.ok) {
-        result = alt;
-        usedModel = alternative;
-        break;
-      }
-    }
-  }
-
-  const errorText = `${result.error || ""}`.toLowerCase();
-  const errorKind = result.ok
-    ? "ok"
-    : result.statusCode === 429 ||
-        /usage limit|rate limit|quota|too many requests/.test(errorText)
-      ? "usage_limit"
-      : result.statusCode === 408 || /timeout|stall/.test(errorText)
-        ? "timeout"
-        : "error";
-
-  const record = {
-    type: "test",
-    at: new Date().toISOString(),
-    ok: result.ok,
-    model: usedModel,
-    statusCode: result.statusCode,
-    errorKind,
-    autoReset: Boolean(resetPerformed),
-    durationMs: Date.now() - started,
-    responseSnippet: (result.response || result.error || "").slice(0, 200),
-  };
-  state.lastTest = record;
-  pushHistory(record);
-  saveState();
-
-  if (!result.ok) {
-    return openAiError(
-      res,
-      result.error || `Upstream error (${result.statusCode})`,
-      result.statusCode || 502,
-      "upstream_error",
-    );
-  }
-
-  const id = `chatcmpl-${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`;
-  if (!stream) {
-    return json(res, openAiCompletion(id, usedModel, result.response, result.usage, resetPerformed));
-  }
-
-  res.writeHead(200, {
-    "content-type": "text/event-stream; charset=utf-8",
-    "cache-control": "no-cache, no-transform",
-    connection: "keep-alive",
-    "x-ocproviderbypass-provider": PROVIDER_ID,
-    "x-ocproviderbypass-model": usedModel,
-    "x-ocproviderbypass-session": state.session,
-    ...(resetPerformed ? { "x-ocproviderbypass-reset": "1" } : {}),
-  });
-  writeSseChunk(res, id, usedModel, result.response);
-  writeSseChunk(res, id, usedModel, "", true);
-  res.write("data: [DONE]\n\n");
-  res.end();
-}
-
 const MIME = { ".html": "text/html", ".css": "text/css", ".js": "text/javascript", ".json": "application/json" };
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
   try {
-    if (url.pathname === "/v1/models" && req.method === "GET") {
-      const { models, source } = await loadModels();
-      return json(res, openAiModelPayload(models, source));
-    }
-    if (url.pathname === "/v1/provider" && req.method === "GET") {
-      return json(res, { object: "provider", id: PROVIDER_ID, name: PROVIDER_ID });
-    }
-    if (url.pathname === "/v1/chat/completions" && req.method === "POST") {
-      return await handleOpenAiChat(req, res, await readBody(req));
-    }
     if (url.pathname === "/api/status") return json(res, await statusPayload());
     if (url.pathname === "/api/check") return json(res, await runChecks());
     if (url.pathname === "/api/models") return json(res, await loadModels());
