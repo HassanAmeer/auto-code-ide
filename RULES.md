@@ -15,5 +15,9 @@
      2. Naya canonical `ses_...` session ID mint karega,
      3. Request ko naye IP aur naye session ke sath auto-retry karega.
 
-4. **Minimal Scope:**
+4. **Model-Specific Dynamic Token Limit:**
+   - `max_tokens` kabhi bhi hardcoded nahi hoga.
+   - Har request ke liye token limit dynamically selected OpenCode model ke `/inference/v1/models` metadata (`limit.output`) ke mutabiq set hogi (aur agar metadata na mile to `max_tokens` omit kiya jayega taake model apni native limit par chale).
+
+5. **Minimal Scope:**
    - Is branch par sirf Chat Screen (`public/`), OpenCode Inference + Limit Reset server (`server.mjs`), WARP control scripts (`scripts/`), aur zaroori docs/config hi rahenge.
