@@ -202,3 +202,19 @@ Aap apni third-party monitoring ya admin panel se in endpoints ko call kar sakte
 4. **List Available Models:**
    - `GET https://oc.tokendeal.cloud/v1/models`
    - Returns: Standard OpenAI models list.
+
+---
+
+## 8. Testing Lab vs Production Integration (پروڈکشن کے لیے ہدایات)
+
+> [!WARNING]
+> **Production Integration Warning:**
+> Yeh Web UI Dashboard (`public/index.html`, `styles.css`, `app.js`), Split Log Drawer, aur in-memory `/api/logs` array **sirf testing aur inspection ke liye banaye gaye hain**.
+> 
+> Jab is setup ko kisi production app (AutoJobs, CLI tool, Cursor, Continue, etc.) ke sath jodein:
+> - **UI aur Log Drawer ko shamil na karein** taake RAM aur Disk space zaya na ho.
+> - **Sirf Core Engine use karein:**
+>   - `POST /v1/chat/completions` (OpenAI format inference)
+>   - `scripts/warp-rotate.sh` (429 par IP subnet rotate karna)
+>   - Canonical session generator (`ses_...`)
+> - Is tarah production par memory footprint sirf **~15MB se 25MB** rahega aur performance maximum rahegi.
