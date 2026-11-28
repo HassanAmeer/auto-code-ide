@@ -249,6 +249,7 @@ function parseSse(raw) {
 }
 
 function bypassHeaders(session, stream = true) {
+  const reqId = `req_${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`;
   return [
     "content-type: application/json",
     "authorization: Bearer public",
@@ -256,6 +257,7 @@ function bypassHeaders(session, stream = true) {
     "x-opencode-client: cli",
     `x-opencode-session: ${session}`,
     `x-opencode-session-id: ${session}`,
+    `x-opencode-request: ${reqId}`,
     `x-session-affinity: ${session}`,
     `x-session-id: ${session}`,
     "x-opencode-project: global",
