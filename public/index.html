@@ -15,49 +15,58 @@
             <p class="sub">Standalone testing lab · free-lane bypass + WARP IP/session rotation</p>
           </div>
           <div class="top-actions">
+            <button class="btn ghost top-split-btn" id="splitToggleBtn" title="Toggle 50/50 Split View (Chat + Live Logs)">🌓 Split Logs (50/50)</button>
             <span class="badge" id="limitBadge">⏳ Limit unknown</span>
             <span class="dot" id="liveDot" title="auto refresh"></span>
           </div>
         </header>
 
-        <section class="card">
-          <div class="card-head">
-            <h2>💬 Chat</h2>
-            <span class="hint">429 aaye to WARP IP + session rotate karke dobara try — bot jaisa flow</span>
+        <div class="workspace-grid" id="workspaceGrid">
+          <div class="workspace-col chat-col">
+            <section class="card main-chat-card">
+              <div class="card-head">
+                <h2>💬 Chat</h2>
+                <span class="hint">429 aaye to WARP IP + session rotate karke dobara try — bot jaisa flow</span>
+              </div>
+              <div class="form-row">
+                <label for="modelSelect">🤖 Model <span class="muted" id="modelSource"></span></label>
+                <div class="row">
+                  <select id="modelSelect"></select>
+                  <button class="btn ghost" id="reloadModels" title="Live models dobara load karein">🔄</button>
+                  <button class="btn ghost" id="clearChat" title="Nayi conversation">🧹</button>
+                </div>
+              </div>
+              <div class="chat" id="chat">
+                <div class="chat-empty" id="chatEmpty">💬 Chat shuru karein — pehla message bhejein</div>
+              </div>
+              <div class="auto-banner" id="resetBanner" hidden></div>
+              <div class="result-top chat-meta">
+                <span class="badge" id="statusBadge">— status</span>
+                <span class="chips" id="usageChips"></span>
+              </div>
+              <div class="form-row">
+                <label for="messageInput">✉️ Message</label>
+                <div class="row">
+                  <input id="messageInput" type="text" placeholder="Apna message likhein…" />
+                  <button class="btn primary" id="sendBtn">➤ Send</button>
+                </div>
+              </div>
+              <div class="error" id="errorBox"></div>
+            </section>
           </div>
-          <div class="form-row">
-            <label for="modelSelect">🤖 Model <span class="muted" id="modelSource"></span></label>
-            <div class="row">
-              <select id="modelSelect"></select>
-              <button class="btn ghost" id="reloadModels" title="Live models dobara load karein">🔄</button>
-              <button class="btn ghost" id="clearChat" title="Nayi conversation">🧹</button>
-            </div>
-          </div>
-          <div class="chat" id="chat">
-            <div class="chat-empty" id="chatEmpty">💬 Chat shuru karein — pehla message bhejein</div>
-          </div>
-          <div class="auto-banner" id="resetBanner" hidden></div>
-          <div class="result-top chat-meta">
-            <span class="badge" id="statusBadge">— status</span>
-            <span class="chips" id="usageChips"></span>
-          </div>
-          <div class="form-row">
-            <label for="messageInput">✉️ Message</label>
-            <div class="row">
-              <input id="messageInput" type="text" placeholder="Apna message likhein…" />
-              <button class="btn primary" id="sendBtn">➤ Send</button>
-            </div>
-          </div>
-          <div class="error" id="errorBox"></div>
-        </section>
 
-        <section class="card">
-          <div class="card-head">
-            <h2>🤖 AI Model Logs</h2>
-            <span class="hint">har model call ka status, kind aur tokens</span>
+          <div class="workspace-col logs-col" id="logsCol">
+            <section class="card live-logs-card">
+              <div class="card-head">
+                <h2>📊 Live Logs &amp; Metrics Inspector</h2>
+                <div class="log-top-actions">
+                  <span class="hint">Tokens, latency, status &amp; responses</span>
+                </div>
+              </div>
+              <div class="ai-logs-container" id="aiLogs"></div>
+            </section>
           </div>
-          <div class="log" id="aiLogs"></div>
-        </section>
+        </div>
 
         <section class="card">
           <div class="card-head">

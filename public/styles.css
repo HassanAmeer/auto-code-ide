@@ -137,3 +137,207 @@ code { display: block; color: var(--code-fg); font: 11px/1.5 ui-monospace, monos
   .sheet { width: min(360px, 100%); }
   .topbar { flex-direction: column; }
 }
+
+/* Split Screen & Live Logs Enhancements */
+.top-split-btn {
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: var(--card-2);
+  border: 1px solid var(--line);
+  color: var(--fg);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all .2s ease;
+}
+.top-split-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.top-split-btn.active {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-color: transparent;
+  box-shadow: 0 0 14px rgba(124, 140, 255, .35);
+}
+
+.workspace-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 18px;
+  transition: all .25s ease;
+}
+
+.app.split-active .main {
+  margin-right: 0 !important;
+}
+
+.app.split-active .workspace-grid {
+  grid-template-columns: 1.05fr 0.95fr;
+  gap: 20px;
+}
+
+.app.split-active .workspace-col {
+  min-width: 0;
+}
+
+.app.split-active .main-chat-card,
+.app.split-active .live-logs-card {
+  height: calc(100vh - 120px);
+  display: flex;
+  flex-direction: column;
+}
+
+.app.split-active .main-chat-card .chat {
+  flex: 1;
+  min-height: 250px;
+  max-height: none;
+}
+
+.app.split-active .ai-logs-container {
+  flex: 1;
+  overflow-y: auto;
+  max-height: none;
+}
+
+.ai-logs-container {
+  max-height: 480px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.ai-log-card {
+  background: var(--card-2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  transition: border-color .2s ease, transform .15s ease;
+}
+.ai-log-card:hover {
+  border-color: var(--accent);
+}
+.ai-log-card.ok {
+  border-left: 4px solid var(--good);
+}
+.ai-log-card.usage_limit {
+  border-left: 4px solid var(--bad);
+}
+.ai-log-card.error {
+  border-left: 4px solid var(--bad);
+}
+
+.ai-log-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.ai-log-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 13px;
+}
+.ai-log-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.ai-log-tokens {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0 10px;
+}
+.token-pill {
+  font-size: 11px;
+  background: var(--input-bg);
+  border: 1px solid var(--line);
+  padding: 3px 8px;
+  border-radius: 6px;
+  color: var(--muted);
+}
+.token-pill b {
+  color: var(--fg);
+  font-weight: 600;
+}
+.token-pill.highlight {
+  border-color: rgba(124, 140, 255, .4);
+  color: var(--accent);
+}
+
+.ai-log-expand-btn {
+  font-size: 11px;
+  padding: 4px 10px;
+  background: var(--input-bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all .2s ease;
+}
+.ai-log-expand-btn:hover {
+  border-color: var(--accent);
+  color: var(--fg);
+}
+
+.ai-log-details {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: var(--input-bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  display: none;
+}
+.ai-log-details.open {
+  display: block;
+}
+.ai-log-details pre {
+  margin: 4px 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--code-fg);
+  max-height: 220px;
+  overflow-y: auto;
+}
+.ai-log-details .lbl {
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  margin-top: 6px;
+}
+.ai-log-copy-btn {
+  float: right;
+  font-size: 10px;
+  padding: 2px 8px;
+  background: var(--card-2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.ai-log-copy-btn:hover {
+  color: var(--fg);
+}
+
+@media (max-width: 900px) {
+  .app.split-active .workspace-grid {
+    grid-template-columns: 1fr;
+  }
+}

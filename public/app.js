@@ -144,6 +144,7 @@ function renderLog(entries = []) {
 
 function renderAiLogs(entries = []) {
   const box = $("aiLogs");
+  if (!box) return;
   box.textContent = "";
   if (!entries.length) {
     const empty = document.createElement("div");
@@ -154,22 +155,108 @@ function renderAiLogs(entries = []) {
   }
   const kindClass = { ok: "log-ok", usage_limit: "log-limit", timeout: "log-warn", error: "log-error" };
   for (const entry of entries) {
-    const row = document.createElement("div");
-    row.className = "log-item";
-    const time = document.createElement("time");
-    time.textContent = timeAgo(entry.at);
+    const card = document.createElement("div");
+    card.className = `ai-log-card ${entry.errorKind || (entry.ok ? "ok" : "error")}`;
+
+    // Header
+    const head = document.createElement("div");
+    head.className = "ai-log-header";
+    const title = document.createElement("div");
+    title.className = "ai-log-title";
     const badge = document.createElement("span");
     badge.className = `badge ${kindClass[entry.errorKind] || "log-error"}`;
-    badge.textContent = entry.errorKind || "error";
-    const detail = document.createElement("span");
-    const usage = entry.usage;
-    const tokens = usage
-      ? `${usage.prompt_tokens ?? usage.promptTokens ?? "?"}/${usage.completion_tokens ?? usage.completionTokens ?? "?"}`
-      : "?";
-    detail.textContent = `${entry.model || "model"} · HTTP ${entry.statusCode} · ${entry.durationMs ?? "?"}ms · tokens ${tokens} · ${entry.autoReset ? "♻️ reset " : ""}${entry.responseSnippet || ""}`;
-    row.append(time, badge, detail);
-    box.appendChild(row);
+    badge.textContent = entry.statusCode === 200 ? "200 OK" : `HTTP ${entry.statusCode || 500}`;
+    const modelSpan = document.createElement("span");
+    modelSpan.textContent = `🤖 ${entry.model || "unknown"}`;
+    title.append(badge, modelSpan);
+
+    const meta = document.createElement("div");
+    meta.className = "ai-log-meta";
+    if (entry.autoReset) {
+      const resetTag = document.createElement("span");
+      resetTag.textContent = "♻️ auto-reset";
+      resetTag.style.color = "var(--warn)";
+      meta.appendChild(resetTag);
+    }
+    const ms = document.createElement("span");
+    ms.textContent = `⏱️ ${entry.durationMs ?? 0}ms`;
+    const time = document.createElement("time");
+    time.textContent = timeAgo(entry.at);
+    meta.append(ms, time);
+    head.append(title, meta);
+
+    // Tokens Row
+    const tokenRow = document.createElement("div");
+    tokenRow.className = "ai-log-tokens";
+    const u = entry.usage;
+    if (u) {
+      tokenRow.innerHTML = `
+        <span class="token-pill">📥 Input: <b>${u.prompt_tokens ?? u.promptTokens ?? 0}</b></span>
+        <span class="token-pill">📤 Output: <b>${u.completion_tokens ?? u.completionTokens ?? 0}</b></span>
+        ${u.reasoning_tokens ? `<span class="token-pill">🧠 Reasoning: <b>${u.reasoning_tokens}</b></span>` : ""}
+        <span class="token-pill highlight">📊 Total: <b>${u.total_tokens ?? u.totalTokens ?? 0}</b></span>
+      `;
+    } else {
+      tokenRow.innerHTML = `<span class="token-pill">📊 Tokens: <b>N/A</b></span>`;
+    }
+
+    // Snippet & Action
+    const bottomRow = document.createElement("div");
+    bottomRow.style.display = "flex";
+    bottomRow.style.justifyContent = "space-between";
+    bottomRow.style.alignItems = "center";
+    bottomRow.style.gap = "8px";
+
+    const snippet = document.createElement("div");
+    snippet.className = "muted";
+    snippet.style.fontSize = "12px";
+    snippet.style.overflow = "hidden";
+    snippet.style.textOverflow = "ellipsis";
+    snippet.style.whiteSpace = "nowrap";
+    snippet.style.flex = "1";
+    snippet.textContent = entry.responseSnippet || (entry.ok ? "Success" : "Error");
+
+    const toggleBtn = document.createElement("button");
+    toggleBtn.className = "ai-log-expand-btn";
+    toggleBtn.textContent = "🔍 View Full Details";
+
+    bottomRow.append(snippet, toggleBtn);
+
+    // Details box
+    const details = document.createElement("div");
+    details.className = "ai-log-details";
+    const copyBtn = document.createElement("button");
+    copyBtn.className = "ai-log-copy-btn";
+    copyBtn.textContent = "📋 Copy JSON";
+    copyBtn.onclick = (e) => {
+      e.stopPropagation();
+      navigator.clipboard.writeText(JSON.stringify(entry, null, 2));
+      toast("JSON copied to clipboard!");
+    };
+
+    details.innerHTML = `
+      <div class="lbl">Prompt / Input</div>
+      <pre>${escapeHtml(entry.prompt || "(not recorded)")}</pre>
+      <div class="lbl">Response / Output</div>
+      <pre>${escapeHtml(entry.response || entry.error || "(empty)")}</pre>
+    `;
+    details.prepend(copyBtn);
+
+    toggleBtn.onclick = () => {
+      const isOpen = details.classList.toggle("open");
+      toggleBtn.textContent = isOpen ? "▲ Hide Details" : "🔍 View Full Details";
+    };
+
+    card.append(head, tokenRow, bottomRow, details);
+    box.appendChild(card);
   }
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
 function renderMechanism(s) {

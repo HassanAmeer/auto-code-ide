@@ -492,8 +492,8 @@ async function statusPayload() {
     limitResetAt: state.lastTest?.resetAt || null,
     limitRetryAfterSeconds: state.lastTest?.retryAfterSeconds || null,
     lastTest: state.lastTest,
-    history: state.history.slice(0, 12),
-    aiLogs: state.history.filter((entry) => entry.type === "test").slice(0, 10),
+    history: state.history.slice(0, 20),
+    aiLogs: state.history.filter((entry) => entry.type === "test").slice(0, 30),
   };
 }
 
@@ -632,6 +632,10 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === "/api/status") return json(res, await statusPayload());
     if (url.pathname === "/api/check") return json(res, await runChecks());
     if (url.pathname === "/api/models") return json(res, await loadModels());
+    if (url.pathname === "/api/logs" && req.method === "GET") {
+      const logs = state.history.filter((entry) => entry.type === "test").slice(0, 50);
+      return json(res, { ok: true, logs });
+    }
     if (url.pathname === "/api/reset" && req.method === "POST") return await handleReset(res);
     if (url.pathname.startsWith("/api/warp/") && req.method === "POST") {
       const action = url.pathname.split("/").pop();
@@ -688,6 +692,7 @@ const server = http.createServer(async (req, res) => {
             : "error";
       const record = {
         type: "test",
+        id: `req_${Date.now()}_${crypto.randomUUID().replace(/-/g, "").slice(0, 6)}`,
         at: new Date().toISOString(),
         ok: result.ok,
         model,
@@ -698,7 +703,10 @@ const server = http.createServer(async (req, res) => {
         retryAfterSeconds: result.retryAfterSeconds,
         resetAt: result.resetAt,
         durationMs: Date.now() - started,
-        responseSnippet: (result.response || result.error || "").slice(0, 200),
+        prompt: messages.at(-1)?.content || "",
+        response: result.response || "",
+        error: result.error || "",
+        responseSnippet: (result.response || result.error || "").slice(0, 300),
       };
       state.lastTest = record;
       pushHistory(record);
