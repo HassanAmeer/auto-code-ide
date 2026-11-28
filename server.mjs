@@ -1,5 +1,6 @@
 import http from "node:http";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import net from "node:net";
 import crypto from "node:crypto";
@@ -260,36 +261,55 @@ function bypassHeaders(session, stream = true) {
   ];
 }
 
+function extractUpstreamHeaders(rawHeaders) {
+  const blocks = String(rawHeaders || "")
+    .split(/\r?\n\r?\n/)
+    .map((b) => b.trim())
+    .filter(Boolean);
+  const nonTunnel = blocks.filter((b) => !/^HTTP\/\S+\s+200\s+Connection\s+established/i.test(b));
+  return nonTunnel.at(-1) || blocks.at(-1) || "";
+}
+
+function isUsageLimitMessage(status, detail) {
+  if (status === 429) return true;
+  return /429|rate limit|quota|limit full|too many requests|free usage limit/i.test(String(detail || ""));
+}
+
 async function testModel(model, messages, session, onChild = null) {
   const useProxy = await proxyAvailable();
   const systemNote =
     "IMPORTANT: You are in direct conversational code generation mode. Do NOT invoke any tools (like `read` or `shell`). Instead, write and present the complete code, solution and explanations directly in your text response.";
   const body = JSON.stringify({
     model,
-    max_tokens: 512,
+    max_tokens: 8192,
     stream: true,
     messages: [{ role: "system", content: systemNote }, ...messages],
     tools: TOOLS.map((t) => ({ type: "function", function: t })),
   });
+  const headerFile = path.join(os.tmpdir(), `olrb-hdr-${crypto.randomUUID()}.txt`);
   const args = curlArgs(CHAT_URL, {
     method: "POST",
     headers: bypassHeaders(session),
     timeout: 90,
     proxy: useProxy,
   });
-  args.splice(args.indexOf("-w"), 0, "--data-binary", "@-", "-D", "-");
-  const r = await run("curl", args, { timeout: 95000, input: body, onChild });
-  const headerStart = r.out.indexOf("HTTP/2") >= 0 ? r.out.indexOf("HTTP/2") : r.out.indexOf("HTTP/");
-  let separator = headerStart >= 0 ? r.out.indexOf("\r\n\r\n", headerStart) : -1;
-  let separatorLength = 4;
-  if (separator < 0) {
-    separator = headerStart >= 0 ? r.out.indexOf("\n\n", headerStart) : -1;
-    separatorLength = 2;
+  args.splice(args.indexOf("-w"), 0, "--data-binary", "@-", "-D", headerFile);
+  let r;
+  let rawHeaders = "";
+  try {
+    r = await run("curl", args, { timeout: 95000, input: body, onChild });
+    try {
+      rawHeaders = fs.readFileSync(headerFile, "utf8");
+    } catch {}
+  } finally {
+    try {
+      fs.unlinkSync(headerFile);
+    } catch {}
   }
-  const headerText = separator >= 0 ? r.out.slice(headerStart, separator) : "";
-  const wireBody = separator >= 0 ? r.out.slice(separator + separatorLength) : r.out;
-  const { body: raw, status } = splitStatus(wireBody);
-  const retryAfterMatch = headerText.match(/^retry-after:\s*(\d+)/im);
+  const headerText = extractUpstreamHeaders(rawHeaders);
+  const { body: raw, status } = splitStatus(r.out);
+  const retryAfterMatch =
+    headerText.match(/^retry-after:\s*(\d+)/im) || headerText.match(/^x-ratelimit-reset:\s*(\d+)/im);
   const retryAfterSeconds = retryAfterMatch ? Number(retryAfterMatch[1]) : null;
   const resetAt = retryAfterSeconds ? new Date(Date.now() + retryAfterSeconds * 1000).toISOString() : null;
   const parsed = parseSse(raw);
@@ -302,9 +322,13 @@ async function testModel(model, messages, session, onChild = null) {
       detail = raw;
     }
   }
+  if (!detail && status === 0 && r.err) detail = r.err.trim();
+  const effectiveStatus = status || (parsed.streamError ? 429 : 500);
+  const isUsageLimit = isUsageLimitMessage(effectiveStatus, detail);
   return {
-    ok: status === 200 && !parsed.streamError,
-    statusCode: status || (parsed.streamError ? 429 : 500),
+    ok: effectiveStatus === 200 && !parsed.streamError,
+    statusCode: isUsageLimit && effectiveStatus === 200 ? 429 : effectiveStatus,
+    isUsageLimit,
     response: parsed.content || parsed.reasoning || "",
     usage: parsed.usage,
     error: `${detail}${retryAfterSeconds ? ` (Reset after: ${retryAfterSeconds}s)` : ""}`.slice(0, 2000),
@@ -532,7 +556,7 @@ const server = http.createServer(async (req, res) => {
       req.on("aborted", () => child?.kill("SIGKILL"));
       let result = await testModel(model, messages, state.session, (c) => (child = c));
       let resetPerformed = null;
-      if (result.statusCode === 429 && state.enabled && body.autoReset !== false) {
+      if ((result.statusCode === 429 || result.isUsageLimit) && state.enabled && body.autoReset !== false) {
         resetPerformed = await rotateAndReset();
         result = await testModel(model, messages, state.session, (c) => (child = c));
       }
